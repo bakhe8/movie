@@ -1,10 +1,18 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { randomUUID } from 'node:crypto';
+import { QueryDeepPartialEntity, Repository } from 'typeorm';
 import { Profile } from '../../entities/profile.entity';
+import { Recommendation } from '../../entities/recommendation.entity';
 import { Title } from '../../entities/title.entity';
 import { UserModelSnapshot } from '../../entities/user-model-snapshot.entity';
 import { UserTitleState } from '../../entities/user-title-state.entity';
+
+// Versions the selection mechanism itself (blueprint §16 reproducibility),
+// distinct from modelVersion (which snapshot supplied the weights). Bump
+// this if the candidate pool or ranking mechanism changes materially --
+// mirrors TriadsService's TRIAD_POLICY_VERSION.
+const RECOMMENDATION_POLICY_VERSION = 'personal-fit-greedy-v1';
 
 const FINGERPRINT_DIMENSIONS = [
   'pacing',
@@ -111,6 +119,8 @@ export class RecommendationsService {
     private readonly snapshotsRepository: Repository<UserModelSnapshot>,
     @InjectRepository(UserTitleState)
     private readonly statesRepository: Repository<UserTitleState>,
+    @InjectRepository(Recommendation)
+    private readonly recommendationsRepository: Repository<Recommendation>,
   ) {}
 
   async findForProfile(userId: string, profileId: string, limit: number): Promise<RecommendationResult[]> {
@@ -126,7 +136,7 @@ export class RecommendationsService {
     }
     const titles = await queryBuilder.getMany();
 
-    return this.scoreTitles(titles, snapshot)
+    const results = this.scoreTitles(titles, snapshot)
       .map((scored) => ({
         title: scored.title,
         personalFitScore: scored.personalFitScore,
@@ -139,6 +149,50 @@ export class RecommendationsService {
         reason: scored.reason,
       }))
       .slice(0, limit);
+
+    await this.persistShown(profileId, snapshot.modelVersion, results);
+    return results;
+  }
+
+  // One row per recommendation actually shown (blueprint §13.1, §14, §14.1) --
+  // without this log the post-watch loop (§4.5) can't close and §16 has
+  // nothing to read (blueprint gap 4). All rows from one call share a
+  // requestId. Left honestly null rather than fabricated: confidenceRaw (no
+  // continuous score backs confidenceBand yet, ADR-21), candidateSource
+  // (today's full-catalog scan-and-sort matches none of the specified
+  // sources -- 'content_similarity' means real similarity retrieval, which
+  // this isn't), and experimentId (no experiments exist, blueprint gap 1
+  // M4). selectionPropensity is 1: the ranking is deterministic given the
+  // snapshot and candidate pool, so every shown item was certain under this
+  // policy (the same convention TriadsService uses for its own uniform-random
+  // policy, just evaluated for a greedy one).
+  private async persistShown(profileId: string, modelVersion: string, results: RecommendationResult[]): Promise<void> {
+    if (results.length === 0) {
+      return;
+    }
+    const requestId = randomUUID();
+    const shownAt = new Date();
+    await this.recommendationsRepository.insert(
+      results.map((result) => ({
+        requestId,
+        profileId,
+        titleId: result.title.id,
+        track: result.track,
+        personalFit: result.personalFitScore,
+        publicQuality: result.publicQualityScore,
+        watchability: result.watchabilityScore,
+        confidenceBand: result.confidenceBand,
+        confidenceRaw: null,
+        reason: result.reason,
+        evidenceSource: result.reason.evidenceSource,
+        candidateSource: null,
+        modelVersion,
+        policyVersion: RECOMMENDATION_POLICY_VERSION,
+        experimentId: null,
+        selectionPropensity: 1,
+        shownAt,
+      })) as unknown as QueryDeepPartialEntity<Recommendation>[],
+    );
   }
 
   // The profile's own library ordered by the same model that ranks

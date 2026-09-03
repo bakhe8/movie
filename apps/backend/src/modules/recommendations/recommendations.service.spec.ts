@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import type { Repository } from 'typeorm';
 import { Profile } from '../../entities/profile.entity';
+import { Recommendation } from '../../entities/recommendation.entity';
 import { Title } from '../../entities/title.entity';
 import { UserModelSnapshot } from '../../entities/user-model-snapshot.entity';
 import { UserTitleState } from '../../entities/user-title-state.entity';
@@ -66,6 +67,7 @@ describe('RecommendationsService', () => {
   let titlesRepository: { findOne: ReturnType<typeof vi.fn>; find: ReturnType<typeof vi.fn>; createQueryBuilder: ReturnType<typeof vi.fn> };
   let snapshotsRepository: ReturnType<typeof repoMock>;
   let statesRepository: ReturnType<typeof repoMock>;
+  let recommendationsRepository: { insert: ReturnType<typeof vi.fn> };
   let service: RecommendationsService;
 
   beforeEach(() => {
@@ -73,11 +75,13 @@ describe('RecommendationsService', () => {
     titlesRepository = { ...repoMock(), createQueryBuilder: vi.fn() };
     snapshotsRepository = repoMock();
     statesRepository = repoMock();
+    recommendationsRepository = { insert: vi.fn().mockResolvedValue({}) };
     service = new RecommendationsService(
       profilesRepository as unknown as Repository<Profile>,
       titlesRepository as unknown as Repository<Title>,
       snapshotsRepository as unknown as Repository<UserModelSnapshot>,
       statesRepository as unknown as Repository<UserTitleState>,
+      recommendationsRepository as unknown as Repository<Recommendation>,
     );
   });
 
@@ -262,6 +266,54 @@ describe('RecommendationsService', () => {
     expect(result[0].fingerprintCoverage).toBe(1);
     expect(result[0].track).toBe('safe');
     expect(result[0].modelVersion).toBe('test-v1');
+  });
+
+  // Blueprint gap 4: without a persisted row, the post-watch loop (§4.5)
+  // has nothing to close and §16 has nothing to read.
+  describe('persistence (blueprint gap 4)', () => {
+    it('writes one recommendations row per shown result, sharing a requestId', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot());
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [
+        { id: 'high-warmth', fingerprint: zeroFingerprint({ warmth: 0.9 }) },
+        { id: 'mid-warmth', fingerprint: zeroFingerprint({ warmth: 0.5 }) },
+      ] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+      expect(recommendationsRepository.insert).toHaveBeenCalledTimes(1);
+      const rows = recommendationsRepository.insert.mock.calls[0][0] as Array<Record<string, unknown>>;
+      expect(rows).toHaveLength(2);
+      expect(rows.map((row) => row.titleId)).toEqual(['high-warmth', 'mid-warmth']);
+      expect(rows.every((row) => row.profileId === 'profile-1')).toBe(true);
+      expect(rows.every((row) => row.modelVersion === 'test-v1')).toBe(true);
+      expect(rows.every((row) => row.confidenceBand === result[0].confidenceBand)).toBe(true);
+      // Both rows from the same call share one requestId.
+      expect(new Set(rows.map((row) => row.requestId)).size).toBe(1);
+      // Honest nulls, not fabricated values (ADR-52/53/56's "flag, don't
+      // invent" pattern): no continuous confidence score, no experiment,
+      // and today's full-catalog scan matches none of the specified
+      // candidateSource values.
+      expect(rows.every((row) => row.confidenceRaw === null)).toBe(true);
+      expect(rows.every((row) => row.experimentId === null)).toBe(true);
+      expect(rows.every((row) => row.candidateSource === null)).toBe(true);
+      // Deterministic top-K given the snapshot and pool: every shown item
+      // was certain under this policy.
+      expect(rows.every((row) => row.selectionPropensity === 1)).toBe(true);
+    });
+
+    it('writes nothing when there are no candidates to show', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot());
+      statesRepository.find.mockResolvedValue([]);
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock([]));
+
+      await service.findForProfile('user-1', 'profile-1', 10);
+
+      expect(recommendationsRepository.insert).not.toHaveBeenCalled();
+    });
   });
 
   it.each([
