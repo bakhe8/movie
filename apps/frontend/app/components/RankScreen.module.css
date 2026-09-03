@@ -1,287 +1,351 @@
-/* Triad screen (SPECIFICATION.md §5.2). Scoped here so the screen's own
-   layout, drag feedback and touch targets don't leak into globals.css. */
+/* Triad screen — the product's signature interaction (blueprint §4.3;
+   docs/IDENTITY_DECISIONS_2026-09-03.md Q5, Q8, Q14–Q18). Built on
+   app/styles/tokens.css only: no literal colours, so both themes come from
+   the tokens. Mobile first; logical properties throughout.
+
+   Cards are TEXT cards until a poster has a licensing registry row
+   (docs/DATA_LICENSING.md rule 5); a poster slot exists for that day. */
 
 .screen {
   display: grid;
-  gap: 16px;
+  gap: var(--sp-6);
+  width: min(100%, 640px);
+  margin-inline: auto;
+}
+
+/* --- Header --------------------------------------------------------------- */
+
+.header {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--accent);
+  font-size: var(--fs-13);
+  font-weight: var(--w-semibold);
 }
 
 .header h2 {
-  font-size: clamp(26px, 5vw, 40px);
-  line-height: 1.15;
-  margin: 6px 0;
+  margin: 0;
+  font-size: var(--fs-26);
+  text-wrap: balance;
 }
 
 .hint {
   margin: 0;
   color: var(--muted);
-  line-height: 1.5;
+  font-size: var(--fs-14);
 }
 
 .rounds {
-  margin: 6px 0 0;
+  margin: 0;
   color: var(--muted);
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: var(--fs-13);
 }
 
 .roundsCount {
-  color: var(--ink);
-  font-weight: 700;
+  color: var(--text);
+  font-weight: var(--w-semibold);
 }
 
-.alt {
-  margin: 0 0 2px;
-  color: var(--muted);
-  font-size: 13px;
+/* --- Status lines --------------------------------------------------------- */
+
+.status {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border-inline-start: 3px solid var(--accent);
+  border-radius: var(--r-chip);
+  background: var(--surface);
+  font-size: var(--fs-14);
 }
 
+.error {
+  border-inline-start-color: var(--muted);
+}
+
+/* --- The well and the list ------------------------------------------------ */
+
+/* The three cards sit in the darker well (Q5, Q18) so they read as one
+   object being ordered, in both themes. */
 .list {
   display: grid;
-  gap: 12px;
-  margin: 8px 0 0;
-  padding: 0;
+  gap: var(--sp-3);
+  margin: 0;
+  padding: var(--sp-3);
   list-style: none;
-}
-
-/* While a card is lifted, a mouse drag must not start a text selection. */
-.dragging {
-  user-select: none;
+  background: var(--well);
+  border-radius: var(--r-card);
 }
 
 .card {
   position: relative;
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) auto;
-  gap: 14px;
-  align-items: start;
-  padding: 16px;
-  border: 1px solid #e1e6e9;
-  border-radius: 18px;
-  background: var(--card);
-  box-shadow: 0 4px 14px #17212a0d;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    "badge body controls"
+    "replace replace replace";
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
   transition:
-    transform 0.16s ease,
-    box-shadow 0.16s ease,
-    border-color 0.16s ease;
+    transform 150ms ease,
+    border-color 150ms ease;
 }
 
-/* The card being dragged follows the pointer; the transform is set inline. */
+.withPoster {
+  grid-template-columns: auto auto 1fr auto;
+  grid-template-areas:
+    "badge poster body controls"
+    "replace replace replace replace";
+}
+
+/* The lifted card follows the pointer (inline transform) and is marked by
+   the accent border, not a shadow (Q8). */
 .lifted {
-  z-index: 2;
+  z-index: 1;
   border-color: var(--accent);
-  box-shadow: 0 18px 40px #17212a2e;
   transition: none;
 }
 
-/* Where the lifted card will land on release. */
 .target {
-  border: 1px dashed var(--accent);
-  background: #fff8f5;
+  border-style: dashed;
+  border-color: var(--accent);
 }
 
+.dragging .card:not(.lifted) {
+  transition: transform 150ms ease;
+}
+
+/* --- Card parts ----------------------------------------------------------- */
+
 .badge {
+  grid-area: badge;
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
+  width: 28px;
+  height: 28px;
+  align-self: center;
   border-radius: 50%;
-  background: #fff0eb;
+  background: var(--well);
+  color: var(--muted);
+  font-size: var(--fs-13);
+  font-weight: var(--w-semibold);
+}
+
+/* Position 1 is the answer the instruction asks for: the only accent on the card. */
+.card:first-child .badge {
+  background: var(--accent-soft);
   color: var(--accent);
-  font-size: 18px;
-  font-weight: 900;
+}
+
+.poster {
+  grid-area: poster;
+  width: 56px;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border: 1px solid var(--poster-edge);
+  border-radius: var(--r-chip);
+  background: var(--well);
 }
 
 .body {
+  grid-area: body;
+  display: grid;
+  align-content: center;
+  gap: 2px;
   min-width: 0;
 }
 
+/* The film title is UI text, not a display heading. */
 .title {
-  margin: 2px 0 4px;
-  font-size: 21px;
-  line-height: 1.2;
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: var(--fs-16);
+  font-weight: var(--w-semibold);
+  line-height: var(--lh-ui);
+  overflow-wrap: anywhere;
 }
 
-.meta {
+/* Other-language title and year, one muted line (Q13, Q17). */
+.alt {
   margin: 0;
   color: var(--muted);
-  font-size: 14px;
-}
-
-.desc {
-  display: -webkit-box;
-  margin: 8px 0 0;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1.45;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  font-size: var(--fs-13);
+  font-weight: var(--w-medium);
+  line-height: var(--lh-ui);
 }
 
 .controls {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
+  grid-area: controls;
+  display: grid;
+  align-content: center;
+  gap: var(--sp-1);
 }
 
-/* Every control on the card is a real 44px touch target. */
 .handle,
 .arrow {
   display: grid;
   place-items: center;
-  width: 44px;
-  border: 1px solid #dfe4e8;
-  border-radius: 12px;
-  background: #fff;
-  color: var(--ink);
+  min-width: var(--tap);
+  height: 36px;
+  padding: 0;
+  border-radius: var(--r-chip);
+  font: inherit;
+  line-height: 1;
 }
 
 .handle {
-  height: 44px;
+  border: 0;
+  background: transparent;
   color: var(--muted);
   cursor: grab;
-  user-select: none;
-  /* Lets pointer events drive the reorder instead of the page scroll. */
   touch-action: none;
 }
 
-.handle:active {
+.lifted .handle {
+  color: var(--accent);
   cursor: grabbing;
 }
 
 .arrow {
-  height: 36px;
-  font-size: 16px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-16);
 }
 
 .arrow:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
+  opacity: 0.35;
 }
 
+/* --- Replace controls (neutral, ADR-17) ------------------------------------ */
+
 .replaceRow {
-  grid-column: 1 / -1;
+  grid-area: replace;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  padding-top: 12px;
-  border-top: 1px dashed #e4e8ea;
+  gap: var(--sp-2);
 }
 
 .ghost {
-  min-height: 40px;
-  padding: 8px 14px;
-  border: 1px solid #dfe4e8;
-  border-radius: 999px;
-  background: #fff;
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.ghost:hover {
-  border-color: var(--accent);
+  min-height: 36px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-button);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--fs-13);
+  font-weight: var(--w-medium);
+  line-height: var(--lh-ui);
 }
 
 .ghost:disabled {
   opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .confirm {
-  grid-column: 1 / -1;
+  grid-area: replace;
   display: grid;
-  gap: 10px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: #f5f7f8;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  background: var(--well);
+  border-radius: var(--r-chip);
+  font-size: var(--fs-14);
 }
 
 .confirm p {
   margin: 0;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1.45;
 }
 
 .confirmActions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--sp-2);
 }
 
 .primarySmall {
   min-height: 40px;
-  padding: 8px 16px;
+  padding: 0 var(--sp-4);
   border: 0;
-  border-radius: 999px;
-  background: var(--ink);
-  color: #fff;
-  font-weight: 800;
+  border-radius: var(--r-button);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: var(--fs-14);
+  font-weight: var(--w-semibold);
 }
 
+/* --- Primary action ------------------------------------------------------- */
+
+/* The one filled button on the screen (Q6). 48px on the phone, as the
+   measured mobile CTAs (Netflix 48, Shahid 44–48). */
+.cta {
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  border-radius: var(--r-button);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: var(--fs-16);
+  font-weight: var(--w-semibold);
+}
+
+.cta:disabled,
 .primarySmall:disabled {
-  opacity: 0.45;
+  opacity: 0.5;
 }
 
-.status {
-  margin: 0;
-  padding: 10px 14px;
-  border-radius: 12px;
-  background: #eaf3f5;
-  color: var(--ink);
-  font-weight: 600;
+.retry {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-button);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-16);
+  font-weight: var(--w-semibold);
 }
 
-.error {
-  background: #fff0eb;
-  color: var(--accent);
-}
+/* --- Loading -------------------------------------------------------------- */
 
 .skeleton {
-  height: 118px;
-  border-radius: 18px;
-  background: linear-gradient(90deg, #eef1f3, #f7f9fa, #eef1f3);
-  background-size: 200% 100%;
-  animation: shimmer 1.2s infinite;
+  height: 96px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface);
 }
 
-@keyframes shimmer {
-  from {
-    background-position: 200% 0;
-  }
+/* --- Focus ---------------------------------------------------------------- */
 
-  to {
-    background-position: -200% 0;
-  }
+.handle:focus-visible,
+.arrow:focus-visible,
+.ghost:focus-visible,
+.primarySmall:focus-visible,
+.cta:focus-visible,
+.retry:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
-@media (max-width: 720px) {
-  .card {
-    grid-template-columns: 38px minmax(0, 1fr) auto;
-    gap: 10px;
-    padding: 14px;
+/* --- Wide screens --------------------------------------------------------- */
+
+@media (min-width: 900px) {
+  .screen {
+    gap: var(--sp-8);
   }
 
-  .badge {
-    width: 38px;
-    height: 38px;
-    font-size: 16px;
+  .header h2 {
+    font-size: var(--fs-34);
   }
 
-  .title {
-    font-size: 18px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .card {
-    transition: none;
-  }
-
-  .skeleton {
-    animation: none;
+  .poster {
+    width: 64px;
   }
 }

@@ -40,16 +40,19 @@ export function formatReason(reason: RecommendationReason | undefined, lang: Lan
   return lang === 'ar' ? `ما يقرّبه من ذوقك: ${phrases.join('، ')}.` : `What brings it close to your taste: ${phrases.join(', ')}.`;
 }
 
-// One numeral system per locale (mockup review P10): Arabic-Indic digits in
-// Arabic, Latin digits in English.
+// One numeral system in both languages: Latin digits (identity decision Q12,
+// docs/IDENTITY_DECISIONS_2026-09-03.md -- 9 of 9 measured Arabic-language
+// film/streaming sites, Gulf and Egypt, use Latin digits; our data sources are
+// English). This supersedes mockup review P10, which asked for Arabic-Indic
+// digits in Arabic. Arabic grouping/decimal separators are kept via `nu-latn`.
 export function formatNumber(value: number, lang: Lang): string {
-  return new Intl.NumberFormat(lang === 'ar' ? 'ar-SA' : 'en-US').format(value);
+  return new Intl.NumberFormat(lang === 'ar' ? 'ar-SA-u-nu-latn' : 'en-US').format(value);
 }
 
 // Gregorian in both languages (ar-SA would default to the Umm al-Qura
-// calendar), digits following the locale like formatNumber.
+// calendar), Latin digits like formatNumber.
 export function formatDate(iso: string, lang: Lang): string {
-  return new Intl.DateTimeFormat(lang === 'ar' ? 'ar-SA-u-ca-gregory' : 'en-US', { dateStyle: 'medium' }).format(
+  return new Intl.DateTimeFormat(lang === 'ar' ? 'ar-SA-u-ca-gregory-nu-latn' : 'en-US', { dateStyle: 'medium' }).format(
     new Date(iso),
   );
 }

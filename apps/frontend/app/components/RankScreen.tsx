@@ -45,6 +45,9 @@ const labels = {
           : 'سجّل ثلاثة أفلام على الأقل كمُشاهَدة في «اكتشف» لتبدأ الترتيب.',
     loadFailed: 'تعذّر تحميل الثلاثية.',
     retry: 'إعادة المحاولة',
+    // The one action on the blocked state (decision Q18: the triad is the
+    // first screen; when it cannot be drawn yet, the way forward is one tap).
+    goDiscover: 'اختر أفلامًا شاهدتها',
   },
   en: {
     eyebrow: 'Triad',
@@ -80,10 +83,17 @@ const labels = {
           : 'Mark at least three films as watched in Discover before you can rank.',
     loadFailed: 'The triad could not be loaded.',
     retry: 'Try again',
+    goDiscover: 'Pick films you have watched',
   },
 };
 
 type Phase = { kind: 'loading' } | { kind: 'ready' } | { kind: 'blocked'; needed: number } | { kind: 'failed' };
+
+// Posters are shown only once a title carries a licensed image
+// (docs/DATA_LICENSING.md rule 5). The API has no such field yet; this local
+// extension lets the card render one the day it appears without touching
+// lib/api.ts. Until then every triad card is a text card.
+type TriadTitle = Title & { posterUrl?: string | null };
 
 interface DragState {
   from: number;
@@ -111,7 +121,16 @@ function GripIcon() {
   );
 }
 
-export function RankScreen({ lang, profileId }: { lang: Lang; profileId: string }) {
+export function RankScreen({
+  lang,
+  profileId,
+  onGoToDiscover,
+}: {
+  lang: Lang;
+  profileId: string;
+  // Where "pick films you have watched" leads when the triad is blocked.
+  onGoToDiscover?: () => void;
+}) {
   const t = labels[lang];
   const [triad, setTriad] = useState<Triad | null>(null);
   const [order, setOrder] = useState<Title[]>([]);
@@ -306,7 +325,7 @@ export function RankScreen({ lang, profileId }: { lang: Lang; profileId: string 
   // the app's 72px top bar, which would squash this block into a flex row.
   const header = (
     <div className={styles.header}>
-      <p className="eyebrow">{t.eyebrow}</p>
+      <p className={styles.eyebrow}>{t.eyebrow}</p>
       <h2>{t.title}</h2>
       {phase.kind === 'ready' && <p className={styles.hint}>{t.hint}</p>}
       {completedRounds !== null && (
@@ -346,6 +365,13 @@ export function RankScreen({ lang, profileId }: { lang: Lang; profileId: string 
         <p className={`${styles.status} ${styles.error}`} role="status">
           {t.needMore(phase.needed)}
         </p>
+        {/* The screen's single filled action (Q6, Q18): the watched set is the
+            only thing that unblocks a triad (blueprint §4.1, SPEC §5.1 step 3). */}
+        {onGoToDiscover && (
+          <button type="button" className={styles.cta} onClick={onGoToDiscover}>
+            {t.goDiscover}
+          </button>
+        )}
       </div>
     );
   }
@@ -357,7 +383,7 @@ export function RankScreen({ lang, profileId }: { lang: Lang; profileId: string 
         <p className={`${styles.status} ${styles.error}`} role="alert">
           {t.loadFailed}
         </p>
-        <button type="button" className="cta full" onClick={loadTriad}>
+        <button type="button" className={styles.retry} onClick={loadTriad}>
           {t.retry}
         </button>
       </div>
@@ -381,8 +407,14 @@ export function RankScreen({ lang, profileId }: { lang: Lang; profileId: string 
           const lifted = drag?.from === index;
           const isTarget = drag !== null && drag.to !== drag.from && drag.to === index;
           const isPending = pending?.titleId === title.id;
-          const meta = [title.releaseYear, title.genres?.join(' · ')].filter(Boolean).join(' · ');
-          const className = [styles.card, lifted && styles.lifted, isTarget && styles.target].filter(Boolean).join(' ');
+          // Card content is poster (when licensed), title and year only --
+          // no critic scores, no genres, no synopsis (blueprint §4.3; decisions
+          // Q17). The other-language title shares the year's muted line (Q13).
+          const showAlt = Boolean(alt && alt !== name);
+          const poster = (title as TriadTitle).posterUrl ?? null;
+          const className = [styles.card, poster && styles.withPoster, lifted && styles.lifted, isTarget && styles.target]
+            .filter(Boolean)
+            .join(' ');
 
           return (
             <li
@@ -397,11 +429,20 @@ export function RankScreen({ lang, profileId }: { lang: Lang; profileId: string 
               <span className={styles.badge} aria-hidden="true">
                 {formatNumber(index + 1, lang)}
               </span>
+              {/* Plain <img>: poster hosts are decided by the licensing registry, not
+                  by next.config remotePatterns, and there is no poster field yet. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              {poster && <img className={styles.poster} src={poster} alt="" loading="lazy" />}
               <div className={styles.body}>
                 <h3 className={styles.title}>{name}</h3>
-                {alt && alt !== name && <p className={styles.alt}>{alt}</p>}
-                {meta && <p className={styles.meta}>{meta}</p>}
-                {title.description && <p className={styles.desc}>{title.description}</p>}
+                {(showAlt || title.releaseYear) && (
+                  <p className={styles.alt}>
+                    {showAlt && <bdi>{alt}</bdi>}
+                    {showAlt && title.releaseYear ? ' · ' : ''}
+                    {/* A year is an identifier, not a quantity: no grouping separator. */}
+                    {title.releaseYear ? String(title.releaseYear) : ''}
+                  </p>
+                )}
               </div>
               <div className={styles.controls}>
                 {/* Not focusable on purpose: the arrows are the keyboard path. */}
@@ -476,7 +517,7 @@ export function RankScreen({ lang, profileId }: { lang: Lang; profileId: string 
           );
         })}
       </ol>
-      <button type="button" className="cta full" onClick={submitRanking} disabled={busy}>
+      <button type="button" className={styles.cta} onClick={submitRanking} disabled={busy}>
         {saving ? t.saving : t.save}
       </button>
     </div>

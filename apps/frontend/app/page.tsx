@@ -99,11 +99,18 @@ export default function Home() {
         <OnboardingScreen
           lang={lang}
           onLanguageChange={setLang}
+          // Identity decision Q18: a new user lands on the triad -- the
+          // product's one question -- not on a catalogue. The triad screen
+          // itself explains the watched-set gate (blueprint §4.1) and offers
+          // the one tap to Discover when it cannot be drawn yet.
           onDone={() => {
             setOnboarding('done');
-            setView('discover');
+            setView('rank');
           }}
-          onSkip={() => setOnboarding('done')}
+          onSkip={() => {
+            setOnboarding('done');
+            setView('rank');
+          }}
         />
       </AppShell>
     );
@@ -116,7 +123,9 @@ export default function Home() {
       {view === 'home' && (
         <RecommendationsScreen lang={lang} profileId={profile.id} onGoToRank={() => setView('rank')} />
       )}
-      {view === 'rank' && <RankScreen lang={lang} profileId={profile.id} />}
+      {view === 'rank' && (
+        <RankScreen lang={lang} profileId={profile.id} onGoToDiscover={() => setView('discover')} />
+      )}
       {view === 'discover' && (
         <DiscoverScreen lang={lang} profileId={profile.id} onGoToRank={() => setView('rank')} />
       )}
