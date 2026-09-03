@@ -7,6 +7,11 @@
  *
  *   npm run build && node dist/scripts/load-imdb-ratings.js [--file <path>] [--fetch] [--dry-run]
  *
+ * The same pass also runs inside the app on a schedule when
+ * IMDB_REFRESH_INTERVAL_HOURS is set (modules/public-quality/
+ * public-quality-refresh.service.ts), so Public Quality stays a living
+ * value rather than a one-off snapshot.
+ *
  * (compiled, not `tsx`: same DataSource/decorator-metadata reason as
  * load-director-credits.ts and seed-demo.ts.)
  *
@@ -192,12 +197,13 @@ export async function loadImdbRatings(
 // Like fetch-catalog.ts's CATALOG_CACHE_DIR: the dump is a ~7 MB download
 // that must never enter git, so it lives under the OS temp dir unless
 // IMDB_DATASETS_DIR says otherwise.
-function defaultDumpPath(): string {
+export function defaultDumpPath(): string {
   const dir = process.env.IMDB_DATASETS_DIR || path.join(tmpdir(), 'movie-imdb-datasets');
   return path.join(dir, 'title.ratings.tsv.gz');
 }
 
-async function fetchDump(url: string, target: string): Promise<void> {
+// The official dataset endpoint, never an imdb.com page (DATA_LICENSING.md §3.2).
+export async function fetchDump(url: string, target: string): Promise<void> {
   mkdirSync(path.dirname(target), { recursive: true });
   const response = await fetch(url);
   if (!response.ok || !response.body) {
@@ -206,15 +212,33 @@ async function fetchDump(url: string, target: string): Promise<void> {
   await pipeline(Readable.fromWeb(response.body as never), createWriteStream(target));
 }
 
-async function main(): Promise<void> {
-  const args = process.argv.slice(2);
-  const dryRun = args.includes('--dry-run');
-  const fileIndex = args.indexOf('--file');
-  const filePath = fileIndex !== -1 && args[fileIndex + 1] ? path.resolve(args[fileIndex + 1]) : defaultDumpPath();
+export async function wantedTconsts(dataSource: DataSource): Promise<Set<string>> {
+  const rows = await dataSource
+    .getRepository(Title)
+    .createQueryBuilder('title')
+    .select(`title."externalIds"->>'imdb'`, 'imdb')
+    .where(`title."externalIds"->>'imdb' IS NOT NULL`)
+    .getRawMany<{ imdb: string }>();
+  return new Set(rows.map((row) => row.imdb));
+}
 
-  if (args.includes('--fetch')) {
+export interface RefreshImdbRatingsOptions {
+  filePath?: string;
+  // Download the dump first (to filePath) from IMDB_RATINGS_URL.
+  fetch?: boolean;
+  dryRun?: boolean;
+  log?: (line: string) => void;
+}
+
+// One complete pass: (download,) parse for the catalog's ids, load. Shared
+// by the CLI below and by the in-app periodic refresh
+// (modules/public-quality/public-quality-refresh.service.ts).
+export async function refreshImdbRatings(dataSource: DataSource, options: RefreshImdbRatingsOptions = {}): Promise<LoadImdbRatingsSummary> {
+  const log = options.log ?? (() => {});
+  const filePath = options.filePath ?? defaultDumpPath();
+  if (options.fetch) {
     const url = process.env.IMDB_RATINGS_URL || IMDB_RATINGS_URL;
-    console.log(`Downloading ${url} -> ${filePath}`);
+    log(`Downloading ${url} -> ${filePath}`);
     await fetchDump(url, filePath);
   }
   if (!existsSync(filePath)) {
@@ -222,35 +246,40 @@ async function main(): Promise<void> {
   }
   const capturedAt = statSync(filePath).mtime;
 
+  const wanted = await wantedTconsts(dataSource);
+  log(`Reading ${filePath} (dated ${capturedAt.toISOString()}) for ${wanted.size} IMDb id(s)...`);
+  const ratings = await parseRatings(openDump(filePath), wanted);
+  log(`${ratings.size} of them found in the dump.`);
+
+  const summary = await loadImdbRatings(dataSource, ratings, { capturedAt, dryRun: options.dryRun, log: (line) => log(`  ${line}`) });
+  log(
+    `${options.dryRun ? '[dry run] would write' : 'Wrote'} ${summary.created} rating(s) for ${summary.titlesWithImdbId} title(s) with an IMDb id ` +
+      `(${summary.unchanged} unchanged, ${summary.superseded} superseded).`,
+  );
+  if (summary.notInDump.length > 0) {
+    log(
+      `${summary.notInDump.length} title(s) with an IMDb id are not in the dump (no value written): ` +
+        summary.notInDump.slice(0, 10).join(', ') +
+        (summary.notInDump.length > 10 ? ', ...' : ''),
+    );
+  }
+  return summary;
+}
+
+async function main(): Promise<void> {
+  const args = process.argv.slice(2);
+  const fileIndex = args.indexOf('--file');
+  const filePath = fileIndex !== -1 && args[fileIndex + 1] ? path.resolve(args[fileIndex + 1]) : undefined;
+
   const dataSource = new DataSource(DatabaseConfig() as DataSourceOptions);
   await dataSource.initialize();
   try {
-    const wanted = new Set<string>(
-      (
-        await dataSource
-          .getRepository(Title)
-          .createQueryBuilder('title')
-          .select(`title."externalIds"->>'imdb'`, 'imdb')
-          .where(`title."externalIds"->>'imdb' IS NOT NULL`)
-          .getRawMany<{ imdb: string }>()
-      ).map((row) => row.imdb),
-    );
-    console.log(`Reading ${filePath} (dated ${capturedAt.toISOString()}) for ${wanted.size} IMDb id(s)...`);
-    const ratings = await parseRatings(openDump(filePath), wanted);
-    console.log(`${ratings.size} of them found in the dump.`);
-
-    const summary = await loadImdbRatings(dataSource, ratings, { capturedAt, dryRun, log: (line) => console.log(`  ${line}`) });
-    console.log(
-      `\n${dryRun ? '[dry run] would write' : 'Wrote'} ${summary.created} rating(s) for ${summary.titlesWithImdbId} title(s) with an IMDb id ` +
-        `(${summary.unchanged} unchanged, ${summary.superseded} superseded).`,
-    );
-    if (summary.notInDump.length > 0) {
-      console.log(
-        `${summary.notInDump.length} title(s) with an IMDb id are not in the dump (no value written): ` +
-          summary.notInDump.slice(0, 10).join(', ') +
-          (summary.notInDump.length > 10 ? ', ...' : ''),
-      );
-    }
+    await refreshImdbRatings(dataSource, {
+      filePath,
+      fetch: args.includes('--fetch'),
+      dryRun: args.includes('--dry-run'),
+      log: (line) => console.log(line),
+    });
   } finally {
     await dataSource.destroy();
   }
