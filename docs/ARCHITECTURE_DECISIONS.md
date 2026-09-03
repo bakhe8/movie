@@ -1,7 +1,7 @@
 # Architecture Decision Records
 
 **Status**: Living log. Every decision cites the blueprint section it serves (`BP §x.y`) or states that it is this repository's own engineering choice within the blueprint's constraints. A decision that contradicts the blueprint is a bug in this file. Product-level open questions that must be settled by experiment are **not** decided here — they are listed in `BP App. C` and [SPECIFICATION.md §11](SPECIFICATION.md).
-**Version**: 2.1 — 2026-09-03 (ADR-1…13 rewritten for consistency; ADR-14…26 added to close the gaps found in the documentation audit; ADR-27…28 added from a code-quality/security audit).
+**Version**: 2.2 — 2026-09-03 (ADR-1…13 rewritten for consistency; ADR-14…26 added to close the gaps found in the documentation audit; ADR-27…28 added from a code-quality/security audit; ADR-29 added for the NestJS 10→11 migration).
 
 Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 
@@ -185,6 +185,14 @@ Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 **Consequences.** Any future change to the triad lifecycle must keep `'active'` meaning "the one open round for this profile" — a second concurrently-valid "in progress" status would need its own partial index or a rethink of this constraint.
 **Revisit when.** The triad lifecycle grows a second concurrently-valid in-progress status (e.g. simultaneous ranking modes).
 
+## ADR-29 — NestJS 10 → 11, not 12
+
+**Context.** `@nestjs/core <=11.1.17` carries CVE-2026-35515 (GHSA-36xv-jgw5-4q75, moderate: unsanitized newlines in Server-Sent Events `type`/`id` fields inside `SseStream._transform()` — this app has no SSE routes at all, so it was never actually reachable, but `npm audit` offered no non-major fix). `npm audit`'s suggested fix target was `@nestjs/core@12.0.1`, but the advisory's real patched version is `11.1.18`. Checking peer dependencies directly on npm: `@nestjs/throttler` (guards `/auth/login` and `/auth/register` against brute-force, `ARCHITECTURE_DECISIONS.md` ADR-26) has no published version whose `peerDependencies` include `@nestjs/common@^12.0.0` — its latest, `6.5.0`, only declares support up to `^11.0.0`.
+**Decision.** Upgrade the `@nestjs/*` family to the 11.2.x line — `@nestjs/common`/`core`/`platform-express`/`testing` at `^11.2.3`; `@nestjs/config` `^12.0.0`, `@nestjs/passport` `^12.0.0`, `@nestjs/typeorm` `^12.0.1` (all three declare peer support for `@nestjs/common@^11.0.0`, so using their latest majors alongside Nest 11 is still inside their supported range); `@nestjs/throttler` unchanged at `^6.5.0` — instead of jumping to the 12.x line. `@nestjs/platform-express@11.x` already pulls Express 5 (the breaking change happens at 11, not 12), so targeting v11 costs the same migration effort as v12 while staying inside every dependency's officially-declared peer range.
+**Rationale.** Same CVE fix, same Express-5 migration cost, zero unverified peer-dependency combinations — particularly for the rate limiter, which is a security control guarding the login endpoint, not a cosmetic dependency.
+**Consequences.** `apps/backend/package.json` now declares `engines.node >= 20.19.0` (the strictest floor in the tree, from `@nestjs/typeorm@12.0.1`). A dedicated e2e test, `test/throttling.e2e-spec.ts`, proves the 6th `/auth/login` attempt within a minute still returns `429` under the new `@nestjs/throttler`/Nest-11 combination — verifying the exact compatibility question this decision turned on, not just that the app boots. `npm audit --omit=dev`: 3 moderate → 0.
+**Revisit when.** `@nestjs/throttler` publishes a release whose `peerDependencies` include `@nestjs/common@^12.0.0`, or another dependency forces a 12.x requirement anyway.
+
 ---
 
 ## Summary
@@ -219,6 +227,7 @@ Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 | 26 | Auth & roles | `BP §21.3` | — |
 | 27 | `bcryptjs` over `bcrypt` | audit | throughput bottleneck |
 | 28 | One active triad per profile (DB constraint) | `BP §4.3` | second in-progress status |
+| 29 | NestJS 11, not 12 | audit | `@nestjs/throttler` v12 support |
 
 ## How to add a decision
 
