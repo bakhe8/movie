@@ -438,9 +438,14 @@ export function RankScreen({
                 {(showAlt || title.releaseYear) && (
                   <p className={styles.alt}>
                     {showAlt && <bdi>{alt}</bdi>}
-                    {showAlt && title.releaseYear ? ' · ' : ''}
-                    {/* A year is an identifier, not a quantity: no grouping separator. */}
-                    {title.releaseYear ? String(title.releaseYear) : ''}
+                    {/* A year is an identifier, not a quantity: no grouping separator.
+                        The separator and the year wrap as one unit (audit 2026-09-04). */}
+                    {title.releaseYear && (
+                      <span className={styles.yearTail}>
+                        {showAlt ? ' · ' : ''}
+                        {String(title.releaseYear)}
+                      </span>
+                    )}
                   </p>
                 )}
               </div>

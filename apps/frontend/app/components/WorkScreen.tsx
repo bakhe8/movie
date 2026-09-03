@@ -3,8 +3,8 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { api, type FingerprintDimension, type LibraryRankingItem, type Recommendation, type Title, type TitleState } from '../lib/api';
 import { FEATURE_REASON_COPY } from '../lib/copy';
-import { DataNoticeBadge } from '../data-notice/DataNoticeBadge';
 import { PublicQualityCell } from '../public-quality/PublicQualityCell';
+import { collectSources, SourcesFooter } from '../public-quality/SourcesFooter';
 import { Poster } from './Poster';
 import { WorkCard } from './WorkCard';
 import styles from './WorkScreen.module.css';
@@ -295,8 +295,12 @@ export function WorkScreen({
         {(showAlt || title.releaseYear) && (
           <p className={styles.alt}>
             {showAlt && <bdi>{alt}</bdi>}
-            {showAlt && title.releaseYear ? ' · ' : ''}
-            {title.releaseYear ? String(title.releaseYear) : ''}
+            {title.releaseYear && (
+              <span className={styles.yearTail}>
+                {showAlt ? ' · ' : ''}
+                {String(title.releaseYear)}
+              </span>
+            )}
           </p>
         )}
         {title.genres && title.genres.length > 0 && (
@@ -316,13 +320,8 @@ export function WorkScreen({
               {title.description}
             </p>
           )}
-          {detail.posterSource?.attribution && (
-            <p className={styles.credit} dir="auto">
-              {detail.posterSource.attribution}
-            </p>
-          )}
-          {/* The rights badge beside the first external image (DATA_NOTICE_COPY §2). */}
-          {detail.posterSource?.attribution && <DataNoticeBadge lang={lang} className={styles.noticeBadge} />}
+          {/* No attribution sentence here: every third-party credit on the page
+              lives in the SourcesFooter at the end (owner, 2026-09-04). */}
         </div>
       </div>
 
@@ -399,6 +398,11 @@ export function WorkScreen({
           <span className={styles.hollow}>{t.fingerprintPending}</span>
         )}
       </section>
+
+      {/* One place for every third-party credit on this page: the sources
+          line, the badge, the verbatim lines folded (DATA_NOTICE_COPY §2).
+          Unmounting this one line is the whole removal once the agreements land. */}
+      <SourcesFooter lang={lang} sources={collectSources(detail)} />
 
       <section className={styles.section} aria-label={t.yourState}>
         <h3>{t.yourState}</h3>

@@ -3,7 +3,8 @@
 import type { LibraryRankingItem, Recommendation } from '../lib/api';
 import { TRACK_COPY } from '../lib/copy';
 import { formatConfidence, formatNumber, formatPersonalFit, formatReason, type PersonalFitLevel } from '../lib/format';
-import { DataNoticeBadge } from '../data-notice/DataNoticeBadge';
+import { PublicQualityCell } from '../public-quality/PublicQualityCell';
+import type { PublicQuality } from '../public-quality/types';
 import { Poster } from './Poster';
 import styles from './WorkCard.module.css';
 
@@ -33,7 +34,9 @@ type Lang = 'ar' | 'en';
  * they arrive.
  */
 type Contract = {
-  publicQuality?: { value: number | null; votes: number | null; sources: string[] } | null;
+  // The API's Public Quality object (board G4): rendered by PublicQualityCell,
+  // with the source's attribution and the rights badge, as soon as it arrives.
+  publicQuality?: PublicQuality | null;
   watchability?: { available: boolean | null; providers: { name: string; market: string }[] } | null;
 };
 
@@ -141,9 +144,8 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
   const filled = SEGMENTS[fit.level];
 
   // Public quality: contract object when present, else the transitional number.
-  const quality = rec
-    ? (rec.publicQuality ?? (rec.publicQualityScore === null ? null : { value: rec.publicQualityScore, votes: null, sources: [] }))
-    : null;
+  const fullQuality = rec?.publicQuality ?? null;
+  const quality = rec && !fullQuality && rec.publicQualityScore !== null ? { value: rec.publicQualityScore, votes: null, sources: [] as string[] } : null;
   // Availability: contract object when present, else the transitional number
   // (> 0 read as available; 0 as not; null as unknown).
   const watch = rec
@@ -182,8 +184,12 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
             {(showAlt || title.releaseYear) && (
               <p className={styles.alt}>
                 {showAlt && <bdi>{alt}</bdi>}
-                {showAlt && title.releaseYear ? ' · ' : ''}
-                {title.releaseYear ? String(title.releaseYear) : ''}
+                {title.releaseYear && (
+                  <span className={styles.yearTail}>
+                    {showAlt ? ' · ' : ''}
+                    {String(title.releaseYear)}
+                  </span>
+                )}
               </p>
             )}
           </div>
@@ -228,7 +234,9 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
           </div>
         )}
 
-        {!isRanking && !withoutQuality && (
+        {!isRanking && !withoutQuality && fullQuality && <PublicQualityCell quality={fullQuality} lang={lang} />}
+
+        {!isRanking && !withoutQuality && !fullQuality && (
           <div className={styles.cell}>
             <dt>{t.quality}</dt>
             <dd>
@@ -244,9 +252,6 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
               ) : (
                 <span className={`${styles.chip} ${styles.hollow}`}>{t.qualityUnknown}</span>
               )}
-              {/* The rights badge sits with every external score, present or
-                  pending (DATA_NOTICE_COPY §2). */}
-              <DataNoticeBadge lang={lang} className={styles.noticeBadge} />
             </dd>
           </div>
         )}

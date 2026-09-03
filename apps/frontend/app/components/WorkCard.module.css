@@ -362,7 +362,8 @@
   opacity: 1;
 }
 
-/* The rights badge under the quality value: a small link, start-aligned. */
-.noticeBadge {
-  justify-self: start;
+
+/* "· 2024" never splits from its separator when the alt title wraps. */
+.yearTail {
+  white-space: nowrap;
 }

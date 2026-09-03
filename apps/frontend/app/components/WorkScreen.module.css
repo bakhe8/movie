@@ -99,12 +99,6 @@
   background: linear-gradient(to top, var(--bg) 0%, transparent 75%);
 }
 
-.credit {
-  margin: var(--sp-1) 0 0;
-  color: var(--muted);
-  font-size: var(--fs-12);
-  text-align: start;
-}
 
 .eyebrow {
   margin: 0;
@@ -332,11 +326,12 @@
 }
 
 /* Public Quality section: the cell brings its own layout; the list only
-   resets the definition-list margin. The badge sits under the credit line. */
+   resets the definition-list margin. */
 .qualityList {
   margin: 0;
 }
 
-.noticeBadge {
-  justify-self: start;
+
+.yearTail {
+  white-space: nowrap;
 }

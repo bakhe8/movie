@@ -1,4 +1,4 @@
-import type { PublicQuality } from '../public-quality/types';
+import type { PublicQuality, TextSource } from '../public-quality/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3101/api';
 
@@ -75,6 +75,9 @@ export interface Title {
   // Public Quality as GET /titles/:id returns it since 2026-09-04 (ALPHA_PLAN
   // 5.3): sources listed separately, never merged; null = no source yet.
   publicQuality?: PublicQuality | null;
+  // The description's source from the rights registry (ALPHA_PLAN 5.1
+  // follow-up); the page's SourcesFooter folds its credit. null = no row.
+  descriptionSource?: TextSource | null;
 }
 
 export interface PaginatedTitles {
