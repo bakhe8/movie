@@ -2,7 +2,9 @@
 
 Complete reference documentation for the Movie Recommendation System. Start here to find what you need.
 
-> **Foundational document**: [movie_taste_platform_blueprint_ar.md](movie_taste_platform_blueprint_ar.md) (Arabic, v1.0) is the product's source of truth — vision, non-negotiable principles, UX, math, data, architecture, evaluation, privacy, and rollout. Every other document in this folder is an implementation detail that must stay consistent with it. Where a document below conflicts with the blueprint (numeric targets, scoring model, post-watch rating, etc.), the blueprint wins — flag and fix the conflict rather than follow the older doc.
+> **Foundational document**: [movie_taste_platform_blueprint_ar.md](movie_taste_platform_blueprint_ar.md) (Arabic, v1.0) is the product's sole source of truth — vision, non-negotiable principles, UX, math, data, architecture, evaluation, privacy, and rollout. Provenance rule for everything else in this folder:
+> - **Content that contradicts the blueprint** must be fixed to match it, or deleted if it can't be reconciled — not just hedged with a caveat. (A pass doing this ran across SPECIFICATION.md, RANKING_ALGORITHM.md, ARCHITECTURE_DECISIONS.md, architecture.md, schema.md, privacy.md, PHASE1_CHECKLIST.md, QUICKSTART.md, and both READMEs — merged Personal Fit/Public Quality/Watchability scores, post-watch star ratings, an uncalibrated percentage "confidence", a utility model missing the population prior, fixed pass/fail numeric targets presented as promises, a fabricated future model name ("GPT-5.6 Luna") — but it was targeted via search, not an exhaustive sentence-by-sentence diff, so treat any remaining inconsistency you spot the same way: fix or delete on sight, don't assume it was already checked.)
+> - **Content that is simply absent from the blueprint** (specific SQL types, exact folder layout, specific dollar-cost estimates, etc.) is this repo's own elaboration, not part of the authoritative spec. It isn't necessarily wrong, but it wasn't decided by the blueprint either — treat it as an unverified draft needing review before anyone builds on it as if it were settled, especially anywhere it states a specific number, name, or product behavior with more confidence than the blueprint itself claims.
 
 ---
 
@@ -215,10 +217,12 @@ Statistical model that learns user taste weights from complete rankings
 - See: [RANKING_ALGORITHM.md](RANKING_ALGORITHM.md) (full math + code)
 
 ### Preference Score
-`score_i = weights · fingerprint_i`
-- Computed real-time for recommendations
-- Cached in Redis
-- Deterministic (no randomness in MVP)
+Three separate values per film — never merged into one number (blueprint §4.4):
+- `personal_fit_i = weights · fingerprint_i + bias_i` — ranking-derived, this user only
+- `public_quality_i` — normalized critic/audience prior, independent source
+- `watchability_i` — availability now (market/platform/dub/subtitle)
+- Computed real-time for recommendations, cached in Redis
+- Deterministically ranked *within* each of the 3 tracks (safe/discovery/outside-usual), which are part of MVP scope, not a later addition (blueprint §4.4, §5.1)
 - See: [SPECIFICATION.md](SPECIFICATION.md) Section 6
 
 ### Event-Based Architecture

@@ -181,10 +181,12 @@ How do users provide preference signals? Options: rank 2 films, rank 3 films, ra
 ### Migration Path
 ```
 Phase 2+: Hybrid feedback
-├── Keep triadic ranking as primary
-├── Add implicit signals (clicks, watch time)
-├── Add 1-10 ratings (for films they've seen)
-└── Weight by confidence (triadic > watch time > rating)
+├── Keep triadic ranking as the ONLY explicit preference question — permanently,
+│   not just an MVP simplification (blueprint §2.4 principle #2, non-negotiable)
+├── Add implicit signals (clicks, watch time) — engagement only, low confidence
+└── An imported rating (from a user-provided list) may already exist as an
+    auxiliary low-confidence signal (blueprint §4.2) — but never solicited
+    in-app, and never a 1-10 prompt after a watch
 ```
 
 ---

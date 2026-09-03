@@ -250,16 +250,16 @@ $$w_u = w_{global} + w_{similarity\_group} + \Delta w_u$$
 **Primary Metric**: Pairwise accuracy on held-out triads
 - Extract all pairs (A > B, B > C, A > C)
 - Check if model correctly predicts order
-- Target: 60-65% after 20-30 triads
+- Illustrative starting point: ~60-65% after 20-30 triads — not a fixed pass/fail number; per blueprint §16.5/§17, the actual bar is set experimentally before each gate
 
 **Baselines to Beat**:
-1. Popularity ranking (IMDb rating or frequency)
+1. Popularity ranking (IMDb rating or frequency) — kept as its own baseline; never merged into Personal Fit (blueprint §4.4, §10.3)
 2. Genre-only matching
 3. Closest watched film
 4. Random Embeddings similarity
 5. Simple content model
 
-**Success Threshold**: Model must outperform all baselines by 5+ percentage points on pairwise accuracy
+**Success Threshold**: Model must outperform all baselines by a statistically significant margin on pairwise accuracy — "5+ percentage points" is an illustrative starting point, not the fixed bar (blueprint §16.5)
 
 ---
 
@@ -294,7 +294,7 @@ CREATE TABLE triads (
   model_version_used VARCHAR,
   reason_for_selection TEXT,
   
-  -- Replacements for "haven't watched"
+  -- Replacements for "haven't watched" / "don't remember" (both neutral, never a preference signal)
   replacements JSONB,
   
   created_at TIMESTAMP
@@ -493,8 +493,10 @@ title.save()
 
 ```python
 # User sees recommendation
-# Score was computed offline
-recommendation_score = 0.87  # Already computed
+# Scores were computed offline — kept as separate values, never merged (blueprint §4.4)
+personal_fit_score = 0.87    # Already computed
+public_quality_score = 0.71  # Independent source, own uncertainty
+confidence_band = "strong"   # Verbal band, not a raw % (blueprint §7.2)
 
 # Optionally, explain in natural language
 explanation = enrichment_worker.generate_recommendation_explanation(
@@ -527,9 +529,12 @@ def rank_films_for_user(user_id):
 # Use batch API for offline work (50% discount)
 batch_job = openai_client.beta.batch.create(requests=[...])
 
-# Use gpt-4o mini for cheap tasks
-# Use gpt-4o for quality fingerprints
-# Later: use GPT-5.6 Luna (cost-optimized) for bulk
+# Use a cheaper model tier for low-stakes tasks
+# Use a higher-quality model tier for fingerprints that need nuance
+# Re-evaluate model choice whenever OpenAI's lineup changes — don't hard-code a model name in docs;
+# this doc previously named a specific future model ("GPT-5.6 Luna") that isn't grounded in the
+# blueprint (which only specifies "OpenAI Responses API" generically) and wasn't a verified model —
+# removed as an unreliable, ungrounded addition.
 ```
 
 **Data Privacy**:
@@ -674,14 +679,13 @@ See [docs/privacy.md](privacy.md) for full compliance checklist.
 - ❌ Email
 - ❌ Collaborative filtering
 
-**Success Metrics**:
-- 65%+ of users complete 15 triads
-- Pairwise accuracy 60-65%
-- Model beats all baselines by 5+ points
+**Success Metrics** (illustrative starting points — see the actual Alpha gate in §12 below, sourced from blueprint §17.2; do not treat the numbers here as the fixed bar):
+- Majority of accepters complete 20-30 triads (blueprint §17.2 Alpha scope, not "15 triads")
+- Pairwise accuracy beats the best simpler baseline by a statistically significant margin
 - Session duration > 5 min
-- Replacement rate < 40%
+- Haven't-watched / not-remembered replacement rate stays low enough not to degrade triad reliability
 
-**Deployment**: Internal or restricted beta only
+**Deployment**: Internal or restricted Alpha only (80-150 users, blueprint §17.2)
 
 ### Phase 1b: Film Fingerprints (Parallel)
 - Curate 300-500 diverse films
@@ -721,22 +725,26 @@ See [docs/privacy.md](privacy.md) for full compliance checklist.
 | Session duration & fatigue | No worse than a non-adaptive baseline policy | Blueprint §16.4: adaptive vs. semi-fixed triad selection experiment |
 | First useful result | Reached within 3-5 triads | Blueprint's early-value gate (§8, gate 2) |
 
-### Phase 2 Scale (100-1000 users)
+### Closed/Public Beta direction (blueprint §17.3-§17.4)
 
-| Metric | Target |
+> Not blueprint-sourced numbers — these did not appear in the original blueprint and are this doc's own placeholders. Flagged per the no-fixed-promises rule (§17 intro, §16.5): treat every figure below as a hypothesis to validate, not a target already decided. Before relying on any of them, replace with thresholds set experimentally per the actual gates in blueprint §17.3/§17.4 (retention interpretable and improving, recommendations converting to watches and a positive later ranking, no large unexplained gap for Arabic/non-English titles).
+
+| Metric | Illustrative direction (unverified) |
 |--------|--------|
-| User retention (7-day) | 40%+ |
-| Triads per active user | 30+ |
-| Recommendation CTR | 15%+ |
-| User-generated feedback on recommendations | 50%+ |
+| User retention (D7/D30) | Improving trend, not a fixed % — blueprint §17.3 gate is "احتفاظ أولي قابل للتفسير" (interpretable early retention), not a specific number |
+| Triads per active user | Enough to keep the taste profile useful; exact count TBD experimentally |
+| Recommendations converting to a confirmed watch + later positive ranking | This is the blueprint's actual north-star metric (§3.3), tracked per-user/per-minute-of-training rather than as a flat CTR% |
+| Cross-language/country coverage gap | No large unexplained gap for Arabic or non-English titles (blueprint §17.3) |
 
 ### Long-Term
 
-| Metric | Target |
+> Also not blueprint-sourced. "User satisfaction 4.0/5.0+" in particular reads like a star-rating survey and should not be read as license to add an in-app star-rating UI — the blueprint's ban on post-watch star ratings (§4.5) is about the film-preference signal specifically, but any satisfaction measurement mechanism still needs its own design decision, not an assumed 5-star widget.
+
+| Metric | Illustrative direction (unverified) |
 |--------|--------|
-| Watch-through rate of recommended films | 70%+ |
-| User satisfaction with recommendations | 4.0/5.0+ |
-| Time between sessions | < 7 days (engaged users) |
+| Watch-through rate of recommended films | Directionally up over time; no fixed % committed here |
+| User satisfaction with recommendations | Measurement method TBD — do not default to a 5-star widget without a separate design decision |
+| Time between sessions | Shorter for engaged users; no fixed day-count committed here |
 
 ---
 

@@ -51,7 +51,7 @@ npm run dev
 Open your browser:
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:3101
-- **Health Check**: http://localhost:3101/health
+- **Health Check**: http://localhost:3101/api/health
 
 ## Common Commands
 
@@ -177,7 +177,7 @@ User sees 3 films and ranks them 1st, 2nd, 3rd. This trains the preference model
 Machine learns user's taste weights using Plackett-Luce MLE from triad rankings.
 
 ### Recommendation Score
-`score = weights · fingerprint + bias`
+Three separate values, never merged (blueprint §4.4): `personal_fit = weights · fingerprint + bias`, plus an independent `public_quality` and a `watchability` value, plus a confidence *band* (not a raw %).
 
 ## Support
 
@@ -193,7 +193,7 @@ Machine learns user's taste weights using Plackett-Luce MLE from triad rankings.
 2. Build frontend UI for ranking
 3. Create film fingerprinting worker
 4. Seed initial film catalog
-5. Run beta tests with 15-20 users
+5. Run the Alpha (80-150 users, blueprint §17.2) — 15-20 people is the earlier clickable-prototype cohort, not this stage
 6. Measure model accuracy vs. baselines
 
 Happy coding! 🎬

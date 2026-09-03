@@ -71,9 +71,12 @@
       │ - Scoring      │                        │ (No training)    │
       │ - Evaluation   │                        │                  │
       │                │                        │                  │
-      │ NumPy/SciPy    │                        │ gpt-4o,          │
-      └────────────────┘                        │ GPT-5.6 Luna     │
-                                                │ (cost optimized) │
+      │ NumPy/SciPy    │                        │ model tier TBD   │
+      └────────────────┘                        │ (pick per task at │
+                                                │  implementation   │
+                                                │  time; don't      │
+                                                │  hard-code a name │
+                                                │  here)            │
                                                 └──────────────────┘
 ```
 
@@ -118,7 +121,10 @@ New Film Added to Catalog
          1. Fetch film description & plot
          2. Call OpenAI Responses API
          3. Parse structured JSON fingerprint
-         4. Compute embedding (OpenAI embed-3-small)
+         4. Compute embedding — model choice is an open implementation decision, not
+            fixed by the blueprint; its own external references (Appendix د, م24) cite
+            text-embedding-3-large specifically, so treat that as the default unless a
+            benchmark justifies the cheaper -small variant
          5. Store fingerprint in PostgreSQL
          6. Store embedding in pgvector
          7. Update global model metadata
@@ -139,19 +145,24 @@ User Opens Recommendations Page
      │   - All unwatched titles
      │   - Title fingerprints
      │
-     ├─► Scores all titles:
-     │   score_i = weights · fingerprint_i + bias_i
+     ├─► Scores all titles — three separate values, never merged (blueprint §4.4):
+     │   personal_fit_i   = weights · fingerprint_i + bias_i
+     │   public_quality_i = normalized critic/audience prior (independent source)
+     │   watchability_i    = market/platform/dub-subtitle availability now
      │
-     ├─► Sort by score, filter by:
+     ├─► Sort candidates by personal_fit within each of 3 tracks (safe/discovery/outside-usual),
+     │   filter by:
      │   - Not watched
      │   - Not in watchlist
-     │   - Available in Saudi Arabia (future: JustWatch)
+     │   - Available in Saudi Arabia (future: JustWatch) — a filter, not a ranking factor
      │
-     ├─► Select top recommendations (e.g., 10)
+     ├─► Select top recommendations (e.g., 10), each carrying personal_fit, public_quality,
+     │   watchability, and a confidence BAND (not a raw %, until calibrated — blueprint §7.2)
      │
      └─► Optional: Call OpenAI for explanations (batch/async)
          explanation = "Based on your preference for [dims]
-                       and similarity to [watched films]..."
+                       and similarity to [watched films]..." (no-spoiler, generated only
+                       from features that actually drove the score — blueprint §9.4)
 ```
 
 ## Deployment Topology
