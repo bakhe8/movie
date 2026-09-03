@@ -18,6 +18,12 @@ export const IMDB_LICENSE = 'IMDb non-commercial datasets: personal and non-comm
 // backend, not the UI, is the single place the line lives.
 export const ATTRIBUTION_BY_SOURCE: Record<string, string> = {
   [IMDB_SOURCE]: 'Information courtesy of IMDb (https://www.imdb.com). Used with permission.',
+  // Catalog text and facts (ALPHA_PLAN 5.1, scripts/load-catalog-rights.ts):
+  // CC BY-SA needs the license named and a link to the page (the page URL is
+  // the registry row's `value`); CC0 needs nothing, credited anyway.
+  'wikipedia:en': 'Text from Wikipedia, licensed CC BY-SA 4.0',
+  'wikipedia:ar': 'Text from Wikipedia, licensed CC BY-SA 4.0',
+  wikidata: 'Data from Wikidata (CC0)',
 };
 
 // DATA_LICENSING.md §0: while the service earns nothing, a value with a
