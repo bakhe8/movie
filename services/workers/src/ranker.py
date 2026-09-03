@@ -1,0 +1,178 @@
+"""
+Plackett-Luce ranking model for learning user preferences from triadic comparisons.
+
+This module implements a simple Plackett-Luce model that learns preference weights
+from complete rankings of three items (triads).
+"""
+
+import numpy as np
+from scipy.special import logsumexp
+from scipy.optimize import minimize
+from typing import Dict, List, Tuple, Optional
+
+
+class PlackettLuceRanker:
+    """
+    Plackett-Luce model for learning user taste weights from triadic rankings.
+    
+    The model assumes that given a set of items with associated features (fingerprints),
+    a user's preference score for an item is: U_ui = w_u^T * x_i + delta_ui
+    
+    Where:
+    - w_u: user's taste weights
+    - x_i: film's fingerprint (feature vector)
+    - delta_ui: per-item bias term
+    """
+    
+    def __init__(self, fingerprint_dim: int, learning_rate: float = 0.01, regularization: float = 0.01):
+        """
+        Initialize the Plackett-Luce ranker.
+        
+        Args:
+            fingerprint_dim: Dimensionality of film fingerprints
+            learning_rate: Step size for optimization
+            regularization: L2 regularization coefficient
+        """
+        self.fingerprint_dim = fingerprint_dim
+        self.learning_rate = learning_rate
+        self.regularization = regularization
+        self.weights: Optional[np.ndarray] = None
+        self.bias_terms: Dict[str, float] = {}
+        
+    def fit(self, triads: List[Tuple[Tuple[str, str, str], List[int]]], fingerprints: Dict[str, np.ndarray]) -> None:
+        """
+        Fit the model to observed triadic rankings.
+        
+        Args:
+            triads: List of (title_id_1, title_id_2, title_id_3, ranking) tuples
+                   where ranking is [0, 1, 2] indicating the preference order
+            fingerprints: Dictionary mapping title_id to fingerprint vector
+        """
+        # Initialize weights if needed
+        if self.weights is None:
+            self.weights = np.random.randn(self.fingerprint_dim) * 0.01
+        
+        # Extract features for all triads
+        X_list = []
+        y_list = []
+        
+        for triad_ids, ranking in triads:
+            # Create feature matrix for this triad
+            X_triad = np.array([fingerprints.get(tid, np.zeros(self.fingerprint_dim)) for tid in triad_ids])
+            X_list.append(X_triad)
+            
+            # Ranking: which index is 1st, 2nd, 3rd
+            y_list.append(np.array(ranking, dtype=int))
+        
+        # Optimize weights using MLE
+        def negative_log_likelihood(w: np.ndarray) -> float:
+            """Negative log likelihood of observed rankings under Plackett-Luce model."""
+            nll = 0.0
+            
+            for X_triad, ranking in zip(X_list, y_list):
+                # Compute scores for all items in this triad
+                scores = X_triad @ w
+                
+                # Plackett-Luce probability: P(ranking) = 
+                # exp(score[1st]) / (exp(score[1st]) + exp(score[2nd]) + exp(score[3rd])) *
+                # exp(score[2nd]) / (exp(score[2nd]) + exp(score[3rd])) *
+                # exp(score[3rd]) / exp(score[3rd])
+                
+                # Log-likelihood
+                for pos in range(2):
+                    idx = ranking[pos]
+                    remaining_indices = ranking[pos:]
+                    remaining_scores = scores[remaining_indices]
+                    
+                    # Log probability for this position
+                    log_prob = scores[idx] - logsumexp(remaining_scores)
+                    nll -= log_prob
+            
+            # Add L2 regularization
+            nll += self.regularization * np.sum(w ** 2)
+            return nll
+        
+        # Optimize
+        result = minimize(
+            negative_log_likelihood,
+            self.weights,
+            method='BFGS',
+            options={'gtol': 1e-4}
+        )
+        
+        self.weights = result.x
+    
+    def predict_score(self, title_id: str, fingerprint: np.ndarray, bias: float = 0.0) -> float:
+        """
+        Predict preference score for a film given its fingerprint.
+        
+        Args:
+            title_id: ID of the title (for bias lookup)
+            fingerprint: Feature vector of the film
+            bias: Optional bias term
+            
+        Returns:
+            Predicted preference score
+        """
+        if self.weights is None:
+            raise ValueError("Model has not been fitted yet")
+        
+        score = float(fingerprint @ self.weights)
+        if title_id in self.bias_terms:
+            score += self.bias_terms[title_id]
+        return score
+    
+    def predict_ranking(self, title_ids: List[str], fingerprints: Dict[str, np.ndarray]) -> List[int]:
+        """
+        Predict ranking of titles by preference score.
+        
+        Args:
+            title_ids: List of title IDs
+            fingerprints: Mapping of title_id to fingerprint
+            
+        Returns:
+            Indices sorted by predicted preference (descending)
+        """
+        scores = [self.predict_score(tid, fingerprints.get(tid, np.zeros(self.fingerprint_dim))) for tid in title_ids]
+        return np.argsort(scores)[::-1].tolist()
+
+
+def compute_pairwise_accuracy(
+    triads: List[Tuple[Tuple[str, str, str], List[int]]],
+    fingerprints: Dict[str, np.ndarray],
+    ranker: PlackettLuceRanker
+) -> float:
+    """
+    Evaluate model accuracy on pairwise comparisons.
+    
+    Extracts all pairwise comparisons from triadic rankings and measures
+    the fraction correctly predicted.
+    
+    Args:
+        triads: List of triadic rankings
+        fingerprints: Mapping of title_id to fingerprint
+        ranker: Fitted PlackettLuceRanker model
+        
+    Returns:
+        Pairwise accuracy (0-1)
+    """
+    correct = 0
+    total = 0
+    
+    for triad_ids, ranking in triads:
+        # Extract all pairwise comparisons
+        for i in range(3):
+            for j in range(i + 1, 3):
+                idx_i, idx_j = ranking[i], ranking[j]
+                tid_i, tid_j = triad_ids[idx_i], triad_ids[idx_j]
+                
+                # Predict scores
+                score_i = ranker.predict_score(tid_i, fingerprints.get(tid_i, np.zeros(ranker.fingerprint_dim)))
+                score_j = ranker.predict_score(tid_j, fingerprints.get(tid_j, np.zeros(ranker.fingerprint_dim)))
+                
+                # Check if predicted correctly (i should beat j)
+                if score_i > score_j:
+                    correct += 1
+                total += 1
+    
+    return correct / total if total > 0 else 0.0

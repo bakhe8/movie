@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: ankane/pgvector:latest
+    container_name: movie-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-movieapp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-moviedb}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - movie-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-movieapp}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: movie-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - movie-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Separate, disposable database for the backend's e2e test suite
+  # (apps/backend/npm run test:e2e). Never used for dev/prod data.
+  postgres-test:
+    image: ankane/pgvector:latest
+    container_name: movie-postgres-test
+    environment:
+      POSTGRES_USER: movieapp
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_DB: moviedb_test
+    ports:
+      - "5544:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    networks:
+      - movie-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U movieapp"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  movie-network:
+    driver: bridge

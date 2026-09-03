@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.hypothesis/
+
+# Production
+dist/
+build/
+.next/
+.nuxt/
+.cache/
+.vuepress/dist/
+.serverless/
+
+# Misc
+.DS_Store
+*.pem
+.env
+.env.local
+.env.*.local
+.idea/
+.vscode/
+*.sw[op]
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python
+venv/
+env/
+.venv
+
+# Docker
+docker-compose.override.yml
