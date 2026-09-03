@@ -69,6 +69,31 @@ describe('AuthService', () => {
       ).rejects.toBeInstanceOf(ConflictException);
       expect(usersRepository.save).not.toHaveBeenCalled();
     });
+
+    // M3: findOne() then save() is a check-then-act race -- two concurrent
+    // registrations for the same email can both pass the findOne check
+    // before either saves. The loser must see the same 409 a sequential
+    // duplicate gets, not the raw 23505 as an unhandled 500.
+    it('maps a unique-constraint violation on save (a concurrent duplicate) to 409, not a raw 500', async () => {
+      usersRepository.findOne.mockResolvedValue(null);
+      vi.mocked(bcrypt.hash).mockResolvedValue('hashed-password' as never);
+      usersRepository.save.mockRejectedValue({ code: '23505' });
+
+      await expect(
+        service.register({ email: 'race@example.com', password: 'x', firstName: 'A', lastName: 'B' }),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('re-throws a save error that is not a unique-constraint violation', async () => {
+      usersRepository.findOne.mockResolvedValue(null);
+      vi.mocked(bcrypt.hash).mockResolvedValue('hashed-password' as never);
+      const dbError = new Error('connection reset');
+      usersRepository.save.mockRejectedValue(dbError);
+
+      await expect(
+        service.register({ email: 'x@example.com', password: 'x', firstName: 'A', lastName: 'B' }),
+      ).rejects.toBe(dbError);
+    });
   });
 
   describe('login', () => {

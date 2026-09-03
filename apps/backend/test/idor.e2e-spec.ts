@@ -191,8 +191,13 @@ describe('Cross-user access (IDOR) and auth guards', () => {
         .expect(400);
     });
 
-    it('rejects a malformed titleId on the public title-lookup route with 400, not 500', async () => {
-      await request(app.getHttpServer()).get('/titles/not-a-uuid').expect(400);
+    it('rejects a malformed titleId on the title-lookup route with 400, not 500', async () => {
+      // Auth-guarded since M2 -- a real token is required to even reach the
+      // ParseUUIDPipe check.
+      await request(app.getHttpServer())
+        .get('/titles/not-a-uuid')
+        .set('Authorization', `Bearer ${userA.token}`)
+        .expect(400);
     });
 
     it('rejects a malformed titleId when writing watch state with 400, not 500', async () => {
@@ -208,6 +213,67 @@ describe('Cross-user access (IDOR) and auth guards', () => {
         .get('/profiles/not-a-uuid/recommendations')
         .set('Authorization', `Bearer ${userA.token}`)
         .expect(400);
+    });
+  });
+
+  // M2 (an independent audit's finding): the catalog -- including the full
+  // 13-dimension fingerprint and third-party externalIds, a licensed derived
+  // asset (DATA_LICENSING.md) -- was reachable by anyone with no token at
+  // all, with only the global 60 req/min throttle in the way.
+  describe('catalog auth (M2)', () => {
+    it('rejects an unauthenticated list request', async () => {
+      await request(app.getHttpServer()).get('/titles').expect(401);
+    });
+
+    it('rejects an unauthenticated single-title request', async () => {
+      await request(app.getHttpServer())
+        .get('/titles/00000000-0000-0000-0000-000000000000')
+        .expect(401);
+    });
+
+    it('never returns fingerprint or externalIds, even to an authenticated caller', async () => {
+      const listResponse = await request(app.getHttpServer())
+        .get('/titles?limit=1')
+        .set('Authorization', `Bearer ${userA.token}`)
+        .expect(200);
+
+      expect(listResponse.body.items.length).toBeGreaterThan(0);
+      const [listed] = listResponse.body.items;
+      expect(listed).not.toHaveProperty('fingerprint');
+      expect(listed).not.toHaveProperty('externalIds');
+
+      const singleResponse = await request(app.getHttpServer())
+        .get(`/titles/${listed.id}`)
+        .set('Authorization', `Bearer ${userA.token}`)
+        .expect(200);
+
+      expect(singleResponse.body).not.toHaveProperty('fingerprint');
+      expect(singleResponse.body).not.toHaveProperty('externalIds');
+    });
+  });
+
+  // M3 (an independent audit's finding): register() checked for an existing
+  // email with findOne(), then save()'d unconditionally -- two concurrent
+  // registrations for the same email could both pass the check before
+  // either saved, so the loser hit the raw unique-constraint error as an
+  // unhandled 500 instead of the 409 a duplicate email should produce.
+  describe('register race (M3)', () => {
+    it('maps the losing concurrent registration to 409, not 500', async () => {
+      const email = `m3-race-${Date.now()}@example.com`;
+      const payload = (lastName: string) => ({
+        email,
+        password: 'CorrectHorseBattery1',
+        firstName: 'Race',
+        lastName,
+      });
+
+      const [first, second] = await Promise.all([
+        request(app.getHttpServer()).post('/auth/register').send(payload('First')),
+        request(app.getHttpServer()).post('/auth/register').send(payload('Second')),
+      ]);
+
+      const statuses = [first.status, second.status].sort();
+      expect(statuses).toEqual([201, 409]);
     });
   });
 });

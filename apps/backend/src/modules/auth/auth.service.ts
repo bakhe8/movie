@@ -44,7 +44,19 @@ export class AuthService {
       active: true,
     });
 
-    await this.usersRepository.save(user);
+    // The findOne check above doesn't stop two concurrent registrations of
+    // the same email from both passing it before either saves (M3) -- the
+    // loser then hits the `users.email` unique constraint. Map that the same
+    // way ProfilesService already does for its own unique constraint,
+    // instead of letting a raw 23505 fall through as an unhandled 500.
+    try {
+      await this.usersRepository.save(user);
+    } catch (error) {
+      if (this.isUniqueConstraintError(error)) {
+        throw new ConflictException('Email already registered');
+      }
+      throw error;
+    }
 
     // Generate JWT token
     const access_token = this.jwtService.sign({
@@ -141,5 +153,9 @@ export class AuthService {
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
+  }
+
+  private isUniqueConstraintError(error: unknown): boolean {
+    return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505';
   }
 }
