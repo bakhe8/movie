@@ -1,8 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
+import type { Repository } from 'typeorm';
 import { AppModule } from '../src/modules/app/app.module';
+import { User } from '../src/entities/user.entity';
 
 // Exercises the app over real HTTP against a real (disposable) Postgres
 // instance -- see package.json's `test:e2e*` scripts and
@@ -68,6 +71,30 @@ describe('Cross-user access (IDOR) and auth guards', () => {
         .get('/profiles')
         .set('Authorization', `Bearer ${userA.token}`)
         .expect(200);
+    });
+
+    // H2 (an independent audit's finding): login() already rejects a
+    // deactivated account, but that's not what runs on every other guarded
+    // request -- JwtStrategy calls AuthService.validateUser(), which never
+    // checked `active`. A still-unexpired JWT from before deactivation kept
+    // full API access. Deactivate directly via the repository (no admin
+    // endpoint exists yet to do it through the API) and prove the same
+    // token that worked above now doesn't.
+    it("rejects a deactivated account's still-valid JWT", async () => {
+      const user = await registerUser('deactivated');
+      const usersRepository = app.get<Repository<User>>(getRepositoryToken(User));
+
+      await request(app.getHttpServer())
+        .get('/profiles')
+        .set('Authorization', `Bearer ${user.token}`)
+        .expect(200);
+
+      await usersRepository.update({ email: user.email }, { active: false });
+
+      await request(app.getHttpServer())
+        .get('/profiles')
+        .set('Authorization', `Bearer ${user.token}`)
+        .expect(401);
     });
   });
 

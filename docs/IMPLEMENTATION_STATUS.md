@@ -1,7 +1,7 @@
 # Implementation Status — code versus blueprint
 
-> **Snapshot 2026-09-03, after the "close the six cheap gaps" change, a security/code-quality audit, a NestJS 10→11 migration, a dev-tooling security bump, a `SCHEMA.md` doc-sync fix, closing blueprint gaps 9, 2 and 3, an independent audit's H1 (triad pool exhaustion) fixed, plus a frontend ↔ backend boundary assessment (documentation only)** (base `093a1d3` on `main`).
-> Verified for this revision: backend vitest suite **59 tests / 6 files pass**; backend e2e suite **17 tests pass** over real HTTP against `postgres-test` with all seven migrations applied; Python pytest **39 tests pass** (+2 gap 9, +8 gap 2, +3 gap 3); `tsc --noEmit` clean for `apps/backend`, `apps/frontend` and `packages/shared`; `eslint` clean for both `apps/frontend` and `apps/backend`; `ruff` clean for `services/workers`; `npm audit` clean — 0 vulnerabilities, production and dev. `train-profile` was run **manually against the real local dev database** for the first time in this codebase's history (both the ≥5-triad and <5-triad paths, then again after gap 3's ranking-format change), which is how two previously-undiscovered, always-failing bugs in it were found and fixed (`uuid[]` parsing, a numpy-float leak into a psycopg2 parameter) — see the gap-2 table below. Gap 3 (title-id ranking, `Idempotency-Key`) was verified the same way as the manual browser pass below, freshly re-run today: register → Discover (mark 3 watched) → Rank (reorder, save) → confirmed via the network tab that the persisted triad carried real title-id `ranking`, `shownAt` < `answeredAt`, `modelVersion: null`, and the generated idempotency key; My list → Profile → language toggle → logout carried forward from an earlier snapshot, unaffected by today's changes. H1 (a concurrent independent audit's finding, [AUDIT_2026-09-03.md](AUDIT_2026-09-03.md)) was independently reproduced before fixing, then re-verified with a new e2e test running three real ranking rounds over real HTTP.
+> **Snapshot 2026-09-03, after the "close the six cheap gaps" change, a security/code-quality audit, a NestJS 10→11 migration, a dev-tooling security bump, a `SCHEMA.md` doc-sync fix, closing blueprint gaps 9, 2 and 3, an independent audit's H1 (triad pool exhaustion) and H2 (deactivated account access) fixed, plus a frontend ↔ backend boundary assessment (documentation only)** (base `093a1d3` on `main`).
+> Verified for this revision: backend vitest suite **60 tests / 6 files pass**; backend e2e suite **18 tests pass** over real HTTP against `postgres-test` with all seven migrations applied; Python pytest **39 tests pass** (+2 gap 9, +8 gap 2, +3 gap 3); `tsc --noEmit` clean for `apps/backend`, `apps/frontend` and `packages/shared`; `eslint` clean for both `apps/frontend` and `apps/backend`; `ruff` clean for `services/workers`; `npm audit` clean — 0 vulnerabilities, production and dev. `train-profile` was run **manually against the real local dev database** for the first time in this codebase's history (both the ≥5-triad and <5-triad paths, then again after gap 3's ranking-format change), which is how two previously-undiscovered, always-failing bugs in it were found and fixed (`uuid[]` parsing, a numpy-float leak into a psycopg2 parameter) — see the gap-2 table below. Gap 3 (title-id ranking, `Idempotency-Key`) was verified the same way as the manual browser pass below, freshly re-run today: register → Discover (mark 3 watched) → Rank (reorder, save) → confirmed via the network tab that the persisted triad carried real title-id `ranking`, `shownAt` < `answeredAt`, `modelVersion: null`, and the generated idempotency key; My list → Profile → language toggle → logout carried forward from an earlier snapshot, unaffected by today's changes. H1 and H2 (a concurrent independent audit's findings, [AUDIT_2026-09-03.md](AUDIT_2026-09-03.md)) were both independently reproduced before fixing, then re-verified with new e2e tests over real HTTP.
 >
 > Two verdicts per row, because "the code exists and runs" and "it does what the blueprint requires" are different claims:
 >
@@ -91,6 +91,16 @@ While adding the e2e test, found and fixed an unrelated, pre-existing test-fragi
 
 ---
 
+## Closed on 2026-09-03 (H2 — deactivated account access, from an independent audit)
+
+Not one of the originally numbered gaps below — found by a concurrent independent audit ([AUDIT_2026-09-03.md](AUDIT_2026-09-03.md) §2 H2), reproduced and confirmed independently before fixing (see ADR-35).
+
+| Bug | What changed | Proof |
+|---|---|---|
+| `AuthService.login()` already rejected `active=false` (`§21.3`), but `login()` isn't what runs on every other guarded request — `JwtStrategy.validate()` calls `AuthService.validateUser()`, which never checked `active` at all. A still-unexpired JWT issued before deactivation kept full API access for the rest of its 7-day lifetime; deactivating an account only blocked *new* logins, not the token already in the user's hand | `validateUser()` now returns `null` when `!user.active`, exactly as it already does for "no such user" — Passport turns that into a 401 the same way (ADR-35) | New unit test in `auth.service.spec.ts` (60 total) — a deactivated user's id resolves to `null`, not the safe-user projection; new e2e test in `idor.e2e-spec.ts` (18 total) — the same token that got 200 pre-deactivation gets 401 immediately after, no re-login involved |
+
+---
+
 ## Project setup
 
 | Item | Built | Blueprint | Evidence / gap |
@@ -131,9 +141,10 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Register / login / JWT (`AuthService`, `AuthController`) | ✅ | 🟡 | `§13.1`: pseudonymous taste id exists (profile); no market/platforms; no `consents` at registration (`§2.4 #9`) |
 | Password hashing (bcrypt cost 10), email validation, 8–64 char passwords | ✅ | — | |
 | Auth throttling (5 req/min) + global 60 req/min | ✅ | — | `§21.3` |
+| Deactivated accounts locked out of every guarded route, not just login | ✅ | ✅ | `§21.3`; H2 fix, ADR-35 — `validateUser()` (what every guarded request actually runs) now checks `active` too, not only `login()` |
 | Refresh tokens | ❌ | — | ADR-26, before Alpha |
 | Roles (`users.role`) for the admin board | ❌ | ❌ | `§5.1` |
-| Unit tests | ✅ | — | `auth.service.spec.ts`, 9 tests |
+| Unit tests | ✅ | — | `auth.service.spec.ts`, 10 tests |
 | Frontend: login / register (`AuthScreen`) | ✅ | ❌ | `§4.1` onboarding (language, market, platforms, consent, import) not collected |
 | Frontend: session persistence, auto-redirect, logout | ✅ | — | `localStorage` via `lib/session.tsx` |
 | Password reset | ❌ | — | |
@@ -285,4 +296,4 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 
 **Next milestone (in order):** the replacement endpoint + two UI buttons (ADR-17) and `triads.holdout`/`correctsTriadId` (same M1 step, [SCHEMA.md](SCHEMA.md) §2.4); then a training trigger through the FastAPI service (ADR-25) and the real confidence-band criteria now that held-out metrics exist (gap 5); then M5 + persisted recommendations and outcomes (gap 4) so the post-watch loop can close; then consent/onboarding (gap 7) and the admin board. Gaps 2, 3 and 9 are done.
 
-**Last updated**: 2026-09-03 · **Status**: core loop (auth → mark watched → rank → train by CLI → recommend) runs locally. Closed today: the original six cheap gaps, five security/code-quality audit findings, the NestJS 10→11 migration (ADR-29), a dev-tooling security bump (ADR-30), blueprint gaps 9 (enrichment worker), 2 (temporal hold-out, ADR-31) and 3 (triad event completeness, ADR-32), and an independent audit's H1 finding — permanent title exclusion across triads (ADR-34). `npm audit` clean end to end. Six blueprint-conformance gaps still fall short: 1 (schema), 4 (recommendations not persisted), 5 (confidence band), 6 (fingerprint provenance/V2), 7 (onboarding), 8 (PWA) — list above. Assessed today: the frontend ↔ backend boundary — separated in responsibilities, not in contract (section above).
+**Last updated**: 2026-09-03 · **Status**: core loop (auth → mark watched → rank → train by CLI → recommend) runs locally. Closed today: the original six cheap gaps, five security/code-quality audit findings, the NestJS 10→11 migration (ADR-29), a dev-tooling security bump (ADR-30), blueprint gaps 9 (enrichment worker), 2 (temporal hold-out, ADR-31) and 3 (triad event completeness, ADR-32), and an independent audit's H1 (permanent title exclusion across triads, ADR-34) and H2 (deactivated accounts kept API access via `validateUser()`, ADR-35) findings. `npm audit` clean end to end. Six blueprint-conformance gaps still fall short: 1 (schema), 4 (recommendations not persisted), 5 (confidence band), 6 (fingerprint provenance/V2), 7 (onboarding), 8 (PWA) — list above. Assessed today: the frontend ↔ backend boundary — separated in responsibilities, not in contract (section above).

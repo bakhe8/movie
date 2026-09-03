@@ -155,5 +155,25 @@ describe('AuthService', () => {
 
       await expect(service.validateUser('missing-id')).resolves.toBeNull();
     });
+
+    // H2: this is what every guarded request actually runs (not login()),
+    // so a deactivated account whose JWT is still unexpired kept full API
+    // access for the rest of its 7-day lifetime until this check existed.
+    // Passport treats a null return as "authentication failed" (401), the
+    // same mechanism already used for "no such user".
+    it('returns null for a deactivated user, not the (still valid) JWT holder', async () => {
+      usersRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        email: 'user@example.com',
+        password: 'hashed-password',
+        firstName: 'A',
+        lastName: 'B',
+        active: false,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+
+      await expect(service.validateUser('user-1')).resolves.toBeNull();
+    });
   });
 });

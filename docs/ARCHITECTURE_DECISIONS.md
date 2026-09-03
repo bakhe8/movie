@@ -1,7 +1,7 @@
 # Architecture Decision Records
 
 **Status**: Living log. Every decision cites the blueprint section it serves (`BP §x.y`) or states that it is this repository's own engineering choice within the blueprint's constraints. A decision that contradicts the blueprint is a bug in this file. Product-level open questions that must be settled by experiment are **not** decided here — they are listed in `BP App. C` and [SPECIFICATION.md §11](SPECIFICATION.md).
-**Version**: 2.6 — 2026-09-03 (ADR-1…13 rewritten for consistency; ADR-14…26 added to close the gaps found in the documentation audit; ADR-27…28 added from a code-quality/security audit; ADR-29 added for the NestJS 10→11 migration; ADR-30 added for the `@typescript-eslint`/`vitest` dev-tooling bump; ADR-31 added for the training temporal hold-out, gap 2; ADR-32 added for triad event completeness, gap 3; ADR-33 added for prediction display formatting; ADR-34 added for the H1 triad-reuse fix).
+**Version**: 2.7 — 2026-09-03 (ADR-1…13 rewritten for consistency; ADR-14…26 added to close the gaps found in the documentation audit; ADR-27…28 added from a code-quality/security audit; ADR-29 added for the NestJS 10→11 migration; ADR-30 added for the `@typescript-eslint`/`vitest` dev-tooling bump; ADR-31 added for the training temporal hold-out, gap 2; ADR-32 added for triad event completeness, gap 3; ADR-33 added for prediction display formatting; ADR-34 added for the H1 triad-reuse fix; ADR-35 added for the H2 deactivated-account fix).
 
 Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 
@@ -236,6 +236,13 @@ Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 **Consequences.** A title can be reused after just one intervening triad. `random-v1`'s other `BP §8.3` gaps (session limit/fatigue, reserved hold-out, director/language guard) are unchanged and still open.
 **Revisit when.** The adaptive policy lands and can express repetition as a real scored penalty instead of a fixed one-triad lookback.
 
+## ADR-35 — `AuthService.validateUser()` checks `active` (H2)
+
+**Context.** `login()` already rejected a deactivated account (`§21.3` account takeover controls), but `validateUser()` — what `JwtStrategy` actually runs on *every other* guarded request — did not check `active` at all. A deactivated account's still-unexpired JWT kept full API access for the rest of its 7-day lifetime; only re-authenticating was blocked. Found by an independent audit ([AUDIT_2026-09-03.md](AUDIT_2026-09-03.md) §2 H2), reproduced and confirmed independently before fixing.
+**Decision.** `validateUser()` now returns `null` when `!user.active`, exactly as it already does for "no such user" — Passport treats a `null` return from a JWT strategy's `validate()` as authentication failure (`401`), so this reuses a mechanism that already existed rather than adding a new one.
+**Consequences.** No behavior change for active accounts. A newly deactivated account is locked out of every guarded route on its very next request, not just at its next login.
+**Revisit when.** ADR-26's refresh-token work lands — re-verify the refresh path also re-checks `active` and doesn't reintroduce this gap through a second code path.
+
 ---
 
 ## Summary
@@ -276,6 +283,7 @@ Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 | 32 | Triad event completeness: timestamps, `Idempotency-Key`, ranking by title id | `BP §13.2`, `§14`, ADR-15 | — |
 | 33 | Prediction display: verbal confidence everywhere, Personal Fit never a % | `BP §4.4`, `§7.2`, `§9.3` | App. C confidence-display experiment after calibration |
 | 34 | `random-v1` excludes only the previous triad, not full history (H1) | `BP §8.1`, `§8.2` | adaptive policy computes a real `Repeat` penalty |
+| 35 | `validateUser()` checks `active` (H2) | `BP §21.3` | refresh-token work (ADR-26) |
 
 ## How to add a decision
 

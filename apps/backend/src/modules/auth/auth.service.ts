@@ -104,9 +104,16 @@ export class AuthService {
 
   // Called by JwtStrategy on every guarded request; the result becomes
   // req.user, so it must never carry the password hash (see SafeUser).
+  // Passport treats a null return as "authentication failed" (401) the same
+  // way it already does for "no such user" -- so a deactivated account's
+  // still-valid JWT (login() rejects new logins, but this guard path is what
+  // every other request actually runs) is rejected the same way, not just
+  // at the login endpoint (H2, an independent audit's finding: this check
+  // was missing here, so a deactivated account kept API access for the rest
+  // of its 7-day token lifetime).
   async validateUser(userId: string): Promise<SafeUser | null> {
     const user = await this.usersRepository.findOne({ where: { id: userId } });
-    if (!user) {
+    if (!user || !user.active) {
       return null;
     }
     return {
