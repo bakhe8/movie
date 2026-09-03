@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
 import { Title } from '../../entities/title.entity';
+import { PublicQuality, PublicQualityService } from '../public-quality/public-quality.service';
 import { ListTitlesQueryDto } from './dto/list-titles-query.dto';
 import { ARABIC_FOLD_FROM, ARABIC_FOLD_TO, diversify, foldArabic } from './starter';
 
@@ -15,6 +16,11 @@ const STARTER_POOL_SIZE = 300;
 // the work page, which doesn't exist yet. Not fetched from the DB at all
 // (see the `select` lists below), not just omitted from the response.
 export type PublicTitle = Omit<Title, 'fingerprint' | 'externalIds'>;
+
+// The work page (`GET /titles/:id`, BP §5.3): Public Quality travels as its
+// own value with its source and attribution, never merged into anything;
+// null when no displayable source exists (BP §11.3), never 0.
+export type WorkPageTitle = PublicTitle & { publicQuality: PublicQuality | null };
 
 const PUBLIC_TITLE_COLUMNS = [
   'title.id',
@@ -41,6 +47,7 @@ export class TitlesService {
   constructor(
     @InjectRepository(Title)
     private readonly titlesRepository: Repository<Title>,
+    private readonly publicQualityService: PublicQualityService,
   ) {}
 
   async findAll(query: ListTitlesQueryDto): Promise<PaginatedTitles> {
@@ -97,7 +104,7 @@ export class TitlesService {
     return diversify(pool as PublicTitle[], limit);
   }
 
-  async findOne(titleId: string): Promise<PublicTitle> {
+  async findOne(titleId: string): Promise<WorkPageTitle> {
     const title = await this.titlesRepository.findOne({
       where: { id: titleId },
       select: {
@@ -115,6 +122,7 @@ export class TitlesService {
     if (!title) {
       throw new NotFoundException('Title not found');
     }
-    return title;
+    const publicQuality = await this.publicQualityService.forTitle(titleId);
+    return { ...title, publicQuality };
   }
 }

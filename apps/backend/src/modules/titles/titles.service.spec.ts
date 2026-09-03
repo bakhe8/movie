@@ -3,6 +3,7 @@ import { NotFoundException } from '@nestjs/common';
 import type { Repository } from 'typeorm';
 import { Title } from '../../entities/title.entity';
 import { ListTitlesQueryDto } from './dto/list-titles-query.dto';
+import { PublicQualityService } from '../public-quality/public-quality.service';
 import { TitlesService } from './titles.service';
 
 function queryBuilderMock(items: Partial<Title>[], total: number) {
@@ -24,11 +25,13 @@ function listQuery(overrides: Partial<ListTitlesQueryDto> = {}): ListTitlesQuery
 
 describe('TitlesService', () => {
   let titlesRepository: { findOne: ReturnType<typeof vi.fn>; createQueryBuilder: ReturnType<typeof vi.fn> };
+  let publicQualityService: { forTitle: ReturnType<typeof vi.fn> };
   let service: TitlesService;
 
   beforeEach(() => {
     titlesRepository = { findOne: vi.fn(), createQueryBuilder: vi.fn() };
-    service = new TitlesService(titlesRepository as unknown as Repository<Title>);
+    publicQualityService = { forTitle: vi.fn().mockResolvedValue(null) };
+    service = new TitlesService(titlesRepository as unknown as Repository<Title>, publicQualityService as unknown as PublicQualityService);
   });
 
   describe('findAll', () => {
@@ -73,6 +76,20 @@ describe('TitlesService', () => {
       expect(call.select.fingerprint).toBeUndefined();
       expect(call.select.externalIds).toBeUndefined();
       expect(call.select.titleEn).toBe(true);
+    });
+
+    // ALPHA_PLAN 5.3 / BP §5.3: the work page carries Public Quality as its
+    // own value from PublicQualityService -- null when there is none, never 0.
+    it('attaches publicQuality from PublicQualityService, null when no displayable source exists', async () => {
+      titlesRepository.findOne.mockResolvedValue({ id: 't-1', titleEn: 'Arrival' });
+      const quality = { value: 7.8, votes: 1200, sources: [{ source: 'imdb', value: 7.8, scale: '0-10', votes: 1200, capturedAt: '2026-09-04T00:00:00.000Z', attribution: 'x' }] };
+      publicQualityService.forTitle.mockResolvedValueOnce(quality);
+
+      expect(await service.findOne('t-1')).toMatchObject({ id: 't-1', publicQuality: quality });
+      expect(publicQualityService.forTitle).toHaveBeenCalledWith('t-1');
+
+      publicQualityService.forTitle.mockResolvedValueOnce(null);
+      expect((await service.findOne('t-1')).publicQuality).toBeNull();
     });
 
     it('throws 404 for an unknown title', async () => {

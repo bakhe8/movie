@@ -95,6 +95,25 @@ export interface Title {
   genres: string[] | null;
   externalIds?: { imdb?: string; tmdb?: string; wikidata?: string } | null;
   fingerprint?: FilmFingerprintV1 | null;
+  /** Work page only (`GET /titles/:id`): Public Quality per source with its attribution (§10.3); null = no displayable source, never 0. */
+  publicQuality?: PublicQuality | null;
+}
+
+/** One source's reception value (§10.3, API.md §2.3). `attribution` is the line the source requires, rendered next to the value. */
+export interface PublicQualitySourceView {
+  source: string;
+  value: number | null;
+  scale: string | null;
+  votes: number | null;
+  capturedAt: string;
+  attribution: string | null;
+}
+
+/** Sources listed separately, never averaged (§10.3); `value`/`votes` are set only when exactly one source exists. */
+export interface PublicQuality {
+  value: number | null;
+  votes: number | null;
+  sources: PublicQualitySourceView[];
 }
 
 /** Exposure / list state. `not_watched` = unknown exposure, never a negative signal (§2.4 #3). */
