@@ -157,12 +157,15 @@ Target: App Router routes (`/onboarding`, `/rank`, `/discover`, `/library`, `/re
 
 ```
 src/ranker.py       PlackettLuceRanker (listwise PL, BFGS, population_priors, bias_terms), compute_pairwise_accuracy
-src/training.py     CLI train-profile: loads completed triads + fingerprints, fits, writes user_model_snapshots
-src/enrichment.py   FilmEnrichmentWorker (Chat Completions structured parse; explanation generator) — unused
-tests/              21 tests
+src/training.py     CLI train-profile: loads completed triads + fingerprints (V1 + V2 + V3 keys), fits, writes user_model_snapshots
+src/model_service.py FastAPI service the backend calls: POST /train, GET /health (`make model-service`, 127.0.0.1:8001) — built
+src/enrichment.py   FilmEnrichmentWorker (Anthropic structured outputs: V1, V2 families, V3 form families; explanation generator; per-call accounting)
+src/enrich_catalog.py  batch runner for the demo catalog (--v2, --v3, --ar-evidence, placeholders, reports)
+src/fingerprint_v2_eval.py / train_demo.py  offline feature-set evaluation; demo-persona training and recovery
+tests/              pytest
 ```
 
-Target: `api.py` (FastAPI: train, triads/select, score, taste-profile, shared-space/retrain), `policy.py`, `confidence.py`, `attribution.py`, `shared_space.py`, `evaluation.py`, `enrichment/` pipeline with validation and review queue. See [RANKING_ALGORITHM.md](RANKING_ALGORITHM.md) §15.
+Target (the rest of `api.py`: triads/select, score, taste-profile, shared-space/retrain), `policy.py`, `confidence.py`, `attribution.py`, `shared_space.py`, `evaluation.py`, `enrichment/` pipeline with validation and review queue. See [RANKING_ALGORITHM.md](RANKING_ALGORITHM.md) §15.
 
 ### 4.4 Shared package (`packages/shared`)
 

@@ -100,6 +100,8 @@ cd services/workers && python -m src.training <profile-uuid>
 
 (with Poetry: `poetry run python -m src.training <profile-uuid>`)
 
+Or run `make model-service` (the training HTTP service on 127.0.0.1:8001) before starting the backend so training happens automatically after each completed triad; without it, training stays this manual step.
+
 5. **قائمتي / My list** now shows a recommendation list computed from the snapshot. Until a snapshot exists the API answers 409 and the UI shows "not ready yet".
 
 ### 6.1 Demo data instead of walking the loop by hand
