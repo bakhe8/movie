@@ -1,10 +1,25 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './modules/app/app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // M10 (BP §21.3): behind any reverse proxy -- every staging/prod topology
+  // these docs describe, even though hosting itself is undecided (ADR-24)
+  // -- Express's default req.ip is the proxy's own address, not the
+  // client's, so every user shares one ThrottlerGuard bucket and the
+  // auth routes' 5/min brute-force limit becomes 5/min combined for
+  // everyone. A hop count, not `true`: `true` trusts an arbitrary-length
+  // forwarded chain, which would let a client set its own
+  // X-Forwarded-For and dodge the limit entirely. 1 (a single reverse
+  // proxy directly in front of the app) is correct for every topology
+  // named in these docs; TRUST_PROXY_HOPS overrides it once a real one is
+  // chosen. @nestjs/throttler's default tracker already reads req.ip, so
+  // no custom getTracker is needed once Express resolves it correctly.
+  app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS ?? 1));
 
   // Matches NEXT_PUBLIC_API_URL=http://localhost:3101/api in
   // apps/frontend/.env.local -- keep both in sync.
