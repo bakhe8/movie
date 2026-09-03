@@ -8,6 +8,7 @@ import { AppModule } from '../src/modules/app/app.module';
 import { Recommendation } from '../src/entities/recommendation.entity';
 import { Title } from '../src/entities/title.entity';
 import { UserModelSnapshot } from '../src/entities/user-model-snapshot.entity';
+import { UserTitleState } from '../src/entities/user-title-state.entity';
 
 const FINGERPRINT_DIMENSIONS = [
   'pacing',
@@ -79,6 +80,35 @@ describe('Recommendation persistence (real HTTP, real DB, blueprint gap 4)', () 
   it('writes one recommendations row per shown result, sharing a requestId, and never leaks into another profile', async () => {
     const token = await registerUser(app, 'persist-check');
     const profileId = await createProfile(app, token, 'Persist check');
+
+    // findForProfile() candidates are every fingerprinted title in the whole
+    // database minus this profile's watched ones (by design -- recommend
+    // from the full catalog, not just titles this profile has touched).
+    // postgres-test is shared and accumulates fingerprinted titles across
+    // many other e2e specs' beforeAll hooks over this disposable container's
+    // life, so without isolating the pool, which two titles land in the
+    // top-`limit` here depends on whatever else happens to exist at run
+    // time. Mark every other fingerprinted title watched for this fresh
+    // profile -- the same exclusion the service already applies for real
+    // usage -- so this test's own two titles are the only candidates left,
+    // deterministically, regardless of accumulated data.
+    const titlesRepository = app.get<Repository<Title>>(getRepositoryToken(Title));
+    const otherFingerprintedTitles = await titlesRepository
+      .createQueryBuilder('title')
+      .where('title.fingerprint IS NOT NULL')
+      .andWhere('title.id NOT IN (:...titleIds)', { titleIds })
+      .getMany();
+    if (otherFingerprintedTitles.length > 0) {
+      const statesRepository = app.get<Repository<UserTitleState>>(getRepositoryToken(UserTitleState));
+      await statesRepository.save(
+        otherFingerprintedTitles.map((title) => ({
+          profileId,
+          titleId: title.id,
+          state: 'watched' as const,
+          watchedAt: new Date(),
+        })),
+      );
+    }
 
     const snapshotsRepository = app.get<Repository<UserModelSnapshot>>(getRepositoryToken(UserModelSnapshot));
     await snapshotsRepository.save({
