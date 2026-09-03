@@ -18,6 +18,7 @@ import { WatchEventsModule } from '../watch-events/watch-events.module';
 import { OutcomesModule } from '../outcomes/outcomes.module';
 import { TrainingModule } from '../training/training.module';
 import { PrivacyModule } from '../privacy/privacy.module';
+import { AdminModule } from '../admin/admin.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { PrivacyModule } from '../privacy/privacy.module';
     OutcomesModule,
     TrainingModule,
     PrivacyModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [

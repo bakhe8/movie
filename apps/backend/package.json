@@ -16,6 +16,7 @@
     "seed:demo": "npm run build && node dist/scripts/seed-demo.js",
     "seed:demo:clean": "npm run build && node dist/scripts/seed-demo.js --clean",
     "catalog:fetch": "tsx src/scripts/fetch-catalog.ts",
+    "admin:grant": "npm run build && node dist/scripts/grant-admin.js",
     "start": "node dist/main.js",
     "lint": "eslint src/",
     "test": "vitest run -c vitest.config.ts",
