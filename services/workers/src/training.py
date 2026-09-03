@@ -121,6 +121,22 @@ def compute_language_diversity(triads: List[TriadEvent], languages: Dict[str, st
     return len(seen)
 
 
+def compute_director_diversity(triads: List[TriadEvent], directors: Dict[str, List[str]]) -> int:
+    """
+    Distinct director count across every title in `triads` (blueprint gap 5,
+    BP §9.2's third and last named diversity axis). Same treatment as
+    compute_genre_diversity: a title missing from `directors` (no `credits`
+    row with role 'director', or the title predates gap 6's ingestion pass)
+    contributes nothing -- unknown, not evidence against diversity. A
+    co-directed title's directors are each counted (list-valued, like genre).
+    """
+    seen = set()
+    for triad_ids, _ in triads:
+        for title_id in triad_ids:
+            seen.update(directors.get(title_id, []))
+    return len(seen)
+
+
 def ranking_to_indices(triad_ids: Tuple[str, str, str], ranking_title_ids: List[Any]) -> List[int]:
     """
     Convert a triads.ranking row -- title ids in ranked order, best first
@@ -146,6 +162,7 @@ class TrainingResult:
     standard_errors: Optional[np.ndarray]
     training_genre_diversity: Optional[int]
     training_language_diversity: Optional[int]
+    training_director_diversity: Optional[int]
     # The L2 strength actually used to fit the served weights -- REGULARIZATION_GRID's
     # default (first entry) below the 5-triad floor, held-out-chosen above it.
     # Diagnostic only, not persisted (RANKING_ALGORITHM.md/ADR-22's determinism
@@ -159,6 +176,7 @@ def train_and_evaluate(
     fingerprints: Dict[str, np.ndarray],
     genres: Optional[Dict[str, List[str]]] = None,
     languages: Optional[Dict[str, str]] = None,
+    directors: Optional[Dict[str, List[str]]] = None,
 ) -> TrainingResult:
     """
     Temporal hold-out, fit, evaluate, refit for serving -- no I/O (RANKING_ALGORITHM.md
@@ -176,11 +194,12 @@ def train_and_evaluate(
     hold-out existed) -- the held-out slice affects only which metrics get
     reported, never what the profile is actually served.
 
-    `genres` (title_id -> genre list) and `languages` (title_id -> original
-    language) are optional and used only for `training_genre_diversity` /
-    `training_language_diversity` (blueprint gap 5); omitting either (or
-    passing an empty dict) is equivalent to no title having any known
-    genre/language.
+    `genres` (title_id -> genre list), `languages` (title_id -> original
+    language) and `directors` (title_id -> director person-id list) are
+    optional and used only for `training_genre_diversity` /
+    `training_language_diversity` / `training_director_diversity` (blueprint
+    gap 5); omitting any of them (or passing an empty dict) is equivalent to
+    no title having any known genre/language/director.
     """
     fingerprint_dim = next(iter(fingerprints.values())).shape[0]
     n = len(complete_triads)
@@ -191,6 +210,7 @@ def train_and_evaluate(
     standard_errors: Optional[np.ndarray] = None
     training_genre_diversity: Optional[int] = None
     training_language_diversity: Optional[int] = None
+    training_director_diversity: Optional[int] = None
     # Below the 5-triad floor there's no held-out slice to choose from --
     # default to the grid's first (smallest, most permissive) entry, same
     # spirit as every other held-out-gated diagnostic here reporting nothing
@@ -224,6 +244,7 @@ def train_and_evaluate(
 
         training_genre_diversity = compute_genre_diversity(complete_triads, genres or {})
         training_language_diversity = compute_language_diversity(complete_triads, languages or {})
+        training_director_diversity = compute_director_diversity(complete_triads, directors or {})
 
     serving_ranker = PlackettLuceRanker(fingerprint_dim, regularization=chosen_regularization)
     # No population_priors source exists yet (no shared/cross-user popularity or
@@ -246,6 +267,7 @@ def train_and_evaluate(
         standard_errors=standard_errors,
         training_genre_diversity=training_genre_diversity,
         training_language_diversity=training_language_diversity,
+        training_director_diversity=training_director_diversity,
         chosen_regularization=chosen_regularization,
     )
 
@@ -317,6 +339,18 @@ def train_profile(profile_id: str) -> TrainingResult:
             for title_id, _fingerprint, _genres, language in rows
             if language
         }
+        # Director data lives relationally (credits/people, blueprint gap 6,
+        # ADR-70), not as a titles column like genre/language -- a separate
+        # query, one row per (title, director) credit. A title with no
+        # 'director'-role credit contributes no entry, same "unknown, not
+        # evidence against diversity" treatment as a missing genre/language.
+        cursor.execute(
+            'SELECT "titleId", "personId" FROM credits WHERE role = \'director\' AND "titleId" = ANY(%s::uuid[])',
+            (title_ids,),
+        )
+        directors: Dict[str, List[str]] = {}
+        for title_id, person_id in cursor.fetchall():
+            directors.setdefault(str(title_id), []).append(str(person_id))
         # Order is preserved from the ORDER BY above -- list comprehensions don't reshuffle.
         complete_triads = [
             (triad_ids, ranking)
@@ -326,7 +360,7 @@ def train_profile(profile_id: str) -> TrainingResult:
         if not complete_triads:
             raise ValueError("Completed triads need complete fingerprints on all three titles before model training")
 
-        result = train_and_evaluate(complete_triads, fingerprints, genres, languages)
+        result = train_and_evaluate(complete_triads, fingerprints, genres, languages, directors)
         # posterior holds UserModelSnapshotPosterior's shape (apps/backend's
         # user-model-snapshot.entity.ts) -- keep the two in sync by hand.
         posterior = json.dumps({"standardErrors": result.standard_errors.tolist()}) if result.standard_errors is not None else None
@@ -335,8 +369,8 @@ def train_profile(profile_id: str) -> TrainingResult:
             INSERT INTO user_model_snapshots
               ("profileId", weights, "biasTerms", "modelVersion", "trainingTriadCount", "pairwiseAccuracy",
                "heldOutTriadCount", "heldOutNll", "heldOutPairwiseAccuracy", posterior, "trainingGenreDiversity",
-               "trainingLanguageDiversity")
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               "trainingLanguageDiversity", "trainingDirectorDiversity")
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ''',
             (
                 profile_id,
@@ -351,6 +385,7 @@ def train_profile(profile_id: str) -> TrainingResult:
                 posterior,
                 result.training_genre_diversity,
                 result.training_language_diversity,
+                result.training_director_diversity,
             ),
         )
 
@@ -370,8 +405,9 @@ def main() -> None:
             f"chosen regularization={result.chosen_regularization}"
         )
         print(
-            f"Training evidence spanned {result.training_genre_diversity} distinct genre(s) and "
-            f"{result.training_language_diversity} distinct language(s) (blueprint gap 5)"
+            f"Training evidence spanned {result.training_genre_diversity} distinct genre(s), "
+            f"{result.training_language_diversity} distinct language(s) and "
+            f"{result.training_director_diversity} distinct director(s) (blueprint gap 5)"
         )
     else:
         print("Fewer than 5 completed triads -- no held-out evaluation or posterior/diversity metrics yet (RANKING_ALGORITHM.md §6, blueprint gap 5)")

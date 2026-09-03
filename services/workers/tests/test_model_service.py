@@ -20,6 +20,7 @@ def _result(triads=7):
         standard_errors=None,
         training_genre_diversity=4,
         training_language_diversity=2,
+        training_director_diversity=3,
         chosen_regularization=0.03,
     )
 

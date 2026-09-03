@@ -94,6 +94,7 @@ function warmthOnlySnapshot(
     posterior?: { standardErrors: number[] } | null;
     trainingGenreDiversity?: number | null;
     trainingLanguageDiversity?: number | null;
+    trainingDirectorDiversity?: number | null;
   } = {},
 ) {
   return {
@@ -105,6 +106,7 @@ function warmthOnlySnapshot(
     posterior: options.posterior ?? null,
     trainingGenreDiversity: options.trainingGenreDiversity ?? null,
     trainingLanguageDiversity: options.trainingLanguageDiversity ?? null,
+    trainingDirectorDiversity: options.trainingDirectorDiversity ?? null,
   };
 }
 
@@ -583,6 +585,59 @@ describe('RecommendationsService', () => {
     it('falls back to the triad-count heuristic when diversity is unknown (below the 5-triad floor)', async () => {
       profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
       snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot(30, null, { trainingLanguageDiversity: null }));
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+      expect(result[0].confidenceBand).toBe('strong');
+    });
+  });
+
+  // Blueprint gap 5 (BP §9.2's third and last named diversity axis),
+  // unblocked by gap 6's director-credit ingestion pass (ADR-70) -- same
+  // rule as genre/language, mirrored exactly.
+  describe('confidence band factors in training director diversity (blueprint gap 5)', () => {
+    it('demotes to inconclusive when every triad drew from the same one director', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot(30, null, { trainingDirectorDiversity: 1 }));
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+      expect(result[0].confidenceBand).toBe('inconclusive');
+    });
+
+    it('demotes to inconclusive when no title in training had a known director', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot(30, null, { trainingDirectorDiversity: 0 }));
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+      expect(result[0].confidenceBand).toBe('inconclusive');
+    });
+
+    it('keeps the triad-count band with at least 2 distinct directors', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot(30, null, { trainingDirectorDiversity: 4 }));
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+      expect(result[0].confidenceBand).toBe('strong');
+    });
+
+    it('falls back to the triad-count heuristic when diversity is unknown (below the 5-triad floor)', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot(30, null, { trainingDirectorDiversity: null }));
       statesRepository.find.mockResolvedValue([]);
       const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));

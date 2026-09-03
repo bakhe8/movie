@@ -13,6 +13,7 @@ export interface ModelServiceJobResult {
   heldOutPairwiseAccuracy: number | null;
   trainingGenreDiversity: number | null;
   trainingLanguageDiversity: number | null;
+  trainingDirectorDiversity: number | null;
   chosenRegularization: number;
 }
 

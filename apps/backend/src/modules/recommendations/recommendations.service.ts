@@ -76,10 +76,13 @@ const POSTERIOR_STABILITY_Z = 1.0;
 const MIN_TRAINING_GENRE_DIVERSITY = 2;
 
 // Same floor, the second of §9.2's three named diversity axes: fewer than 2
-// distinct Title.originalLanguage values across the training triads. The
-// third axis (director) has no data yet -- people/credits/source_records
-// stay empty until a real ingestion pass runs (blueprint gap 6).
+// distinct Title.originalLanguage values across the training triads.
 const MIN_TRAINING_LANGUAGE_DIVERSITY = 2;
+
+// Same floor, the third and last of §9.2's three named diversity axes:
+// fewer than 2 distinct directors across the training triads. Unblocked by
+// blueprint gap 6's director-credit ingestion pass (ADR-70).
+const MIN_TRAINING_DIRECTOR_DIVERSITY = 2;
 
 // One step down per band. A title with unknown fingerprint dimensions cannot be
 // recommended with the same confidence as a fully described one (blueprint §9.1
@@ -381,14 +384,13 @@ export class RecommendationsService {
     return weightedScore + (snapshot.biasTerms?.[title.id] ?? 0);
   }
 
-  // Provisional heuristic banding covering four of blueprint §9.2's five
+  // Heuristic banding covering all of blueprint §9.2's diversity-related
   // criteria: evidence quantity ("عدد أدلة فعال كافٍ"), held-out prediction
-  // success, stable posterior direction, and diversity of evidence -- now
-  // two of the three named diversity axes, genre and language (gap 5/gap 6).
-  // Still NOT the fully calibrated confidence system blueprint §9.3/§16.2
-  // describes -- director diversity has no data yet (people/credits/
-  // source_records are empty, blueprint gap 6, still open for that one axis),
-  // and no Brier/ECE calibration exists (ADR-21). Until then this
+  // success, stable posterior direction, and diversity of evidence -- all
+  // three named axes now wired: genre (ADR-62), language (ADR-64) and
+  // director (ADR-71, unblocked by gap 6's ingestion pass, ADR-70). Still
+  // NOT the fully calibrated confidence system blueprint §9.3/§16.2
+  // describes -- no Brier/ECE calibration exists (ADR-21). Until then this
   // thresholding is deliberately conservative and must never be presented to
   // the user as a precise probability; it only decides which verbal band
   // copy to show.
@@ -419,6 +421,12 @@ export class RecommendationsService {
     // Same check, the language axis: fewer than 2 distinct original languages
     // across the training evidence.
     if (snapshot.trainingLanguageDiversity !== null && snapshot.trainingLanguageDiversity < MIN_TRAINING_LANGUAGE_DIVERSITY) {
+      return 'inconclusive';
+    }
+
+    // Same check, the third and last named axis: fewer than 2 distinct
+    // directors across the training evidence.
+    if (snapshot.trainingDirectorDiversity !== null && snapshot.trainingDirectorDiversity < MIN_TRAINING_DIRECTOR_DIVERSITY) {
       return 'inconclusive';
     }
 

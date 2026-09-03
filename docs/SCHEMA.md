@@ -85,7 +85,7 @@ triad_replacements (                                             -- one append-o
 
 user_model_snapshots (                                           -- one row per training run (BP §13.1 taste_profiles, partial)
   id uuid PK, "profileId" uuid NOT NULL FK profiles ON DELETE CASCADE,
-  weights real[] NOT NULL,                                       -- θᵤ over FINGERPRINT_DIMENSIONS order (13 today)
+  weights real[] NOT NULL,                                       -- θᵤ over FINGERPRINT_DIMENSIONS order (28 since ADR-69: 13 V1 + 15 V2)
   "biasTerms" json,                                              -- { titleId: δ }; PlackettLuceRanker.fit() never populates this yet, so it is always {} today
   "modelVersion" varchar NOT NULL, "trainingTriadCount" integer NOT NULL,
   "validationAccuracy" real, "pairwiseAccuracy" real,            -- pairwiseAccuracy is in-sample today
@@ -96,6 +96,7 @@ user_model_snapshots (                                           -- one row per 
   "calibratedAgainst" varchar,                                   -- FK shared_latent_space_versions(version) once M7 creates that table (M4, ADR-54); plain column until then
   "trainingGenreDiversity" integer,                              -- distinct genre count across the training triads (gap 5); NULL below the 5-triad floor (ADR-62)
   "trainingLanguageDiversity" integer,                           -- distinct titles.originalLanguage count across the training triads (gap 5/gap 6); NULL below the same floor (ADR-64)
+  "trainingDirectorDiversity" integer,                           -- distinct director (credits.role='director') count across the training triads (gap 5, closed in full); NULL below the same floor (ADR-71)
   "createdAt" timestamp,
   INDEX ("profileId", "createdAt" DESC)                          -- M4
 )
@@ -484,6 +485,8 @@ Each step is one TypeORM migration; none require data backfill beyond defaults b
 ---
 
 **Changelog**
+- 2.22 (2026-09-04): twentieth migration `AddTrainingDirectorDiversity` applied -- adds `user_model_snapshots.trainingDirectorDiversity integer` (blueprint gap 5, ADR-71). The third and last of `BP §9.2`'s three named diversity axes, closing the criterion in full: `training.py`'s `train_profile()` now queries `credits`/`people` (`role = 'director'`) alongside `genres`/`languages` and writes `trainingDirectorDiversity` the same way the other two are written; `RecommendationsService.confidenceBand()` demotes to `inconclusive` below 2 distinct directors, mirroring the genre/language checks exactly. Verified with a real `python -m src.training` run against `movie-postgres`'s highest-triad-count demo profile (49 distinct directors across 47 completed triads), read back from the persisted row; full backend (211/211 unit) and Python (139/139) suites green.
+- 2.21 (2026-09-04): no migration -- application code, `apps/backend/src/scripts/load-director-credits.ts` (ADR-70). Joins ADR-65's staged Wikidata director fetch to the now-loaded catalog (WS3): writes `people` (232 new rows, deduped by `externalIds.wikidata`), `credits` (313 rows, `role: 'director'`) and `source_records` (313 rows, `license: 'CC0'`, `licenseStatus: 'commercial_allowed'`, DATA_LICENSING.md §3.1) for 295 of 300 demo titles -- the first real ingestion pass into any of M3's rights-registry/provenance tables, closing blueprint gap 6. Verified with a real (non-dry-run) run against `movie-postgres`, read back with `SELECT count(*)` matching the script's own summary exactly, and the full e2e suite green after.
 - 2.20 (2026-09-04): no migration -- application code and JSON-column shape only (`titles.fingerprint` is already `json`; the new `v2` key is additive within it, no DDL change). `training.py`/`recommendations.service.ts` grow `FINGERPRINT_DIMENSIONS` from 13 (V1) to 28 (V1 + 15 namespaced V2 families, ADR-69) and now read `fingerprint.v2.features` for the second half. `UserModelSnapshot.weights`'s existing length guard (`loadSnapshot()`) already refuses a pre-this-change (13-length) snapshot -- no migration or backfill needed for correctness.
 - 2.19 (2026-09-04): no migration -- application code. `TriadsService.rank()` (ADR-68) writes `outcomes.type: 'ranked_later'` (using `triadId`/`rankPosition`, both columns since M5, unused until now) for any ranked title that traces back to a `recommendations` row -- the last `Outcome` type without a writer. Blueprint gap 4 is closed in full.
 - 2.18 (2026-09-04): no migration -- application code. `OutcomesService.create()` (new `POST /api/recommendations/:recommendationId/outcome`, ADR-67) writes `outcomes` for the four caller-reportable types (`saved`/`clicked`/`dismissed_not_relevant`/`opened_provider`); `watched` already written by `WatchEventsService` (ADR-66), `ranked_later` still has no writer (needs `TriadsService.rank()` instrumentation). `library_imports` remains M5's only fully unwritten table.

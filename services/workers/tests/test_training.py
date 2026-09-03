@@ -6,6 +6,7 @@ from src.training import (
     FINGERPRINT_DIMENSIONS,
     FINGERPRINT_V1_DIMENSIONS,
     REGULARIZATION_GRID,
+    compute_director_diversity,
     compute_genre_diversity,
     compute_language_diversity,
     fingerprint_vector,
@@ -193,6 +194,37 @@ class TestComputeLanguageDiversity:
         assert compute_language_diversity(triads, {}) == 0
 
 
+class TestComputeDirectorDiversity:
+    # Blueprint gap 5 (BP §9.2): the third and last named diversity axis,
+    # mirroring TestComputeGenreDiversity exactly -- list-valued per title
+    # (like genre), since a title can have more than one director.
+    def test_counts_distinct_directors_across_every_title_in_every_triad(self):
+        triads, _ = make_triads(2)
+        directors = {
+            "A0": ["p1"], "B0": ["p2"], "C0": ["p1", "p3"],
+            "A1": ["p4"], "B1": ["p2"], "C1": ["p4"],
+        }
+
+        assert compute_director_diversity(triads, directors) == 4  # p1, p2, p3, p4
+
+    def test_one_director_repeated_across_every_title_scores_one(self):
+        triads, _ = make_triads(3)
+        directors = {tid: ["p1"] for triad_ids, _ in triads for tid in triad_ids}
+
+        assert compute_director_diversity(triads, directors) == 1
+
+    def test_a_title_missing_from_the_directors_mapping_contributes_nothing_not_a_failure(self):
+        triads, _ = make_triads(1)  # ("A0", "B0", "C0")
+        directors = {"A0": ["p1"], "B0": ["p2"]}  # C0 has no known director (no 'director' credit)
+
+        assert compute_director_diversity(triads, directors) == 2
+
+    def test_no_titles_have_any_known_director_scores_zero(self):
+        triads, _ = make_triads(2)
+
+        assert compute_director_diversity(triads, {}) == 0
+
+
 class TestTrainAndEvaluate:
     # RANKING_ALGORITHM.md §6 step 2: below 5 completed triads there isn't
     # enough data left after a split to make held-out metrics meaningful, so
@@ -211,6 +243,7 @@ class TestTrainAndEvaluate:
         assert result.standard_errors is None
         assert result.training_genre_diversity is None
         assert result.training_language_diversity is None
+        assert result.training_director_diversity is None
 
     def test_five_or_more_triads_holds_out_floor_0_2n_most_recent(self):
         for n, expected_held_out in [(5, 1), (9, 1), (10, 2), (25, 5)]:
@@ -223,9 +256,10 @@ class TestTrainAndEvaluate:
             assert result.held_out_pairwise_accuracy is not None
             assert result.standard_errors is not None
             assert result.standard_errors.shape == (1,)  # one per fingerprint dimension
-            # No genres/languages passed in this test -- absence, not zero diversity.
+            # No genres/languages/directors passed in this test -- absence, not zero diversity.
             assert result.training_genre_diversity == 0
             assert result.training_language_diversity == 0
+            assert result.training_director_diversity == 0
 
     def test_genre_diversity_reflects_the_genres_mapping_passed_in(self):
         triads, fingerprints = make_triads(5)
@@ -242,6 +276,14 @@ class TestTrainAndEvaluate:
         result = train_and_evaluate(triads, fingerprints, genres=None, languages=languages)
 
         assert result.training_language_diversity == 3
+
+    def test_director_diversity_reflects_the_directors_mapping_passed_in(self):
+        triads, fingerprints = make_triads(5)
+        directors = {"A0": ["p1"], "B1": ["p2"], "C2": ["p3"]}
+
+        result = train_and_evaluate(triads, fingerprints, genres=None, languages=None, directors=directors)
+
+        assert result.training_director_diversity == 3
 
     def test_served_weights_are_still_fit_on_every_triad_not_just_the_training_slice(self):
         # Step 6: the held-out split affects only which metrics get reported;

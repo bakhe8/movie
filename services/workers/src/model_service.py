@@ -87,6 +87,7 @@ def summarize(result: TrainingResult) -> Dict[str, Any]:
         "heldOutPairwiseAccuracy": result.held_out_pairwise_accuracy,
         "trainingGenreDiversity": result.training_genre_diversity,
         "trainingLanguageDiversity": result.training_language_diversity,
+        "trainingDirectorDiversity": result.training_director_diversity,
         "chosenRegularization": result.chosen_regularization,
     }
 

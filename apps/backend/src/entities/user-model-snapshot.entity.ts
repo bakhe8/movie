@@ -94,11 +94,17 @@ export class UserModelSnapshot {
 
   // Same idea, the second of §9.2's three named diversity axes: distinct
   // Title.originalLanguage count across the triads this snapshot was trained
-  // on. The third axis (director) still has no data -- people/credits/
-  // source_records stay empty until a real ingestion pass runs (blueprint
-  // gap 6). NULL for snapshots trained before this column existed.
+  // on. NULL for snapshots trained before this column existed.
   @Column({ type: 'integer', nullable: true })
   trainingLanguageDiversity: number | null;
+
+  // The third and last of §9.2's three named diversity axes: distinct
+  // director (people.id via credits.role = 'director') count across the
+  // triads this snapshot was trained on. Blocked until blueprint gap 6's
+  // ingestion pass landed (ADR-70); NULL for snapshots trained before this
+  // column existed, same as the other two axes.
+  @Column({ type: 'integer', nullable: true })
+  trainingDirectorDiversity: number | null;
 
   @CreateDateColumn()
   createdAt: Date;
