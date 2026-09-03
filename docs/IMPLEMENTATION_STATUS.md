@@ -1,6 +1,6 @@
 # Implementation Status — code versus blueprint
 
-> **Snapshot 2026-09-03, after the "close the six cheap gaps" change plus a security/code-quality audit and a NestJS 10→11 migration** (base `9ff2583` on `main`; the NestJS migration below is on branch `nestjs-11-migration`, uncommitted at time of writing).
+> **Snapshot 2026-09-03, after the "close the six cheap gaps" change plus a security/code-quality audit and a NestJS 10→11 migration** (base `7608a91` on `main`).
 > Verified for this revision: backend vitest suite **48 tests / 6 files pass**; backend e2e suite **13 tests pass** (12 IDOR/auth-guard + 1 new rate-limiting test) over real HTTP against `postgres-test` with all five migrations applied; Python pytest **26 tests pass**; `tsc --noEmit` clean for `apps/backend`, `apps/frontend` and `packages/shared`; `eslint` clean for both `apps/frontend` and `apps/backend`; the migrations applied to the local dev database; `npm audit --omit=dev` **clean — 0 vulnerabilities** (down from 14 earlier today, via the two rounds in the audit table below); a real `node dist/main.js` production-mode boot (not just the Nest testing module) verified over actual HTTP, including CORS and rate-limit headers. The manual browser pass (register → Discover → Rank → My list → Profile → language toggle → logout) was verified in an earlier snapshot and is carried forward; nothing in today's work touched the frontend UI or its dependencies.
 >
 > Two verdicts per row, because "the code exists and runs" and "it does what the blueprint requires" are different claims:
