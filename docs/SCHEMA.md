@@ -111,12 +111,24 @@ consents (                                                       -- one grant/re
 )
 
 privacy_requests (                                               -- export/delete/reset lifecycle (BP §13.1, §14, PRIVACY.md §5)
-  id uuid PK, "userId" uuid NOT NULL FK users(id),                -- no ON DELETE clause (matches target DDL) -- see note below
+  id uuid PK, "userId" uuid FK users(id) ON DELETE SET NULL,      -- nullable since PrivacyRequestsTombstone (gap 7's delete flow, ALPHA_PLAN 2.1) -- see note below
+  "subjectKey" varchar(64),                                      -- sha256(userId), written on every request; survives the row's userId going NULL (PRIVACY.md §9's "permanent record without personal data")
+  "profileId" uuid,                                              -- bare uuid, no FK -- which profile a 'reset' request applied to; the profile may be gone by the time this is read
   type varchar NOT NULL,                                         -- 'export' | 'delete' | 'reset'
   status varchar NOT NULL,                                       -- 'requested' | 'verifying' | 'scheduled' | 'running' | 'done' | 'cancelled'
   "requestedAt" timestamp NOT NULL, "executeAfter" timestamp, "completedAt" timestamp,
   "artifactUrl" varchar, "executionLog" json,
-  INDEX ("userId")
+  INDEX ("userId"), INDEX ("subjectKey")
+)
+
+refresh_tokens (                                                 -- ADR-26: rotated refresh tokens with family-level reuse detection
+  id uuid PK, "userId" uuid NOT NULL FK users ON DELETE CASCADE, -- a privacy purge takes every session with the account
+  "tokenHash" varchar(64) UNIQUE NOT NULL,                       -- sha256 of the raw token; the raw value is never stored
+  "familyId" uuid NOT NULL,                                      -- one rotation chain; reusing a superseded token revokes the whole family
+  "expiresAt" timestamp NOT NULL, "revokedAt" timestamp, "revokedReason" varchar,
+  "replacedById" uuid,                                           -- bare uuid, no FK -- points at the token this one rotated into
+  "ipHash" varchar, "createdAt" timestamp NOT NULL DEFAULT now(),
+  INDEX ("userId"), INDEX ("familyId")
 )
 
 audit_log (                                                      -- append-only, BP §21.1/§21.3
@@ -253,7 +265,7 @@ Indexes: primary keys and the unique constraints above, the partial unique index
 
 `embeddings.vector` is still `real[]`, not the `vector(n)` pgvector type §2.4's plan row names for M7: unlike every other item across all seven steps, SCHEMA.md's target DDL never specified a literal dimension `n`, because no document or code in this repository commits to one — no embedding-generation code exists anywhere, and the table is empty in every environment. Converting the column now would mean inventing a product/vendor decision (which embedding model, hence cost and lock-in) with no grounding. Asked the user directly rather than guessing (2026-09-03); decided to defer this one item — it is the only piece of the entire seven-step plan still open (ADR-57).
 
-`privacy_requests.userId` has no `ON DELETE` action and `audit_log.actorUserId` has no FK at all, on purpose: PRIVACY.md §5 requires both to survive as a tombstone after the user they name is deleted, which is in tension with a NOT NULL FK to a row a delete flow would remove. No delete flow exists yet (blueprint gap 7) — this is deliberately left for whoever builds it to resolve (`SET NULL` vs. a denormalized snapshot of the deleted user), not decided silently here.
+`privacy_requests.userId` is resolved (`PrivacyRequestsTombstone`, ALPHA_PLAN 2.1): nullable with `ON DELETE SET NULL`, plus `subjectKey` (a `sha256(userId)` written on every request, surviving the purge) so an operator can still answer "was this account deleted, and when?" from the id alone without keeping the id itself after deletion — PRIVACY.md §9's "permanent record without personal data", the `SET NULL` option this note originally left open. `audit_log.actorUserId` still has no FK at all, on purpose, for the identical reason — still deliberately left open, since no code writes a delete-triggered row there yet that would force the question.
 
 `source_records.titleId` and `content_features.supersededBy` follow the DDL literally too: `source_records` is nullable on `titleId` (a record can describe something other than one title) and both `source_records.supersededBy`/`content_features.supersededBy` are self-referencing FKs with no `ON DELETE` action — a correction is a new row, the old one is never deleted, so there is nothing for a cascade to do.
 

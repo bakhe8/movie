@@ -463,7 +463,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Contract enforced at compile time | ❌ | — | three hand-kept copies: `packages/shared/src/types.ts` (consumed by nobody), backend entities + `title-fingerprint.type.ts` ("keep both copies in sync by hand"), `apps/frontend/app/lib/api.ts` ("mirrors backend shapes"); drift is caught only by the backend e2e suite and the frontend has no tests. Fix per ADR-11: emit the OpenAPI description from the controllers, generate the frontend client and types from it, delete the copies |
 | Response DTO layer (entity shape ≠ public contract) | ❌ | ❌ | `§14`, ADR-15: controllers return TypeORM entities; a new column is public by default; the password hash is stripped by hand in `AuthService` only |
 | Triad response carries its items | ✅ | — | every `Triad` response (`current`, `rank`, `replace`) carries `items` in `displayOrder`, public columns only (API.md 1.7); the screen renders in one round trip |
-| Session token handling | 🟡 | — | JWT in `localStorage`, no refresh (ADR-26, before Alpha) — see *Authentication and accounts* |
+| Session token handling | 🟡 | — | backend rotates refresh tokens since `7603900` (ADR-26); frontend still holds only the access token in `localStorage` with no refresh flow (F8, open) — see *Authentication and accounts* |
 | Independently deployable | ❌ | — | by decision (ADR-1: release together; compose has no app containers; `npm run dev` runs both) until `§12.3` signals |
 
 ## Authentication and accounts
@@ -474,8 +474,8 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Password hashing (bcrypt cost 10), email validation, 8–64 char passwords | ✅ | — | |
 | Auth throttling (5 req/min) + global 60 req/min | ✅ | — | `§21.3` |
 | Deactivated accounts locked out of every guarded route, not just login | ✅ | ✅ | `§21.3`; H2 fix, ADR-35 — `validateUser()` (what every guarded request actually runs) now checks `active` too, not only `login()` |
-| Refresh tokens | ❌ | — | ADR-26, before Alpha |
-| Roles (`users.role`) for the admin board | ❌ | ❌ | `§5.1` |
+| Refresh tokens | ✅ | — | ADR-26, `7603900`: rotated on use, family-level reuse detection (an old token reused revokes the whole chain), `refresh_tokens` table; frontend adoption is F8, open |
+| Roles (`users.role`) for the admin board | 🟡 | ❌ | `§5.1`; `AdminGuard` exists and checks `users.role`, but no admin route exists yet to guard |
 | Unit tests | ✅ | — | `auth.service.spec.ts`, 10 tests |
 | Frontend: login / register (`AuthScreen`) + onboarding (`OnboardingScreen`) | ✅ | 🟡 | `§4.1`: language, market and platforms collected and saved; the "what we collect and why" step now records `watch_history`/`personalization_individual` consent (ADR-60) — `personalization_pooled`/`analytics_first_party` disclosure+opt-out, `terms_privacy` at registration, and CSV import still missing (gap 7) |
 | Frontend: session persistence, auto-redirect, logout | ✅ | — | `localStorage` via `lib/session.tsx` |
@@ -501,7 +501,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | `TitlesService` list/search/get/starter | ✅ | 🟡 | ILIKE on `titleEn`/`titleAr` **with Arabic folding on both sides** since 2026-09-03 (hamza forms of alef → ا, ة → ه, ى → ي, tashkeel/tatweel ignored; `translate()` in SQL, `foldArabic` in code) so «احلام» finds «أحلام»; `GET /titles/starter` — the `§4.2` diverse starter list, a deterministic round-robin across primary genres (`diversify()`); still missing: `§5.1` alternate titles / `§12.1` FTS — `localized_titles` (with its GIN index) exists since M3 but search hasn't switched over to it yet |
 | Fingerprint field (`FilmFingerprintV1`, 13 dims) | ✅ | 🟡 | V1 frozen (ADR-19); per-dimension `confidence`/`content_features` provenance still empty (no ingestion pass writes there yet) — separate from director-credit provenance (`people`/`credits`/`source_records`), which is loaded, gap 6 closed (ADR-70) |
 | Fingerprint field V2 (15 namespaced families, nested `fingerprint.v2`) | ✅ | 🟡 | extracted for all 300 demo titles (session C); wired into the trainer/scorer as a 28-dim vector since 2026-09-04 (ADR-69); People/Cultural-context blocks still unbuilt (`FINGERPRINT_SCHEMA.md` §3.1) |
-| Rights registry (`source_records`) | ❌ | ❌ | `§11.1` — table exists since M3, empty; seeded rows still carry `licenseStatus: 'unknown'` |
+| Rights registry (`source_records`) | 🟡 | 🟡 | `§11.1` — populated since 2026-09-04 for director credits (313 rows, ADR-70); `unknown`/`non_commercial_only` are displayable through the free launch (owner decision 2026-09-04, DATA_LICENSING.md §0, ADR-72), not blocked on `commercial_allowed` |
 | Admin write endpoints | ❌ | — | no admin role |
 | Seed script (15 dev titles) | ✅ | ❌ | `§17.1`: 300–500-film balanced research catalog with rights |
 | Fingerprint batch generation | ❌ | ❌ | `§15.3` |
@@ -520,7 +520,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Adaptive policy (`§8.1` functions, `§8.2` score, `§7.5` Fisher targeting) | ❌ | ❌ | [RANKING_ALGORITHM.md](RANKING_ALGORITHM.md) §9 |
 | Ranking validation (title ids, ADR-15) | ✅ | ✅ | exactly 3 distinct ids matching the fetched triad's own `titleIds`; was index-based before gap 3 |
 | Replacement (`not_watched` / `not_remembered`) | ✅ | ✅ | `POST /triads/:id/replace` per ADR-17 (closed above): swaps one item, fresh `displayOrder`, `triad_replacements` row, `not_watched` clears exposure, `not_remembered` clears `triadEligible`; never a preference signal; `skipped` when nothing is left. `metadata.replacements` stays reserved and unused — the table is the record |
-| Training trigger from the backend | ❌ | ❌ | `§12.2`; ADR-25 |
+| Training trigger from the backend | ✅ | 🟡 | `§12.2`; ADR-25, `4b8f877`: subscribes to triad completion, requests training on the 3rd round and every 5th after; `POST /profiles/:id/train` (manual) and `GET /profiles/:id/training` (status/latest snapshot) |
 | Unit tests | ✅ | — | `triads.service.spec.ts`, 36 tests |
 | Frontend: instruction copy fixed to `§4.3` («حسب إعجابك الشخصي، من الأكثر إلى الأقل») | ✅ | ✅ | `lib/copy.ts` |
 | Frontend: three cards, pointer-driven reorder (touch/pen/mouse) + ↑/↓ (keyboard path), position numbers, save, next round auto-loads | ✅ | 🟡 | rebuilt 2026-09-03 (ADR-17 table above); RTL ✅, 44 px targets ✅; touch reorder verified with dispatched `PointerEvent`s in the browser (the pane's own drag emulation hangs — noted in the snapshot); no licensed poster on the card (`§4.3`, none is licensed yet — text card); no critic scores ✅; progress/"model updated" still open below |
@@ -538,9 +538,9 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Unknown-feature handling | ✅ | ✅ | trainer excludes triads with incomplete fingerprints; ranker refuses undescribed titles (ADR-19) |
 | BFGS listwise MLE with L2 | ✅ | ✅ | `§7.2` |
 | Snapshot persistence (`user_model_snapshots`) | ✅ | 🟡 | `§13.1 taste_profiles`: held-out metrics (ADR-31) and posterior standard errors (ADR-62, gap 5) are both populated since 2026-09-03, at/above the 5-triad floor; still missing: `recentWeights`/time layers, `exceptions`, `calibratedAgainst` |
-| Population prior source (Public Quality) | ❌ | ❌ | needs a licensed source ([DATA_LICENSING.md](DATA_LICENSING.md)); `public_quality_sources` table exists since M6, empty |
-| Shared latent space (`§7.5`) | ❌ | ❌ | ADR-13; external seed license-blocked without GroupLens permission; `shared_latent_space_versions` table exists since M7, empty — `calibratedAgainst`'s FK now points here, but nothing writes a version to calibrate against |
-| FastAPI model service (`train`, `triads/select`, `score`, `taste-profile`) | ❌ | ❌ | ADR-25 |
+| Population prior source (Public Quality) | ❌ | ❌ | source decided: IMDb non-commercial datasets through the free launch (owner decision 2026-09-04, [DATA_LICENSING.md](DATA_LICENSING.md) §3.2); loader is ALPHA_PLAN item 5.3, not built yet; `public_quality_sources` table exists since M6, empty |
+| Shared latent space (`§7.5`) | ❌ | ❌ | ADR-13/ADR-72; external seed is optional during the free period, not license-blocked — permission is an input to the post-launch revenue-model study, not currently planned either way; `shared_latent_space_versions` table exists since M7, empty — `calibratedAgainst`'s FK now points here, but nothing writes a version to calibrate against |
+| FastAPI model service (`train`, `triads/select`, `score`, `taste-profile`) | 🟡 | ❌ | ADR-25, `4b8f877`: `/train` (async job) and `/health` built; `/triads/select`, `/score`, `/taste-profile` still not built — scoring/selection stay in the backend for now |
 | Python tests | ✅ | — | 26 tests (`test_ranker.py`, `test_training.py`, `test_enrichment.py`) |
 
 ## Recommendations
@@ -580,12 +580,12 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 
 | Item | Built | Blueprint | Evidence / gap |
 |---|---|---|---|
-| Consent capture (`consents`) | 🟡 | 🟡 | `§13.1`, `§2.4 #9`; `GET/PUT /api/consents` records `watch_history`/`personalization_individual` from onboarding since 2026-09-03 (ADR-60); `personalization_pooled`/`analytics_first_party`/`terms_privacy` still unrecorded; purposes in [PRIVACY.md](PRIVACY.md) §3 |
-| Export / delete / reset endpoints | ❌ | ❌ | `§14`, `§18.1`; `privacy_requests` table exists since M2, unused; `DELETE /profiles/:id` cascades one profile only |
-| Restrictions (`no_pooled`, `pause_all`) | ❌ | ❌ | [PRIVACY.md](PRIVACY.md) §4; `profiles.pausedAt` exists since M1, unused |
-| Audit log | ❌ | ❌ | `§21.3`; `audit_log` table exists since M2, nothing writes to it yet |
+| Consent capture (`consents`) | ✅ | 🟡 | `§13.1`, `§2.4 #9`; all six live purposes now recorded (`d0b7d43`, gap 7's write side closed in full): `watch_history`/`personalization_individual` from onboarding since 2026-09-03 (ADR-60), plus `terms_privacy` (mandatory checkbox at registration), `personalization_pooled` (default on, PRIVACY.md §3) and `analytics_first_party` (default off pending the owner's confirmation) from onboarding step 2; purposes in [PRIVACY.md](PRIVACY.md) §3. Restrictions (`no_pooled`) still unenforced in training, below |
+| Export / delete / reset endpoints | ✅ | ✅ | `§14`, `§18.1`, ADR (privacy rights, `9bc53d4`); `/api/privacy/{export,delete,delete/:id/cancel,reset,requests}` — export synchronous at Alpha scale, delete schedules a safety-window purge (cancellable), reset clears one profile's taste data only |
+| Restrictions (`no_pooled`, `pause_all`) | ❌ | ❌ | [PRIVACY.md](PRIVACY.md) §4; `profiles.pausedAt` exists since M1, unused; `no_pooled` not yet enforced by the shared-latent-space retrain (F5, open) |
+| Audit log | 🟡 | 🟡 | `§21.3`; `audit_log` has a writer now (privacy requests write to it, `9bc53d4`) but no reader — no admin board or query surface exists yet |
 | Admin board (`§5.1`, `§17.2`) | ❌ | ❌ | required for Alpha, not optional |
-| Privacy documentation | ✅ | 🟡 | [PRIVACY.md](PRIVACY.md) rewritten; counsel review pending |
+| Privacy documentation | ✅ | 🟡 | [PRIVACY.md](PRIVACY.md) rewritten; team review before launch, outside counsel deferred to the revenue-model study (owner decision 2026-09-04, ADR-72) |
 | PIA, DPO, breach plan, regional residency decision | ❌ | — | [PRIVACY.md](PRIVACY.md) §13 |
 
 ## Testing and evaluation
@@ -598,7 +598,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Frontend tests | ❌ | — | |
 | Python tests (36) | ✅ | — | re-run 2026-09-03; +2 with the gap-9 enrichment-worker fix, +8 with the gap-2 temporal hold-out |
 | Offline evaluation protocol (`§16.1`), metrics beyond in-sample pairwise (`§16.2`), baselines (`§16.3`), acceptance gate (`§16.5`) | ❌ | ❌ | |
-| Automated tests for triad, replacement, delete, export (`§18.1`) | 🟡 | ❌ | triad ranking and replacement; delete/export not built |
+| Automated tests for triad, replacement, delete, export (`§18.1`) | ✅ | ❌ | triad ranking, replacement, and privacy export/delete/reset (`privacy.service.spec.ts`, `privacy.e2e-spec.ts`, `9bc53d4`) all covered |
 | Performance with 100+ titles / 50+ triads | ❌ | — | |
 
 ## Infrastructure and operations
@@ -618,10 +618,10 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 
 | Definition-of-Done item | Status |
 |---|---|
-| New user reaches a first result unaided | ❌ (training is a manual CLI) |
+| New user reaches a first result unaided | 🟡 (backend now trains automatically after the 3rd triad, `4b8f877`; frontend still shows no waiting/progress state for it, F2 open) |
 | "Haven't watched" never enters the taste loss | ✅ (never enters training; `not_watched` stays a recommendation candidate; the two replacement controls exist end to end and record exposure only, ADR-17) |
 | Every result reproducible from event log + model version | 🟡 (training is deterministic; triads now carry `modelVersion` (`NULL` under `random-v1`, gap 3) but recommendations are still not persisted) |
-| Automated tests for triad, replacement, delete, export | ❌ |
+| Automated tests for triad, replacement, delete, export | ✅ |
 | Backup restore drill documented | ❌ |
 | No content/images shown without a known license status | 🟡 (no images shown; seeded text is `unknown`) |
 | Metrics board separates click, watch, later ranking | ❌ |
