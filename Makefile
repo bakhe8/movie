@@ -25,6 +25,7 @@ help:
 	@echo "  make catalog-enrich             Fingerprint the fixture through the enrichment worker (Anthropic key)"
 	@echo "  make catalog-enrich-placeholder Fill labelled placeholder vectors, no credentials"
 	@echo "  make demo                       Seed the four demo personas into the dev DB and train them"
+	@echo "  make model-service              Run the training HTTP service the backend calls (127.0.0.1:8001)"
 	@echo "  make demo-clean                 Remove the demo persona accounts (titles stay)"
 	@echo ""
 	@echo "Utility Commands:"
@@ -83,6 +84,11 @@ catalog-enrich-placeholder:
 demo:
 	npm run db:seed:demo
 	cd services/workers && python -m src.train_demo
+
+# Model service (ADR-25): the HTTP front the backend calls to train a profile.
+# Binds MODEL_SERVICE_HOST:MODEL_SERVICE_PORT (default 127.0.0.1:8001).
+model-service:
+	cd services/workers && python -m src.model_service
 
 demo-clean:
 	npm run db:seed:demo:clean

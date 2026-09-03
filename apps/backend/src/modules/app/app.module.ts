@@ -16,6 +16,7 @@ import { RecommendationsModule } from '../recommendations/recommendations.module
 import { UserTitleStateModule } from '../user-title-state/user-title-state.module';
 import { WatchEventsModule } from '../watch-events/watch-events.module';
 import { OutcomesModule } from '../outcomes/outcomes.module';
+import { TrainingModule } from '../training/training.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { OutcomesModule } from '../outcomes/outcomes.module';
     ConsentsModule,
     WatchEventsModule,
     OutcomesModule,
+    TrainingModule,
   ],
   controllers: [AppController],
   providers: [

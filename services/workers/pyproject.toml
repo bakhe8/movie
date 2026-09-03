@@ -30,6 +30,10 @@ psycopg2-binary = "^2.9.9"
 # anywhere in src/ (docs/DEMO_DATA_PLAN_2026-09-03.md §8, provider decision).
 anthropic = ">=0.98,<2"
 python-dotenv = "^1.0.0"
+# Model service (ADR-25): the HTTP front the backend calls to train a profile
+# (src/model_service.py). httpx is what FastAPI's TestClient runs on.
+fastapi = "^0.111.0"
+uvicorn = "^0.30.0"
 
 [tool.poetry.group.dev.dependencies]
 # ^7.4.0 (pytest) and ^0.1.0 (ruff) both excluded the versions actually
@@ -40,6 +44,7 @@ python-dotenv = "^1.0.0"
 # declared, uninstalled, and no `--cov` flag anywhere).
 pytest = "^9.0.0"
 ruff = "^0.14.0"
+httpx = "^0.28.0"
 
 [tool.pytest.ini_options]
 # So `import src...` resolves regardless of how/where pytest is invoked from.
