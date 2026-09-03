@@ -22,10 +22,10 @@ Verified against `apps/backend/src/modules/**` on 2026-09-03. Every profile-scop
 | POST | `/api/auth/register` | — | `{ email, password(8–64), firstName, lastName }` | `{ access_token, user }` | 5 req/min per IP |
 | POST | `/api/auth/login` | — | `{ email, password }` | `{ access_token, user }` | 5 req/min per IP |
 | GET | `/api/auth/profile` | JWT | — | account fields | account, not taste profile |
-| POST | `/api/profiles` | JWT | `{ name, preferredLanguage? }` | Profile | unique `(userId, name)` → 409 |
+| POST | `/api/profiles` | JWT | `{ name, preferredLanguage?, market?, platforms? }` | Profile | unique `(userId, name)` → 409; `market` is ISO 3166-1 alpha-2, `platforms` ≤ 20 identifiers ≤ 40 chars — display and Watchability only, never a taste input (`BP §4.1`) |
 | GET | `/api/profiles` | JWT | — | Profile[] | caller's profiles only |
 | GET | `/api/profiles/:profileId` | JWT | — | Profile | |
-| PATCH | `/api/profiles/:profileId` | JWT | `{ name?, preferredLanguage? }` | Profile | |
+| PATCH | `/api/profiles/:profileId` | JWT | `{ name?, preferredLanguage?, market?, platforms? }` | Profile | the onboarding screen writes `market`/`platforms` here; `market` stays `null` until chosen |
 | DELETE | `/api/profiles/:profileId` | JWT | — | 204 | cascades events/models of that profile only |
 | GET | `/api/titles` | — | `?query&page&limit(≤100)` | `{ items, page, limit, total, totalPages }` | ILIKE on `titleEn`/`titleAr` only |
 | GET | `/api/titles/search` | — | same as above | same | alias of `GET /api/titles` |
@@ -43,7 +43,7 @@ Verified against `apps/backend/src/modules/**` on 2026-09-03. Every profile-scop
 Response shapes in use (from `apps/frontend/app/lib/api.ts`, which mirrors the entities):
 
 ```ts
-Profile { id, userId, name, preferredLanguage: 'ar'|'en', createdAt, updatedAt }
+Profile { id, userId, name, preferredLanguage: 'ar'|'en', market: string|null /* ISO 3166-1 alpha-2 */, platforms: string[], createdAt, updatedAt }
 Title { id, internalId, titleEn, titleAr, description|null, releaseYear|null, genres|null, externalIds?, fingerprint? }
 UserTitleState { id, profileId, titleId, state, watchedAt|null, triadEligible /* false after 'not_remembered' (ADR-17) */,
                  importedRating|null, ratingSource:'import'|null, notes|null, updatedAt, title? }
@@ -162,6 +162,7 @@ Ranking is sent as title ids (not indices), on both the unversioned route and th
 ---
 
 **Changelog**
+- 1.6 (2026-09-03): `Profile` gains `market` and `platforms` (onboarding, `BP §4.1`); accepted by `POST /profiles` and `PATCH /profiles/:profileId`.
 - 1.5 (2026-09-03): `GET /api/profiles/:profileId/library/ranking` -- the library's personal ranking, positions only (ADR-33), sharing the recommendation scoring path.
 - 1.4 (2026-09-03): replacement endpoint implemented (ADR-17) -- `POST /api/triads/:triadId/replace`; `UserTitleState` gains `triadEligible`; `GET …/triads/current` draws from eligible titles only and its 400 carries `{ reason: 'need_more_watched', needed }`.
 - 1.3 (2026-09-03): `personalFit` display note cites ADR-33 (verbal confidence, no percentage on any prediction surface).

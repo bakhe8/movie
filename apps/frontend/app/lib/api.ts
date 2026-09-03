@@ -20,6 +20,11 @@ export interface Profile {
   userId: string;
   name: string;
   preferredLanguage: PreferredLanguage;
+  // Onboarding (blueprint §4.1): display and availability only, never a
+  // taste prior. `market` is ISO 3166-1 alpha-2; null until chosen -- the
+  // onboarding screen shows while it is null.
+  market: string | null;
+  platforms: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -167,7 +172,10 @@ export const api = {
   createProfile: (data: { name: string; preferredLanguage?: PreferredLanguage }) =>
     request<Profile>('/profiles', { method: 'POST', body: JSON.stringify(data) }),
 
-  updateProfile: (profileId: string, data: { name?: string; preferredLanguage?: PreferredLanguage }) =>
+  updateProfile: (
+    profileId: string,
+    data: { name?: string; preferredLanguage?: PreferredLanguage; market?: string; platforms?: string[] },
+  ) =>
     request<Profile>(`/profiles/${profileId}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   // Cascades every event, mark and model snapshot of that profile (and only

@@ -1,0 +1,88 @@
+/* Sign-in / create-account form (blueprint §4.1 "حساب"). The page frame
+   (.auth, .auth section) stays in globals.css; this scopes the form. */
+
+.form {
+  display: grid;
+  gap: 12px;
+  margin: 26px 0 14px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.field label {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.field input {
+  min-height: 48px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #dfe4e8;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.field input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.two {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.error {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #fff0eb;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.submit {
+  min-height: 50px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--ink);
+  color: #fff;
+  font-weight: 800;
+  padding: 12px;
+}
+
+.submit:disabled {
+  opacity: 0.45;
+}
+
+.switch {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 700;
+  padding: 10px 0;
+}
+
+.adults {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 480px) {
+  .two {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

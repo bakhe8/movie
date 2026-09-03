@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { AuthScreen } from './components/AuthScreen';
 import { DiscoverScreen } from './components/DiscoverScreen';
 import { ListScreen } from './components/ListScreen';
+import { OnboardingScreen } from './components/OnboardingScreen';
 import { ProfileScreen } from './components/ProfileScreen';
 import { RankScreen } from './components/RankScreen';
 import { RecommendationsScreen } from './components/RecommendationsScreen';
@@ -20,6 +21,11 @@ export default function Home() {
   const { ready, user, profile } = useSession();
   const [lang, setLang] = useState<'ar' | 'en'>('ar');
   const [view, setView] = useState<View>('home');
+  // Onboarding (blueprint §4.1) starts when a profile arrives with no market
+  // and stays open until its last step (or "later") -- step 1 saves the
+  // market, so the flow cannot be keyed on the market alone. "Later" hides it
+  // for this session only; with the market still unset it returns next time.
+  const [onboarding, setOnboarding] = useState<'unknown' | 'active' | 'done'>('unknown');
   const t = labels[lang];
 
   // Keep the document's language and direction in step with the UI language
@@ -41,6 +47,14 @@ export default function Home() {
     }
   }, [preferredLanguage]);
 
+  const profileMarket = profile?.market;
+  const profileId = profile?.id;
+  useEffect(() => {
+    if (!profileId || onboarding !== 'unknown') return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOnboarding(profileMarket === null ? 'active' : 'done');
+  }, [profileId, profileMarket, onboarding]);
+
   if (!ready) {
     return null;
   }
@@ -53,16 +67,39 @@ export default function Home() {
     return <p className="muted">{lang === 'ar' ? 'جارٍ إعداد ملفك…' : 'Setting up your profile…'}</p>;
   }
 
+  const chrome = (
+    <header>
+      <div className="brand">
+        <span>R</span>Reel
+      </div>
+      <button className="language" onClick={() => setLang(lang === 'ar' ? 'en' : 'ar')}>
+        {lang === 'ar' ? 'EN' : 'عربي'}
+      </button>
+    </header>
+  );
+
+  if (onboarding === 'active') {
+    return (
+      <main className="app" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+        {chrome}
+        <section className="content">
+          <OnboardingScreen
+            lang={lang}
+            onLanguageChange={setLang}
+            onDone={() => {
+              setOnboarding('done');
+              setView('discover');
+            }}
+            onSkip={() => setOnboarding('done')}
+          />
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="app" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-      <header>
-        <div className="brand">
-          <span>R</span>Reel
-        </div>
-        <button className="language" onClick={() => setLang(lang === 'ar' ? 'en' : 'ar')}>
-          {lang === 'ar' ? 'EN' : 'عربي'}
-        </button>
-      </header>
+      {chrome}
       <section className="content">
         {/* Home is "tonight's decision" (blueprint §5.3): the recommendation
             tracks, or the honest "still learning" state before a model exists. */}

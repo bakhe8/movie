@@ -2,7 +2,7 @@
 
 **Status**: Derived from blueprint `§13` (entities and event shapes), `§11` (rights registry), `§7.5`–`§7.6`, `§21`. Two layers, kept apart on purpose:
 
-- **§1 Current physical schema** — exactly what the eight TypeORM migrations in `apps/backend/src/migrations/` create (verified 2026-09-03). This is the truth for anyone writing SQL today.
+- **§1 Current physical schema** — exactly what the nine TypeORM migrations in `apps/backend/src/migrations/` create (verified 2026-09-03). This is the truth for anyone writing SQL today.
 - **§2 Target schema** — the `BP §13.1` entity set expressed as tables, plus the migration plan from §1 to §2.
 
 Naming (ADR-16): tables `snake_case` plural; columns are TypeORM's default `camelCase` and therefore **quoted** in raw SQL (`"profileId"`); primary keys `uuid` via `uuid_generate_v4()`; timestamps `TIMESTAMP` (UTC by convention). One exception to plural naming exists today (`user_title_state`); it is renamed in step M1 below. Schema changes go through `npm run migration:generate` / `npm run db:migrate` only — `synchronize` is off in every environment.
@@ -11,7 +11,7 @@ Naming (ADR-16): tables `snake_case` plural; columns are TypeORM's default `came
 
 ## 1. Current physical schema (migrated)
 
-Migrations, in order: `1788410140231-InitialSchema`, `1788411790951-AddTriadEventFields`, `1788412500000-SplitImportedRatingFromInAppState`, `1788418200000-ArabicFirstProfileDefault`, `1788421102891-AddOneActiveTriadPerProfileConstraint`, `1788424108820-AddHeldOutTrainingMetrics`, `1788425067800-AddTriadEventCompleteness`, `1788428400000-AddTriadReplacements`. Extension: `uuid-ossp`. The `ankane/pgvector` image is used but no column has the `vector` type yet.
+Migrations, in order: `1788410140231-InitialSchema`, `1788411790951-AddTriadEventFields`, `1788412500000-SplitImportedRatingFromInAppState`, `1788418200000-ArabicFirstProfileDefault`, `1788421102891-AddOneActiveTriadPerProfileConstraint`, `1788424108820-AddHeldOutTrainingMetrics`, `1788425067800-AddTriadEventCompleteness`, `1788428400000-AddTriadReplacements`, `1788432000000-AddProfileMarketAndPlatforms`. Extension: `uuid-ossp`. The `ankane/pgvector` image is used but no column has the `vector` type yet.
 
 ```sql
 users (
@@ -23,6 +23,8 @@ users (
 profiles (                      -- the pseudonymous taste id (BP §13.1, §21.1)
   id uuid PK, "userId" uuid NOT NULL FK users(id) ON DELETE CASCADE,
   name varchar(255) NOT NULL, "preferredLanguage" varchar(5) NOT NULL DEFAULT 'ar',   -- Arabic-first (BP §2)
+  market varchar(2),                                             -- ISO 3166-1 alpha-2; NULL until chosen at onboarding (BP §4.1); display/availability only
+  platforms text[] NOT NULL DEFAULT '{}',                        -- platform identifiers the user can watch on (BP §4.1); display/availability only
   "createdAt" timestamp, "updatedAt" timestamp,
   UNIQUE ("userId", name)
 )
@@ -98,7 +100,7 @@ What is **not** in the database today (see §2 for the target): recommendations 
 
 | Blueprint entity (`§13.1`) | Target table(s) | Status today |
 |---|---|---|
-| users / identities | `users`, `profiles` (+ `market`, `platforms`, `role`) | partial |
+| users / identities | `users`, `profiles` (+ `role`; `market`/`platforms` present since `AddProfileMarketAndPlatforms`) | partial |
 | content_items / editions | `titles`, `title_editions` | `titles` only |
 | localized_titles | `localized_titles` | missing (search is ILIKE on two columns) |
 | credits / people | `people`, `credits` | missing |
@@ -122,9 +124,8 @@ Types follow the conventions above. Columns marked `-- BP` are required by the c
 ```sql
 -- Accounts and taste ids -----------------------------------------------------------
 ALTER TABLE users    ADD COLUMN role varchar NOT NULL DEFAULT 'user';            -- 'user' | 'admin' (BP §5.1 admin board)
-ALTER TABLE profiles ADD COLUMN market varchar(2),                              -- ISO 3166-1; display/availability only (BP §4.1)
-                     ADD COLUMN platforms text[] NOT NULL DEFAULT '{}',         -- user-declared providers (BP §4.1, App. C)
-                     ADD COLUMN "pausedAt" timestamp;                           -- 'pause_all' restriction (PRIVACY.md §4)
+-- profiles.market / profiles.platforms already exist in §1 (migration AddProfileMarketAndPlatforms) -- not repeated here.
+ALTER TABLE profiles ADD COLUMN "pausedAt" timestamp;                           -- 'pause_all' restriction (PRIVACY.md §4)
 
 consents (                                                                      -- BP §13.1
   id uuid PK, "userId" uuid NOT NULL FK users ON DELETE CASCADE,
@@ -303,7 +304,7 @@ Each step is one TypeORM migration; none require data backfill beyond defaults b
 
 | Step | Contents | Unblocks |
 |---|---|---|
-| M1 | rename `user_title_state` → `user_title_states`; `profiles.market/platforms/pausedAt`; `users.role`; `triads.holdout/correctsTriadId` + indexes (`shownAt`/`answeredAt`/`modelVersion`/`idempotencyKey` already exist, ADR-32; `triad_replacements` and `triadEligible` already exist, ADR-17) | event completeness (`BP §13.2`, `§14`); the replacement endpoint shipped ahead of the rest of M1 |
+| M1 | rename `user_title_state` → `user_title_states`; `profiles.pausedAt` (`market`/`platforms` already exist, migration `AddProfileMarketAndPlatforms`); `users.role`; `triads.holdout/correctsTriadId` + indexes (`shownAt`/`answeredAt`/`modelVersion`/`idempotencyKey` already exist, ADR-32; `triad_replacements` and `triadEligible` already exist, ADR-17) | event completeness (`BP §13.2`, `§14`); the replacement endpoint shipped ahead of the rest of M1 |
 | M2 | `consents`, `privacy_requests`, `audit_log` | onboarding consent, export/delete/reset |
 | M3 | `source_records`, `content_features`, `localized_titles`, `people`, `credits`, `title_editions` | rights registry, FTS search, provenance |
 | M4 | `model_versions`, `experiments`, `experiment_assignments`; `user_model_snapshots` additions (`posterior`, `recentWeights`, `exceptions`, `calibratedAgainst` — held-out metrics already exist, ADR-31) | reproducibility, calibration |
@@ -314,6 +315,7 @@ Each step is one TypeORM migration; none require data backfill beyond defaults b
 ---
 
 **Changelog**
+- 2.6 (2026-09-03): ninth migration `AddProfileMarketAndPlatforms` (onboarding, `BP §4.1`) applied -- `profiles.market` (nullable ISO 3166-1 alpha-2) and `profiles.platforms` (text[] default '{}'); §1, the entity map, the target ALTER and the M1 plan updated to match.
 - 2.5 (2026-09-03): eighth migration `AddTriadReplacements` (ADR-17) applied -- new `triad_replacements` table (append-only, indexed on `triadId`) and `user_title_state.triadEligible`; §1, the entity map and the M1 plan updated to match.
 - 2.4 (2026-09-03): seventh migration `AddTriadEventCompleteness` (ADR-32, gap 3) applied -- `triads.shownAt`/`answeredAt`/`modelVersion`/`idempotencyKey` added, and `ranking` changed from `integer[]` (indices) to `uuid[]` (title ids, ADR-15) with a data backfill. §1, the entity map and the M1 target-plan ALTER updated to match.
 - 2.3 (2026-09-03): sixth migration `AddHeldOutTrainingMetrics` (ADR-31, gap 2) applied -- adds `heldOutTriadCount`/`heldOutNll`/`heldOutPairwiseAccuracy` to `user_model_snapshots`; §1 updated and the same three columns removed from the M4 target-plan ALTER (already done, not still pending).

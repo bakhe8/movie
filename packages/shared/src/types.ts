@@ -77,6 +77,10 @@ export interface Profile {
   userId: string;
   name: string;
   preferredLanguage: PreferredLanguage;
+  /** ISO 3166-1 alpha-2; display and Watchability only (§4.1); null until chosen at onboarding. */
+  market: string | null;
+  /** Platform identifiers the user says they can watch on (§4.1); display and Watchability only. */
+  platforms: string[];
   createdAt: string;
   updatedAt: string;
 }
