@@ -17,7 +17,8 @@
     "docker:up": "docker-compose --project-directory . -f docker/docker-compose.yml up -d",
     "docker:down": "docker-compose --project-directory . -f docker/docker-compose.yml down",
     "db:migrate": "npm run migrate -w apps/backend",
-    "db:seed": "npm run seed -w apps/backend"
+    "db:seed": "npm run seed -w apps/backend",
+    "catalog:fetch": "npm run catalog:fetch -w apps/backend"
   },
   "devDependencies": {
     "concurrently": "^9.0.1",
