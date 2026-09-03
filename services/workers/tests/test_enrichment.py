@@ -38,13 +38,17 @@ def _model_output(**overrides):
     )
 
 
+def _usage(input_tokens=1200, output_tokens=300):
+    return MagicMock(input_tokens=input_tokens, output_tokens=output_tokens, cache_creation_input_tokens=0, cache_read_input_tokens=0)
+
+
 def _parsed_response(output, served_model="claude-test-served"):
     """Shape of anthropic's ParsedMessage as this worker reads it."""
-    return MagicMock(parsed_output=output, stop_reason="end_turn", stop_details=None, model=served_model)
+    return MagicMock(parsed_output=output, stop_reason="end_turn", stop_details=None, model=served_model, usage=_usage())
 
 
 def _text_response(text):
-    return MagicMock(content=[MagicMock(type="text", text=text)], stop_reason="end_turn", stop_details=None)
+    return MagicMock(content=[MagicMock(type="text", text=text)], stop_reason="end_turn", stop_details=None, model="claude-test-served", usage=_usage(80, 40))
 
 
 @pytest.fixture
@@ -294,3 +298,95 @@ class TestGenerateRecommendationExplanation:
 
         with pytest.raises(ValueError):
             worker.generate_recommendation_explanation("Arrival", {})
+
+
+class TestCallAccounting:
+    """Board request G7: tokens, models, latency and status per model call; cost only with prices."""
+
+    def _v2_output(self):
+        from src.enrichment import FingerprintV2Confidence, FingerprintV2Features, FingerprintV2Output
+
+        values = {name: 0.6 for name in FingerprintV2Features.model_fields}
+        return FingerprintV2Output(features=FingerprintV2Features(**values), themes=[], confidence=FingerprintV2Confidence(**{name: 0.4 for name in values}))
+
+    def test_records_usage_models_latency_status_and_writes_one_json_line(self, worker, tmp_path, monkeypatch):
+        import json
+
+        from src.enrichment import V2_EXTRACTOR_VERSION
+
+        monkeypatch.setenv("LLM_CALL_LOG_DIR", str(tmp_path))
+        monkeypatch.delenv("LLM_PRICES_JSON", raising=False)
+        worker.run_id = "run-test"
+        worker._client.messages.parse = MagicMock(return_value=_parsed_response(self._v2_output()))
+
+        worker.generate_fingerprint_v2("Arrival", "desc", "a secret plot", internal_id="DEMO0001")
+
+        record = worker.calls[-1]
+        assert record["purpose"] == "fingerprint_v2" and record["provider"] == "anthropic"
+        assert record["modelRequested"] == "claude-test" and record["modelServed"] == "claude-test-served"
+        assert (record["inputTokens"], record["outputTokens"], record["cacheCreationInputTokens"], record["cacheReadInputTokens"]) == (1200, 300, 0, 0)
+        assert record["status"] == "ok" and record["error"] is None and record["latencyMs"] >= 0
+        assert record["internalId"] == "DEMO0001" and record["extractorVersion"] == V2_EXTRACTOR_VERSION and record["runId"] == "run-test"
+        assert record["costUsd"] is None  # no LLM_PRICES_JSON: derived later, never a stored fact
+        lines = (tmp_path / "run-test.jsonl").read_text(encoding="utf-8").splitlines()
+        assert len(lines) == 1 and json.loads(lines[0])["purpose"] == "fingerprint_v2"
+        assert "secret plot" not in lines[0]  # never any prompt or evidence text
+
+    def test_error_refusal_and_explanation_lines(self, worker, tmp_path, monkeypatch):
+        import anthropic
+
+        monkeypatch.setenv("LLM_CALL_LOG_DIR", str(tmp_path))
+        worker._client.messages.parse = MagicMock(side_effect=anthropic.APIConnectionError(request=MagicMock()))
+        with pytest.raises(ValueError):
+            worker.generate_fingerprint("Arrival", "desc", "plot", internal_id="DEMO0002")
+        assert worker.calls[-1]["status"] == "error" and worker.calls[-1]["error"] == "APIConnectionError"
+        assert worker.calls[-1]["purpose"] == "fingerprint_v1" and worker.calls[-1]["inputTokens"] == 0
+
+        refusal = MagicMock(parsed_output=None, stop_reason="refusal", stop_details=MagicMock(explanation="nope", category="other"), model="m", usage=_usage(10, 0))
+        worker._client.messages.parse = MagicMock(return_value=refusal)
+        with pytest.raises(ValueError):
+            worker.generate_fingerprint_v3("Arrival", "desc", "plot")
+        assert worker.calls[-1]["status"] == "refused" and worker.calls[-1]["purpose"] == "fingerprint_v3" and worker.calls[-1]["internalId"] is None
+
+        worker._client.messages.create = MagicMock(return_value=_text_response("A slow, warm film."))
+        worker.generate_recommendation_explanation("Arrival", {"pacing": 0.2}, internal_id="DEMO0003")
+        assert worker.calls[-1]["purpose"] == "explanation" and worker.calls[-1]["status"] == "ok" and worker.calls[-1]["outputTokens"] == 40
+        assert len((tmp_path / f"{worker.run_id}.jsonl").read_text(encoding="utf-8").splitlines()) == 3
+
+    def test_cost_only_with_prices_and_the_summary_table(self, worker, tmp_path, monkeypatch):
+        import json
+
+        from src.enrichment import estimate_cost_usd, format_calls_table, summarize_calls
+
+        monkeypatch.setenv("LLM_CALL_LOG_DIR", str(tmp_path))
+        monkeypatch.setenv("LLM_PRICES_JSON", json.dumps({"claude-test-served": {"inputPerMTok": 3.0, "outputPerMTok": 15.0}}))
+        worker._client.messages.parse = MagicMock(return_value=_parsed_response(self._v2_output()))
+        worker.generate_fingerprint_v2("Arrival", "desc", "plot", internal_id="DEMO0001")
+        worker.generate_fingerprint_v2("Persona", "desc", "plot", internal_id="DEMO0002")
+        assert worker.calls[-1]["costUsd"] == pytest.approx(1200 / 1e6 * 3.0 + 300 / 1e6 * 15.0)
+        assert estimate_cost_usd("unknown-model", 100, 100, {"claude-test-served": {"inputPerMTok": 3.0, "outputPerMTok": 15.0}}) is None
+
+        rows = summarize_calls(worker.calls)
+        assert rows == [
+            {
+                "purpose": "fingerprint_v2",
+                "modelServed": "claude-test-served",
+                "calls": 2,
+                "ok": 2,
+                "inputTokens": 2400,
+                "outputTokens": 600,
+                "titles": 2,
+                "meanInputPerTitle": 1200,
+                "meanOutputPerTitle": 300,
+                "meanLatencyMs": rows[0]["meanLatencyMs"],
+                "costUsd": pytest.approx(2 * (1200 / 1e6 * 3.0 + 300 / 1e6 * 15.0)),
+            }
+        ]
+        table = format_calls_table(worker.calls, "run-x")
+        assert "## Model calls (run `run-x`)" in table and "| fingerprint_v2 | claude-test-served | 2 | 2 | 2400 | 600 | 2 | 1200 | 300 |" in table
+        assert "No model calls were recorded" in format_calls_table([], None)
+
+        monkeypatch.setenv("LLM_PRICES_JSON", "not json")
+        worker.generate_fingerprint_v2("Third", "desc", "plot", internal_id="DEMO0003")
+        assert worker.calls[-1]["costUsd"] is None
+        assert summarize_calls(worker.calls)[0]["costUsd"] is None  # one call without a price: the sum is unknown, not partial

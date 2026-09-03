@@ -41,7 +41,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from dotenv import load_dotenv
 
-from .enrichment import EXTRACTOR_VERSION, V2_EXTRACTOR_VERSION, V3_EXTRACTOR_VERSION, FilmEnrichmentWorker
+from .enrichment import EXTRACTOR_VERSION, V2_EXTRACTOR_VERSION, V3_EXTRACTOR_VERSION, FilmEnrichmentWorker, format_calls_table
 
 # Nested blocks that hang off a V1 fingerprint: CLI flag -> (fingerprint key, current extractor version).
 BLOCKS: Dict[str, Tuple[str, str]] = {
@@ -111,13 +111,32 @@ NEUTRAL_CENTROID = tuple(0.5 for _ in DIMENSIONS)
 # ---------------------------------------------------------------------------
 
 
+# Below this many characters of plot text the extractor's own confidence drops
+# a full step (DEMO_DATA_PLAN §7.5: 0.45-0.55 against 0.64 above 2,000 on this
+# catalog), so a second plot in Arabic is appended when the fixture has one.
+PLOT_SHORT_CHARS = 2000
+AR_EVIDENCE_SUFFIX = "+ar-evidence"
+
+
+def uses_arabic_evidence(entry: Dict[str, Any]) -> bool:
+    """True when the entry carries an Arabic plot and its English plot is short."""
+    evidence = entry.get("evidence") or {}
+    plot_ar = evidence.get("plotSummaryAr") or ""
+    plot = evidence.get("plotSummary") or ""
+    return bool(plot_ar) and plot_ar != plot and len(plot) < PLOT_SHORT_CHARS
+
+
 def build_evidence(entry: Dict[str, Any]) -> Dict[str, Any]:
     """
     The evidence payload for one fixture entry, in the worker's argument names.
 
     The English description is used when it is a real Wikipedia lead; when it
     is only Wikidata's stub ("1955 film"), the Arabic lead is the real
-    description (fetch-catalog.ts marks this in `descriptionSource`).
+    description (fetch-catalog.ts marks this in `descriptionSource`). When the
+    English plot is short and the fixture carries the Arabic Wikipedia plot
+    section (fetch-evidence-ar.ts), that section is appended as a second plot
+    and its article joins the source ids -- more evidence for the same film,
+    never a different film.
     """
     evidence = entry.get("evidence") or {}
     description_source = entry.get("descriptionSource")
@@ -125,6 +144,12 @@ def build_evidence(entry: Dict[str, Any]) -> Dict[str, Any]:
     if description_source != "wikipedia:en" and entry.get("descriptionAr"):
         description = entry["descriptionAr"]
     plot = evidence.get("plotSummary") or ""
+    arabic = uses_arabic_evidence(entry)
+    source_ids = list(evidence.get("sourceIds") or [])
+    if arabic:
+        plot = f"{plot}\n\n[Plot section of the Arabic Wikipedia article]\n{evidence['plotSummaryAr']}".strip()
+        if evidence.get("plotSourceAr") and evidence["plotSourceAr"] not in source_ids:
+            source_ids.append(evidence["plotSourceAr"])
 
     context_parts = []
     if entry.get("releaseYear"):
@@ -140,15 +165,34 @@ def build_evidence(entry: Dict[str, Any]) -> Dict[str, Any]:
     plot_source = evidence.get("plotSource")
     if plot_source and str(plot_source).endswith(":lead"):
         context_parts.append("Evidence note: no plot section was available; the plot text is only the article lead")
+    if arabic:
+        context_parts.append("Evidence note: the English plot is short; the Arabic Wikipedia plot section follows it as second evidence for the same film")
 
     return {
         "title": entry.get("titleEn") or entry.get("titleAr") or entry["internalId"],
         "description": description,
         "plot_summary": plot,
         "additional_context": "; ".join(context_parts) or None,
-        "source_ids": list(evidence.get("sourceIds") or []),
+        "source_ids": source_ids,
         "has_plot": bool(plot),
+        "uses_arabic_evidence": arabic,
     }
+
+
+def needs_arabic_evidence_extraction(entry: Dict[str, Any], force: bool = False) -> bool:
+    """A title whose evidence would now include the Arabic plot but whose V1 fingerprint was made without it."""
+    fingerprint = entry.get("fingerprint")
+    if not isinstance(fingerprint, dict) or not uses_arabic_evidence(entry):
+        return False
+    return force or AR_EVIDENCE_SUFFIX not in str(fingerprint.get("extractorVersion") or "")
+
+
+def stamp_arabic_evidence(fingerprint: Dict[str, Any]) -> Dict[str, Any]:
+    """Mark a V1 fingerprint as extracted with the Arabic plot appended (a different evidence policy is a different version)."""
+    version = str(fingerprint.get("extractorVersion") or "")
+    if AR_EVIDENCE_SUFFIX not in version:
+        fingerprint["extractorVersion"] = f"{version}{AR_EVIDENCE_SUFFIX}"
+    return fingerprint
 
 
 def needs_extraction(entry: Dict[str, Any], force: bool = False, extractor_version: str = EXTRACTOR_VERSION) -> bool:
@@ -194,6 +238,7 @@ def enrich_entry_v2(worker: FilmEnrichmentWorker, entry: Dict[str, Any]) -> Dict
         plot_summary=evidence["plot_summary"],
         additional_context=evidence["additional_context"],
         source_ids=evidence["source_ids"],
+        internal_id=entry.get("internalId"),
     )
 
 
@@ -206,6 +251,7 @@ def enrich_entry_v3(worker: FilmEnrichmentWorker, entry: Dict[str, Any]) -> Dict
         plot_summary=evidence["plot_summary"],
         additional_context=evidence["additional_context"],
         source_ids=evidence["source_ids"],
+        internal_id=entry.get("internalId"),
     )
 
 
@@ -261,6 +307,7 @@ def enrich_entry(worker: FilmEnrichmentWorker, entry: Dict[str, Any]) -> Dict[st
         plot_summary=evidence["plot_summary"],
         additional_context=evidence["additional_context"],
         source_ids=evidence["source_ids"],
+        internal_id=entry.get("internalId"),
     )
     return fingerprint.model_dump(mode="json")
 
@@ -323,6 +370,8 @@ def build_report(
     results: Dict[str, Tuple[str, str]],
     mode: str,
     elapsed: float,
+    calls: Optional[List[Dict[str, Any]]] = None,
+    run_id: Optional[str] = None,
 ) -> str:
     done = [entry for entry in entries if isinstance(entry.get("fingerprint"), dict)]
     versions: Dict[str, int] = {}
@@ -401,10 +450,13 @@ def build_report(
         "",
         "## Rules",
         "",
-        "- Evidence sent: the fixture's own Wikipedia lead and plot text plus year/genres/country/language; never user data.",
+        "- Evidence sent: the fixture's own Wikipedia lead and plot text plus year/genres/country/language; never user data. "
+        "When the English plot is under 2,000 characters and the fixture carries the Arabic Wikipedia plot section, that section is appended "
+        "(`+ar-evidence` in the version).",
         "- One extraction per (title, extractorVersion); `--force` is the only way to overwrite.",
         "- `licenseStatus` stays `unknown` and `reviewStatus` `unreviewed`: a development fixture, not a rights registry.",
         "",
+        format_calls_table(list(calls or []), run_id),
     ]
     return "\n".join(lines)
 
@@ -425,6 +477,11 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--v2", action="store_true", help="extract the V2 families into fingerprint.v2 (V1 must already exist)")
     parser.add_argument("--v3", action="store_true", help="extract the third block (form families) into fingerprint.v3 (V1 must already exist)")
     parser.add_argument("--partial-ids", default=",".join(DEFAULT_PARTIAL_IDS), help="comma-separated ids to leave partial ('' for none)")
+    parser.add_argument(
+        "--ar-evidence",
+        action="store_true",
+        help="re-extract V1 only for titles whose short English plot now gets the Arabic plot appended and whose fingerprint predates that",
+    )
     parser.add_argument("--write-db", action="store_true", help="also UPDATE titles.fingerprint for seeded rows (DATABASE_URL)")
     parser.add_argument("--dry-run", action="store_true", help="print the evidence that would be sent, change nothing")
     parser.add_argument("--seed", type=int, default=20260903, help="placeholder generator seed")
@@ -447,15 +504,24 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"--{block_name} has no placeholder mode: the families exist only as extractions", file=sys.stderr)
         return 2
     block_key, block_version = BLOCKS[block_name] if block_name else (None, None)
+    if args.ar_evidence and (block_key or args.placeholder):
+        print("--ar-evidence re-extracts V1 with the model; it does not combine with --v2/--v3/--placeholder", file=sys.stderr)
+        return 2
     needing = [
         entry
         for entry in selected
-        if (needs_block_extraction(entry, block_key, block_version, args.force) if block_key else needs_extraction(entry, args.force))
+        if (
+            needs_arabic_evidence_extraction(entry, args.force)
+            if args.ar_evidence
+            else needs_block_extraction(entry, block_key, block_version, args.force)
+            if block_key
+            else needs_extraction(entry, args.force)
+        )
     ]
     candidates = needing[: args.limit] if args.limit else needing
     candidate_ids = {entry["internalId"] for entry in candidates}
     partial_ids = {value.strip() for value in args.partial_ids.split(",") if value.strip()}
-    mode = block_name if block_name else "placeholder" if args.placeholder else "anthropic"
+    mode = block_name if block_name else "placeholder" if args.placeholder else "ar-evidence" if args.ar_evidence else "anthropic"
     print(
         f"enrich: {len(entries)} entries in {args.fixture.name}; {len(needing)} need extraction, "
         f"{len(candidates)} in this run ({mode})"
@@ -479,6 +545,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     started = time.monotonic()
     lock = threading.Lock()
     completed_since_write = 0
+    calls: List[Dict[str, Any]] = []
+    run_id: Optional[str] = None
 
     def finish(entry: Dict[str, Any], fingerprint: Optional[Dict[str, Any]], error: Optional[str]) -> None:
         nonlocal completed_since_write
@@ -488,7 +556,16 @@ def main(argv: Optional[List[str]] = None) -> int:
                     # A nested block hangs off the existing V1 fingerprint; V1 keys and the other blocks are untouched.
                     entry["fingerprint"][block_key] = fingerprint
                 else:
-                    entry["fingerprint"] = make_partial(fingerprint) if entry["internalId"] in partial_ids else fingerprint
+                    # A V1 re-extraction replaces the top-level keys only: the nested
+                    # blocks (v2, v3) were made from their own evidence and stay.
+                    previous = entry.get("fingerprint") if isinstance(entry.get("fingerprint"), dict) else {}
+                    if uses_arabic_evidence(entry):
+                        fingerprint = stamp_arabic_evidence(fingerprint)
+                    fresh = make_partial(fingerprint) if entry["internalId"] in partial_ids else fingerprint
+                    for nested_key in ("v2", "v3"):
+                        if isinstance(previous.get(nested_key), dict):
+                            fresh[nested_key] = previous[nested_key]
+                    entry["fingerprint"] = fresh
                 results[entry["internalId"]] = ("done", "")
                 print(f"  ✓ {entry['internalId']} {entry.get('titleEn')}")
             else:
@@ -506,6 +583,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
             print("  note: ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN not set; relying on an `ant auth login` profile if one exists")
         worker = FilmEnrichmentWorker()
+        # One accounting file per run, named by mode and time (G7).
+        worker.run_id = os.environ.get("LLM_RUN_ID") or f"enrich-{mode}-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}"
 
         extract = enrich_entry_v3 if args.v3 else enrich_entry_v2 if args.v2 else enrich_entry
 
@@ -518,11 +597,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         with ThreadPoolExecutor(max_workers=max(1, args.concurrency)) as pool:
             for future in as_completed([pool.submit(run, entry) for entry in candidates]):
                 future.result()
+        recorded = getattr(worker, "calls", None)
+        calls = list(recorded) if isinstance(recorded, list) else []
+        run_id = worker.run_id if isinstance(getattr(worker, "run_id", None), str) else None
 
     write_fixture(args.fixture, entries)
     elapsed = time.monotonic() - started
-    report_path = args.fixture.with_name(args.fixture.stem + (f".enrichment-{block_name}-report.md" if block_name else ".enrichment-report.md"))
-    report_path.write_text(build_report(args.fixture, entries, results, mode, elapsed), encoding="utf-8")
+    report_path = args.fixture.with_name(
+        args.fixture.stem + (f".enrichment-{block_name}-report.md" if block_name else ".enrichment-ar-evidence-report.md" if args.ar_evidence else ".enrichment-report.md")
+    )
+    report_path.write_text(build_report(args.fixture, entries, results, mode, elapsed, calls, run_id), encoding="utf-8")
 
     if args.write_db:
         updated = write_fingerprints_to_db([entry for entry in entries if results.get(entry["internalId"], ("", ""))[0] == "done"])

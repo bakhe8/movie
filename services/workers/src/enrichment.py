@@ -9,9 +9,13 @@ ADR-6/ADR-23 (rules) and the provider-switch decision recorded in
 docs/DEMO_DATA_PLAN_2026-09-03.md §8 for the rules this pipeline must follow.
 """
 
+import json
 import os
+import tempfile
+import time
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
 
 import anthropic
 from pydantic import BaseModel, Field
@@ -277,6 +281,120 @@ def _served_model(response, requested: str) -> str:
     return served if isinstance(served, str) and served else requested
 
 
+# ---------------------------------------------------------------------------
+# Call accounting (board request G7, owner's decision 2026-09-04): every model
+# call records its tokens, models, latency and status -- one JSON line per
+# call in $LLM_CALL_LOG_DIR/<runId>.jsonl (default <os tmp>/movie-llm-calls,
+# outside git like the catalog cache) and in memory on the worker for the run
+# report. Cost is derived, never stored as a fact: it is filled in only when
+# LLM_PRICES_JSON names prices for the served model, else null, so a later
+# study computes it from the tokens with the prices of its day. No prompt or
+# evidence text is ever written here, only counts.
+# ---------------------------------------------------------------------------
+
+PURPOSES = ("fingerprint_v1", "fingerprint_v2", "fingerprint_v3", "explanation")
+DEFAULT_CALL_LOG_DIR = Path(tempfile.gettempdir()) / "movie-llm-calls"
+
+
+def call_log_dir() -> Path:
+    configured = os.environ.get("LLM_CALL_LOG_DIR")
+    return Path(configured) if configured else DEFAULT_CALL_LOG_DIR
+
+
+def load_prices() -> Optional[Dict[str, Dict[str, float]]]:
+    """`{"<model>": {"inputPerMTok": x, "outputPerMTok": y}}` from LLM_PRICES_JSON, or None (invalid JSON counts as none)."""
+    raw = os.environ.get("LLM_PRICES_JSON")
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def estimate_cost_usd(model: str, input_tokens: int, output_tokens: int, prices: Optional[Dict[str, Dict[str, float]]]) -> Optional[float]:
+    """Input and output tokens at the served model's per-million prices; None when no price is known for it."""
+    entry = (prices or {}).get(model)
+    if not isinstance(entry, dict):
+        return None
+    try:
+        return round(input_tokens / 1e6 * float(entry["inputPerMTok"]) + output_tokens / 1e6 * float(entry["outputPerMTok"]), 6)
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _usage_int(usage, name: str) -> int:
+    value = getattr(usage, name, None) if usage is not None else None
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+
+def call_status(response, expect_parsed: bool) -> str:
+    """ok | refused | ceiling | unparsed | error -- what the API answered, before the caller's own checks."""
+    if response is None:
+        return "error"
+    if _refusal_text(response):
+        return "refused"
+    if getattr(response, "stop_reason", None) == "max_tokens":
+        return "ceiling"
+    if expect_parsed:
+        return "ok" if getattr(response, "parsed_output", None) is not None else "unparsed"
+    return "ok" if _first_text(response) else "unparsed"
+
+
+def summarize_calls(calls: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """One row per (purpose, modelServed): calls, ok, tokens in/out, mean per title, mean latency, cost when every call had one."""
+    groups: Dict[tuple, List[Dict[str, Any]]] = {}
+    for call in calls:
+        groups.setdefault((str(call.get("purpose")), str(call.get("modelServed"))), []).append(call)
+    rows = []
+    for (purpose, model), members in sorted(groups.items()):
+        titles = {call.get("internalId") for call in members if call.get("internalId")}
+        input_tokens = sum(int(call.get("inputTokens") or 0) for call in members)
+        output_tokens = sum(int(call.get("outputTokens") or 0) for call in members)
+        costs = [call.get("costUsd") for call in members]
+        rows.append(
+            {
+                "purpose": purpose,
+                "modelServed": model,
+                "calls": len(members),
+                "ok": sum(1 for call in members if call.get("status") == "ok"),
+                "inputTokens": input_tokens,
+                "outputTokens": output_tokens,
+                "titles": len(titles),
+                "meanInputPerTitle": round(input_tokens / len(titles)) if titles else None,
+                "meanOutputPerTitle": round(output_tokens / len(titles)) if titles else None,
+                "meanLatencyMs": round(sum(int(call.get("latencyMs") or 0) for call in members) / len(members)),
+                "costUsd": round(sum(costs), 6) if costs and all(isinstance(cost, (int, float)) for cost in costs) else None,
+            }
+        )
+    return rows
+
+
+def format_calls_table(calls: List[Dict[str, Any]], run_id: Optional[str] = None) -> str:
+    """Markdown for the run report: the summary rows, or a line saying no call was recorded."""
+    rows = summarize_calls(calls)
+    header = f"## Model calls{f' (run `{run_id}`)' if run_id else ''}"
+    if not rows:
+        return f"{header}\n\nNo model calls were recorded in this run.\n"
+    lines = [
+        header,
+        "",
+        "| Purpose | Model served | Calls | OK | Input tokens | Output tokens | Titles | Input / title | Output / title | Mean latency | Cost (USD) |",
+        "|---|---|---|---|---|---|---|---|---|---|---|",
+    ]
+    for row in rows:
+        cost = f"{row['costUsd']:.4f}" if row["costUsd"] is not None else "— (no LLM_PRICES_JSON)"
+        lines.append(
+            f"| {row['purpose']} | {row['modelServed']} | {row['calls']} | {row['ok']} | {row['inputTokens']} | {row['outputTokens']} | {row['titles']} | "
+            f"{row['meanInputPerTitle'] if row['meanInputPerTitle'] is not None else '—'} | {row['meanOutputPerTitle'] if row['meanOutputPerTitle'] is not None else '—'} | "
+            f"{row['meanLatencyMs']} ms | {cost} |"
+        )
+    lines.append("")
+    lines.append("Tokens as the API reported them (`usage`); the log holds one JSON line per call under `LLM_CALL_LOG_DIR` and never any prompt or evidence text.")
+    return "\n".join(lines) + "\n"
+
+
 class FilmEnrichmentWorker:
     """Worker for generating film fingerprints and spoiler-free descriptions."""
 
@@ -292,6 +410,90 @@ class FilmEnrichmentWorker:
         """
         self._model_override = model
         self._client: Optional[anthropic.Anthropic] = None
+        # Call accounting: one record per model call this instance makes (G7);
+        # the run id names the JSON-lines file and the report section.
+        self.run_id: str = os.environ.get("LLM_RUN_ID") or f"run-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{os.getpid()}"
+        self.calls: List[Dict[str, Any]] = []
+
+    def _record_call(
+        self,
+        response,
+        *,
+        purpose: str,
+        model_requested: str,
+        internal_id: Optional[str],
+        extractor_version: str,
+        started_at: float,
+        status: str,
+        error: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        usage = getattr(response, "usage", None) if response is not None else None
+        served = _served_model(response, model_requested) if response is not None else model_requested
+        input_tokens = _usage_int(usage, "input_tokens")
+        output_tokens = _usage_int(usage, "output_tokens")
+        record = {
+            "occurredAt": datetime.now(timezone.utc).isoformat(),
+            "runId": self.run_id,
+            "purpose": purpose,
+            "provider": "anthropic",
+            "modelRequested": model_requested,
+            "modelServed": served,
+            "inputTokens": input_tokens,
+            "outputTokens": output_tokens,
+            "cacheCreationInputTokens": _usage_int(usage, "cache_creation_input_tokens"),
+            "cacheReadInputTokens": _usage_int(usage, "cache_read_input_tokens"),
+            "latencyMs": int((time.monotonic() - started_at) * 1000),
+            "status": status,
+            "error": error,
+            "internalId": internal_id,
+            "extractorVersion": extractor_version,
+            "costUsd": estimate_cost_usd(served, input_tokens, output_tokens, load_prices()),
+        }
+        self.calls.append(record)
+        try:
+            directory = call_log_dir()
+            directory.mkdir(parents=True, exist_ok=True)
+            with (directory / f"{self.run_id}.jsonl").open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+        except OSError:
+            pass  # accounting must never break an extraction; the in-memory record still feeds the report
+        return record
+
+    def _call(
+        self,
+        purpose: str,
+        model: str,
+        internal_id: Optional[str],
+        extractor_version: str,
+        expect_parsed: bool,
+        request: Callable[[anthropic.Anthropic], Any],
+    ):
+        """Run one API request and record it, whatever happens; API errors are re-raised for the caller's own wrapping."""
+        started_at = time.monotonic()
+        try:
+            response = request(self._get_client())
+        except anthropic.APIError as error:
+            self._record_call(
+                None,
+                purpose=purpose,
+                model_requested=model,
+                internal_id=internal_id,
+                extractor_version=extractor_version,
+                started_at=started_at,
+                status="error",
+                error=type(error).__name__,
+            )
+            raise
+        self._record_call(
+            response,
+            purpose=purpose,
+            model_requested=model,
+            internal_id=internal_id,
+            extractor_version=extractor_version,
+            started_at=started_at,
+            status=call_status(response, expect_parsed),
+        )
+        return response
 
     def _get_client(self) -> anthropic.Anthropic:
         # Built on first real use, not at import time or construction time
@@ -329,6 +531,8 @@ class FilmEnrichmentWorker:
         plot_summary: str,
         additional_context: Optional[str] = None,
         source_ids: Optional[list[str]] = None,
+        *,
+        internal_id: Optional[str] = None,
     ) -> FilmFingerprintV1:
         """
         Generate a film fingerprint with structured outputs.
@@ -370,12 +574,19 @@ Focus on objective aspects that can be inferred from the plot, themes, and narra
 Provide scores for all dimensions. For dimensions you're less confident about, provide lower confidence scores."""
 
         try:
-            response = self._get_client().messages.parse(
-                model=model,
-                max_tokens=FINGERPRINT_MAX_TOKENS,
-                system=instructions,
-                messages=[{"role": "user", "content": input_text}],
-                output_format=FingerprintOutput,
+            response = self._call(
+                "fingerprint_v1",
+                model,
+                internal_id,
+                EXTRACTOR_VERSION,
+                True,
+                lambda client: client.messages.parse(
+                    model=model,
+                    max_tokens=FINGERPRINT_MAX_TOKENS,
+                    system=instructions,
+                    messages=[{"role": "user", "content": input_text}],
+                    output_format=FingerprintOutput,
+                ),
             )
         except anthropic.APIError as error:
             raise ValueError(f"Anthropic fingerprint request failed: {error}") from error
@@ -411,6 +622,8 @@ Provide scores for all dimensions. For dimensions you're less confident about, p
         plot_summary: str,
         additional_context: Optional[str] = None,
         source_ids: Optional[list[str]] = None,
+        *,
+        internal_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Extract the V2 families (FINGERPRINT_SCHEMA.md §3.1) from the same
@@ -438,12 +651,19 @@ Give a confidence for every feature: high only where the plot text clearly suppo
 Score all fifteen features and give a confidence for each."""
 
         try:
-            response = self._get_client().messages.parse(
-                model=model,
-                max_tokens=FINGERPRINT_MAX_TOKENS,
-                system=instructions,
-                messages=[{"role": "user", "content": input_text}],
-                output_format=FingerprintV2Output,
+            response = self._call(
+                "fingerprint_v2",
+                model,
+                internal_id,
+                V2_EXTRACTOR_VERSION,
+                True,
+                lambda client: client.messages.parse(
+                    model=model,
+                    max_tokens=FINGERPRINT_MAX_TOKENS,
+                    system=instructions,
+                    messages=[{"role": "user", "content": input_text}],
+                    output_format=FingerprintV2Output,
+                ),
             )
         except anthropic.APIError as error:
             raise ValueError(f"Anthropic V2 fingerprint request failed: {error}") from error
@@ -482,6 +702,8 @@ Score all fifteen features and give a confidence for each."""
         plot_summary: str,
         additional_context: Optional[str] = None,
         source_ids: Optional[list[str]] = None,
+        *,
+        internal_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Extract the third block -- the form families (FINGERPRINT_SCHEMA.md
@@ -510,12 +732,19 @@ Give a confidence for every feature: high only where the text clearly supports t
 Score all twelve features and give a confidence for each."""
 
         try:
-            response = self._get_client().messages.parse(
-                model=model,
-                max_tokens=FINGERPRINT_MAX_TOKENS,
-                system=instructions,
-                messages=[{"role": "user", "content": input_text}],
-                output_format=FingerprintV3Output,
+            response = self._call(
+                "fingerprint_v3",
+                model,
+                internal_id,
+                V3_EXTRACTOR_VERSION,
+                True,
+                lambda client: client.messages.parse(
+                    model=model,
+                    max_tokens=FINGERPRINT_MAX_TOKENS,
+                    system=instructions,
+                    messages=[{"role": "user", "content": input_text}],
+                    output_format=FingerprintV3Output,
+                ),
             )
         except anthropic.APIError as error:
             raise ValueError(f"Anthropic V3 fingerprint request failed: {error}") from error
@@ -550,6 +779,8 @@ Score all twelve features and give a confidence for each."""
         title: str,
         fingerprint: Dict[str, float],
         themes: Optional[list[str]] = None,
+        *,
+        internal_id: Optional[str] = None,
     ) -> str:
         """
         Generate a spoiler-free, evidence-only description of a film's tone
@@ -605,11 +836,18 @@ Evidence (0-1 scale):
 Describe the film's tone and character from this evidence alone."""
 
         try:
-            response = self._get_client().messages.create(
-                model=model,
-                max_tokens=EXPLANATION_MAX_TOKENS,
-                system=instructions,
-                messages=[{"role": "user", "content": input_text}],
+            response = self._call(
+                "explanation",
+                model,
+                internal_id,
+                "explanation",
+                False,
+                lambda client: client.messages.create(
+                    model=model,
+                    max_tokens=EXPLANATION_MAX_TOKENS,
+                    system=instructions,
+                    messages=[{"role": "user", "content": input_text}],
+                ),
             )
         except anthropic.APIError as error:
             raise ValueError(f"Anthropic explanation request failed: {error}") from error
