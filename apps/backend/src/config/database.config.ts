@@ -2,7 +2,10 @@ import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { DataSourceOptions } from 'typeorm';
 import { config } from 'dotenv';
 import { resolve } from 'node:path';
+import { AuditLog } from '../entities/audit-log.entity';
+import { Consent } from '../entities/consent.entity';
 import { Embedding } from '../entities/embedding.entity';
+import { PrivacyRequest } from '../entities/privacy-request.entity';
 import { Profile } from '../entities/profile.entity';
 import { Title } from '../entities/title.entity';
 import { Triad } from '../entities/triad.entity';
@@ -41,7 +44,19 @@ export function getConnectionOptions(): ConnectionOptions {
     username: process.env.POSTGRES_USER || 'movieapp',
     password,
     database: process.env.POSTGRES_DB || 'moviedb',
-    entities: [User, Profile, Title, Triad, TriadReplacement, Embedding, UserModelSnapshot, UserTitleState],
+    entities: [
+      User,
+      Profile,
+      Title,
+      Triad,
+      TriadReplacement,
+      Embedding,
+      UserModelSnapshot,
+      UserTitleState,
+      Consent,
+      PrivacyRequest,
+      AuditLog,
+    ],
   };
 }
 

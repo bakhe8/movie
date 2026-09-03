@@ -46,11 +46,11 @@ Nothing left open from this line of audit.
 
 These run today and contradict or fall short of the blueprint; a green test suite makes them invisible.
 
-1. **Schema covers 8 of the target tables** — `recommendations`, `outcomes`, `watch_events`, `consents`, `privacy_requests`, `source_records`, `content_features`, `localized_titles`, `model_versions`, `experiments`, `audit_log`, `shared_latent_space_versions` are still missing (`§13.1`, `§11.1`; [SCHEMA.md](SCHEMA.md) §2.4 migration plan M1–M7). Step 1/7 of that plan (M1) is closed today — see the table below; none of the twelve missing tables are added by it, only column-level completions to tables that already existed.
+1. **Schema covers 11 of the target tables** — `recommendations`, `outcomes`, `watch_events`, `source_records`, `content_features`, `localized_titles`, `model_versions`, `experiments`, `shared_latent_space_versions` are still missing (`§13.1`, `§11.1`; [SCHEMA.md](SCHEMA.md) §2.4 migration plan M1–M7). Steps 1–2/7 of that plan (M1, M2) are closed today — see the tables below; M2 added `consents`/`privacy_requests`/`audit_log` but no application logic reads or writes them yet.
 4. **Recommendations are never persisted** — no reason, no display propensity, no `experimentId`/`requestId` (`§13.1`, `§14`, `§14.1`). Without the log the post-watch loop (`§4.5`) cannot close and `§16` has nothing to read.
 5. **Confidence band is a triad-count heuristic** — `§9.2`/`§9.3` require evidence diversity, held-out prediction success and fingerprint quality (ADR-21). The fingerprint-quality and held-out-prediction inputs now exist (gaps 6's one-band demotion, gap 2); the rest does not.
 6. **Fingerprints carry no provenance and cover part of `§6.1`** — the 15 seeded rows leave `confidence` empty; families characters/ending/people/cultural context are absent (V1 is frozen; V2 planned — [FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md)).
-7. **Onboarding records no consent** (`§4.1`, `§13.1`, `§2.4 #9`) — market and platforms are collected since 2026-09-03 (onboarding section below); the `consents` table and rows are still missing.
+7. **Onboarding records no consent** (`§4.1`, `§13.1`, `§2.4 #9`) — market and platforms are collected since 2026-09-03 (onboarding section below); the `consents` table exists since M2 but no screen or endpoint writes a row to it yet.
 8. **Not a PWA yet** — no web manifest or service worker (`§5.1`, ADR-5).
 
 (Numbering keeps gaps 1, 4–8 as originally assigned; gaps 2, 3 and 9 are closed — see the tables below.)
@@ -63,7 +63,17 @@ Not itself the close of gap 1 (schema) — a single step of the already-designed
 |---|---|---|
 | M1 had been landing piecemeal all day as other features needed pieces of it (the replacement endpoint needed `triad_replacements`, ADR-17; onboarding needed `market`/`platforms`), leaving four items open: `user_title_state` → `user_title_states` (ADR-16 plural naming); `users.role` (`§5.1` admin board); `profiles.pausedAt` (PRIVACY.md §4 `pause_all`); `triads.holdout`/`correctsTriadId` + two indexes (`§8.3`, `§13.2`) | One migration, `CompleteM1Plan`, applies exactly what SCHEMA.md §2.2's target DDL already specified — no new design. `SafeUser` picked up `role` automatically via `Omit<User, 'password'>`; `AuthService.validateUser()`'s explicit object literal updated to include it (ADR-51) | Verified with a real `up()` → `down()` → `up()` round trip against `postgres-test` (every `ALTER`/rename both directions), then the full e2e suite (41/41) on the final state; `tsc`, the full unit suite (98 tests) and `eslint` all clean |
 
-None of these four columns are read by anything yet — the admin board, the `pause_all` flow, and a triad-correction flow are all still unbuilt. That's expected: schema arrives before the feature that uses it, the same way `market`/`platforms` sat unused between their own migration and the onboarding screen. Next: M2 (`consents`, `privacy_requests`, `audit_log`) — directly what gap 7 needs.
+None of these four columns are read by anything yet — the admin board, the `pause_all` flow, and a triad-correction flow are all still unbuilt. That's expected: schema arrives before the feature that uses it, the same way `market`/`platforms` sat unused between their own migration and the onboarding screen.
+
+## Closed on 2026-09-03 (M2 migration plan step, 2 of 7 toward gap 1)
+
+Not itself the close of gap 1, and not gap 7 (onboarding consent) either — schema only, one more step of [SCHEMA.md](SCHEMA.md) §2.4's plan. Picked next because gap 7 is directly blocked on the `consents` table this step adds.
+
+| Gap | What changed | Proof |
+|---|---|---|
+| Three of the twelve tables blueprint gap 1 needs were missing: `consents` (PRIVACY.md §3 purposes), `privacy_requests` and `audit_log` (PRIVACY.md §5 export/delete/reset lifecycle and the audit trail) | One migration, `AddM2ConsentAndAuditTables`, plus three new entities (`Consent`, `PrivacyRequest`, `AuditLog`), implementing SCHEMA.md §2.2's target DDL verbatim — schema only, nothing reads or writes these tables yet. `privacy_requests.userId`/`audit_log.actorUserId` deliberately carry no cascade/no FK, matching the DDL exactly, even though this is in real tension with PRIVACY.md §5's tombstone requirement — flagged, not silently resolved (ADR-52) | Verified with a real `up()` → `down()` → `up()` round trip against `postgres-test` (all three tables, FKs and indexes both directions), then the full e2e suite (41/41) on the final state; `tsc`, the full unit suite (98 tests) and `eslint` all clean |
+
+None of the three new tables are read or written by anything yet — no onboarding screen records a grant, no settings page revokes one, no export/delete endpoint exists. Next: M3 (`source_records`, `content_features`, `localized_titles`, `people`, `credits`, `title_editions`) — the rights registry and provenance step.
 
 ---
 
@@ -394,10 +404,10 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 
 | Item | Built | Blueprint | Evidence / gap |
 |---|---|---|---|
-| Consent capture (`consents`) | ❌ | ❌ | `§13.1`, `§2.4 #9`; purposes in [PRIVACY.md](PRIVACY.md) §3 |
-| Export / delete / reset endpoints | ❌ | ❌ | `§14`, `§18.1`; `DELETE /profiles/:id` cascades one profile only |
-| Restrictions (`no_pooled`, `pause_all`) | ❌ | ❌ | [PRIVACY.md](PRIVACY.md) §4 |
-| Audit log | ❌ | ❌ | `§21.3` |
+| Consent capture (`consents`) | ❌ | ❌ | `§13.1`, `§2.4 #9`; table exists since M2, no screen/endpoint writes a row yet; purposes in [PRIVACY.md](PRIVACY.md) §3 |
+| Export / delete / reset endpoints | ❌ | ❌ | `§14`, `§18.1`; `privacy_requests` table exists since M2, unused; `DELETE /profiles/:id` cascades one profile only |
+| Restrictions (`no_pooled`, `pause_all`) | ❌ | ❌ | [PRIVACY.md](PRIVACY.md) §4; `profiles.pausedAt` exists since M1, unused |
+| Audit log | ❌ | ❌ | `§21.3`; `audit_log` table exists since M2, nothing writes to it yet |
 | Admin board (`§5.1`, `§17.2`) | ❌ | ❌ | required for Alpha, not optional |
 | Privacy documentation | ✅ | 🟡 | [PRIVACY.md](PRIVACY.md) rewritten; counsel review pending |
 | PIA, DPO, breach plan, regional residency decision | ❌ | — | [PRIVACY.md](PRIVACY.md) §13 |
