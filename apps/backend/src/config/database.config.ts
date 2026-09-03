@@ -19,6 +19,7 @@ import { PrivacyRequest } from '../entities/privacy-request.entity';
 import { Profile } from '../entities/profile.entity';
 import { PublicQualitySource } from '../entities/public-quality-source.entity';
 import { Recommendation } from '../entities/recommendation.entity';
+import { RefreshToken } from '../entities/refresh-token.entity';
 import { SharedLatentSpaceVersion } from '../entities/shared-latent-space-version.entity';
 import { SourceRecord } from '../entities/source-record.entity';
 import { Title } from '../entities/title.entity';
@@ -62,6 +63,7 @@ export function getConnectionOptions(): ConnectionOptions {
     database: process.env.POSTGRES_DB || 'moviedb',
     entities: [
       User,
+      RefreshToken,
       Profile,
       Title,
       Triad,
@@ -99,7 +101,11 @@ export function DatabaseConfig(): TypeOrmModuleOptions {
     // Schema is now managed exclusively through migrations (see src/migrations
     // and `npm run db:migrate`), not TypeORM's auto-sync, in every environment.
     synchronize: false,
-    logging: process.env.NODE_ENV === 'development',
+    // L6 (2026-09-03 audit): `logging: true` printed every query with its
+    // parameters -- password hashes on insert, emails -- to stdout in
+    // development. Errors and schema/migration events are always logged;
+    // full query logging is opt-in with DB_LOG_QUERIES=true.
+    logging: process.env.DB_LOG_QUERIES === 'true' ? true : ['error', 'warn', 'schema', 'migration'],
     extra: {
       // pgvector support
       supportGeoJSON: true,

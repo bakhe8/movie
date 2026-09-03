@@ -3,7 +3,7 @@ import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import type { Repository } from 'typeorm';
 import { User } from '../../entities/user.entity';
-import { AuthService } from './auth.service';
+import { AuthService, hashRefreshToken } from './auth.service';
 
 vi.mock('bcryptjs', () => ({
   hash: vi.fn(),
@@ -25,18 +25,44 @@ function createRepositoryMock() {
 }
 
 function createJwtServiceMock() {
-  return { sign: vi.fn(() => 'signed-jwt-token') };
+  return {
+    sign: vi.fn(() => 'signed-jwt-token'),
+    decode: vi.fn(() => ({ iat: 1_000, exp: 1_900 })),
+  };
+}
+
+function createRefreshRepositoryMock() {
+  let nextId = 1;
+  return {
+    findOne: vi.fn(),
+    create: vi.fn((data: Record<string, unknown>) => ({ ...data })),
+    save: vi.fn(async (entity: Record<string, unknown>) => ({ id: entity.id ?? `rt-${nextId++}`, ...entity })),
+    update: vi.fn(async () => ({ affected: 1 })),
+  };
+}
+
+function createAuditMock() {
+  return { record: vi.fn(async () => ({})), hashIp: vi.fn(() => 'ip-hash') };
 }
 
 describe('AuthService', () => {
   let usersRepository: ReturnType<typeof createRepositoryMock>;
+  let refreshTokens: ReturnType<typeof createRefreshRepositoryMock>;
   let jwtService: ReturnType<typeof createJwtServiceMock>;
+  let audit: ReturnType<typeof createAuditMock>;
   let service: AuthService;
 
   beforeEach(() => {
     usersRepository = createRepositoryMock();
+    refreshTokens = createRefreshRepositoryMock();
     jwtService = createJwtServiceMock();
-    service = new AuthService(usersRepository as unknown as Repository<User>, jwtService as never);
+    audit = createAuditMock();
+    service = new AuthService(
+      usersRepository as unknown as Repository<User>,
+      refreshTokens as never,
+      jwtService as never,
+      audit as never,
+    );
     vi.mocked(bcrypt.hash).mockReset();
     vi.mocked(bcrypt.compare).mockReset();
   });
@@ -199,6 +225,91 @@ describe('AuthService', () => {
       });
 
       await expect(service.validateUser('user-1')).resolves.toBeNull();
+    });
+  });
+  describe('refresh tokens (ADR-26)', () => {
+    const activeUser = { id: 'user-1', email: 'a@example.com', active: true, role: 'user' };
+
+    it('login issues a pair: a signed access token plus a random refresh token stored only as a hash', async () => {
+      usersRepository.findOne.mockResolvedValue({ ...activeUser, password: 'hashed' });
+      vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+      const result = await service.login({ email: 'a@example.com', password: 'pw' }, '10.0.0.1');
+      expect(result).toMatchObject({ access_token: 'signed-jwt-token', token_type: 'Bearer', expires_in: 900 });
+      expect(result.refresh_token).toHaveLength(43);
+      expect(refreshTokens.save).toHaveBeenCalledTimes(1);
+      const stored = refreshTokens.save.mock.calls[0][0] as { id: string; familyId: string; tokenHash: string; ipHash: string };
+      expect(stored.tokenHash).toBe(hashRefreshToken(result.refresh_token));
+      expect(stored.tokenHash).not.toBe(result.refresh_token);
+      expect(stored.ipHash).toBe('ip-hash');
+      // A fresh login starts a family named after its first row.
+      expect(stored.familyId).toBe(stored.id);
+    });
+
+    it('rotates: the presented token is revoked with a pointer to its replacement, same family', async () => {
+      refreshTokens.findOne.mockResolvedValue({
+        id: 'old',
+        userId: 'user-1',
+        familyId: 'fam',
+        tokenHash: 'h',
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+      usersRepository.findOne.mockResolvedValue(activeUser);
+      const pair = await service.refresh('presented-token-value-xxxx');
+      expect(pair.refresh_token).not.toBe('presented-token-value-xxxx');
+      const created = refreshTokens.create.mock.calls[0][0] as { familyId: string };
+      expect(created.familyId).toBe('fam');
+      expect(refreshTokens.update).toHaveBeenCalledWith(
+        { id: 'old' },
+        expect.objectContaining({ revokedReason: 'rotated', replacedById: expect.any(String) }),
+      );
+    });
+
+    it('treats a revoked token as reuse: revokes the family, audits, 401', async () => {
+      refreshTokens.findOne.mockResolvedValue({
+        id: 'old',
+        userId: 'user-1',
+        familyId: 'fam',
+        revokedAt: new Date(),
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+      await expect(service.refresh('presented-token-value-xxxx', '10.0.0.1')).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(refreshTokens.update).toHaveBeenCalledWith(
+        expect.objectContaining({ familyId: 'fam' }),
+        expect.objectContaining({ revokedReason: 'reuse_detected' }),
+      );
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'auth.refresh.reuse_detected', status: 'failed', actorUserId: 'user-1' }),
+      );
+    });
+
+    it('refuses unknown and expired tokens without touching anything', async () => {
+      refreshTokens.findOne.mockResolvedValueOnce(null);
+      await expect(service.refresh('nope-nope-nope-nope-nope')).rejects.toBeInstanceOf(UnauthorizedException);
+      refreshTokens.findOne.mockResolvedValueOnce({ id: 'x', userId: 'user-1', familyId: 'fam', revokedAt: null, expiresAt: new Date(Date.now() - 1) });
+      await expect(service.refresh('expired-expired-expired-x')).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(refreshTokens.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses a deactivated account at the refresh door and closes its family (H2)', async () => {
+      refreshTokens.findOne.mockResolvedValue({ id: 'old', userId: 'user-1', familyId: 'fam', revokedAt: null, expiresAt: new Date(Date.now() + 60_000) });
+      usersRepository.findOne.mockResolvedValue({ ...activeUser, active: false });
+      await expect(service.refresh('presented-token-value-xxxx')).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(refreshTokens.update).toHaveBeenCalledWith(
+        expect.objectContaining({ familyId: 'fam' }),
+        expect.objectContaining({ revokedReason: 'deactivated' }),
+      );
+    });
+
+    it('logout revokes one session or all of them, and audits', async () => {
+      await expect(service.logout('user-1', 'presented-token-value-xxxx', false)).resolves.toEqual({ revoked: 1 });
+      expect(refreshTokens.update).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 'user-1', tokenHash: hashRefreshToken('presented-token-value-xxxx') }),
+        expect.objectContaining({ revokedReason: 'logout' }),
+      );
+      refreshTokens.update.mockResolvedValueOnce({ affected: 3 });
+      await expect(service.logout('user-1', undefined, true)).resolves.toEqual({ revoked: 3 });
+      expect(audit.record).toHaveBeenLastCalledWith(expect.objectContaining({ action: 'auth.logout_all', reason: 'revoked 3' }));
     });
   });
 });
