@@ -10,8 +10,9 @@ type Mode = 'login' | 'register';
 const labels = {
   ar: {
     brand: 'Reel',
-    welcome: 'أهلاً بك في Reel',
-    hint: 'ترتّب ثلاثة أفلام شاهدتها، فنبدأ بفهم ذوقك. لا نجوم ولا إعجاب.',
+    // The brand sits above as the mark; the heading states the product's one ask.
+    welcome: 'ثلاثة أفلام تكفي للبدء',
+    hint: 'ترتّب ما شاهدت حسب إعجابك، فنبدأ بفهم ذوقك. لا نجوم ولا إعجاب.',
     login: 'تسجيل الدخول',
     register: 'إنشاء حساب',
     email: 'البريد الإلكتروني',
@@ -28,8 +29,8 @@ const labels = {
   },
   en: {
     brand: 'Reel',
-    welcome: 'Welcome to Reel',
-    hint: 'Rank three films you have watched and we start learning your taste. No stars, no likes.',
+    welcome: 'Three films are enough to start',
+    hint: 'Rank what you have watched by how much you liked it, and we start learning your taste. No stars, no likes.',
     login: 'Log in',
     register: 'Create account',
     email: 'Email',
