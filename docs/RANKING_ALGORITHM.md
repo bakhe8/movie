@@ -1,6 +1,6 @@
 # Model Service Specification — Ranking, Selection, Confidence, Attribution
 
-**Status**: Derived from blueprint `§7` (utility model, Plackett–Luce, time layers, exceptions, shared latent space, silent vs disclosed use), `§8` (triad selection policy), `§9` (confidence and explanation), `§10.3` (public quality vs personal fit), `§14.1` (candidate generation and reranking), `§16` (evaluation). Decisions: ADR-3, ADR-8, ADR-13, ADR-19–ADR-22, ADR-25.
+**Status**: Derived from blueprint `§7` (utility model, Plackett–Luce, time layers, exceptions, shared latent space, silent vs disclosed use), `§8` (triad selection policy), `§9` (confidence and explanation), `§10.3` (public quality vs personal fit), `§14.1` (candidate generation and reranking), `§16` (evaluation). Decisions: ADR-3, ADR-8, ADR-13, ADR-19–ADR-22, ADR-25, ADR-59.
 **Version**: 2.0 — 2026-09-03 (rewrite of the 2025-dated implementation guide; the base Plackett–Luce math is unchanged, everything around it now matches the blueprint).
 
 This is the contract for `services/workers` (the Python model service). What exists today is in §16.
@@ -119,7 +119,7 @@ Four things that must not be confused: preference probability, epistemic uncerta
 
 A tendency ("tends to…") is shown only when all `BP §9.2` criteria hold: stable posterior direction beyond a pre-set threshold, sufficient *effective* evidence (not one series repeated), diversity of directors/languages/genres, successful prediction of later held-out comparisons, and healthy fingerprint quality underneath.
 
-Bands (`BP §9.3`): `initial` (3–5 triads or correlated evidence), `likely` (several pieces of evidence in a narrow context), `strong` (repeated across contexts and predictive), `inconclusive` (conflicting evidence or weak fingerprint). Current code derives the band from `trainingTriadCount` alone — an explicit interim heuristic (ADR-21) that must be replaced by the criteria above before Alpha reporting. A numeric probability may be shown only after Brier/ECE calibration against confirmed post-watch outcomes.
+Bands (`BP §9.3`): `initial` (3–5 triads or correlated evidence), `likely` (several pieces of evidence in a narrow context), `strong` (repeated across contexts and predictive), `inconclusive` (conflicting evidence or weak fingerprint). Current code derives the band from `trainingTriadCount` (interim heuristic, ADR-21), demoted one step for incomplete fingerprint coverage (ADR-19), and — since 2026-09-03 — overridden to `inconclusive` outright when `heldOutPairwiseAccuracy` is at or below chance (0.5), the domain-standard reading of "conflicting evidence" for a model that fails to predict its own held-out comparisons (ADR-59). Two `§9.2` criteria remain unimplemented: stable posterior direction (needs the trainer to compute per-weight uncertainty, which it doesn't yet) and diversity of directors/languages/genres (needs a metric definition that hasn't been decided). A numeric probability may be shown only after Brier/ECE calibration against confirmed post-watch outcomes.
 
 ## 11. Shared latent space (`BP §7.5`)
 

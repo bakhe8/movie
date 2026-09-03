@@ -53,12 +53,13 @@ function queryBuilderMock(titles: Title[]) {
   return builder;
 }
 
-function warmthOnlySnapshot(trainingTriadCount = 25) {
+function warmthOnlySnapshot(trainingTriadCount = 25, heldOutPairwiseAccuracy: number | null = null) {
   return {
     weights: FINGERPRINT_DIMENSIONS.map((dim) => (dim === 'warmth' ? 1 : 0)),
     biasTerms: {},
     modelVersion: 'test-v1',
     trainingTriadCount,
+    heldOutPairwiseAccuracy,
   };
 }
 
@@ -336,6 +337,61 @@ describe('RecommendationsService', () => {
     const result = await service.findForProfile('user-1', 'profile-1', 10);
 
     expect(result[0].confidenceBand).toBe(expectedBand);
+  });
+
+  // Blueprint gap 5: §9.2's "successful prediction of later held-out
+  // comparisons" criterion. A model that predicts at or below chance (0.5)
+  // on held-out triads is conflicting evidence by §9.3's own definition of
+  // 'inconclusive' -- this overrides the triad-count band outright.
+  describe('confidence band factors in held-out prediction (blueprint gap 5)', () => {
+    it('demotes to inconclusive when held-out accuracy is at chance, even with many training triads', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot(30, 0.5));
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+      expect(result[0].confidenceBand).toBe('inconclusive');
+    });
+
+    it('demotes to inconclusive when held-out accuracy is below chance', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot(30, 0.3));
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+      expect(result[0].confidenceBand).toBe('inconclusive');
+    });
+
+    it('keeps the triad-count band when held-out accuracy is meaningfully above chance', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot(30, 0.75));
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+      expect(result[0].confidenceBand).toBe('strong');
+    });
+
+    it('falls back to the triad-count heuristic when held-out accuracy is unknown (below the 5-triad floor, ADR-31)', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot(30, null));
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+      // Unknown is not treated as failing -- 30 triads still bands 'strong'.
+      expect(result[0].confidenceBand).toBe('strong');
+    });
   });
 
   it('excludes only titles the profile has watched; a not_watched mark keeps the title a candidate (blueprint §2.4 #3)', async () => {

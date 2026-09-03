@@ -47,6 +47,14 @@ export interface RecommendationReason {
 const REASON_MAX_FEATURES = 2;
 const REASON_MIN_SHARE_OF_TOP = 0.2;
 
+// A pairwise comparison is a coin flip at 0.5; at or below that the model
+// has not been shown to predict held-out comparisons any better than
+// chance (blueprint §9.2's "successful prediction of later held-out
+// comparisons" criterion, inverted). Matches BP §9.3's own inconclusive
+// definition ("conflicting evidence") -- this is not an arbitrary number,
+// it is the domain-standard floor for a binary comparison.
+const HELD_OUT_CHANCE_ACCURACY = 0.5;
+
 // One step down per band. A title with unknown fingerprint dimensions cannot be
 // recommended with the same confidence as a fully described one (blueprint §9.1
 // "fingerprint confidence", §9.2 last criterion; ADR-19).
@@ -336,13 +344,22 @@ export class RecommendationsService {
   }
 
   // Provisional heuristic banding by evidence quantity (blueprint §9.2's first
-  // criterion: "عدد أدلة فعال كافٍ"). This is NOT the calibrated confidence system
-  // blueprint §9.3/§16.2 describes (which also requires context diversity and
-  // successful prediction of held-out comparisons, validated via Brier score/ECE)
-  // -- that calibration work hasn't been done yet (ADR-21). Until it has, this
-  // thresholding is deliberately conservative and must never be presented to the
-  // user as a precise probability; it only decides which verbal band copy to show.
+  // criterion: "عدد أدلة فعال كافٍ") plus held-out prediction success (§9.2's
+  // fourth criterion, gap 5). Still NOT the fully calibrated confidence system
+  // blueprint §9.3/§16.2 describes -- posterior stability and
+  // director/language/genre diversity (§9.2's other two criteria) aren't
+  // wired in, and no Brier/ECE calibration exists yet (ADR-21). Until then
+  // this thresholding is deliberately conservative and must never be
+  // presented to the user as a precise probability; it only decides which
+  // verbal band copy to show.
   private confidenceBand(snapshot: UserModelSnapshot): ConfidenceBand {
+    // heldOutPairwiseAccuracy is NULL below the 5-triad floor (ADR-31) --
+    // falls through to the triad-count heuristic below, same as always.
+    // At or below chance, the evidence is conflicting by definition (§9.3):
+    // this overrides the triad-count band outright, not a one-step demotion.
+    if (snapshot.heldOutPairwiseAccuracy !== null && snapshot.heldOutPairwiseAccuracy <= HELD_OUT_CHANCE_ACCURACY) {
+      return 'inconclusive';
+    }
     if (snapshot.trainingTriadCount < 3) {
       return 'inconclusive';
     }
