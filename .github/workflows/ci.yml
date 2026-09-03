@@ -1,0 +1,114 @@
+# Continuous integration (ALPHA_PLAN phase 7, item 7.1; ADR-24 "CI with tests
+# and migrations" before Alpha). Three independent jobs mirror what runs
+# locally, nothing more: the backend (type-check, lint, unit, then the e2e
+# suite against a disposable pgvector Postgres with every migration applied
+# from scratch), the frontend (type-check, lint, production build) and the
+# Python workers (ruff, pytest from the committed poetry.lock). A failing job
+# blocks the merge; there is no deploy step here yet (phase 7.3).
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend (types, lint, unit, e2e on Postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      # Same image, credentials and port as docker/docker-compose.yml's
+      # `postgres-test`, so apps/backend/test/test-db-env.js needs no change.
+      postgres:
+        image: ankane/pgvector:latest
+        env:
+          POSTGRES_USER: movieapp
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: moviedb_test
+        ports:
+          - 5544:5432
+        options: >-
+          --health-cmd "pg_isready -U movieapp"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: shared types compile
+        run: npx tsc --noEmit -p packages/shared
+      - name: type-check
+        run: npx tsc --noEmit
+        working-directory: apps/backend
+      - name: lint
+        run: npx eslint src/
+        working-directory: apps/backend
+      - name: unit tests
+        run: npx vitest run -c vitest.config.ts
+        working-directory: apps/backend
+      - name: migrate the test database from scratch
+        run: npm run test:e2e:migrate
+        working-directory: apps/backend
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: '5544'
+      - name: e2e tests (real HTTP, real Postgres)
+        # One retry absorbs the known isolation flake in
+        # recommendations-persistence when files run in parallel; a real
+        # regression fails twice.
+        run: npx vitest run -c vitest.e2e.config.ts --retry=1
+        working-directory: apps/backend
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: '5544'
+
+  frontend:
+    name: frontend (types, lint, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: type-check
+        run: npx tsc --noEmit
+        working-directory: apps/frontend
+      - name: lint
+        run: npm run lint -w apps/frontend
+      - name: production build
+        run: npm run build -w apps/frontend
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+
+  workers:
+    name: workers (ruff, pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: services/workers
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: install poetry
+        run: pipx install poetry
+      - name: install from the committed lock
+        run: poetry install --no-interaction
+      - name: ruff
+        run: poetry run ruff check src tests
+      - name: pytest
+        run: poetry run pytest -q
