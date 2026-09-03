@@ -14,9 +14,6 @@ from typing import Dict, Optional
 import openai
 from pydantic import BaseModel, Field
 
-# Initialize OpenAI client
-openai_client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
 # Bump whenever this pipeline's prompt or evidence shape changes -- a
 # published fingerprint is re-extracted only on a schema/model/extractor
 # version change, never ad hoc (FINGERPRINT_SCHEMA.md §5).
@@ -100,6 +97,16 @@ class FilmEnrichmentWorker:
                 model choice is a deployment decision, not a code constant.
         """
         self._model_override = model
+        self._client: Optional[openai.OpenAI] = None
+
+    def _get_client(self) -> openai.OpenAI:
+        # Built on first real use, not at import time or construction time
+        # (H3): a module-level client made `import src.enrichment` --
+        # transitively, `python -m src.training`, which never talks to
+        # OpenAI -- fail on any machine without OPENAI_API_KEY set.
+        if self._client is None:
+            self._client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        return self._client
 
     def _resolve_model(self, env_var: str) -> str:
         if self._model_override:
@@ -158,7 +165,7 @@ Focus on objective aspects that can be inferred from the plot, themes, and narra
 Provide scores for all dimensions. For dimensions you're less confident about, provide lower confidence scores."""
 
         try:
-            response = openai_client.responses.parse(
+            response = self._get_client().responses.parse(
                 model=model,
                 instructions=instructions,
                 input=input_text,
@@ -235,7 +242,7 @@ Provide scores for all dimensions. For dimensions you're less confident about, p
 Keep it concise and friendly."""
 
         try:
-            response = openai_client.responses.create(
+            response = self._get_client().responses.create(
                 model=model,
                 instructions=instructions,
                 input=input_text,

@@ -1,7 +1,7 @@
 # Architecture Decision Records
 
 **Status**: Living log. Every decision cites the blueprint section it serves (`BP §x.y`) or states that it is this repository's own engineering choice within the blueprint's constraints. A decision that contradicts the blueprint is a bug in this file. Product-level open questions that must be settled by experiment are **not** decided here — they are listed in `BP App. C` and [SPECIFICATION.md §11](SPECIFICATION.md).
-**Version**: 2.7 — 2026-09-03 (ADR-1…13 rewritten for consistency; ADR-14…26 added to close the gaps found in the documentation audit; ADR-27…28 added from a code-quality/security audit; ADR-29 added for the NestJS 10→11 migration; ADR-30 added for the `@typescript-eslint`/`vitest` dev-tooling bump; ADR-31 added for the training temporal hold-out, gap 2; ADR-32 added for triad event completeness, gap 3; ADR-33 added for prediction display formatting; ADR-34 added for the H1 triad-reuse fix; ADR-35 added for the H2 deactivated-account fix).
+**Version**: 2.8 — 2026-09-03 (ADR-1…13 rewritten for consistency; ADR-14…26 added to close the gaps found in the documentation audit; ADR-27…28 added from a code-quality/security audit; ADR-29 added for the NestJS 10→11 migration; ADR-30 added for the `@typescript-eslint`/`vitest` dev-tooling bump; ADR-31 added for the training temporal hold-out, gap 2; ADR-32 added for triad event completeness, gap 3; ADR-33 added for prediction display formatting; ADR-34 added for the H1 triad-reuse fix; ADR-35 added for the H2 deactivated-account fix; ADR-36 added for the H3 lazy-OpenAI-client fix).
 
 Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 
@@ -243,6 +243,13 @@ Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 **Consequences.** No behavior change for active accounts. A newly deactivated account is locked out of every guarded route on its very next request, not just at its next login.
 **Revisit when.** ADR-26's refresh-token work lands — re-verify the refresh path also re-checks `active` and doesn't reintroduce this gap through a second code path.
 
+## ADR-36 — `services/workers`: the OpenAI client is built lazily, not at import time (H3)
+
+**Context.** `src/enrichment.py` built `openai.OpenAI(...)` at module import time, and `src/__init__.py` imported `enrichment` unconditionally — so importing the `src` package at all (including `python -m src.training`, which has no dependency on OpenAI) raised `openai.OpenAIError` on any machine without `OPENAI_API_KEY` set. [QUICKSTART.md](QUICKSTART.md) §Prerequisites already (correctly) documents that the core loop needs no OpenAI key; this bug just made that untrue in practice. Found by an independent audit ([AUDIT_2026-09-03.md](AUDIT_2026-09-03.md) §2 H3), reproduced independently before fixing (`env -u OPENAI_API_KEY python -m src.training --help` raised before the fix, exits 0 after).
+**Decision.** Two changes, both from the audit's suggested fix: (1) `src/__init__.py` no longer imports `enrichment` — callers reach it directly via `from src.enrichment import ...`, same as the existing test file already did; (2) `FilmEnrichmentWorker` builds its OpenAI client lazily, cached on first use in a private `_get_client()`, instead of module scope. A key is now only ever required at the point a call to OpenAI is actually about to happen.
+**Consequences.** `import src`, `import src.training`, and `import src.enrichment` all succeed with no `OPENAI_API_KEY` set; so does constructing a `FilmEnrichmentWorker()`. The key is still required — unchanged — to actually call `generate_fingerprint()` / `generate_recommendation_explanation()`. No behavior change for the enrichment worker's real callers, which always have the key set before running it.
+**Revisit when.** Never, barring a redesign of how workers share OpenAI clients across multiple worker instances (not needed today — one process runs one worker at a time).
+
 ---
 
 ## Summary
@@ -284,6 +291,7 @@ Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 | 33 | Prediction display: verbal confidence everywhere, Personal Fit never a % | `BP §4.4`, `§7.2`, `§9.3` | App. C confidence-display experiment after calibration |
 | 34 | `random-v1` excludes only the previous triad, not full history (H1) | `BP §8.1`, `§8.2` | adaptive policy computes a real `Repeat` penalty |
 | 35 | `validateUser()` checks `active` (H2) | `BP §21.3` | refresh-token work (ADR-26) |
+| 36 | `services/workers` OpenAI client built lazily, not at import time (H3) | engineering choice | multi-worker client sharing, if ever needed |
 
 ## How to add a decision
 
