@@ -5,6 +5,7 @@ import { api, ApiError, type ConfidenceBand, type PreferredLanguage } from '../l
 import { formatConfidence, formatNumber } from '../lib/format';
 import { MARKETS, PLATFORMS } from '../lib/onboarding-options';
 import { useSession } from '../lib/session';
+import { ConsentsPanel } from './ConsentsPanel';
 import styles from './ProfileScreen.module.css';
 
 type Lang = 'ar' | 'en';
@@ -357,6 +358,9 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
       <section className={styles.section} aria-label={t.privacy}>
         <h3>{t.privacy}</h3>
         <p>{t.privacyBody}</p>
+
+        {/* Consent changes the onboarding copy promises (PRIVACY.md §3). */}
+        <ConsentsPanel lang={lang} />
 
         <p className={styles.strong}>{t.resetTitle}</p>
         <p>{t.resetBody}</p>
