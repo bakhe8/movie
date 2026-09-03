@@ -1,4 +1,4 @@
-.PHONY: help install dev build test docker-up docker-down db-migrate db-seed catalog-fetch catalog-cultural catalog-enrich catalog-enrich-placeholder demo demo-clean lint clean
+.PHONY: help install dev build test docker-up docker-down db-migrate db-seed catalog-fetch catalog-cultural catalog-evidence-ar catalog-enrich catalog-enrich-placeholder demo demo-clean lint clean
 
 help:
 	@echo "🎬 Movie Recommendation System"
@@ -23,10 +23,12 @@ help:
 	@echo "Demo catalog (docs/DEMO_DATA_PLAN_2026-09-03.md):"
 	@echo "  make catalog-fetch              Rebuild the 300-title fixture from Wikidata/Wikipedia"
 	@echo "  make catalog-cultural           Add the cultural-context block (Wikidata facts, CC0) and the coverage report"
+	@echo "  make catalog-evidence-ar        Add the Arabic Wikipedia plot section as second evidence for short English plots"
 	@echo "  make catalog-enrich             Fingerprint the fixture through the enrichment worker (Anthropic key)"
 	@echo "  make catalog-enrich-placeholder Fill labelled placeholder vectors, no credentials"
 	@echo "  make demo                       Seed the four demo personas into the dev DB and train them"
 	@echo "  make model-service              Run the training HTTP service the backend calls (127.0.0.1:8001)"
+	@echo "  make evaluate                   Offline evaluation vs baselines + acceptance gate (writes evaluation-report.json)"
 	@echo "  make demo-clean                 Remove the demo persona accounts (titles stay)"
 	@echo ""
 	@echo "Utility Commands:"
@@ -74,6 +76,9 @@ catalog-fetch:
 catalog-cultural:
 	npm run catalog:cultural
 
+catalog-evidence-ar:
+	npm run catalog:evidence-ar
+
 # Fingerprint the demo catalog through the enrichment worker (needs ANTHROPIC_API_KEY
 # and ANTHROPIC_FINGERPRINT_MODEL in .env); resumable, writes the fixture + a report.
 catalog-enrich:
@@ -93,6 +98,11 @@ demo:
 # Binds MODEL_SERVICE_HOST:MODEL_SERVICE_PORT (default 127.0.0.1:8001).
 model-service:
 	cd services/workers && python -m src.model_service
+
+# Offline evaluation and the model acceptance gate (BP §16; ALPHA_PLAN 6.1). Read-only.
+# Exit 0 = gate passed, 1 = failed, 2 = not enough held-out data. Demo personas excluded.
+evaluate:
+	cd services/workers && python -m src.evaluation --exclude-domain demo.local --out ../../evaluation-report.json
 
 demo-clean:
 	npm run db:seed:demo:clean
