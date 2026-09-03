@@ -3,6 +3,7 @@
 import type { LibraryRankingItem, Recommendation } from '../lib/api';
 import { TRACK_COPY } from '../lib/copy';
 import { formatConfidence, formatNumber, formatPersonalFit, formatReason, type PersonalFitLevel } from '../lib/format';
+import { DataNoticeBadge } from '../data-notice/DataNoticeBadge';
 import { Poster } from './Poster';
 import styles from './WorkCard.module.css';
 
@@ -98,6 +99,9 @@ type Shared = {
   onOpen?: () => void;
   // Inside the work page: the cells only (the page owns the head and the actions).
   headless?: boolean;
+  // The host renders Public Quality itself (the work page, with the source's
+  // attribution and date); skip the card's transitional quality cell.
+  withoutQuality?: boolean;
 };
 
 type RecommendationProps = Shared & {
@@ -154,7 +158,7 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
     </div>
   );
 
-  const { onOpen, headless } = props;
+  const { onOpen, headless, withoutQuality } = props;
 
   return (
     <article className={headless ? `${styles.card} ${styles.headless}` : styles.card} aria-label={name}>
@@ -224,7 +228,7 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
           </div>
         )}
 
-        {!isRanking && (
+        {!isRanking && !withoutQuality && (
           <div className={styles.cell}>
             <dt>{t.quality}</dt>
             <dd>
@@ -240,6 +244,9 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
               ) : (
                 <span className={`${styles.chip} ${styles.hollow}`}>{t.qualityUnknown}</span>
               )}
+              {/* The rights badge sits with every external score, present or
+                  pending (DATA_NOTICE_COPY §2). */}
+              <DataNoticeBadge lang={lang} className={styles.noticeBadge} />
             </dd>
           </div>
         )}

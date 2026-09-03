@@ -361,3 +361,8 @@
   color: var(--role-later);
   opacity: 1;
 }
+
+/* The rights badge under the quality value: a small link, start-aligned. */
+.noticeBadge {
+  justify-self: start;
+}

@@ -22,6 +22,7 @@ const labels = {
     terms: 'أوافق على الشروط وإشعار الخصوصية.',
     termsLink: 'الشروط',
     privacyLink: 'إشعار الخصوصية',
+    dataLink: 'المصادر والحقوق',
     email: 'البريد الإلكتروني',
     password: 'كلمة المرور',
     passwordHint: 'من 8 إلى 64 حرفًا.',
@@ -43,6 +44,7 @@ const labels = {
     terms: 'I agree to the Terms and Privacy Notice.',
     termsLink: 'Terms',
     privacyLink: 'Privacy Notice',
+    dataLink: 'Sources and rights',
     email: 'Email',
     password: 'Password',
     passwordHint: '8 to 64 characters.',
@@ -182,6 +184,10 @@ export function AuthScreen({
                 {' · '}
                 <Link href={`/privacy?lang=${lang}`} target="_blank" rel="noopener" className={styles.docLink}>
                   {t.privacyLink}
+                </Link>
+                {' · '}
+                <Link href={`/data-notice?lang=${lang}`} target="_blank" rel="noopener" className={styles.docLink}>
+                  {t.dataLink}
                 </Link>
               </span>
             </label>

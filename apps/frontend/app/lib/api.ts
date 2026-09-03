@@ -1,3 +1,5 @@
+import type { PublicQuality } from '../public-quality/types';
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3101/api';
 
 export interface User {
@@ -70,6 +72,9 @@ export interface Title {
   // The attribution the image's source requires (e.g. TMDB), shown where the
   // image is shown (DATA_LICENSING §5).
   posterSource?: { name: string; attribution: string } | null;
+  // Public Quality as GET /titles/:id returns it since 2026-09-04 (ALPHA_PLAN
+  // 5.3): sources listed separately, never merged; null = no source yet.
+  publicQuality?: PublicQuality | null;
 }
 
 export interface PaginatedTitles {

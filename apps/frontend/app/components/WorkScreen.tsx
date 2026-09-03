@@ -3,6 +3,8 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { api, type FingerprintDimension, type LibraryRankingItem, type Recommendation, type Title, type TitleState } from '../lib/api';
 import { FEATURE_REASON_COPY } from '../lib/copy';
+import { DataNoticeBadge } from '../data-notice/DataNoticeBadge';
+import { PublicQualityCell } from '../public-quality/PublicQualityCell';
 import { Poster } from './Poster';
 import { WorkCard } from './WorkCard';
 import styles from './WorkScreen.module.css';
@@ -133,6 +135,8 @@ const labels = {
     fingerprintNote: 'سمات مراجَعة تصف العمل نفسه، لا حكمًا عليه ولا توقعًا لذوقك.',
     fingerprintPending: 'لم تُنشر بصمة هذا العمل بعد.',
     fit: 'ملاءمته لك',
+    quality: 'الجودة العامة',
+    qualityNote: 'درجة خارجية بمصدرها وتاريخها؛ لا تُدمج مع ملاءمتك ولا تُرتَّب بها.',
     fitNote: 'كما ظهرت في المكان الذي فتحت منه هذا العمل؛ أربع قيم منفصلة.',
     noContext: 'افتح هذا العمل من توصية أو من ترتيبك لترى ملاءمته لك هنا.',
     yourState: 'حالته عندك',
@@ -154,6 +158,8 @@ const labels = {
     fingerprintNote: 'Reviewed traits describing the work itself -- not a verdict, not a prediction of your taste.',
     fingerprintPending: 'This work’s fingerprint has not been published yet.',
     fit: 'How it fits you',
+    quality: 'Public quality',
+    qualityNote: 'An external score with its source and date; never merged with your fit, never used to rank you.',
     fitNote: 'As shown where you opened this work from; four separate values.',
     noContext: 'Open this work from a recommendation or your ranking to see how it fits you here.',
     yourState: 'Your status',
@@ -201,6 +207,27 @@ export function WorkScreen({
   const [state, setState] = useState<TitleState | null>(initialState ?? null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // The card's copy of the title is what it was when listed; the page reads
+  // the title itself for what only GET /titles/:id carries (Public Quality
+  // today; the poster and the fingerprint summary as they land). Until it
+  // arrives, the card's copy renders.
+  const [fresh, setFresh] = useState<Title | null>(null);
+  const detail: Title = fresh ? { ...title, ...fresh } : title;
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getTitle(title.id)
+      .then((loaded) => {
+        if (!cancelled) setFresh(loaded);
+      })
+      .catch(() => {
+        // The card's copy stays.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [title.id]);
 
   // The originating screen only knows what happened on it this session; the
   // server's lists are the record (watched wins over the watchlist).
@@ -230,7 +257,7 @@ export function WorkScreen({
   const name = lang === 'ar' ? title.titleAr : title.titleEn;
   const alt = lang === 'ar' ? title.titleEn : title.titleAr;
   const showAlt = Boolean(alt && alt !== name);
-  const summary = (title as PublicTitle).fingerprintSummary ?? null;
+  const summary = (detail as PublicTitle).fingerprintSummary ?? null;
   const known = new Map((summary ?? []).map((entry) => [entry.key, entry.level]));
 
   // Only exposure/list states are written here -- never a rating (ADR-4);
@@ -258,10 +285,10 @@ export function WorkScreen({
       {/* Q21: the backdrop is the poster itself, blurred, under a gradient to
           the ground; the frontend composes no image URL of its own. */}
       <div
-        className={title.posterUrl ? `${styles.header} ${styles.withImage}` : styles.header}
-        style={title.posterUrl ? ({ '--hero-image': `url("${title.posterUrl}")` } as CSSProperties) : undefined}
+        className={detail.posterUrl ? `${styles.header} ${styles.withImage}` : styles.header}
+        style={detail.posterUrl ? ({ '--hero-image': `url("${detail.posterUrl}")` } as CSSProperties) : undefined}
       >
-        <Poster title={title} size="lg" className={styles.headerPoster} />
+        <Poster title={detail} size="lg" className={styles.headerPoster} />
         <div className={styles.headerText}>
         <p className={styles.eyebrow}>{t.eyebrow}</p>
         <h2>{name}</h2>
@@ -289,11 +316,13 @@ export function WorkScreen({
               {title.description}
             </p>
           )}
-          {title.posterSource?.attribution && (
+          {detail.posterSource?.attribution && (
             <p className={styles.credit} dir="auto">
-              {title.posterSource.attribution}
+              {detail.posterSource.attribution}
             </p>
           )}
+          {/* The rights badge beside the first external image (DATA_NOTICE_COPY §2). */}
+          {detail.posterSource?.attribution && <DataNoticeBadge lang={lang} className={styles.noticeBadge} />}
         </div>
       </div>
 
@@ -318,6 +347,7 @@ export function WorkScreen({
               listed={state === 'watchlist'}
               busy={busy}
               headless
+              withoutQuality
             />
           </>
         )}
@@ -328,6 +358,17 @@ export function WorkScreen({
           </>
         )}
         {context.kind === 'none' && <span className={styles.hollow}>{t.noContext}</span>}
+      </section>
+
+      {/* Public Quality: a fact about the title, separate from the fit
+          (blueprint §5.3, §10.3; ALPHA_PLAN 5.3): one row per source with its
+          attribution verbatim and the rights badge; null stays hollow. */}
+      <section className={styles.section} aria-label={t.quality}>
+        <h3>{t.quality}</h3>
+        <p className={styles.sectionNote}>{t.qualityNote}</p>
+        <dl className={styles.qualityList}>
+          <PublicQualityCell quality={detail.publicQuality} lang={lang} headless />
+        </dl>
       </section>
 
       {/* Content fingerprint: reviewed dimensions as levels, in the text colour

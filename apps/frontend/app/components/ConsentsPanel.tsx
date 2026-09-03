@@ -54,6 +54,7 @@ const labels = {
     loading: 'جارٍ التحميل…',
     termsLink: 'الشروط',
     privacyLink: 'إشعار الخصوصية',
+    dataLink: 'المصادر والحقوق',
   },
   en: {
     title: 'Your consents',
@@ -86,6 +87,7 @@ const labels = {
     loading: 'Loading…',
     termsLink: 'Terms',
     privacyLink: 'Privacy Notice',
+    dataLink: 'Sources and rights',
   },
 };
 
@@ -226,6 +228,10 @@ export function ConsentsPanel({ lang }: { lang: Lang }) {
                     {' · '}
                     <Link href={`/privacy?lang=${lang}`} className={styles.docLink}>
                       {t.privacyLink}
+                    </Link>
+                    {' · '}
+                    <Link href={`/data-notice?lang=${lang}`} className={styles.docLink}>
+                      {t.dataLink}
                     </Link>
                   </p>
                 )}

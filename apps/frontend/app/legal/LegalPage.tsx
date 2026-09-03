@@ -12,8 +12,8 @@ import styles from './legal.module.css';
  * like the document root.
  */
 const chrome = {
-  ar: { brand: 'Reel', toApp: 'إلى التطبيق', other: 'اللغة: English', updated: 'آخر تحديث', terms: 'شروط الاستخدام', privacy: 'إشعار الخصوصية' },
-  en: { brand: 'Reel', toApp: 'To the app', other: 'اللغة: العربية', updated: 'Last updated', terms: 'Terms of Use', privacy: 'Privacy Notice' },
+  ar: { brand: 'Reel', toApp: 'إلى التطبيق', other: 'اللغة: English', updated: 'آخر تحديث', terms: 'شروط الاستخدام', privacy: 'إشعار الخصوصية', dataNotice: 'إشعار البيانات والمصادر' },
+  en: { brand: 'Reel', toApp: 'To the app', other: 'اللغة: العربية', updated: 'Last updated', terms: 'Terms of Use', privacy: 'Privacy Notice', dataNotice: 'Data notice' },
 };
 
 export function resolveLang(value: string | string[] | undefined): Lang {
@@ -75,6 +75,9 @@ export function LegalPage({ kind, lang }: { kind: LegalKind; lang: Lang }) {
         <footer className={styles.foot}>
           <Link href={`/${otherKind}?lang=${lang}`} className={styles.link}>
             {c[otherKind]}
+          </Link>
+          <Link href={`/data-notice?lang=${lang}`} className={styles.link}>
+            {c.dataNotice}
           </Link>
         </footer>
       </article>

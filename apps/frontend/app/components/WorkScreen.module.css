@@ -330,3 +330,13 @@
   color: var(--role-later);
   opacity: 1;
 }
+
+/* Public Quality section: the cell brings its own layout; the list only
+   resets the definition-list margin. The badge sits under the credit line. */
+.qualityList {
+  margin: 0;
+}
+
+.noticeBadge {
+  justify-self: start;
+}

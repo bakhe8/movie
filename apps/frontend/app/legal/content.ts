@@ -65,7 +65,7 @@ export const LEGAL: Record<LegalKind, Record<Lang, LegalDocument>> = {
         {
           head: 'بيانات الأفلام',
           paragraphs: [
-            'معلومات الأفلام وصورها تأتي من مصادر مرخّصة، ولكل مصدر حقوقه وإسناده المذكور حيث تُعرض. لا نعرض صورة إلا حين يسمح سجل الحقوق بذلك؛ وإلا تبقى الفتحة فارغة.',
+            'معلومات الأفلام وصورها ودرجاتها تأتي من مصادر خارجية بشروطها المنشورة وبإسنادها المذكور حيث تُعرض، وتفصيلها في إشعار مرحلة التطوير واستخدام البيانات. لا نعرض صورة إلا حين يسمح سجل الحقوق بذلك؛ وإلا تبقى الفتحة فارغة.',
           ],
         },
         {
@@ -125,7 +125,7 @@ export const LEGAL: Record<LegalKind, Record<Lang, LegalDocument>> = {
         {
           head: 'Film data',
           paragraphs: [
-            'Film information and images come from licensed sources, each with its own rights and the attribution shown where it appears. An image is shown only when the rights registry allows it; otherwise the slot stays empty.',
+            'Film information, images and scores come from external sources under their published terms, with the attribution shown where they appear; the development notice and data statement gives the detail. An image is shown only when the rights registry allows it; otherwise the slot stays empty.',
           ],
         },
         {

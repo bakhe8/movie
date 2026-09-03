@@ -45,6 +45,7 @@ const labels = {
     privacy: 'الخصوصية',
     privacyBody: 'ملفك خاص افتراضيًا: لا صفحة عامة، ولا مشاركة إلا بقرارك، ولا يُباع ملف ذوقك.',
     privacyLink: 'اقرأ إشعار الخصوصية',
+    dataLink: 'المصادر والحقوق',
     resetTitle: 'مسح ملف الذوق والبدء من جديد',
     resetBody: 'يحذف كل جولات الترتيب والعلامات والنموذج لهذا الملف ويبدأ ملفًا فارغًا. حسابك يبقى. لا يمكن التراجع.',
     resetAction: 'مسح ملف الذوق',
@@ -88,6 +89,7 @@ const labels = {
     privacy: 'Privacy',
     privacyBody: 'Your profile is private by default: no public page, no sharing unless you choose it, and your taste profile is never sold.',
     privacyLink: 'Read the Privacy Notice',
+    dataLink: 'Sources and rights',
     resetTitle: 'Wipe the taste profile and start over',
     resetBody: 'Deletes every ranking round, mark and model of this profile and starts an empty one. Your account stays. This cannot be undone.',
     resetAction: 'Wipe taste profile',
@@ -364,6 +366,10 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
         <p>
           <Link href={`/privacy?lang=${lang}`} className={styles.docLink}>
             {t.privacyLink}
+          </Link>
+          {' · '}
+          <Link href={`/data-notice?lang=${lang}`} className={styles.docLink}>
+            {t.dataLink}
           </Link>
         </p>
 
