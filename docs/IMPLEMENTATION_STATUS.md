@@ -539,7 +539,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Unknown-feature handling | ✅ | ✅ | trainer excludes triads with incomplete fingerprints; ranker refuses undescribed titles (ADR-19) |
 | BFGS listwise MLE with L2 | ✅ | ✅ | `§7.2` |
 | Snapshot persistence (`user_model_snapshots`) | ✅ | 🟡 | `§13.1 taste_profiles`: held-out metrics (ADR-31) and posterior standard errors (ADR-62, gap 5) are both populated since 2026-09-03, at/above the 5-triad floor; still missing: `recentWeights`/time layers, `exceptions`, `calibratedAgainst` |
-| Population prior source (Public Quality) | ❌ | ❌ | source decided: IMDb non-commercial datasets through the free launch (owner decision 2026-09-04, [DATA_LICENSING.md](DATA_LICENSING.md) §3.2); loader is ALPHA_PLAN item 5.3, not built yet; `public_quality_sources` table exists since M6, empty |
+| Population prior source (Public Quality) | ✅ | 🟡 | source: IMDb non-commercial datasets through the free launch (owner decision 2026-09-04, [DATA_LICENSING.md](DATA_LICENSING.md) §3.2, ADR-77); loader (`scripts/load-imdb-ratings.ts`) built, tested, and run for real — 298 rows on `movie-postgres`; read side (`PublicQualityService`) used by `GET /titles/:id` and recommendations (ADR-78); `availability_snapshots`/Watchability still has no source |
 | Shared latent space (`§7.5`) | ❌ | ❌ | ADR-13/ADR-72; external seed is optional during the free period, not license-blocked — permission is an input to the post-launch revenue-model study, not currently planned either way; `shared_latent_space_versions` table exists since M7, empty — `calibratedAgainst`'s FK now points here, but nothing writes a version to calibrate against |
 | FastAPI model service (`train`, `triads/select`, `score`, `taste-profile`) | 🟡 | ❌ | ADR-25, `4b8f877`: `/train` (async job) and `/health` built; `/triads/select`, `/score`, `/taste-profile` still not built — scoring/selection stay in the backend for now |
 | Python tests | ✅ | — | 26 tests (`test_ranker.py`, `test_training.py`, `test_enrichment.py`) |
@@ -551,7 +551,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | `GET /profiles/:id/recommendations` (409 until a snapshot exists) | ✅ | ✅ | `§13.1`/`§14`: persists one row per shown result (reason, propensity, `requestId` all logged, ADR-58); `POST …/watch-events` (ADR-66), `POST …/recommendations/:id/outcome` (ADR-67) and `TriadsService.rank()` (ADR-68) now cover every `Outcome` type — still missing only `§16` reading any of it back |
 | `GET /profiles/:id/library/ranking` (personal ranking of the watched set) | ✅ | ✅ | `§5.3` "ترتيب شخصي": the same scoring path, positions only — no score leaves the server (ADR-33); 409 until a snapshot exists |
 | Personal Fit from latest snapshot; dimension-mismatch guard | ✅ | — | |
-| Four separate values, never merged | ✅ | ✅ | `§4.4`: Public Quality and Watchability are explicit `null` (no source), not fabricated |
+| Four separate values, never merged | ✅ | ✅ | `§4.4`: Public Quality is real (IMDb, ADR-77/78) when a displayable value exists, explicit `null` otherwise; Watchability is still explicit `null` (no source) — neither ever fabricated |
 | Three tracks | ❌ | ❌ | every result is `safe` (`§4.4`, ADR-8) |
 | Candidate filtering | ✅ | ✅ | excludes `watched` and unfingerprinted only; `not_watched` stays a candidate (`§2.4 #3`) |
 | Unknown dimensions | ✅ | ✅ | pool-mean imputation, `fingerprintCoverage`, one-band demotion (`§11.3`, ADR-19) |

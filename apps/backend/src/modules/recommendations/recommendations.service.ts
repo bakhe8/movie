@@ -6,6 +6,7 @@ import { ModelVersion } from '../../entities/model-version.entity';
 import { Profile } from '../../entities/profile.entity';
 import { Recommendation } from '../../entities/recommendation.entity';
 import { Title } from '../../entities/title.entity';
+import { PublicQuality, PublicQualityService } from '../public-quality/public-quality.service';
 import { FINGERPRINT_V2_DIMENSIONS, FINGERPRINT_V3_DIMENSIONS } from '../../entities/title-fingerprint.type';
 import { UserModelSnapshot } from '../../entities/user-model-snapshot.entity';
 import { UserTitleState } from '../../entities/user-title-state.entity';
@@ -102,10 +103,16 @@ const BAND_DEMOTION: Record<ConfidenceBand, ConfidenceBand> = {
 export interface RecommendationResult {
   title: Title;
   personalFitScore: number;
-  // Neither has a data source yet (no critic/audience-prior ingestion, no
-  // availability integration) -- explicitly null, never a fabricated number, per
-  // the "missing is NULL/unknown, never false or 0" rule (blueprint §11.3).
+  // publicQualityScore is PublicQualityService's own single-source
+  // convenience value (`quality.value`) -- non-null only when exactly one
+  // displayable source exists, never an average across several (BP §10.3,
+  // §4.4's "never merged"). publicQuality carries every source separately
+  // for a client that wants to show them individually (G4). watchability
+  // still has no data source at all -- explicitly null, never a fabricated
+  // number, per the "missing is NULL/unknown, never false or 0" rule
+  // (blueprint §11.3).
   publicQualityScore: number | null;
+  publicQuality: PublicQuality | null;
   watchabilityScore: number | null;
   confidenceBand: ConfidenceBand;
   // Fraction (0-1) of fingerprint dimensions actually known for this title.
@@ -161,6 +168,7 @@ export class RecommendationsService {
     private readonly recommendationsRepository: Repository<Recommendation>,
     @InjectRepository(ModelVersion)
     private readonly modelVersionsRepository: Repository<ModelVersion>,
+    private readonly publicQualityService: PublicQualityService,
   ) {}
 
   async findForProfile(userId: string, profileId: string, limit: number): Promise<RecommendationResult[]> {
@@ -176,19 +184,26 @@ export class RecommendationsService {
     }
     const titles = await queryBuilder.getMany();
 
-    const results = this.scoreTitles(titles, snapshot)
-      .map((scored) => ({
-        title: scored.title,
-        personalFitScore: scored.personalFitScore,
-        publicQualityScore: null,
+    const scored = this.scoreTitles(titles, snapshot).slice(0, limit);
+    // Batched over just the titles actually being returned, not the whole
+    // candidate pool -- a title absent from the map has no displayable
+    // source and gets null, never 0 (BP §11.3).
+    const publicQualityByTitle = await this.publicQualityService.forTitles(scored.map((item) => item.title.id));
+    const results = scored.map((item) => {
+      const publicQuality = publicQualityByTitle.get(item.title.id) ?? null;
+      return {
+        title: item.title,
+        personalFitScore: item.personalFitScore,
+        publicQualityScore: publicQuality?.value ?? null,
+        publicQuality,
         watchabilityScore: null,
-        confidenceBand: scored.confidenceBand,
-        fingerprintCoverage: scored.fingerprintCoverage,
+        confidenceBand: item.confidenceBand,
+        fingerprintCoverage: item.fingerprintCoverage,
         track: 'safe' as const,
         modelVersion: snapshot.modelVersion,
-        reason: scored.reason,
-      }))
-      .slice(0, limit);
+        reason: item.reason,
+      };
+    });
 
     await this.persistShown(profileId, snapshot.modelVersion, results);
     return results;

@@ -6,12 +6,13 @@ import { Recommendation } from '../../entities/recommendation.entity';
 import { Title } from '../../entities/title.entity';
 import { UserModelSnapshot } from '../../entities/user-model-snapshot.entity';
 import { UserTitleState } from '../../entities/user-title-state.entity';
+import { PublicQualityModule } from '../public-quality/public-quality.module';
 import { LibraryController } from './library.controller';
 import { RecommendationsController } from './recommendations.controller';
 import { RecommendationsService } from './recommendations.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Profile, Title, UserModelSnapshot, UserTitleState, Recommendation, ModelVersion])],
+  imports: [TypeOrmModule.forFeature([Profile, Title, UserModelSnapshot, UserTitleState, Recommendation, ModelVersion]), PublicQualityModule],
   controllers: [RecommendationsController, LibraryController],
   providers: [RecommendationsService],
 })

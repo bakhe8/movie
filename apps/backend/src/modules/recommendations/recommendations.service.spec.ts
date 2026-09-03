@@ -7,6 +7,7 @@ import { Recommendation } from '../../entities/recommendation.entity';
 import { Title } from '../../entities/title.entity';
 import { UserModelSnapshot } from '../../entities/user-model-snapshot.entity';
 import { UserTitleState } from '../../entities/user-title-state.entity';
+import type { PublicQuality, PublicQualityService } from '../public-quality/public-quality.service';
 import { RecommendationsService } from './recommendations.service';
 
 const FINGERPRINT_V1_DIMENSIONS = [
@@ -142,6 +143,7 @@ describe('RecommendationsService', () => {
   let statesRepository: ReturnType<typeof repoMock>;
   let recommendationsRepository: { insert: ReturnType<typeof vi.fn> };
   let modelVersionsRepository: ReturnType<typeof repoMock>;
+  let publicQualityService: { forTitles: ReturnType<typeof vi.fn> };
   let service: RecommendationsService;
 
   beforeEach(() => {
@@ -154,6 +156,7 @@ describe('RecommendationsService', () => {
     // No active pin by default -- every existing test keeps serving each
     // profile's own latest snapshot regardless of modelVersion, unchanged.
     modelVersionsRepository.findOne.mockResolvedValue(null);
+    publicQualityService = { forTitles: vi.fn().mockResolvedValue(new Map()) };
     service = new RecommendationsService(
       profilesRepository as unknown as Repository<Profile>,
       titlesRepository as unknown as Repository<Title>,
@@ -161,6 +164,7 @@ describe('RecommendationsService', () => {
       statesRepository as unknown as Repository<UserTitleState>,
       recommendationsRepository as unknown as Repository<Recommendation>,
       modelVersionsRepository as unknown as Repository<ModelVersion>,
+      publicQualityService as unknown as PublicQualityService,
     );
   });
 
@@ -907,6 +911,75 @@ describe('RecommendationsService', () => {
       const result = await service.findForProfile('user-1', 'profile-1', 10);
 
       expect(result[0].modelVersion).toBe('this-profile-never-reached-the-pin');
+    });
+  });
+
+  // G4, BP §10.3/§4.4: Public Quality is a separate value from Personal Fit,
+  // never merged into it -- PublicQualityService.forTitles() was already
+  // built and used by GET /titles/:id (TitlesService), but findForProfile()
+  // never called it, so publicQualityScore stayed hardcoded null even once
+  // real IMDb data existed.
+  describe('public quality (G4)', () => {
+    it('batches PublicQualityService.forTitles() over only the titles actually returned, not the whole candidate pool', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot());
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [
+        { id: 'a', fingerprint: zeroFingerprint({ warmth: 0.9 }) },
+        { id: 'b', fingerprint: zeroFingerprint({ warmth: 0.1 }) },
+      ] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      await service.findForProfile('user-1', 'profile-1', 1);
+
+      expect(publicQualityService.forTitles).toHaveBeenCalledWith(['a']);
+    });
+
+    it('exposes the full multi-source object and its single-source convenience value on the result', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot());
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+      const quality: PublicQuality = {
+        value: 7.8,
+        votes: 12000,
+        sources: [{ source: 'imdb', value: 7.8, scale: '0-10', votes: 12000, capturedAt: '2026-09-04T00:00:00.000Z', attribution: 'IMDb rating' }],
+      };
+      publicQualityService.forTitles.mockResolvedValue(new Map([['title-1', quality]]));
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+      expect(result[0].publicQuality).toEqual(quality);
+      expect(result[0].publicQualityScore).toBe(7.8);
+    });
+
+    it('leaves both fields null for a title with no displayable public-quality source, never a fabricated 0', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot());
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+      publicQualityService.forTitles.mockResolvedValue(new Map());
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+      expect(result[0].publicQuality).toBeNull();
+      expect(result[0].publicQualityScore).toBeNull();
+    });
+
+    it('persists publicQualityScore into the recommendations row', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot());
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+      const quality: PublicQuality = { value: 6.2, votes: 500, sources: [] };
+      publicQualityService.forTitles.mockResolvedValue(new Map([['title-1', quality]]));
+
+      await service.findForProfile('user-1', 'profile-1', 10);
+
+      expect(recommendationsRepository.insert).toHaveBeenCalledWith([expect.objectContaining({ publicQuality: 6.2 })]);
     });
   });
 });
