@@ -371,12 +371,16 @@ function parseWhen(value: unknown, fallback: Date): Date {
   return parsed && !Number.isNaN(parsed.getTime()) ? parsed : fallback;
 }
 
+/** The nested blocks a published snapshot may carry, each with its own extractor version and provenance. */
+export const NESTED_BLOCKS = ['v2', 'v3'] as const;
+
 /**
  * One row per known feature of a published snapshot: the 13 V1 keys that are
  * present (a missing dimension gets no row — unknown is not a value) and the
- * V2 block's namespaced keys. `uncertainty` is 1 − the extractor's confidence
- * where it reported one, NULL otherwise. Provenance fields are copied from
- * the block that produced the value, never invented here.
+ * namespaced keys of every nested block (`v2` families, `v3` form families).
+ * `uncertainty` is 1 − the extractor's confidence where it reported one, NULL
+ * otherwise. Provenance fields are copied from the block that produced the
+ * value, never invented here.
  */
 export function featureRowsFor(entry: CatalogEntry, titleId: string, now: Date): FeatureRow[] {
   const fingerprint = entry.fingerprint;
@@ -391,11 +395,13 @@ export function featureRowsFor(entry: CatalogEntry, titleId: string, now: Date):
     confidence: ((fingerprint as Record<string, unknown>).confidence as Record<string, unknown>) ?? {},
     meta: fingerprint as Record<string, unknown>,
   });
-  const v2 = (fingerprint as Record<string, unknown>).v2;
-  if (v2 && typeof v2 === 'object') {
-    const block = v2 as Record<string, unknown>;
-    const features = (block.features as Record<string, unknown>) ?? {};
-    blocks.push({ keys: Object.keys(features), values: features, confidence: (block.confidence as Record<string, unknown>) ?? {}, meta: block });
+  for (const blockKey of NESTED_BLOCKS) {
+    const nested = (fingerprint as Record<string, unknown>)[blockKey];
+    if (nested && typeof nested === 'object') {
+      const block = nested as Record<string, unknown>;
+      const features = (block.features as Record<string, unknown>) ?? {};
+      blocks.push({ keys: Object.keys(features), values: features, confidence: (block.confidence as Record<string, unknown>) ?? {}, meta: block });
+    }
   }
   for (const block of blocks) {
     const extractorVersion = typeof block.meta.extractorVersion === 'string' ? block.meta.extractorVersion : null;

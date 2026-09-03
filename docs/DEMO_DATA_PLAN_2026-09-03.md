@@ -379,6 +379,86 @@ Trained from the tree on the served 28-key model (`python -m src.train_demo`, ru
 
 The WS4 bar is met again on the served model: `slow-burn` recovers its 28-key θ at 0.87 (≥ 0.8) and predicts 10 of 12 held-out pairs (0.83 ≥ 0.75), against 0.67 and a 0.60 full-vector recovery when the same model was fed the 13-key personas (re-measurement above). The V2 weight the model learns now matches weight the persona actually has (share 0.75 learned against 0.66 true) instead of being spurious. `spectacle` and `warm-talky` behave as designed for their band: high held-out accuracy from few rounds but a direction the model has not pinned down yet (recovery 0.60 and 0.32 at 12 and 6 rounds) — exactly the "likely" and "initial" stories the screens tell. `train_demo` judges a 28-key persona on the full-vector recovery and a legacy 13-key one on its V1 part, and says which in its message.
 
+### 7.3 The third block — form families, specified and extracted 2026-09-04
+
+Owner's directive after the regeneration: specify the third block and extract it. Specified in [FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md) §3.3 from two sources of evidence — the `BP §6.1` families the dense vector still did not cover (rhythm detail, dialogue & information, style) and the two places §7.2's re-measurement showed the served 28-key model still disagrees with Claude's order (formal distinction and lightness-with-depth ranked too low; openly sentimental social dramas too high). Twelve namespaced features: `rhythm.setupLength`, `rhythm.turningPointDensity`, `rhythm.deliberateness`, `information.expositionDirectness`, `information.subtext`, `information.knowledgeComplexity`, `style.stylization`, `style.experimentation`, `style.scale`, `tone.playfulness`, `tone.sentimentality`, `narrative.scope`. Left out on purpose: camera movement and editing (no descriptive visual evidence in the fixture), People and Cultural context (factual blocks, §3.2). No key encodes a political or other sensitive stance; `narrative.scope` is the size of the canvas and the prompt says so.
+
+**Extraction** (`python -m src.enrich_catalog --v3`, concurrency 4): 300 of 300 titles, 0 failures, 0 refusals, 340 s, every block served by the same model id; stored as `fingerprint.v3` in the fixture and, through the seed, in `titles.fingerprint` and as 3,600 `content_features` rows (`enrichment-worker-v3-form-v1`). Mean confidence per feature, as the extractor reported it — lowest exactly where the evidence is thinnest, the two style features scored from plot text (0.42–0.43), highest on the canvas and the turning points (0.61–0.63):
+
+| Feature | Mean | Spread (σ) | Confidence |
+|---|---|---|---|
+| `rhythm.setupLength` | 0.45 | 0.16 | 0.56 |
+| `rhythm.turningPointDensity` | 0.52 | 0.19 | 0.61 |
+| `rhythm.deliberateness` | 0.73 | 0.14 | 0.58 |
+| `information.expositionDirectness` | 0.43 | 0.19 | 0.55 |
+| `information.subtext` | 0.59 | 0.21 | 0.57 |
+| `information.knowledgeComplexity` | 0.35 | 0.16 | 0.51 |
+| `style.stylization` | 0.44 | 0.23 | 0.43 |
+| `style.experimentation` | 0.40 | 0.22 | 0.42 |
+| `style.scale` | 0.39 | 0.23 | 0.55 |
+| `tone.playfulness` | 0.34 | 0.26 | 0.58 |
+| `tone.sentimentality` | 0.40 | 0.20 | 0.53 |
+| `narrative.scope` | 0.54 | 0.21 | 0.63 |
+
+`rhythm.deliberateness` sits high for almost every title (mean 0.73, the narrowest spread): a canon-heavy catalog rarely contains padding, so the feature will separate little until the catalog holds ordinary films — a catalog property, not an extraction fault. Spot values on the films §7.2 named, exactly the distinctions the 28 keys could not make:
+
+| Title | playfulness | sentimentality | stylization | experimentation | scale | scope | subtext |
+|---|---|---|---|---|---|---|---|
+| Toy Story (Claude #40, model #60) | 0.85 | 0.55 | 0.55 | 0.35 | 0.45 | 0.25 | 0.30 |
+| Where Is the Friend's House? (#11, model #31) | 0.30 | 0.15 | 0.10 | 0.30 | 0.10 | 0.35 | 0.55 |
+| Amélie (#50, model #58) | 0.90 | 0.75 | 0.85 | 0.60 | 0.30 | 0.30 | 0.40 |
+| Capernaum (#36, model #15) | 0.15 | 0.60 | 0.25 | 0.40 | 0.35 | 0.75 | 0.40 |
+| The Yacoubian Building (#60, model #40) | 0.15 | 0.55 | 0.30 | 0.20 | 0.65 | 0.85 | 0.40 |
+| 12 Angry Men (#44, model #23) | 0.10 | 0.25 | 0.15 | 0.30 | 0.05 | 0.75 | 0.60 |
+| Paradise Now (#48, model #26) | 0.05 | 0.25 | 0.15 | 0.30 | 0.30 | 0.75 | 0.75 |
+| Persona (#3, model #1) | 0.05 | 0.05 | 0.85 | 0.95 | 0.05 | 0.25 | 0.95 |
+| Stalker (#6, model #3) | 0.05 | 0.15 | 0.75 | 0.85 | 0.25 | 0.70 | 0.90 |
+| In the Mood for Love (#1, model #2) | 0.10 | 0.35 | 0.65 | 0.60 | 0.15 | 0.20 | 0.95 |
+
+The social dramas Claude ranks low share `narrative.scope` 0.75–0.85 with `tone.playfulness` ≤ 0.15; the restrained film about a child (Where Is the Friend's House?) reads sentimentality 0.15 against Capernaum's 0.60; Persona and Stalker are the catalog's experimentation ceiling.
+
+**Offline evaluation** (`fingerprint_v2_eval`, Claude's 50 rounds — 47 usable — same temporal hold-out as the trainer; V1+V2 is the served model):
+
+At the 50 rounds of §7.2 (47 usable, 9 held out), every L2 penalty of the trainer's grid:
+
+| Penalty | Set | Held-out accuracy | Held-out NLL | Spearman with Claude's order |
+|---|---|---|---|---|
+| 0.01 | V1 | 0.85 | 0.91 | 0.79 |
+| 0.01 | **V1+V2 (served)** | 0.85 | **0.82** | 0.83 |
+| 0.01 | V1+V2+V3 | 0.81 | 1.91 | 0.85 |
+| 0.01 | V3 alone | 0.77 | 1.32 | 0.79 |
+| 0.03 | V1+V2 | 0.85 | 0.97 | 0.83 |
+| 0.03 | V1+V2+V3 | 0.81 | 1.30 | **0.86** |
+| 0.1 | V1+V2 | 0.85 | 1.12 | 0.82 |
+| 0.1 | V1+V2+V3 | 0.81 | 1.06 | 0.85 |
+| 0.3 | V1+V2 | 0.81 | 1.24 | 0.79 |
+| 0.3 | V1+V2+V3 | 0.74 | 1.09 | 0.84 |
+| any | V2 alone | 0.53–0.57 | 1.9–2.1 | 0.59–0.62 |
+
+At 50 rounds the block already raises agreement with the written order to the best value of any set (0.86) and V3 alone is the strongest single block after V1 (0.79–0.80 against V2's 0.62), but 40 keys on 38 training rounds cost held-out likelihood at every penalty — the same overfit V2 showed at 25 rounds before the wiring. So the judge answered 25 more rounds through the API from the same written order (75 in all; 71 usable, 14 held out), and the picture inverted:
+
+| Penalty | Set | Held-out accuracy | Held-out NLL | Spearman with Claude's order |
+|---|---|---|---|---|
+| 0.01 | V1 | 0.76 | 1.51 | 0.80 |
+| 0.01 | V1+V2 (served) | 0.81 | 1.12 | 0.84 |
+| 0.01 | V1+V2+V3 | 0.88 | 0.83 | 0.89 |
+| 0.01 | V3 alone | 0.84 | 0.92 | 0.82 |
+| **0.03** | V1 | 0.79 | 1.42 | 0.80 |
+| 0.03 | **V1+V2 (served; the trainer's chosen penalty at 75 rounds)** | 0.81 | 1.08 | 0.84 |
+| 0.03 | **V1+V2+V3** | **0.86** | **0.82** | **0.89** |
+| 0.03 | V3 alone | 0.82 | 0.92 | 0.81 |
+| 0.1 | V1+V2 | 0.76 | 1.09 | 0.83 |
+| 0.1 | V1+V2+V3 | 0.81 | 0.88 | 0.88 |
+| 0.3 | V1+V2 | 0.76 | 1.12 | 0.81 |
+| 0.3 | V1+V2+V3 | 0.79 | 0.93 | 0.87 |
+| any | V2 alone | 0.73–0.78 | 1.37–1.38 | 0.62–0.64 |
+
+The served path confirms the baseline: `train_profile` on the 75 rounds chose 0.03 and reports held-out NLL 1.076 and accuracy 80.95 % — the V1+V2 row above to the third decimal — and the API ranking of the 61 films agrees with Claude's order at Spearman 0.846 (0.825 at 50 rounds). Against that served model, V1+V2+V3 at the same penalty predicts the 14 held-out rounds better (NLL 0.82 vs 1.08, accuracy 0.86 vs 0.81) and agrees with the full written order better (0.89 vs 0.84), at every penalty in the grid. V3 alone (NLL 0.92, accuracy 0.82–0.84, Spearman 0.81–0.82) now beats V1 alone on every measure: the form families carry more of this ranker's taste than the thirteen original dimensions do. The overfit at 50 rounds was a data-size effect, not a property of the block.
+
+**Reading.** The third block is the strongest addition so far, and it needs about 75 rounds before it pays — below that a 40-key vector overfits under a single scalar penalty, exactly the case `BP §7.1`'s hierarchical (block-wise) shrinkage is meant for. Two wiring designs are therefore possible: read the 40 keys with the existing grid (pays from ~75 rounds, costs a little below that), or read them with a per-block penalty so the V3 weights stay near zero until the evidence supports them (pays earlier, one more hyper-parameter). Which one is the model-service owner's call; the evidence for both is above.
+
+Wiring is a model-service change (the served vector would grow from 28 to 40 keys); requested from its owner as C10 with this evidence and the same rules as ADR-69 (V3 read from `fingerprint.v3.features`, a title without the block excluded from training, penalty chosen by held-out NLL).
+
 ---
 
 ## 8. Provider decision — LLM enrichment through the Anthropic Messages API
@@ -412,3 +492,4 @@ Owner's decision, 2026-09-03, in answer to "what is the alternative to an OpenAI
 | 2026-09-04 | `content_features` provenance rows written by the seed for every V1 and V2 feature of the demo catalog (8,390 rows, supersession verified); C9 requested from session A directly |
 | 2026-09-04 | Re-measurement after ADR-69 wired the 28 keys: served judge model NLL 0.824 / acc 85 % / API Spearman 0.825 (from 0.72); personas re-run under 28 keys, `slow-burn` held-out bar not met (0.67) with V1 recovery intact (0.85) — fixture narrower than the model, regeneration on 28 keys proposed; `train_demo` reports V1 recovery, V2 share and chosen penalty; `fingerprint_v2_eval` on the renamed constants |
 | 2026-09-04 | Personas regenerated on 28 keys (V2 half of θ per persona, τ 0.2 → 0.4 by re-calibration, generator reads `MODEL_DIMENSIONS`); WS4 bar met on the served model: `slow-burn` recovery 0.87, held-out accuracy 0.83 |
+| 2026-09-04 | §7.3: third block (form families, 12 keys) specified in FINGERPRINT_SCHEMA §3.3, extracted for all 300 titles (0 failures), published to the dev database with provenance rows, evaluated offline against Claude's order; wiring requested as C10 |

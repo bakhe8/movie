@@ -36,7 +36,7 @@ import psycopg2
 import psycopg2.extras
 from dotenv import load_dotenv
 
-from .enrichment import V2_FEATURES
+from .enrichment import V2_FEATURES, V3_FEATURES
 from .ranker import PlackettLuceRanker, compute_nll, compute_pairwise_accuracy
 from .training import FINGERPRINT_DIMENSIONS, FINGERPRINT_V1_DIMENSIONS, TriadEvent, ranking_to_indices
 
@@ -50,6 +50,10 @@ FEATURE_SETS: Dict[str, Tuple[str, ...]] = {
     "v1": tuple(FINGERPRINT_V1_DIMENSIONS),
     "v1+v2": tuple(FINGERPRINT_DIMENSIONS),
     "v2": tuple(V2_FEATURES),
+    # The third block (form families, FINGERPRINT_SCHEMA.md §3.3): evaluated on
+    # top of the served 28 and alone, the same way V2 was before its wiring.
+    "v1+v2+v3": tuple(FINGERPRINT_DIMENSIONS) + tuple(V3_FEATURES),
+    "v3": tuple(V3_FEATURES),
 }
 
 
@@ -57,11 +61,16 @@ def feature_vector(fingerprint: Optional[Dict[str, Any]], keys: Sequence[str]) -
     """Order a stored fingerprint into `keys`; None when any key is missing or non-finite (unknown != zero)."""
     if not isinstance(fingerprint, dict):
         return None
-    v2 = fingerprint.get("v2") if isinstance(fingerprint.get("v2"), dict) else {}
-    v2_features = v2.get("features") if isinstance(v2.get("features"), dict) else {}
+    # Namespaced keys live in the nested blocks (v2, v3, ...); a key is looked up
+    # in every block, so a feature moving between blocks needs no change here.
+    nested: Dict[str, Any] = {}
+    for block_key in ("v2", "v3"):
+        block = fingerprint.get(block_key)
+        if isinstance(block, dict) and isinstance(block.get("features"), dict):
+            nested.update(block["features"])
     values = []
     for key in keys:
-        value = v2_features.get(key) if "." in key else fingerprint.get(key)
+        value = nested.get(key) if "." in key else fingerprint.get(key)
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not np.isfinite(value):
             return None
         values.append(float(value))
@@ -176,7 +185,7 @@ def format_rows(email: str, results: List[SetResult]) -> str:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="Offline V1 vs V1+V2 vs V2 fingerprint evaluation")
+    parser = argparse.ArgumentParser(description="Offline fingerprint evaluation: V1, V1+V2 (served), V2, V1+V2+V3, V3")
     parser.add_argument("--email", action="append", default=[], help="profile owner's email (repeatable)")
     parser.add_argument("--all-demo", action="store_true", help="also every @demo.local persona")
     parser.add_argument("--order", type=Path, help="judge order fixture (internalIds, best first) for the Spearman column")

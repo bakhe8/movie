@@ -223,11 +223,20 @@ describe('featureRowsFor (content_features provenance)', () => {
       reviewStatus: 'unreviewed',
       generatedAt: '2026-09-04T09:00:00Z',
     },
+    v3: {
+      features: { 'style.scale': 0.7, 'tone.playfulness': 0.3 },
+      confidence: { 'style.scale': 0.5 },
+      extractorVersion: 'enrichment-worker-v3-form-v1',
+      sourceIds: ['wikidata:Q1'],
+      licenseStatus: 'unknown',
+      reviewStatus: 'unreviewed',
+      generatedAt: '2026-09-04T18:00:00Z',
+    },
   };
 
-  it('writes one row per known V1 and V2 feature with the block it came from', () => {
+  it('writes one row per known V1, V2 and V3 feature with the block it came from', () => {
     const rows = featureRowsFor({ ...entry(1, null), fingerprint: full }, 'title-uuid', NOW);
-    expect(rows).toHaveLength(13 + 2);
+    expect(rows).toHaveLength(13 + 2 + 2);
     const pacing = rows.find((row: { featureKey: string }) => row.featureKey === 'pacing');
     expect(pacing).toMatchObject({
       titleId: 'title-uuid',
@@ -241,6 +250,10 @@ describe('featureRowsFor (content_features provenance)', () => {
     expect(pacing.validFrom.toISOString()).toBe('2026-09-03T18:00:00.000Z');
     const irony = rows.find((row: { featureKey: string }) => row.featureKey === 'tone.irony');
     expect(irony).toMatchObject({ value: 0.9, uncertainty: 0.4, extractorVersion: 'enrichment-worker-v2-families-v1', sourceIds: ['wikidata:Q1'] });
+    const scale = rows.find((row) => row.featureKey === 'style.scale');
+    expect(scale).toMatchObject({ value: 0.7, uncertainty: 0.5, extractorVersion: 'enrichment-worker-v3-form-v1' });
+    expect(scale?.validFrom.toISOString()).toBe('2026-09-04T18:00:00.000Z');
+    expect(rows.find((row) => row.featureKey === 'tone.playfulness')?.uncertainty).toBeNull();
     expect(irony.validFrom.toISOString()).toBe('2026-09-04T09:00:00.000Z');
     // No confidence reported for this feature: uncertainty unknown, not 0.
     expect(rows.find((row: { featureKey: string }) => row.featureKey === 'ending.optimism').uncertainty).toBeNull();

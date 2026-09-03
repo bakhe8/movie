@@ -209,6 +209,41 @@ class TestGenerateFingerprintV2:
             worker.generate_fingerprint_v2("Arrival", "desc", "plot")
 
 
+class TestGenerateFingerprintV3:
+    def _output(self):
+        from src.enrichment import FingerprintV3Confidence, FingerprintV3Features, FingerprintV3Output
+
+        values = {name: 0.3 for name in FingerprintV3Features.model_fields}
+        return FingerprintV3Output(features=FingerprintV3Features(**values), confidence=FingerprintV3Confidence(**{name: 0.2 for name in values}))
+
+    def test_publishes_the_twelve_form_keys_with_confidence_and_provenance(self, worker):
+        from src.enrichment import V2_FEATURES, V3_EXTRACTOR_VERSION, V3_FEATURES
+
+        worker._client.messages.parse = MagicMock(return_value=_parsed_response(self._output()))
+
+        block = worker.generate_fingerprint_v3("Arrival", "desc", "plot", additional_context="Year: 2016", source_ids=["sr-1"])
+
+        assert set(block["features"]) == set(V3_FEATURES) and len(V3_FEATURES) == 12
+        assert all(key.count(".") == 1 for key in block["features"])
+        assert not set(V3_FEATURES) & set(V2_FEATURES)  # a key belongs to exactly one block
+        assert block["features"]["style.scale"] == 0.3 and block["confidence"]["style.scale"] == 0.2
+        assert "themes" not in block  # themes are published once, in the V2 block
+        assert block["schemaVersion"] == "film-fingerprint-v3"
+        assert block["extractorVersion"] == V3_EXTRACTOR_VERSION
+        assert block["modelVersion"] == "claude-test-served" and block["generatedBy"] == "anthropic"
+        assert block["sourceIds"] == ["sr-1"] and block["licenseStatus"] == "unknown" and block["reviewStatus"] == "unreviewed"
+        call = worker._client.messages.parse.call_args
+        assert "Plot Summary: plot" in call.kwargs["messages"][0]["content"]
+        assert "never a political or moral stance" in call.kwargs["system"]
+
+    def test_raises_on_refusal(self, worker):
+        response = MagicMock(parsed_output=None, stop_reason="refusal", stop_details=MagicMock(explanation="nope", category="other"))
+        worker._client.messages.parse = MagicMock(return_value=response)
+
+        with pytest.raises(ValueError, match="nope"):
+            worker.generate_fingerprint_v3("Arrival", "desc", "plot")
+
+
 class TestGenerateRecommendationExplanation:
     def test_returns_the_model_generated_text(self, worker):
         worker._client.messages.create = MagicMock(return_value=_text_response("A slow, warm character study."))

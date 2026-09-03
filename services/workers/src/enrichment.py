@@ -194,6 +194,61 @@ class FingerprintV2Output(BaseModel):
     confidence: FingerprintV2Confidence
 
 
+# ---------------------------------------------------------------------------
+# Third block: the form families (FINGERPRINT_SCHEMA.md §3.3)
+# ---------------------------------------------------------------------------
+# The BP §6.1 families V1 and V2 left uncovered in the dense vector -- rhythm
+# detail, dialogue & information, style -- plus the two tone registers and the
+# one narrative scale the first non-synthetic ranker showed were missing
+# (DEMO_DATA_PLAN_2026-09-03.md §7.2: playfulness, sentimentality, the size of
+# the story's canvas). Camera movement and editing are not here: they need
+# descriptive visual evidence the fixture does not carry. No key encodes a
+# political, religious or other sensitive stance (PRIVACY.md §1.6):
+# narrative.scope is the size of the canvas, not a position.
+V3_EXTRACTOR_VERSION = "enrichment-worker-v3-form-v1"
+V3_SCHEMA_VERSION = "film-fingerprint-v3"
+
+V3_FEATURE_KEYS: Dict[str, str] = {
+    "rhythm_setupLength": "rhythm.setupLength",
+    "rhythm_turningPointDensity": "rhythm.turningPointDensity",
+    "rhythm_deliberateness": "rhythm.deliberateness",
+    "information_expositionDirectness": "information.expositionDirectness",
+    "information_subtext": "information.subtext",
+    "information_knowledgeComplexity": "information.knowledgeComplexity",
+    "style_stylization": "style.stylization",
+    "style_experimentation": "style.experimentation",
+    "style_scale": "style.scale",
+    "tone_playfulness": "tone.playfulness",
+    "tone_sentimentality": "tone.sentimentality",
+    "narrative_scope": "narrative.scope",
+}
+V3_FEATURES = tuple(V3_FEATURE_KEYS.values())
+
+
+class FingerprintV3Features(BaseModel):
+    rhythm_setupLength: float = Field(..., description="0 the first significant event happens at once -> 1 a long establishing stretch before anything happens")
+    rhythm_turningPointDensity: float = Field(..., description="0 a handful of turning points -> 1 the situation turns every few minutes")
+    rhythm_deliberateness: float = Field(..., description="0 slow stretches feel slack, empty or repetitive -> 1 every slow stretch serves observation, tension or mood")
+    information_expositionDirectness: float = Field(..., description="0 facts are implied or shown -> 1 facts are stated outright (narration, explanation)")
+    information_subtext: float = Field(..., description="0 what is said is what is meant -> 1 the meaning lies beneath the dialogue")
+    information_knowledgeComplexity: float = Field(..., description="0 no specialised knowledge needed -> 1 dense technical, historical or professional knowledge")
+    style_stylization: float = Field(..., description="0 naturalistic realism -> 1 a heightened, expressionist or artificial world")
+    style_experimentation: float = Field(..., description="0 conventional form -> 1 formally experimental in structure, image or sound")
+    style_scale: float = Field(..., description="0 a chamber piece in a few rooms -> 1 large-scale spectacle across many places and set pieces")
+    tone_playfulness: float = Field(..., description="0 grave throughout -> 1 playful, comic or whimsical")
+    tone_sentimentality: float = Field(..., description="0 emotionally restrained -> 1 openly sentimental, emotion pressed on the viewer")
+    narrative_scope: float = Field(..., description="0 an intimate, private story -> 1 a society, institution or system as the canvas")
+
+
+class FingerprintV3Confidence(FingerprintV3Features):
+    """Same twelve fields, each the confidence 0-1 that the evidence supports the score."""
+
+
+class FingerprintV3Output(BaseModel):
+    features: FingerprintV3Features
+    confidence: FingerprintV3Confidence
+
+
 def _refusal_text(response) -> Optional[str]:
     """The model's refusal explanation, if this response is a refusal."""
     if getattr(response, "stop_reason", None) != "refusal":
@@ -415,6 +470,76 @@ Score all fifteen features and give a confidence for each."""
             "generatedAt": datetime.now(timezone.utc).isoformat(),
             "modelVersion": _served_model(response, model),
             "extractorVersion": V2_EXTRACTOR_VERSION,
+            "sourceIds": source_ids,
+            "licenseStatus": "unknown",
+            "reviewStatus": "unreviewed",
+        }
+
+    def generate_fingerprint_v3(
+        self,
+        title: str,
+        description: str,
+        plot_summary: str,
+        additional_context: Optional[str] = None,
+        source_ids: Optional[list[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Extract the third block -- the form families (FINGERPRINT_SCHEMA.md
+        §3.3) -- from the same evidence as V1/V2 and return the published `v3`
+        block: namespaced feature keys, per-feature confidence, provenance
+        stamped here (never asked of the model). Style features are scored from
+        descriptive text only, so their confidence is expected to run low; the
+        report shows it per feature.
+
+        Raises:
+            ValueError: on API failure, refusal, or a truncated/unparsed answer
+        """
+        model = self._resolve_model("ANTHROPIC_FINGERPRINT_MODEL")
+
+        context = f"Title: {title}\nDescription: {description}\nPlot Summary: {plot_summary}\n"
+        if additional_context:
+            context += f"Additional Context: {additional_context}\n"
+        instructions = """You are an expert film analyst. Score the film's rhythm, its handling of information, its style, two tone registers and its narrative scale on 0-1 scales strictly from the evidence given.
+Every scale is described in the schema. Distinguish carefully: deliberate slowness (stretches that serve observation, tension or mood) from slack or repetition; subtext (meaning beneath the words) from ambiguity of plot; stylization of the world (heightened, artificial, expressionist) from mere visual richness; playfulness (comic, whimsical, light-footed) from warmth; open sentimentality (emotion pressed on the viewer) from depth of feeling. narrative.scope is the size of the story's canvas -- a private life versus a society, institution or system -- never a political or moral stance.
+Style features usually cannot be judged from a plot alone: score them from whatever the description says about the film's form and give a low confidence where you are inferring.
+Give a confidence for every feature: high only where the text clearly supports the score, low where you are inferring."""
+        input_text = f"""Analyze this film and provide the version-3 fingerprint (form families):
+
+{context}
+
+Score all twelve features and give a confidence for each."""
+
+        try:
+            response = self._get_client().messages.parse(
+                model=model,
+                max_tokens=FINGERPRINT_MAX_TOKENS,
+                system=instructions,
+                messages=[{"role": "user", "content": input_text}],
+                output_format=FingerprintV3Output,
+            )
+        except anthropic.APIError as error:
+            raise ValueError(f"Anthropic V3 fingerprint request failed: {error}") from error
+
+        output = getattr(response, "parsed_output", None)
+        if not isinstance(output, FingerprintV3Output):
+            refusal = _refusal_text(response)
+            if refusal:
+                raise ValueError(f"The model refused to fingerprint this film (V3): {refusal}")
+            stop_reason = getattr(response, "stop_reason", None)
+            if stop_reason == "max_tokens":
+                raise ValueError("The V3 fingerprint response hit the token ceiling before a complete JSON object")
+            raise ValueError(f"The model did not return a parsed V3 fingerprint (stop_reason={stop_reason or 'unknown'})")
+
+        features = {V3_FEATURE_KEYS[name]: float(value) for name, value in output.features.model_dump().items()}
+        confidence = {V3_FEATURE_KEYS[name]: float(value) for name, value in output.confidence.model_dump().items()}
+        return {
+            "schemaVersion": V3_SCHEMA_VERSION,
+            "features": features,
+            "confidence": confidence,
+            "generatedBy": "anthropic",
+            "generatedAt": datetime.now(timezone.utc).isoformat(),
+            "modelVersion": _served_model(response, model),
+            "extractorVersion": V3_EXTRACTOR_VERSION,
             "sourceIds": source_ids,
             "licenseStatus": "unknown",
             "reviewStatus": "unreviewed",
