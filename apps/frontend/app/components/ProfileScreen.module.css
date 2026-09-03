@@ -71,6 +71,56 @@
   gap: 8px;
 }
 
+.fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.fieldset legend {
+  padding: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* A platform chip is a real toggle button, 44px tall (same as onboarding). */
+.chipToggle {
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid #dfe4e8;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.chipOn {
+  border-color: var(--accent);
+  background: #fff0eb;
+  color: var(--accent);
+}
+
+.code {
+  display: inline-block;
+  margin: 4px 0;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: #f5f7f8;
+  color: var(--ink);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
 .stat {
   display: grid;
   gap: 2px;

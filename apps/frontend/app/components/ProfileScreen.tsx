@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError, type ConfidenceBand, type PreferredLanguage } from '../lib/api';
 import { formatConfidence, formatNumber } from '../lib/format';
+import { MARKETS, PLATFORMS } from '../lib/onboarding-options';
 import { useSession } from '../lib/session';
 import styles from './ProfileScreen.module.css';
 
@@ -19,6 +20,13 @@ const labels = {
     languageLabel: 'لغة الواجهة',
     arabic: 'العربية',
     english: 'English',
+    // Blueprint §4.1: display and availability only, never a taste prior.
+    marketLabel: 'السوق',
+    marketPlaceholder: 'لم يُحدَّد بعد',
+    platformsLabel: 'المنصات المتاحة لك',
+    settingsNote: 'اللغة والسوق والمنصات تؤثر في العرض والتوفر فقط، لا في افتراض ذوقك.',
+    tasteId: 'معرّف ملف الذوق المستعار',
+    tasteIdNote: 'هذا المعرّف، لا حسابك، هو ما يشير إليه النموذج وكل سجلاتك.',
     save: 'حفظ',
     saving: 'جارٍ الحفظ…',
     saved: 'تم الحفظ.',
@@ -57,6 +65,12 @@ const labels = {
     languageLabel: 'Interface language',
     arabic: 'العربية',
     english: 'English',
+    marketLabel: 'Market',
+    marketPlaceholder: 'Not set yet',
+    platformsLabel: 'Platforms you can watch on',
+    settingsNote: 'Language, market and platforms affect display and availability only, never what we assume about your taste.',
+    tasteId: 'Pseudonymous taste profile id',
+    tasteIdNote: 'This id, not your account, is what the model and all your records point to.',
     save: 'Save',
     saving: 'Saving…',
     saved: 'Saved.',
@@ -92,6 +106,8 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
   const t = labels[lang];
   const [name, setName] = useState(profile?.name ?? '');
   const [language, setLanguage] = useState<PreferredLanguage>(profile?.preferredLanguage ?? 'ar');
+  const [market, setMarket] = useState(profile?.market ?? '');
+  const [platforms, setPlatforms] = useState<Set<string>>(new Set(profile?.platforms ?? []));
   const [saving, setSaving] = useState(false);
   // Stored as a label key, not text, so a notice set just before a language
   // switch renders in the language now on screen.
@@ -105,6 +121,8 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
   const profileId = profile?.id;
   const profileName = profile?.name;
   const profileLanguage = profile?.preferredLanguage;
+  const profileMarket = profile?.market;
+  const profilePlatforms = profile?.platforms.join(',');
 
   // Keep the form in step with the profile it edits (after a save, a refresh,
   // or a reset that replaced the profile).
@@ -112,7 +130,9 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setName(profileName ?? '');
     setLanguage(profileLanguage ?? 'ar');
-  }, [profileId, profileName, profileLanguage]);
+    setMarket(profileMarket ?? '');
+    setPlatforms(new Set(profilePlatforms ? profilePlatforms.split(',') : []));
+  }, [profileId, profileName, profileLanguage, profileMarket, profilePlatforms]);
 
   const loadStats = useCallback(async () => {
     if (!profileId) return;
@@ -146,13 +166,36 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
     return () => window.clearTimeout(timer);
   }, [notice]);
 
-  const dirty = !!profile && (name.trim() !== profile.name || language !== profile.preferredLanguage);
+  const samePlatforms =
+    !!profile && platforms.size === profile.platforms.length && profile.platforms.every((id) => platforms.has(id));
+  const dirty =
+    !!profile &&
+    (name.trim() !== profile.name ||
+      language !== profile.preferredLanguage ||
+      market !== (profile.market ?? '') ||
+      !samePlatforms);
+
+  function togglePlatform(id: string) {
+    setPlatforms((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   async function save() {
     if (!profile || !dirty || name.trim().length === 0) return;
     setSaving(true);
     try {
-      await api.updateProfile(profile.id, { name: name.trim(), preferredLanguage: language });
+      // `market` cannot be unset once chosen (the DTO takes a code or nothing);
+      // an unset market stays unset until the user picks one.
+      await api.updateProfile(profile.id, {
+        name: name.trim(),
+        preferredLanguage: language,
+        ...(market ? { market } : {}),
+        platforms: [...platforms],
+      });
       await refreshProfile();
       onLanguageChange?.(language);
       setNotice({ key: 'saved' });
@@ -230,11 +273,53 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
             <option value="en">{t.english}</option>
           </select>
         </div>
+        <div className={styles.field}>
+          <label htmlFor="profile-market">{t.marketLabel}</label>
+          <select id="profile-market" value={market} onChange={(event) => setMarket(event.target.value)}>
+            <option value="" disabled={market !== ''}>
+              {t.marketPlaceholder}
+            </option>
+            {MARKETS.map((option) => (
+              <option key={option.code} value={option.code}>
+                {lang === 'ar' ? option.ar : option.en}
+              </option>
+            ))}
+          </select>
+        </div>
+        <fieldset className={`${styles.field} ${styles.fieldset}`}>
+          <legend>{t.platformsLabel}</legend>
+          <div className={styles.chips}>
+            {PLATFORMS.map((option) => {
+              const on = platforms.has(option.id);
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  className={on ? `${styles.chipToggle} ${styles.chipOn}` : styles.chipToggle}
+                  aria-pressed={on}
+                  onClick={() => togglePlatform(option.id)}
+                >
+                  {lang === 'ar' ? option.ar : option.en}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+        <p>{t.settingsNote}</p>
         <div className={styles.row}>
           <button type="button" className={styles.primary} onClick={save} disabled={!dirty || saving || name.trim().length === 0}>
             {saving ? t.saving : t.save}
           </button>
         </div>
+        {profile && (
+          <p>
+            <span className={styles.strong}>{t.tasteId}</span>
+            <br />
+            <code className={styles.code}>{profile.id}</code>
+            <br />
+            {t.tasteIdNote}
+          </p>
+        )}
 
         <dl className={styles.stats}>
           <div className={styles.stat}>
