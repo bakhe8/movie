@@ -29,10 +29,10 @@ Two views are kept apart: **as built (2026-09-03)** and **target**. Anything mar
                               │   FTS, vector columns    │   │   taste-profile · shared-space │
                               └──────────────────────────┘   │   batch · enrichment jobs      │
                                                              └──────────────┬────────────────┘
-                              ┌──────────────────────────┐                  │ HTTPS, store=false
+                              ┌──────────────────────────┐                  │ HTTPS, org-level retention
                               │ Redis 7 (port 6379)      │                  ▼
                               │ built: running, unused   │        ┌────────────────────┐
-                              │ target: BullMQ queue,    │        │ OpenAI Responses   │
+                              │ target: BullMQ queue,    │        │ Anthropic Messages │
                               │   cache — only when      │        │ API (enrichment,   │
                               │   BP §12.3 triggers      │        │ explanations)      │
                               └──────────────────────────┘        └────────────────────┘

@@ -150,7 +150,7 @@ Authoritative detail: [RANKING_ALGORITHM.md](RANKING_ALGORITHM.md). Summary of w
 
 - **Frontend ↔ backend**: REST/JSON under `/api/v1` (`BP §12.1`, ADR-15); every response carries `modelVersion`, `experimentId`, `requestId` where applicable (`BP §14`). Full contract: [API.md](API.md).
 - **Backend ↔ model service**: HTTP (FastAPI) for `train`, `select-triad`, `score`, `taste-profile`; training runs asynchronously and writes a `model_snapshot`; a queue (Redis/BullMQ) is introduced only when `BP §12.3` triggers fire. ADR-25.
-- **Enrichment**: OpenAI Responses API with Structured Outputs against the versioned fingerprint JSON schema, `store=false`, model id from configuration only, retry + validation + human-review escalation, immutable versioned publish (`BP §15.3`). Contract: [FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md).
+- **Enrichment**: Anthropic Messages API with structured outputs against the versioned fingerprint JSON schema, model id from configuration only, organization-level retention settings (the API has no per-request flag), retry + validation + human-review escalation, immutable versioned publish. `BP §15.3` names OpenAI as its worked example ("عند اختيار OpenAI"); its controls apply to any provider, and the provider chosen on 2026-09-03 is Anthropic ([DEMO_DATA_PLAN_2026-09-03.md](DEMO_DATA_PLAN_2026-09-03.md) §8). Contract: [FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md).
 - **Catalog sources**: adapter per provider; every value lands in the rights registry with source/license/confidence/version (`BP §11.2`, `§11.3`). Rules: [DATA_LICENSING.md](DATA_LICENSING.md).
 
 ## 9. Phases and gates (`BP §17`, `§18`)

@@ -1,0 +1,439 @@
+"""
+Enrich the demo catalog fixture with fingerprints (docs/DEMO_DATA_PLAN_2026-09-03.md WS2).
+
+    python -m src.enrich_catalog [--fixture PATH] [--only DEMO0007] [--limit N] [--force]
+                                 [--concurrency 4] [--placeholder] [--partial-ids a,b,c]
+                                 [--write-db] [--dry-run]
+
+Reads `apps/backend/src/scripts/fixtures/catalog.demo.json`, runs the enrichment
+worker on every entry whose fingerprint is missing or was produced by an older
+extractor version, and writes the fingerprints back into the fixture (every 10
+completions and at the end, atomically), plus a build report next to it.
+
+Rules it enforces (FINGERPRINT_SCHEMA.md §5, DATA_LICENSING.md §4):
+  - the evidence sent is the fixture's own text (Wikipedia lead + plot section,
+    fixture-only fields) and the film's facts; never user data, never text we
+    have no right to derive from;
+  - one extraction per (title, extractorVersion): a re-run is a no-op unless the
+    extractor version changed or --force is given;
+  - provenance is whatever the worker stamps; this script adds nothing to it and
+    leaves licenseStatus 'unknown' -- the fixture is a development artefact;
+  - a refusal or an API failure is recorded in the report and leaves the entry
+    without a fingerprint (re-run to retry) -- never a fabricated vector;
+  - --placeholder fills deterministic genre-centroid vectors labelled
+    'demo-placeholder-v1' so the UI can be exercised without any credentials;
+    they are never mistaken for extractions;
+  - a fixed set of titles is left deliberately partial (two dimensions removed)
+    so the one-band confidence demotion (ADR-19) is visible in the demo.
+"""
+
+import argparse
+import hashlib
+import json
+import os
+import sys
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Optional, Tuple
+
+from dotenv import load_dotenv
+
+from .enrichment import EXTRACTOR_VERSION, FilmEnrichmentWorker
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+DEFAULT_FIXTURE = REPO_ROOT / "apps" / "backend" / "src" / "scripts" / "fixtures" / "catalog.demo.json"
+
+PLACEHOLDER_VERSION = "demo-placeholder-v1"
+PARTIAL_SUFFIX = "+partial"
+# Left partial on purpose: two dimensions removed after extraction so the
+# ADR-19 demotion ("some traits unknown, confidence lowered one band") shows
+# on Home. One per slice/tier mix; ids are stable because the list is
+# append-only.
+DEFAULT_PARTIAL_IDS = ("DEMO0007", "DEMO0063", "DEMO0150", "DEMO0222", "DEMO0290")
+PARTIAL_DIMENSIONS = ("soundscapeComplexity", "colorSaturation")
+WRITE_EVERY = 10
+
+DIMENSIONS = (
+    "pacing",
+    "rhythmVariance",
+    "ambiguity",
+    "psychologicalDepth",
+    "warmth",
+    "darkness",
+    "linearity",
+    "dialogueDensity",
+    "actionIntensity",
+    "plotComplexity",
+    "visualComplexity",
+    "soundscapeComplexity",
+    "colorSaturation",
+)
+
+# Genre centroids for the placeholder generator (13 dims, DIMENSIONS order).
+# Editorial, not extracted -- that is the whole point of the label.
+GENRE_CENTROIDS: Dict[str, Tuple[float, ...]] = {
+    "Drama": (0.35, 0.45, 0.55, 0.75, 0.50, 0.55, 0.40, 0.65, 0.20, 0.50, 0.50, 0.45, 0.45),
+    "Comedy": (0.65, 0.50, 0.20, 0.35, 0.85, 0.15, 0.25, 0.80, 0.30, 0.35, 0.55, 0.50, 0.75),
+    "Thriller": (0.70, 0.70, 0.65, 0.60, 0.25, 0.75, 0.55, 0.55, 0.60, 0.80, 0.65, 0.75, 0.40),
+    "Crime": (0.60, 0.60, 0.55, 0.60, 0.25, 0.80, 0.55, 0.60, 0.60, 0.75, 0.60, 0.65, 0.40),
+    "Romance": (0.35, 0.35, 0.30, 0.65, 0.90, 0.20, 0.30, 0.85, 0.10, 0.35, 0.55, 0.55, 0.70),
+    "Action": (0.90, 0.75, 0.20, 0.30, 0.40, 0.55, 0.30, 0.35, 0.95, 0.45, 0.85, 0.90, 0.65),
+    "Adventure": (0.75, 0.65, 0.25, 0.35, 0.65, 0.35, 0.30, 0.45, 0.75, 0.50, 0.85, 0.80, 0.80),
+    "Science Fiction": (0.55, 0.55, 0.70, 0.55, 0.30, 0.60, 0.55, 0.50, 0.55, 0.80, 0.90, 0.90, 0.45),
+    "Fantasy": (0.55, 0.60, 0.50, 0.45, 0.60, 0.45, 0.45, 0.45, 0.55, 0.65, 0.95, 0.85, 0.80),
+    "Horror": (0.55, 0.75, 0.65, 0.45, 0.10, 0.95, 0.45, 0.35, 0.55, 0.50, 0.70, 0.85, 0.30),
+    "Animation": (0.65, 0.55, 0.20, 0.40, 0.85, 0.20, 0.25, 0.60, 0.50, 0.40, 0.95, 0.80, 0.95),
+    "Musical": (0.60, 0.65, 0.15, 0.40, 0.85, 0.15, 0.30, 0.65, 0.20, 0.30, 0.85, 0.95, 0.90),
+    "War": (0.55, 0.65, 0.45, 0.60, 0.25, 0.85, 0.40, 0.50, 0.80, 0.55, 0.70, 0.85, 0.35),
+    "Western": (0.40, 0.50, 0.35, 0.50, 0.35, 0.60, 0.25, 0.40, 0.65, 0.40, 0.75, 0.60, 0.55),
+    "History": (0.35, 0.40, 0.35, 0.65, 0.45, 0.55, 0.30, 0.70, 0.35, 0.60, 0.80, 0.60, 0.50),
+    "Mystery": (0.45, 0.55, 0.85, 0.65, 0.30, 0.65, 0.65, 0.65, 0.30, 0.90, 0.60, 0.65, 0.40),
+    "Coming-of-Age": (0.35, 0.40, 0.35, 0.75, 0.75, 0.30, 0.30, 0.70, 0.10, 0.30, 0.50, 0.45, 0.65),
+    "Family": (0.60, 0.45, 0.10, 0.35, 0.95, 0.10, 0.20, 0.65, 0.35, 0.30, 0.70, 0.65, 0.85),
+    "Biography": (0.40, 0.45, 0.30, 0.70, 0.50, 0.45, 0.45, 0.75, 0.25, 0.50, 0.55, 0.50, 0.50),
+    "Film Noir": (0.45, 0.50, 0.75, 0.65, 0.15, 0.85, 0.55, 0.70, 0.40, 0.80, 0.60, 0.55, 0.15),
+    "Documentary": (0.40, 0.40, 0.30, 0.50, 0.45, 0.45, 0.35, 0.80, 0.15, 0.40, 0.45, 0.40, 0.45),
+}
+NEUTRAL_CENTROID = tuple(0.5 for _ in DIMENSIONS)
+
+
+# ---------------------------------------------------------------------------
+# Pure helpers (unit-tested)
+# ---------------------------------------------------------------------------
+
+
+def build_evidence(entry: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    The evidence payload for one fixture entry, in the worker's argument names.
+
+    The English description is used when it is a real Wikipedia lead; when it
+    is only Wikidata's stub ("1955 film"), the Arabic lead is the real
+    description (fetch-catalog.ts marks this in `descriptionSource`).
+    """
+    evidence = entry.get("evidence") or {}
+    description_source = entry.get("descriptionSource")
+    description = entry.get("description") or ""
+    if description_source != "wikipedia:en" and entry.get("descriptionAr"):
+        description = entry["descriptionAr"]
+    plot = evidence.get("plotSummary") or ""
+
+    context_parts = []
+    if entry.get("releaseYear"):
+        context_parts.append(f"Year: {entry['releaseYear']}")
+    if entry.get("genres"):
+        context_parts.append(f"Genres: {', '.join(entry['genres'])}")
+    if entry.get("country"):
+        context_parts.append(f"Country: {entry['country']}")
+    if entry.get("originalLanguage"):
+        context_parts.append(f"Original language: {entry['originalLanguage']}")
+    if entry.get("titleAr"):
+        context_parts.append(f"Arabic title: {entry['titleAr']}")
+    plot_source = evidence.get("plotSource")
+    if plot_source and str(plot_source).endswith(":lead"):
+        context_parts.append("Evidence note: no plot section was available; the plot text is only the article lead")
+
+    return {
+        "title": entry.get("titleEn") or entry.get("titleAr") or entry["internalId"],
+        "description": description,
+        "plot_summary": plot,
+        "additional_context": "; ".join(context_parts) or None,
+        "source_ids": list(evidence.get("sourceIds") or []),
+        "has_plot": bool(plot),
+    }
+
+
+def needs_extraction(entry: Dict[str, Any], force: bool = False, extractor_version: str = EXTRACTOR_VERSION) -> bool:
+    """One extraction per (title, extractorVersion): current or current+partial is done."""
+    if force:
+        return True
+    fingerprint = entry.get("fingerprint")
+    if not isinstance(fingerprint, dict):
+        return True
+    version = fingerprint.get("extractorVersion")
+    return version not in (extractor_version, f"{extractor_version}{PARTIAL_SUFFIX}")
+
+
+def placeholder_fingerprint(entry: Dict[str, Any], seed: int = 20260903) -> Dict[str, Any]:
+    """
+    Deterministic genre-centroid vector with seeded jitter, labelled as a
+    placeholder in every provenance field so it is never mistaken for an
+    extraction. Same entry + seed -> same vector, run after run.
+    """
+    centroids = [GENRE_CENTROIDS[genre] for genre in entry.get("genres") or [] if genre in GENRE_CENTROIDS]
+    base = [sum(values) / len(centroids) for values in zip(*centroids)] if centroids else list(NEUTRAL_CENTROID)
+    digest = hashlib.sha256(f"{seed}:{entry['internalId']}".encode("utf-8")).digest()
+    vector: Dict[str, float] = {}
+    for index, dimension in enumerate(DIMENSIONS):
+        # One byte of the digest per dimension -> jitter in [-0.12, 0.12].
+        jitter = (digest[index] / 255.0 - 0.5) * 0.24
+        vector[dimension] = round(min(0.95, max(0.05, base[index] + jitter)), 3)
+    return {
+        "schemaVersion": "film-fingerprint-v1",
+        **vector,
+        "themes": [genre.lower() for genre in entry.get("genres") or []],
+        # Uniformly low: a centroid is a guess about the genre, not about the film.
+        "confidence": {dimension: 0.3 for dimension in DIMENSIONS},
+        "generatedBy": "placeholder",
+        "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "modelVersion": None,
+        "sourceIds": [],
+        "extractorVersion": PLACEHOLDER_VERSION,
+        "licenseStatus": "unknown",
+        "reviewStatus": "unreviewed",
+    }
+
+
+def make_partial(fingerprint: Dict[str, Any]) -> Dict[str, Any]:
+    """Remove two dimensions (absence = unknown, never zero; ADR-19) and mark the version."""
+    partial = {key: value for key, value in fingerprint.items() if key not in PARTIAL_DIMENSIONS}
+    confidence = dict(partial.get("confidence") or {})
+    for dimension in PARTIAL_DIMENSIONS:
+        confidence.pop(dimension, None)
+    partial["confidence"] = confidence
+    version = str(partial.get("extractorVersion") or "")
+    if not version.endswith(PARTIAL_SUFFIX):
+        partial["extractorVersion"] = f"{version}{PARTIAL_SUFFIX}"
+    return partial
+
+
+def enrich_entry(worker: FilmEnrichmentWorker, entry: Dict[str, Any]) -> Dict[str, Any]:
+    """Run the worker on one entry and return the fingerprint as a JSON-ready dict."""
+    evidence = build_evidence(entry)
+    fingerprint = worker.generate_fingerprint(
+        title=evidence["title"],
+        description=evidence["description"],
+        plot_summary=evidence["plot_summary"],
+        additional_context=evidence["additional_context"],
+        source_ids=evidence["source_ids"],
+    )
+    return fingerprint.model_dump(mode="json")
+
+
+def load_fixture(path: Path) -> List[Dict[str, Any]]:
+    with path.open("r", encoding="utf-8") as handle:
+        entries = json.load(handle)
+    if not isinstance(entries, list):
+        raise ValueError(f"{path} does not hold a JSON array of catalog entries")
+    return entries
+
+
+def write_fixture(path: Path, entries: List[Dict[str, Any]]) -> None:
+    """Atomic: write next to the target, then replace, so a crash never leaves a half file."""
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    with temporary.open("w", encoding="utf-8", newline="\n") as handle:
+        json.dump(entries, handle, ensure_ascii=False, indent=2)
+        handle.write("\n")
+    os.replace(temporary, path)
+
+
+def select_entries(entries: Iterable[Dict[str, Any]], only: Optional[str], limit: Optional[int]) -> List[Dict[str, Any]]:
+    selected = [entry for entry in entries if only is None or entry.get("internalId") == only]
+    return selected[:limit] if limit else selected
+
+
+# ---------------------------------------------------------------------------
+# Database write-through (optional)
+# ---------------------------------------------------------------------------
+
+
+def write_fingerprints_to_db(entries: List[Dict[str, Any]]) -> int:
+    """UPDATE titles.fingerprint for already-seeded rows, matched by internalId. Returns rows updated."""
+    import psycopg2  # imported here so the fixture-only path needs no database driver
+
+    database_url = os.environ.get("DATABASE_URL")
+    if not database_url:
+        raise RuntimeError("DATABASE_URL is required for --write-db")
+    updated = 0
+    with psycopg2.connect(database_url) as connection, connection.cursor() as cursor:
+        for entry in entries:
+            if not isinstance(entry.get("fingerprint"), dict):
+                continue
+            cursor.execute(
+                'UPDATE titles SET fingerprint = %s::json, "updatedAt" = now() WHERE "internalId" = %s',
+                (json.dumps(entry["fingerprint"]), entry["internalId"]),
+            )
+            updated += cursor.rowcount
+    return updated
+
+
+# ---------------------------------------------------------------------------
+# Report
+# ---------------------------------------------------------------------------
+
+
+def build_report(
+    fixture: Path,
+    entries: List[Dict[str, Any]],
+    results: Dict[str, Tuple[str, str]],
+    mode: str,
+    elapsed: float,
+) -> str:
+    done = [entry for entry in entries if isinstance(entry.get("fingerprint"), dict)]
+    versions: Dict[str, int] = {}
+    models: Dict[str, int] = {}
+    for entry in done:
+        fingerprint = entry["fingerprint"]
+        versions[str(fingerprint.get("extractorVersion"))] = versions.get(str(fingerprint.get("extractorVersion")), 0) + 1
+        models[str(fingerprint.get("modelVersion"))] = models.get(str(fingerprint.get("modelVersion")), 0) + 1
+    failures = [(internal_id, detail) for internal_id, (status, detail) in results.items() if status == "failed"]
+    refusals = [(internal_id, detail) for internal_id, detail in failures if "refused" in detail.lower()]
+    confidences = [
+        value
+        for entry in done
+        for value in (entry["fingerprint"].get("confidence") or {}).values()
+        if isinstance(value, (int, float))
+    ]
+    mean_confidence = sum(confidences) / len(confidences) if confidences else None
+    lines = [
+        "# Demo catalog — enrichment report",
+        "",
+        f"Generated by `services/workers/src/enrich_catalog.py` on {datetime.now(timezone.utc).date().isoformat()} "
+        f"(mode: {mode}; {elapsed:.0f} s).",
+        f"Fixture: `{fixture.name}` · entries: {len(entries)} · with fingerprint: {len(done)} · "
+        f"extracted this run: {sum(1 for status, _ in results.values() if status == 'done')} · "
+        f"skipped (already current): {sum(1 for status, _ in results.values() if status == 'skipped')} · "
+        f"failed: {len(failures)}.",
+        "",
+        "## Provenance",
+        "",
+        "| extractorVersion | Titles |",
+        "|---|---|",
+        *[f"| {version} | {count} |" for version, count in sorted(versions.items())],
+        "",
+        "| modelVersion (as served) | Titles |",
+        "|---|---|",
+        *[f"| {model} | {count} |" for model, count in sorted(models.items())],
+        "",
+        f"Mean per-dimension confidence reported by the extractor: {mean_confidence:.2f}" if mean_confidence is not None else "No confidence values yet.",
+        "",
+        f"## Failures ({len(failures)})",
+        "",
+        "None." if not failures else "\n".join(["| Id | Detail |", "|---|---|", *[f"| {internal_id} | {detail.replace('|', '/')} |" for internal_id, detail in failures]]),
+        "",
+        f"Refusals among them: {len(refusals)} — each is a human-review item (BP §15.4), never re-tried blindly.",
+        "",
+        "## Rules",
+        "",
+        "- Evidence sent: the fixture's own Wikipedia lead and plot text plus year/genres/country/language; never user data.",
+        "- One extraction per (title, extractorVersion); `--force` is the only way to overwrite.",
+        "- `licenseStatus` stays `unknown` and `reviewStatus` `unreviewed`: a development fixture, not a rights registry.",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+
+def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Fingerprint the demo catalog fixture")
+    parser.add_argument("--fixture", type=Path, default=DEFAULT_FIXTURE)
+    parser.add_argument("--only", help="internalId of a single entry")
+    parser.add_argument("--limit", type=int, help="stop after N candidate entries")
+    parser.add_argument("--force", action="store_true", help="re-extract even when the fingerprint is current")
+    parser.add_argument("--concurrency", type=int, default=4)
+    parser.add_argument("--placeholder", action="store_true", help="fill deterministic placeholders instead of calling the model")
+    parser.add_argument("--partial-ids", default=",".join(DEFAULT_PARTIAL_IDS), help="comma-separated ids to leave partial ('' for none)")
+    parser.add_argument("--write-db", action="store_true", help="also UPDATE titles.fingerprint for seeded rows (DATABASE_URL)")
+    parser.add_argument("--dry-run", action="store_true", help="print the evidence that would be sent, change nothing")
+    parser.add_argument("--seed", type=int, default=20260903, help="placeholder generator seed")
+    return parser.parse_args(argv)
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    args = parse_args(argv)
+    # override=False: an exported key in the shell wins over the file, and an
+    # empty ANTHROPIC_API_KEY= line in .env cannot blank a real one.
+    load_dotenv(REPO_ROOT / ".env", override=False)
+
+    entries = load_fixture(args.fixture)
+    selected = select_entries(entries, args.only, None)
+    needing = [entry for entry in selected if needs_extraction(entry, args.force)]
+    candidates = needing[: args.limit] if args.limit else needing
+    candidate_ids = {entry["internalId"] for entry in candidates}
+    partial_ids = {value.strip() for value in args.partial_ids.split(",") if value.strip()}
+    mode = "placeholder" if args.placeholder else "anthropic"
+    print(
+        f"enrich: {len(entries)} entries in {args.fixture.name}; {len(needing)} need extraction, "
+        f"{len(candidates)} in this run ({mode})"
+    )
+
+    if args.dry_run:
+        for entry in candidates:
+            evidence = build_evidence(entry)
+            print(f"  {entry['internalId']} {evidence['title']}: description {len(evidence['description'])} chars, "
+                  f"plot {len(evidence['plot_summary'])} chars, context: {evidence['additional_context']}")
+        return 0
+
+    results: Dict[str, Tuple[str, str]] = {}
+    needing_ids = {entry["internalId"] for entry in needing}
+    for entry in selected:
+        if entry["internalId"] not in needing_ids:
+            results[entry["internalId"]] = ("skipped", "fingerprint already current")
+    # Entries that need extraction but fall outside --limit get no result row:
+    # they are simply left for the next run.
+
+    started = time.monotonic()
+    lock = threading.Lock()
+    completed_since_write = 0
+
+    def finish(entry: Dict[str, Any], fingerprint: Optional[Dict[str, Any]], error: Optional[str]) -> None:
+        nonlocal completed_since_write
+        with lock:
+            if fingerprint is not None:
+                entry["fingerprint"] = make_partial(fingerprint) if entry["internalId"] in partial_ids else fingerprint
+                results[entry["internalId"]] = ("done", "")
+                print(f"  ✓ {entry['internalId']} {entry.get('titleEn')}")
+            else:
+                results[entry["internalId"]] = ("failed", error or "unknown error")
+                print(f"  ✗ {entry['internalId']} {entry.get('titleEn')}: {error}")
+            completed_since_write += 1
+            if completed_since_write >= WRITE_EVERY:
+                write_fixture(args.fixture, entries)
+                completed_since_write = 0
+
+    if args.placeholder:
+        for entry in candidates:
+            finish(entry, placeholder_fingerprint(entry, args.seed), None)
+    elif candidates:
+        if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
+            print("  note: ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN not set; relying on an `ant auth login` profile if one exists")
+        worker = FilmEnrichmentWorker()
+
+        def run(entry: Dict[str, Any]) -> None:
+            try:
+                finish(entry, enrich_entry(worker, entry), None)
+            except (ValueError, RuntimeError) as error:
+                finish(entry, None, str(error))
+
+        with ThreadPoolExecutor(max_workers=max(1, args.concurrency)) as pool:
+            for future in as_completed([pool.submit(run, entry) for entry in candidates]):
+                future.result()
+
+    write_fixture(args.fixture, entries)
+    elapsed = time.monotonic() - started
+    report_path = args.fixture.with_name(args.fixture.stem + ".enrichment-report.md")
+    report_path.write_text(build_report(args.fixture, entries, results, mode, elapsed), encoding="utf-8")
+
+    if args.write_db:
+        updated = write_fingerprints_to_db([entry for entry in entries if results.get(entry["internalId"], ("", ""))[0] == "done"])
+        print(f"  database: {updated} titles updated")
+
+    failed = sum(1 for status, _ in results.values() if status == "failed")
+    done = sum(1 for status, _ in results.values() if status == "done")
+    current = sum(1 for status, _ in results.values() if status == "skipped")
+    left = len(needing) - len(candidate_ids)
+    print(
+        f"\n{done} extracted, {failed} failed, {current} already current, {left} left for a later run "
+        f"→ {args.fixture.name}; report → {report_path.name}"
+    )
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

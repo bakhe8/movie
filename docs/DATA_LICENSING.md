@@ -53,7 +53,7 @@ The GroupLens dataset READMEs state that the data may not be used for commercial
 
 Check the README of the exact dataset file downloaded; wording differs slightly between versions.
 
-### 3.6 LLM-derived data (OpenAI)
+### 3.6 LLM-derived data (any LLM provider; Anthropic since 2026-09-03)
 
 Our fingerprints and explanations are our derivatives, but only if the inputs were licensed for derivation (Wikidata facts, our own synopses, licensed provider text). Never feed copied reviews or scraped text. Rules and pipeline: [FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md) §5; privacy: [PRIVACY.md](PRIVACY.md) §6.
 

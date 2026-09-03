@@ -74,12 +74,14 @@ None of these endpoints exist yet — see [IMPLEMENTATION_STATUS.md](IMPLEMENTAT
 
 ## 6. Third-party processors
 
-### 6.1 OpenAI (enrichment and explanation rephrasing) — ADR-23
+### 6.1 Anthropic (enrichment and explanation rephrasing) — ADR-23 rules, provider chosen 2026-09-03
+
+The LLM provider is Anthropic's Messages API (owner's decision, recorded in [DEMO_DATA_PLAN_2026-09-03.md](DEMO_DATA_PLAN_2026-09-03.md) §8 pending its ADR number); the rules below are ADR-23's, unchanged, applied to it.
 
 - Only film evidence we have rights to derive from and the schema are sent. **Never** sent: user ids, emails, rankings, preferences, watch history, profile text. Explanations are rephrased from an evidence payload of film features, not from user data.
-- Responses API with `store=false` so responses are not retained for later retrieval; request zero-data-retention for the organization when eligible. OpenAI's abuse-monitoring retention (up to 30 days unless ZDR applies) is documented in the notice — verify current terms (`BP App. D` [م23]).
+- The Messages API has no per-request "do not store" flag: retention is governed by the organization's data-retention configuration with the provider. Request zero-data-retention for the organization where eligible — note that some model tiers require a retention period and are unavailable under ZDR — and document the configured retention in the notice. Verify current terms before launch (`BP App. D` [م23] is the OpenAI-era reference; add the provider's data-controls page to App. D).
 - A data processing agreement with the provider is in the pre-launch checklist even though no personal data is intended to flow, as a control against accidental leakage.
-- Model ids are configuration; the current worker's Chat Completions call without `store=false` is a listed gap.
+- Model ids are configuration (`ANTHROPIC_FINGERPRINT_MODEL`, `ANTHROPIC_EXPLANATION_MODEL`); every published fingerprint records the model id the API actually served in `modelVersion` and the pipeline version in `extractorVersion`. A refusal by the model is a human-review item, never silently re-routed to another model.
 
 ### 6.2 Catalog and availability providers
 

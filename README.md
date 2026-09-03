@@ -12,7 +12,7 @@ A personal film-taste assistant that learns from one question only — "rank the
 |---|---|
 | `apps/frontend` | Next.js 16 (App Router), React 19, Tailwind 4, TypeScript; RTL/LTR |
 | `apps/backend` | NestJS 10, TypeORM 0.3 (migrations only), Passport JWT, class-validator, @nestjs/throttler; global prefix `/api` |
-| `services/workers` | Python 3.11+, NumPy/SciPy (Plackett–Luce), Pydantic, OpenAI SDK; Poetry |
+| `services/workers` | Python 3.11+, NumPy/SciPy (Plackett–Luce), Pydantic, Anthropic SDK (enrichment); Poetry |
 | `packages/shared` | shared TypeScript types (fingerprint) |
 | `docker/` | PostgreSQL (`ankane/pgvector`), Redis 7, disposable `postgres-test` |
 

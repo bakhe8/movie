@@ -25,7 +25,10 @@ numpy = "^2.1.0"
 scipy = "^1.13.0"
 pydantic = "^2.5.0"
 psycopg2-binary = "^2.9.9"
-openai = "^1.6.0"
+# The enrichment worker runs on the Anthropic Messages API (structured
+# outputs via `messages.parse`); the OpenAI SDK is no longer imported
+# anywhere in src/ (docs/DEMO_DATA_PLAN_2026-09-03.md §8, provider decision).
+anthropic = ">=0.98,<2"
 python-dotenv = "^1.0.0"
 
 [tool.poetry.group.dev.dependencies]

@@ -92,7 +92,8 @@ The model reads the 13 numeric keys in the `FINGERPRINT_DIMENSIONS` order; a sto
 
 ```
 licensed evidence (plot/synopsis/descriptors we have rights to derive from) + fingerprintSchemaVersion + locale
-   → OpenAI Responses API, Structured Outputs against the versioned JSON Schema, store=false, model id from config
+   → Anthropic Messages API, structured outputs (JSON Schema, Pydantic-enforced) against the versioned schema, model id from config,
+     retention governed at the organization level (no per-request flag; PRIVACY.md §6.1)
    → validation: schema → range checks (0–1) → source coverage → contradiction rules (e.g. linearity vs plotComplexity extremes)
    → escalation: low confidence / conflicts / under-represented language → human review queue
    → publish: immutable feature version + provenance + model/eval version; previous version superseded, never overwritten
@@ -105,7 +106,9 @@ Rules:
 - Extract once per `(title, extractorVersion)`; re-extract only on schema/model version change or a review finding — versioned, not ad hoc.
 - Multiple independent extractions (different prompts/evidence) may be merged with a weak-supervision reliability model; low-confidence features can be used silently for candidate generation but not as displayed reasons until they pass the confidence threshold (`BP §7.6` logic applied to features).
 - Triad data feeds back: a repeated contradiction between a feature and many users' behaviour lowers that feature's confidence and queues it for review.
-- The model id is configuration (`OPENAI_FINGERPRINT_MODEL`), never hard-coded in code or docs; the worker's current `"gpt-4o"` default is a placeholder to be moved to configuration.
+- The model id is configuration (`ANTHROPIC_FINGERPRINT_MODEL`), never hard-coded in code or docs. Every published fingerprint records the model id the API actually served (`modelVersion`) and the pipeline version (`extractorVersion`, `enrichment-worker-v2` since the provider switch of 2026-09-03 — a different model family behind the same prompt is a version change).
+- A refusal or an API failure leaves the title without a fingerprint and puts it on the report as a human-review item; nothing is fabricated and nothing is silently re-routed to another model, so one catalog run carries one `modelVersion`.
+- Batch runner for the demo catalog: `services/workers/src/enrich_catalog.py` ([DEMO_DATA_PLAN_2026-09-03.md](DEMO_DATA_PLAN_2026-09-03.md) WS2) — evidence is the fixture's own Wikipedia lead and plot text plus the film's facts; resumable; placeholders are labelled `demo-placeholder-v1` and are never mistaken for extractions.
 
 ## 6. Acceptance tests before any batch is published (`BP §15.4`)
 

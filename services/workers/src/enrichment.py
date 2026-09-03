@@ -1,23 +1,35 @@
 """
-Film fingerprinting worker using the OpenAI Responses API.
+Film fingerprinting worker on the Anthropic Messages API.
 
-This module generates film fingerprints using OpenAI's language models
-with structured outputs (Pydantic schema enforcement). See
-docs/FINGERPRINT_SCHEMA.md §5 and docs/ARCHITECTURE_DECISIONS.md ADR-6/23
-for the rules this pipeline must follow.
+Background-only LLM use (blueprint §15): a film's fingerprint is extracted from
+licensed evidence into a versioned JSON schema (structured outputs, Pydantic
+enforced), stamped with provenance, and published once per extractor/model
+version. See docs/FINGERPRINT_SCHEMA.md §5 and docs/ARCHITECTURE_DECISIONS.md
+ADR-6/ADR-23 (rules) and the provider-switch decision recorded in
+docs/DEMO_DATA_PLAN_2026-09-03.md §8 for the rules this pipeline must follow.
 """
 
 import os
 from datetime import datetime, timezone
 from typing import Dict, Optional
 
-import openai
+import anthropic
 from pydantic import BaseModel, Field
 
 # Bump whenever this pipeline's prompt or evidence shape changes -- a
 # published fingerprint is re-extracted only on a schema/model/extractor
-# version change, never ad hoc (FINGERPRINT_SCHEMA.md §5).
-EXTRACTOR_VERSION = "enrichment-worker-v1"
+# version change, never ad hoc (FINGERPRINT_SCHEMA.md §5). v2: the
+# Anthropic port -- the prompt is unchanged, but a different model family
+# behind the same prompt is exactly the kind of change that must be visible
+# in every published fingerprint's provenance.
+EXTRACTOR_VERSION = "enrichment-worker-v2"
+
+# Output ceilings. Adaptive thinking (on by default for the configured model
+# family) counts toward max_tokens, so these leave room for reasoning before
+# the ~400-token JSON / 2-sentence answer -- a cap hit is a hard failure, not
+# a truncated fingerprint.
+FINGERPRINT_MAX_TOKENS = 8192
+EXPLANATION_MAX_TOKENS = 2048
 
 
 class FilmFingerprintV1(BaseModel):
@@ -73,18 +85,35 @@ class FilmFingerprintV1(BaseModel):
 
 
 def _refusal_text(response) -> Optional[str]:
-    """Pull the model's refusal message out of a Responses API result, if any."""
-    for item in getattr(response, "output", []) or []:
-        if getattr(item, "type", None) != "message":
-            continue
-        for content in getattr(item, "content", []) or []:
-            if getattr(content, "type", None) == "refusal":
-                return content.refusal
+    """The model's refusal explanation, if this response is a refusal."""
+    if getattr(response, "stop_reason", None) != "refusal":
+        return None
+    details = getattr(response, "stop_details", None)
+    explanation = getattr(details, "explanation", None) if details is not None else None
+    category = getattr(details, "category", None) if details is not None else None
+    if isinstance(explanation, str) and explanation:
+        return explanation
+    return f"refused ({category})" if isinstance(category, str) and category else "refused"
+
+
+def _first_text(response) -> Optional[str]:
+    """Text of the first text block in a Messages API response, if any."""
+    for block in getattr(response, "content", []) or []:
+        text = getattr(block, "text", None)
+        if getattr(block, "type", None) == "text" and isinstance(text, str) and text:
+            return text
     return None
 
 
+def _served_model(response, requested: str) -> str:
+    """The model id the API actually served (an alias may resolve to a dated
+    snapshot); the configured id is the fallback."""
+    served = getattr(response, "model", None)
+    return served if isinstance(served, str) and served else requested
+
+
 class FilmEnrichmentWorker:
-    """Worker for generating film fingerprints using OpenAI."""
+    """Worker for generating film fingerprints and spoiler-free descriptions."""
 
     def __init__(self, model: Optional[str] = None):
         """
@@ -92,20 +121,21 @@ class FilmEnrichmentWorker:
             model: overrides the configured model for every call this worker
                 instance makes (tests, one-off scripts). Leave unset in
                 production so each task reads its own configured model
-                (`OPENAI_FINGERPRINT_MODEL` / `OPENAI_EXPLANATION_MODEL`,
+                (`ANTHROPIC_FINGERPRINT_MODEL` / `ANTHROPIC_EXPLANATION_MODEL`,
                 ADR-6) -- the model id is never a hard-coded default, since
                 model choice is a deployment decision, not a code constant.
         """
         self._model_override = model
-        self._client: Optional[openai.OpenAI] = None
+        self._client: Optional[anthropic.Anthropic] = None
 
-    def _get_client(self) -> openai.OpenAI:
+    def _get_client(self) -> anthropic.Anthropic:
         # Built on first real use, not at import time or construction time
-        # (H3): a module-level client made `import src.enrichment` --
-        # transitively, `python -m src.training`, which never talks to
-        # OpenAI -- fail on any machine without OPENAI_API_KEY set.
+        # (H3, ADR-36): importing this module -- transitively,
+        # `python -m src.training`, which never talks to any LLM -- must not
+        # fail on a machine without credentials. The zero-argument client
+        # resolves ANTHROPIC_API_KEY (or an `ant auth login` profile) itself.
         if self._client is None:
-            self._client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            self._client = anthropic.Anthropic()
         return self._client
 
     def _resolve_model(self, env_var: str) -> str:
@@ -127,13 +157,13 @@ class FilmEnrichmentWorker:
         source_ids: Optional[list[str]] = None,
     ) -> FilmFingerprintV1:
         """
-        Generate a film fingerprint using OpenAI structured outputs.
+        Generate a film fingerprint with structured outputs.
 
         Args:
             title: Film title
             description: Short film description
             plot_summary: Detailed plot summary
-            additional_context: Optional additional context (cast, director, etc.)
+            additional_context: Optional additional context (year, genres, country...)
             source_ids: `source_records` row ids backing the evidence above, if
                 any exist yet (FINGERPRINT_SCHEMA.md §2 `sourceIds`) -- stamped
                 onto the result as-is, never invented.
@@ -142,9 +172,10 @@ class FilmEnrichmentWorker:
             FilmFingerprintV1 object with computed fingerprint
 
         Raises:
-            ValueError: If the API call fails or returns no parsed fingerprint
+            ValueError: If the API call fails, the model refuses, or the output
+                hits the token ceiling before a complete fingerprint exists
         """
-        model = self._resolve_model("OPENAI_FINGERPRINT_MODEL")
+        model = self._resolve_model("ANTHROPIC_FINGERPRINT_MODEL")
 
         context = f"Title: {title}\n"
         context += f"Description: {description}\n"
@@ -165,27 +196,29 @@ Focus on objective aspects that can be inferred from the plot, themes, and narra
 Provide scores for all dimensions. For dimensions you're less confident about, provide lower confidence scores."""
 
         try:
-            response = self._get_client().responses.parse(
+            response = self._get_client().messages.parse(
                 model=model,
-                instructions=instructions,
-                input=input_text,
-                max_output_tokens=1024,
-                text_format=FilmFingerprintV1,
-                # Never retain film-evidence prompts/outputs on OpenAI's side
-                # (blueprint §15.2, ADR-6/23; no user data is sent here either way).
-                store=False,
+                max_tokens=FINGERPRINT_MAX_TOKENS,
+                system=instructions,
+                messages=[{"role": "user", "content": input_text}],
+                output_format=FilmFingerprintV1,
             )
-        except openai.OpenAIError as error:
-            raise ValueError(f"OpenAI fingerprint request failed: {error}") from error
+        except anthropic.APIError as error:
+            raise ValueError(f"Anthropic fingerprint request failed: {error}") from error
 
-        parsed = response.output_parsed
-        if parsed is None:
+        parsed = getattr(response, "parsed_output", None)
+        if not isinstance(parsed, FilmFingerprintV1):
             refusal = _refusal_text(response)
-            raise ValueError(f"OpenAI did not return a parsed fingerprint: {refusal or 'unknown reason'}")
+            if refusal:
+                raise ValueError(f"The model refused to fingerprint this film: {refusal}")
+            stop_reason = getattr(response, "stop_reason", None)
+            if stop_reason == "max_tokens":
+                raise ValueError("The fingerprint response hit the token ceiling before a complete JSON object")
+            raise ValueError(f"The model did not return a parsed fingerprint (stop_reason={stop_reason or 'unknown'})")
 
-        parsed.generatedBy = "openai"
+        parsed.generatedBy = "anthropic"
         parsed.generatedAt = datetime.now(timezone.utc)
-        parsed.modelVersion = model
+        parsed.modelVersion = _served_model(response, model)
         parsed.extractorVersion = EXTRACTOR_VERSION
         parsed.sourceIds = source_ids
         parsed.licenseStatus = "unknown"
@@ -203,19 +236,19 @@ Provide scores for all dimensions. For dimensions you're less confident about, p
         Generate a spoiler-free, evidence-only description of a film's tone
         and character from its own fingerprint.
 
-        M12: this used to also take the user's learned preference weights
-        and their previously-watched titles, and put both into the prompt --
-        exactly what ADR-23 and PRIVACY.md §6.1 forbid ("prompts contain
-        licensed evidence and schema only -- never user ids, rankings,
+        M12 (ADR-50): this used to also take the user's learned preference
+        weights and their previously-watched titles, and put both into the
+        prompt -- exactly what ADR-23 and PRIVACY.md §6.1 forbid ("prompts
+        contain licensed evidence and schema only -- never user ids, rankings,
         preferences or account data") and BP §15.2 rules out ("لا يستنتج
         سمات حساسة عن المستخدم من سجل المشاهدة"). Those parameters are
         removed entirely, not merely unused, so a future caller cannot pass
         user data back in by mistake. What personalizes a recommendation
         (which dimensions drove the score, and in which direction) already
         exists as RecommendationsService's own RecommendationReason -- computed
-        and rendered entirely on the backend/client, never sent to OpenAI or
-        any other third party. This function only ever describes the film
-        itself, for any viewer, from evidence the caller supplies.
+        and rendered entirely on the backend/client, never sent to any third
+        party. This function only ever describes the film itself, for any
+        viewer, from evidence the caller supplies.
 
         Args:
             title: Film title
@@ -226,9 +259,9 @@ Provide scores for all dimensions. For dimensions you're less confident about, p
             Natural language, spoiler-free description of the film's traits
 
         Raises:
-            ValueError: If the API call fails or returns no text
+            ValueError: If the API call fails, the model refuses, or returns no text
         """
-        model = self._resolve_model("OPENAI_EXPLANATION_MODEL")
+        model = self._resolve_model("ANTHROPIC_EXPLANATION_MODEL")
 
         dimensions = {k: v for k, v in fingerprint.items() if isinstance(v, (int, float))}
         # The film's own most distinctive traits -- farthest from the 0.5
@@ -253,20 +286,20 @@ Evidence (0-1 scale):
 Describe the film's tone and character from this evidence alone."""
 
         try:
-            response = self._get_client().responses.create(
+            response = self._get_client().messages.create(
                 model=model,
-                instructions=instructions,
-                input=input_text,
-                max_output_tokens=150,
-                # Never retain film-evidence prompts/outputs on OpenAI's side
-                # (blueprint §15.2, ADR-6/23; no user data is sent here either way).
-                store=False,
+                max_tokens=EXPLANATION_MAX_TOKENS,
+                system=instructions,
+                messages=[{"role": "user", "content": input_text}],
             )
-        except openai.OpenAIError as error:
-            raise ValueError(f"OpenAI explanation request failed: {error}") from error
+        except anthropic.APIError as error:
+            raise ValueError(f"Anthropic explanation request failed: {error}") from error
 
-        content = response.output_text
+        refusal = _refusal_text(response)
+        if refusal:
+            raise ValueError(f"The model refused to describe this film: {refusal}")
+        content = _first_text(response)
         if not content:
-            raise ValueError("OpenAI response did not include explanation text")
+            raise ValueError("The explanation response did not include any text")
 
         return content

@@ -11,7 +11,7 @@ Runs the current vertical slice on your machine: register → mark films watched
 | Python | 3.11+ | model service; `pip` or Poetry |
 | Git | any | |
 
-An OpenAI key is **not** needed for the core loop; fingerprints are seeded. It is only needed to run the enrichment worker.
+An Anthropic key is **not** needed for the core loop; fingerprints are seeded. It is only needed to run the enrichment worker (`make catalog-enrich`).
 
 ## 1. Install
 
@@ -29,7 +29,7 @@ cd services/workers && poetry install && cd ../..
 
 ```bash
 # plain pip
-python -m pip install numpy scipy pydantic psycopg2-binary sqlalchemy redis openai python-dotenv pytest
+python -m pip install numpy scipy pydantic psycopg2-binary anthropic python-dotenv pytest ruff
 ```
 
 ## 2. Environment
@@ -50,7 +50,8 @@ cp .env.example .env
 | `NEXT_PUBLIC_API_URL` | `http://localhost:3101/api` | frontend (also in `apps/frontend/.env.local`) |
 | `FRONTEND_URL` | not set → `http://localhost:3000` | backend CORS origin |
 | `JWT_SECRET` | placeholder — **required** | backend |
-| `OPENAI_API_KEY` | placeholder | enrichment worker only |
+| `ANTHROPIC_API_KEY` | empty — add yours, or sign in with `ant auth login` | enrichment worker only |
+| `ANTHROPIC_FINGERPRINT_MODEL` / `ANTHROPIC_EXPLANATION_MODEL` | a current model id | enrichment worker — it refuses to start without them (ADR-6: model ids are configuration) |
 
 ## 3. Infrastructure
 
@@ -163,4 +164,5 @@ cd apps/backend && npm run migration:generate -- src/migrations/<Name>
 
 **Changelog**
 - 2.1 (2026-09-03): added the fresh-clone Postgres-password troubleshooting row (H5, ADR-38) now that `docker:up`/`docker:down`/`test:e2e:up`/`docker-logs` correctly resolve the root `.env`.
+- 2.1 (2026-09-03): enrichment worker moved to the Anthropic Messages API — `ANTHROPIC_*` variables replace `OPENAI_*`, the pip line matches `pyproject.toml`, `make catalog-fetch` / `make catalog-enrich` added for the demo catalog ([DEMO_DATA_PLAN_2026-09-03.md](DEMO_DATA_PLAN_2026-09-03.md)).
 - 2.0 (2026-09-03): added the missing migrate/seed/train steps (the previous guide went from `docker:up` straight to `npm run dev`, which cannot work with `synchronize: false`), corrected framework versions, removed the OpenAI-key prerequisite and the ad-hoc endpoint list, added Windows notes.

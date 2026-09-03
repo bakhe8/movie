@@ -1,4 +1,4 @@
-.PHONY: help install dev build test docker-up docker-down db-migrate db-seed lint clean
+.PHONY: help install dev build test docker-up docker-down db-migrate db-seed catalog-fetch catalog-enrich catalog-enrich-placeholder lint clean
 
 help:
 	@echo "🎬 Movie Recommendation System"
@@ -19,6 +19,11 @@ help:
 	@echo "  make db-migrate    Run database migrations"
 	@echo "  make db-seed       Seed initial film catalog"
 	@echo "  make db-reset      Reset database (⚠️  deletes data)"
+	@echo ""
+	@echo "Demo catalog (docs/DEMO_DATA_PLAN_2026-09-03.md):"
+	@echo "  make catalog-fetch              Rebuild the 300-title fixture from Wikidata/Wikipedia"
+	@echo "  make catalog-enrich             Fingerprint the fixture through the enrichment worker (Anthropic key)"
+	@echo "  make catalog-enrich-placeholder Fill labelled placeholder vectors, no credentials"
 	@echo ""
 	@echo "Utility Commands:"
 	@echo "  make clean         Remove build artifacts"
@@ -57,6 +62,19 @@ db-migrate:
 
 db-seed:
 	npm run db:seed
+
+# Rebuild the demo catalog fixture from the curated list (network; cached under CATALOG_CACHE_DIR).
+catalog-fetch:
+	npm run catalog:fetch
+
+# Fingerprint the demo catalog through the enrichment worker (needs ANTHROPIC_API_KEY
+# and ANTHROPIC_FINGERPRINT_MODEL in .env); resumable, writes the fixture + a report.
+catalog-enrich:
+	cd services/workers && python -m src.enrich_catalog
+
+# Same, without credentials: deterministic placeholder vectors labelled as such.
+catalog-enrich-placeholder:
+	cd services/workers && python -m src.enrich_catalog --placeholder
 
 db-reset:
 	@echo "⚠️  This will delete all data!"
