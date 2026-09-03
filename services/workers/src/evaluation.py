@@ -7,11 +7,12 @@ Offline evaluation protocol and the model acceptance gate
                              [--seed 0] [--out report.json] [--label <model version>]
 
 What it does, per profile with at least five completed triads whose three
-titles all carry the served 28-key fingerprint:
+titles all carry every served fingerprint key:
 
 1. Temporal split exactly as the trainer applies it (the most recent
    floor(0.2 n) triads held out; whole triads stay on one side).
-2. Fit the served model (Plackett–Luce over the 28 keys) on the training
+2. Fit the served model (Plackett–Luce over training.FINGERPRINT_DIMENSIONS,
+   whatever the trainer serves at the time -- 40 keys since ADR-75) on the training
    side only. The L2 strength is chosen on an inner temporal split of the
    training side, never on the held-out slice, so the gate's held-out
    numbers are untouched by model selection.
@@ -66,8 +67,8 @@ BASELINES = ("random", "popularity", "genre_match", "pl_v1")
 @dataclass
 class ProfileData:
     profile_id: str
-    triads: List[TriadEvent]  # oldest first, complete 28-key fingerprints on all three titles
-    fingerprints: Dict[str, np.ndarray]  # 28-key vectors
+    triads: List[TriadEvent]  # oldest first, every served fingerprint key present on all three titles
+    fingerprints: Dict[str, np.ndarray]  # served-key vectors (training.FINGERPRINT_DIMENSIONS)
     fingerprints_v1: Dict[str, np.ndarray]  # 13-key vectors
     genres: Dict[str, List[str]]
     languages: Dict[str, Optional[str]]
