@@ -1,0 +1,243 @@
+/* Discover screen (blueprint §4.2, SPECIFICATION.md §5.1 step 3): build the
+   watched set fast -- search or pick from known titles, mark "watched". */
+
+.screen {
+  display: grid;
+  gap: 16px;
+}
+
+.header h2 {
+  font-size: clamp(26px, 5vw, 40px);
+  line-height: 1.15;
+  margin: 6px 0;
+}
+
+.hint {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* Progress toward the three watched titles that unlock ranking. */
+.progress {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid #e1e6e9;
+  border-radius: 16px;
+  background: var(--card);
+}
+
+.progressRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.progressText {
+  margin: 0;
+  font-weight: 700;
+}
+
+.dots {
+  display: flex;
+  gap: 6px;
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #e4e8ea;
+}
+
+.dotOn {
+  background: var(--accent);
+}
+
+.progressNote {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.search {
+  display: grid;
+  gap: 6px;
+}
+
+.search label {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.search input {
+  min-height: 48px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #dfe4e8;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.search input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.sectionTitle {
+  margin: 4px 0 0;
+  font-size: 18px;
+}
+
+.list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid #e1e6e9;
+  border-radius: 16px;
+  background: var(--card);
+}
+
+.cardWatched {
+  border-color: #cfe5d8;
+  background: #f4faf6;
+}
+
+.title {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.2;
+}
+
+.alt {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.meta {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.desc {
+  display: -webkit-box;
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.primary {
+  min-height: 44px;
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font-weight: 800;
+}
+
+.primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ghost {
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid #dfe4e8;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.ghost:hover {
+  border-color: var(--accent);
+}
+
+.ghost:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.chip {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #dff3e6;
+  color: #1d6b3f;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.status {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #eaf3f5;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.error {
+  background: #fff0eb;
+  color: var(--accent);
+}
+
+.empty {
+  margin: 0;
+  color: var(--muted);
+}
+
+.more {
+  justify-self: center;
+}
+
+.skeleton {
+  height: 120px;
+  border-radius: 16px;
+  background: linear-gradient(90deg, #eef1f3, #f7f9fa, #eef1f3);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}

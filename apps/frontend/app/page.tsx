@@ -58,7 +58,9 @@ export default function Home() {
           <RecommendationsScreen lang={lang} profileId={profile.id} onGoToRank={() => setView('rank')} />
         )}
         {view === 'rank' && <RankScreen lang={lang} profileId={profile.id} />}
-        {view === 'discover' && <DiscoverScreen lang={lang} profileId={profile.id} />}
+        {view === 'discover' && (
+          <DiscoverScreen lang={lang} profileId={profile.id} onGoToRank={() => setView('rank')} />
+        )}
         {view === 'list' && <ListScreen lang={lang} profileId={profile.id} />}
         {view === 'profile' && <ProfileScreen lang={lang} />}
       </section>
