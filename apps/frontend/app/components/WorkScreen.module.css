@@ -41,8 +41,68 @@
 /* --- Header --------------------------------------------------------------- */
 
 .header {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    "poster text"
+    "below below";
+  gap: var(--sp-3) var(--sp-4);
+  align-items: start;
+}
+
+.headerPoster {
+  grid-area: poster;
+}
+
+.headerText {
+  grid-area: text;
   display: grid;
   gap: var(--sp-2);
+  min-width: 0;
+}
+
+.headerBelow {
+  grid-area: below;
+  display: grid;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.headerBelow:empty {
+  display: none;
+}
+
+/* Q21: the poster, blurred, as the backdrop, fading into the ground. */
+.withImage {
+  padding: var(--sp-4);
+  border-radius: var(--r-card);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.withImage::before {
+  content: "";
+  position: absolute;
+  inset: -40px;
+  z-index: -2;
+  background: var(--hero-image) center / cover no-repeat;
+  filter: blur(28px) saturate(0.8);
+  opacity: 0.35;
+}
+
+.withImage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(to top, var(--bg) 0%, transparent 75%);
+}
+
+.credit {
+  margin: var(--sp-1) 0 0;
+  color: var(--muted);
+  font-size: var(--fs-12);
 }
 
 .eyebrow {
@@ -85,7 +145,7 @@
 }
 
 .desc {
-  margin: var(--sp-2) 0 0;
+  margin: 0;
   max-width: 65ch;
   text-align: start;
   color: var(--text);

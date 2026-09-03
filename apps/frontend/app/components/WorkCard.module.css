@@ -16,13 +16,9 @@
 
 .head {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto auto 1fr;
   gap: var(--sp-3);
   align-items: center;
-}
-
-.withPoster {
-  grid-template-columns: auto auto 1fr;
 }
 
 .badge {

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError, type LibraryRankingItem, type Title, type UserTitleState } from '../lib/api';
 import { formatDate, formatNumber } from '../lib/format';
+import { Poster } from './Poster';
 import styles from './ListScreen.module.css';
 import { WorkCard } from './WorkCard';
 
@@ -313,10 +314,13 @@ export function ListScreen({
               const busy = busyId === state.titleId;
               return (
                 <li key={state.id} className={styles.card}>
-                  <div>
-                    <h4 className={styles.title}>{nameOf(state.title, state.titleId)}</h4>
-                    {altOf(state.title) && <p className={styles.alt}>{altOf(state.title)}</p>}
-                    {meta && <p className={styles.meta}>{meta}</p>}
+                  <div className={styles.cardHead}>
+                    <Poster title={state.title} size="md" />
+                    <div className={styles.cardBody}>
+                      <h4 className={styles.title}>{nameOf(state.title, state.titleId)}</h4>
+                      {altOf(state.title) && <p className={styles.alt}>{altOf(state.title)}</p>}
+                      {meta && <p className={styles.meta}>{meta}</p>}
+                    </div>
                   </div>
                   <div className={styles.actions}>
                     <button type="button" className={styles.ghost} onClick={() => markWatched(state)} disabled={busy}>
@@ -392,11 +396,14 @@ export function ListScreen({
               const editing = diary?.titleId === state.titleId;
               return (
                 <li key={state.id} className={editing ? `${styles.card} ${styles.cardEditing}` : styles.card}>
-                  <div>
-                    <h4 className={styles.title}>{nameOf(state.title, state.titleId)}</h4>
-                    {altOf(state.title) && <p className={styles.alt}>{altOf(state.title)}</p>}
-                    <p className={styles.meta}>{state.watchedAt ? formatDate(state.watchedAt, lang) : t.noDate}</p>
-                    {!editing && state.notes && <p className={styles.noteText}>{state.notes}</p>}
+                  <div className={styles.cardHead}>
+                    <Poster title={state.title} size="md" />
+                    <div className={styles.cardBody}>
+                      <h4 className={styles.title}>{nameOf(state.title, state.titleId)}</h4>
+                      {altOf(state.title) && <p className={styles.alt}>{altOf(state.title)}</p>}
+                      <p className={styles.meta}>{state.watchedAt ? formatDate(state.watchedAt, lang) : t.noDate}</p>
+                      {!editing && state.notes && <p className={styles.noteText}>{state.notes}</p>}
+                    </div>
                   </div>
                   {editing && diary ? (
                     <form

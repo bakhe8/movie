@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, type Title, type TitleState } from '../lib/api';
 import { formatNumber } from '../lib/format';
+import { Poster } from './Poster';
 import styles from './DiscoverScreen.module.css';
 
 type Lang = 'ar' | 'en';
@@ -303,7 +304,9 @@ export function DiscoverScreen({
 
             return (
               <li key={title.id} className={state === 'watched' ? `${styles.card} ${styles.cardWatched}` : styles.card}>
-                <div>
+                <div className={styles.cardHead}>
+                  <Poster title={title} size="md" />
+                  <div className={styles.cardBody}>
                   <h4 className={styles.title}>
                     {onOpenTitle ? (
                       <button type="button" className={styles.titleButton} onClick={() => onOpenTitle(title, state ?? null)}>
@@ -321,6 +324,7 @@ export function DiscoverScreen({
                       {title.description}
                     </p>
                   )}
+                  </div>
                 </div>
                 <div className={styles.actions}>
                   {state === 'watched' ? (

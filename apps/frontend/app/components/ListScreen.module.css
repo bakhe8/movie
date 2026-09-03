@@ -306,3 +306,15 @@
     font-size: var(--fs-34);
   }
 }
+
+/* Poster at the start of the row, text beside it (owner decision 2026-09-04). */
+.cardHead {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-start;
+}
+
+.cardBody {
+  flex: 1;
+  min-width: 0;
+}

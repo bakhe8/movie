@@ -63,6 +63,13 @@ export interface Title {
   description: string | null;
   releaseYear: number | null;
   genres: string[] | null;
+  // Display-only. Present only when the rights registry allows showing the
+  // image (SCHEMA.md §5, DATA_LICENSING §4 rule 5); the API composes the URL,
+  // the frontend never builds one. Absent or null: the poster slot is hollow.
+  posterUrl?: string | null;
+  // The attribution the image's source requires (e.g. TMDB), shown where the
+  // image is shown (DATA_LICENSING §5).
+  posterSource?: { name: string; attribution: string } | null;
 }
 
 export interface PaginatedTitles {

@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { api, type FingerprintDimension, type LibraryRankingItem, type Recommendation, type Title, type TitleState } from '../lib/api';
 import { FEATURE_REASON_COPY } from '../lib/copy';
+import { Poster } from './Poster';
 import { WorkCard } from './WorkCard';
 import styles from './WorkScreen.module.css';
 
@@ -212,7 +213,14 @@ export function WorkScreen({
         {t.back}
       </button>
 
-      <div className={styles.header}>
+      {/* Q21: the backdrop is the poster itself, blurred, under a gradient to
+          the ground; the frontend composes no image URL of its own. */}
+      <div
+        className={title.posterUrl ? `${styles.header} ${styles.withImage}` : styles.header}
+        style={title.posterUrl ? ({ '--hero-image': `url("${title.posterUrl}")` } as CSSProperties) : undefined}
+      >
+        <Poster title={title} size="lg" className={styles.headerPoster} />
+        <div className={styles.headerText}>
         <p className={styles.eyebrow}>{t.eyebrow}</p>
         <h2>{name}</h2>
         {(showAlt || title.releaseYear) && (
@@ -229,12 +237,18 @@ export function WorkScreen({
             ))}
           </ul>
         )}
-        {/* Catalogue descriptions arrive in their own language: direction from the text. */}
-        {title.description && (
-          <p className={styles.desc} dir="auto">
-            {title.description}
-          </p>
-        )}
+        </div>
+        {/* Full width under the poster on the phone: a synopsis in the narrow
+            column beside a 120px poster wrapped every few words. */}
+        <div className={styles.headerBelow}>
+          {/* Catalogue descriptions arrive in their own language: direction from the text. */}
+          {title.description && (
+            <p className={styles.desc} dir="auto">
+              {title.description}
+            </p>
+          )}
+          {title.posterSource?.attribution && <p className={styles.credit}>{title.posterSource.attribution}</p>}
+        </div>
       </div>
 
       {notice && (

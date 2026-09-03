@@ -1,0 +1,44 @@
+/* Poster slot: 2:3, poster edge, chip radius, well ground (tokens only).
+   Hollow when no licensed image exists (decision Q16). */
+
+.poster {
+  display: block;
+  flex: none;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border: 1px solid var(--poster-edge);
+  border-radius: var(--r-chip);
+  background: var(--well);
+}
+
+.sm {
+  width: 56px;
+}
+
+.md {
+  width: 72px;
+}
+
+.lg {
+  width: 120px;
+}
+
+.hollow {
+  border-style: dashed;
+  border-color: var(--line);
+  background: transparent;
+}
+
+@media (min-width: 900px) {
+  .sm {
+    width: 64px;
+  }
+
+  .md {
+    width: 84px;
+  }
+
+  .lg {
+    width: 160px;
+  }
+}

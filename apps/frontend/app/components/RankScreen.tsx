@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPoi
 import { api, ApiError, type ReplacementReason, type Title, type Triad } from '../lib/api';
 import { TRIAD_INSTRUCTION } from '../lib/copy';
 import { formatNumber } from '../lib/format';
+import { Poster } from './Poster';
 import styles from './RankScreen.module.css';
 
 type Lang = 'ar' | 'en';
@@ -96,7 +97,6 @@ type Phase = { kind: 'loading' } | { kind: 'ready' } | { kind: 'blocked'; needed
 // (docs/DATA_LICENSING.md rule 5). The API has no such field yet; this local
 // extension lets the card render one the day it appears without touching
 // lib/api.ts. Until then every triad card is a text card.
-type TriadTitle = Title & { posterUrl?: string | null };
 
 interface DragState {
   from: number;
@@ -414,8 +414,7 @@ export function RankScreen({
           // no critic scores, no genres, no synopsis (blueprint §4.3; decisions
           // Q17). The other-language title shares the year's muted line (Q13).
           const showAlt = Boolean(alt && alt !== name);
-          const poster = (title as TriadTitle).posterUrl ?? null;
-          const className = [styles.card, poster && styles.withPoster, lifted && styles.lifted, isTarget && styles.target]
+          const className = [styles.card, styles.withPoster, lifted && styles.lifted, isTarget && styles.target]
             .filter(Boolean)
             .join(' ');
 
@@ -432,10 +431,8 @@ export function RankScreen({
               <span className={styles.badge} aria-hidden="true">
                 {formatNumber(index + 1, lang)}
               </span>
-              {/* Plain <img>: poster hosts are decided by the licensing registry, not
-                  by next.config remotePatterns, and there is no poster field yet. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              {poster && <img className={styles.poster} src={poster} alt="" loading="lazy" />}
+              {/* The poster slot is always present (owner decision 2026-09-04); hollow until licensed. */}
+              <Poster title={title} size="sm" className={styles.poster} />
               <div className={styles.body}>
                 <h3 className={styles.title}>{name}</h3>
                 {(showAlt || title.releaseYear) && (

@@ -2,6 +2,7 @@
 
 import type { LibraryRankingItem, Recommendation } from '../lib/api';
 import { formatConfidence, formatNumber, formatPersonalFit, formatReason, type PersonalFitLevel } from '../lib/format';
+import { Poster } from './Poster';
 import styles from './WorkCard.module.css';
 
 type Lang = 'ar' | 'en';
@@ -32,7 +33,6 @@ type Lang = 'ar' | 'en';
 type Contract = {
   publicQuality?: { value: number | null; votes: number | null; sources: string[] } | null;
   watchability?: { available: boolean | null; providers: { name: string; market: string }[] } | null;
-  title: { posterUrl?: string | null };
 };
 
 const labels = {
@@ -127,7 +127,6 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
   const name = lang === 'ar' ? title.titleAr : title.titleEn;
   const alt = lang === 'ar' ? title.titleEn : title.titleAr;
   const showAlt = Boolean(alt && alt !== name);
-  const poster = (title as Contract['title']).posterUrl ?? null;
 
   // Relative forms only (ADR-33 §3): level + position, never the score.
   const fit = formatPersonalFit(position, count);
@@ -159,13 +158,12 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
   return (
     <article className={headless ? `${styles.card} ${styles.headless}` : styles.card} aria-label={name}>
       {!headless && (
-        <div className={poster ? `${styles.head} ${styles.withPoster}` : styles.head}>
+        <div className={styles.head}>
           <span className={position === 1 ? `${styles.badge} ${styles.first}` : styles.badge} aria-label={t.position(position)}>
             {formatNumber(position, lang)}
           </span>
-          {/* Plain <img>: poster hosts come from the licensing registry, not next.config. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          {poster && <img className={styles.poster} src={poster} alt="" loading="lazy" />}
+          {/* The poster slot is always present (owner decision 2026-09-04); hollow until licensed. */}
+          <Poster title={title} size="sm" />
           <div className={styles.titles}>
             <h4 className={styles.title}>
               {onOpen ? (
