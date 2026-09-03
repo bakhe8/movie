@@ -1,8 +1,11 @@
 import numpy as np
 
-from src.ranker import PlackettLuceRanker
+from src.enrichment import V2_FEATURES
+from src.ranker import PlackettLuceRanker, compute_nll
 from src.training import (
     FINGERPRINT_DIMENSIONS,
+    FINGERPRINT_V1_DIMENSIONS,
+    REGULARIZATION_GRID,
     compute_genre_diversity,
     compute_language_diversity,
     fingerprint_vector,
@@ -28,7 +31,14 @@ def make_triads(n: int):
 
 
 def complete_fingerprint(**overrides):
-    fingerprint = {dim: index / 10 for index, dim in enumerate(FINGERPRINT_DIMENSIONS)}
+    # V1 keys are flat at the top level; V2 keys are namespaced "family.feature"
+    # and live nested under fingerprint["v2"]["features"] instead
+    # (FINGERPRINT_SCHEMA.md §3.1) -- mirrors the real published shape, not a
+    # flat 28-key dict, so fingerprint_vector()'s two read paths are both
+    # actually exercised.
+    v1_count = len(FINGERPRINT_V1_DIMENSIONS)
+    fingerprint = {dim: index / 10 for index, dim in enumerate(FINGERPRINT_V1_DIMENSIONS)}
+    fingerprint["v2"] = {"features": {dim: (v1_count + index) / 10 for index, dim in enumerate(V2_FEATURES)}}
     fingerprint.update(overrides)
     return fingerprint
 
@@ -68,6 +78,30 @@ class TestFingerprintVector:
         vector = fingerprint_vector(complete_fingerprint(themes=["loss"], confidence={}))
 
         assert len(vector) == len(FINGERPRINT_DIMENSIONS)
+
+    # A title enriched with V1 only (no "v2" block at all -- true of the
+    # original 15 seed titles today) is incomplete under the 28-dimension
+    # vector, the same "unknown, not zero" treatment a missing V1 dimension
+    # always got.
+    def test_missing_v2_block_entirely_makes_the_fingerprint_unknown(self):
+        fingerprint = complete_fingerprint()
+        del fingerprint["v2"]
+
+        assert fingerprint_vector(fingerprint) is None
+
+    def test_missing_one_v2_dimension_makes_the_fingerprint_unknown(self):
+        fingerprint = complete_fingerprint()
+        del fingerprint["v2"]["features"]["tone.irony"]
+
+        assert fingerprint_vector(fingerprint) is None
+
+    def test_reads_v2_dimensions_from_the_nested_features_block(self):
+        fingerprint = complete_fingerprint()
+        fingerprint["v2"]["features"]["tone.irony"] = 0.42
+
+        vector = fingerprint_vector(fingerprint)
+
+        assert vector[FINGERPRINT_DIMENSIONS.index("tone.irony")] == 0.42
 
 
 class TestRankingToIndices:
@@ -249,3 +283,64 @@ class TestTrainAndEvaluate:
         np.testing.assert_array_equal(first.weights, second.weights)
         assert first.held_out_nll == second.held_out_nll
         assert first.held_out_pairwise_accuracy == second.held_out_pairwise_accuracy
+
+
+class TestChosenRegularization:
+    # Blueprint §7.1's protection for theta^T*phi: a single L2 strength
+    # picked per training run from REGULARIZATION_GRID by held-out NLL, not
+    # a fixed constant.
+    def test_below_five_triads_defaults_to_the_grid_first_entry(self):
+        triads, fingerprints = make_triads(4)
+
+        result = train_and_evaluate(triads, fingerprints)
+
+        assert result.chosen_regularization == REGULARIZATION_GRID[0]
+
+    def test_at_or_above_the_floor_picks_a_grid_value_by_held_out_nll(self):
+        triads, fingerprints = make_triads(10)
+
+        result = train_and_evaluate(triads, fingerprints)
+
+        assert result.chosen_regularization in REGULARIZATION_GRID
+        # The reported held-out NLL must actually be the chosen candidate's
+        # own NLL, not some other candidate's -- verified independently
+        # rather than trusting the loop that computed both together.
+        held_out_triads = triads[-2:]
+        train_triads = triads[:-2]
+        check_ranker = PlackettLuceRanker(1, regularization=result.chosen_regularization)
+        check_ranker.fit(train_triads, fingerprints, population_priors=None)
+
+        assert compute_nll(held_out_triads, fingerprints, check_ranker) == result.held_out_nll
+
+    def test_picks_the_grid_value_with_the_lowest_held_out_nll_among_all_candidates(self):
+        triads, fingerprints = make_triads(10)
+        held_out_triads = triads[-2:]
+        train_triads = triads[:-2]
+
+        every_candidate_nll = {}
+        for candidate in REGULARIZATION_GRID:
+            candidate_ranker = PlackettLuceRanker(1, regularization=candidate)
+            candidate_ranker.fit(train_triads, fingerprints, population_priors=None)
+            every_candidate_nll[candidate] = compute_nll(held_out_triads, fingerprints, candidate_ranker)
+        best_candidate = min(every_candidate_nll, key=every_candidate_nll.get)
+
+        result = train_and_evaluate(triads, fingerprints)
+
+        assert result.chosen_regularization == best_candidate
+
+    def test_deterministic_for_the_same_events(self):
+        triads, fingerprints = make_triads(10)
+
+        first = train_and_evaluate(triads, fingerprints)
+        second = train_and_evaluate(triads, fingerprints)
+
+        assert first.chosen_regularization == second.chosen_regularization
+
+    def test_serving_weights_are_fit_with_the_chosen_regularization_not_a_fixed_default(self):
+        triads, fingerprints = make_triads(10)
+
+        result = train_and_evaluate(triads, fingerprints)
+
+        check_ranker = PlackettLuceRanker(1, regularization=result.chosen_regularization)
+        check_ranker.fit(triads, fingerprints, population_priors=None)
+        np.testing.assert_allclose(result.weights, check_ranker.weights)

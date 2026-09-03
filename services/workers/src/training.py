@@ -12,6 +12,7 @@ import psycopg2
 import psycopg2.extras
 from dotenv import load_dotenv
 
+from .enrichment import V2_FEATURES
 from .ranker import PlackettLuceRanker, compute_nll, compute_pairwise_accuracy
 
 # Without this, psycopg2 has no typecaster for uuid[] (unlike scalar uuid,
@@ -24,7 +25,7 @@ psycopg2.extras.register_uuid()
 
 TriadEvent = Tuple[Tuple[str, str, str], List[int]]
 
-FINGERPRINT_DIMENSIONS = (
+FINGERPRINT_V1_DIMENSIONS = (
     "pacing",
     "rhythmVariance",
     "ambiguity",
@@ -39,21 +40,48 @@ FINGERPRINT_DIMENSIONS = (
     "soundscapeComplexity",
     "colorSaturation",
 )
-MODEL_VERSION = "plackett-luce-v1"
+# V2_FEATURES (imported from enrichment.py, the single source of truth for
+# the 15 namespaced "family.feature" keys, FINGERPRINT_SCHEMA.md §3.1) reads
+# only, never modified here -- V1 first, then V2 in enrichment.py's own
+# order, matching how they were proposed (DEMO_DATA_PLAN_2026-09-03.md §7.2).
+FINGERPRINT_DIMENSIONS = FINGERPRINT_V1_DIMENSIONS + V2_FEATURES
+MODEL_VERSION = "plackett-luce-v2"
+
+# Held-out-chosen L2 strength for theta^T*phi (blueprint §7.1's protection
+# for that term: "regularization ... before showing a tendency"). A single
+# scalar picked per training run, not a fixed constant and not a separate,
+# untested V2-block penalty -- BP §7.1 names general regularization for this
+# term, not a V1-vs-V2 split, and a real 50-round evaluation against a
+# genuine human-derived ranking (not a synthetic persona) already validated
+# this exact adaptive approach: 0.1 held up at 25 rounds, 0.01 was better at
+# 50 (DEMO_DATA_PLAN_2026-09-03.md §7.2) -- precisely the situation an
+# adaptive, held-out-chosen value is for, rather than guessing one number.
+REGULARIZATION_GRID = (0.01, 0.03, 0.1, 0.3)
 
 
 def fingerprint_vector(fingerprint: dict[str, Any]) -> np.ndarray | None:
     """
     Order a stored fingerprint into the model's dimension order.
 
+    V1 keys are read at the top level; V2 keys are namespaced "family.feature"
+    and live nested under fingerprint["v2"]["features"] instead
+    (FINGERPRINT_SCHEMA.md §3.1) -- the two sub-shapes are read into one flat
+    28-dimension vector here so nothing past this function needs to know a
+    fingerprint has two different internal shapes.
+
     Returns None when any dimension is missing, None, or not a finite number:
     absence means unknown, never zero (blueprint §6, §11.3; ADR-19), and a
     triad with an incompletely described title is excluded from training rather
-    than fitted against fabricated values.
+    than fitted against fabricated values. A title enriched with V1 only (no
+    "v2" block yet -- true of the original 15 seed titles) is therefore
+    incomplete under the 28-dimension vector, the same way a title missing
+    even one V1 dimension always was.
     """
+    v2 = fingerprint.get("v2") or {}
+    v2_features = v2.get("features") or {}
     values = []
     for dimension in FINGERPRINT_DIMENSIONS:
-        value = fingerprint.get(dimension)
+        value = v2_features.get(dimension) if "." in dimension else fingerprint.get(dimension)
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not np.isfinite(value):
             return None
         values.append(float(value))
@@ -118,6 +146,12 @@ class TrainingResult:
     standard_errors: Optional[np.ndarray]
     training_genre_diversity: Optional[int]
     training_language_diversity: Optional[int]
+    # The L2 strength actually used to fit the served weights -- REGULARIZATION_GRID's
+    # default (first entry) below the 5-triad floor, held-out-chosen above it.
+    # Diagnostic only, not persisted (RANKING_ALGORITHM.md/ADR-22's determinism
+    # only requires the same events reproduce the same choice, which a fixed
+    # grid + argmin already guarantees).
+    chosen_regularization: float
 
 
 def train_and_evaluate(
@@ -157,25 +191,41 @@ def train_and_evaluate(
     standard_errors: Optional[np.ndarray] = None
     training_genre_diversity: Optional[int] = None
     training_language_diversity: Optional[int] = None
+    # Below the 5-triad floor there's no held-out slice to choose from --
+    # default to the grid's first (smallest, most permissive) entry, same
+    # spirit as every other held-out-gated diagnostic here reporting nothing
+    # meaningful yet rather than an arbitrary guess.
+    chosen_regularization = REGULARIZATION_GRID[0]
 
     if n >= 5:
         held_out_triad_count = max(1, n // 5)  # floor(0.2n), exact since 0.2 == 1/5
         train_triads = complete_triads[:-held_out_triad_count]
         held_out_triads = complete_triads[-held_out_triad_count:]
 
-        # Fresh instance: PlackettLuceRanker.fit() only zero-initializes when
-        # self.weights is None, so reusing an instance across two fits would
-        # start the second one from the first one's result, breaking the
-        # deterministic-zero-init guarantee (ADR-22) for this eval fit.
-        eval_ranker = PlackettLuceRanker(fingerprint_dim)
-        eval_ranker.fit(train_triads, fingerprints, population_priors=None)
-        held_out_nll = compute_nll(held_out_triads, fingerprints, eval_ranker)
-        held_out_pairwise_accuracy = compute_pairwise_accuracy(held_out_triads, fingerprints, eval_ranker)
+        # Try every candidate L2 strength on the same train/held-out split and
+        # keep the one with the lowest held-out NLL -- the actual predictive
+        # fit (blueprint §16.2), not the training objective, which trivially
+        # prefers the weakest regularization. Fresh instance per candidate:
+        # PlackettLuceRanker.fit() only zero-initializes when self.weights is
+        # None, so reusing one across fits would start each from the last
+        # one's result, breaking the deterministic-zero-init guarantee
+        # (ADR-22) for every candidate after the first.
+        best_ranker: Optional[PlackettLuceRanker] = None
+        for candidate in REGULARIZATION_GRID:
+            candidate_ranker = PlackettLuceRanker(fingerprint_dim, regularization=candidate)
+            candidate_ranker.fit(train_triads, fingerprints, population_priors=None)
+            candidate_nll = compute_nll(held_out_triads, fingerprints, candidate_ranker)
+            if held_out_nll is None or candidate_nll < held_out_nll:
+                held_out_nll = candidate_nll
+                best_ranker = candidate_ranker
+                chosen_regularization = candidate
+
+        held_out_pairwise_accuracy = compute_pairwise_accuracy(held_out_triads, fingerprints, best_ranker)
 
         training_genre_diversity = compute_genre_diversity(complete_triads, genres or {})
         training_language_diversity = compute_language_diversity(complete_triads, languages or {})
 
-    serving_ranker = PlackettLuceRanker(fingerprint_dim)
+    serving_ranker = PlackettLuceRanker(fingerprint_dim, regularization=chosen_regularization)
     # No population_priors source exists yet (no shared/cross-user popularity or
     # critic-prior model in this codebase) -- explicit None rather than omitting
     # the argument, so this gap stays visible instead of silently defaulting away.
@@ -196,6 +246,7 @@ def train_and_evaluate(
         standard_errors=standard_errors,
         training_genre_diversity=training_genre_diversity,
         training_language_diversity=training_language_diversity,
+        chosen_regularization=chosen_regularization,
     )
 
 
@@ -315,7 +366,8 @@ def main() -> None:
     if result.held_out_triad_count > 0:
         print(
             f"Held out {result.held_out_triad_count} most recent triads for evaluation: "
-            f"NLL={result.held_out_nll:.4f}, pairwise accuracy={result.held_out_pairwise_accuracy:.2%}"
+            f"NLL={result.held_out_nll:.4f}, pairwise accuracy={result.held_out_pairwise_accuracy:.2%}, "
+            f"chosen regularization={result.chosen_regularization}"
         )
         print(
             f"Training evidence spanned {result.training_genre_diversity} distinct genre(s) and "

@@ -5,6 +5,7 @@ import { QueryDeepPartialEntity, Repository } from 'typeorm';
 import { Profile } from '../../entities/profile.entity';
 import { Recommendation } from '../../entities/recommendation.entity';
 import { Title } from '../../entities/title.entity';
+import { FINGERPRINT_V2_DIMENSIONS } from '../../entities/title-fingerprint.type';
 import { UserModelSnapshot } from '../../entities/user-model-snapshot.entity';
 import { UserTitleState } from '../../entities/user-title-state.entity';
 
@@ -14,7 +15,7 @@ import { UserTitleState } from '../../entities/user-title-state.entity';
 // mirrors TriadsService's TRIAD_POLICY_VERSION.
 const RECOMMENDATION_POLICY_VERSION = 'personal-fit-greedy-v1';
 
-const FINGERPRINT_DIMENSIONS = [
+const FINGERPRINT_V1_DIMENSIONS = [
   'pacing',
   'rhythmVariance',
   'ambiguity',
@@ -29,6 +30,12 @@ const FINGERPRINT_DIMENSIONS = [
   'soundscapeComplexity',
   'colorSaturation',
 ] as const;
+// First V2 family pass (ADR-69, FINGERPRINT_SCHEMA.md §3.1): 13 V1 + 15
+// V2 dimensions, V1 first -- matches services/workers/src/training.py's
+// FINGERPRINT_DIMENSIONS exactly (both trainer and scorer must agree on
+// dimension order, since UserModelSnapshot.weights is a plain array
+// positioned by this order, not a keyed map).
+const FINGERPRINT_DIMENSIONS = [...FINGERPRINT_V1_DIMENSIONS, ...FINGERPRINT_V2_DIMENSIONS] as const;
 
 export type ConfidenceBand = 'initial' | 'likely' | 'strong' | 'inconclusive';
 export type RecommendationTrack = 'safe' | 'discovery' | 'outside_usual';
@@ -331,9 +338,21 @@ export class RecommendationsService {
     return { features, evidenceSource: 'individual' };
   }
 
+  // V1 dimensions are flat top-level properties; V2 dimensions are
+  // namespaced "family.feature" and live nested under fingerprint.v2.features
+  // instead (FINGERPRINT_SCHEMA.md §3.1) -- both are read into one flat
+  // 28-value vector here (mirrors training.py's fingerprint_vector()) so
+  // nothing past this method needs to know a fingerprint has two different
+  // internal shapes. A title enriched with V1 only (no v2 block, true of the
+  // original 15 seed titles) simply reports those 15 dimensions as unknown,
+  // the same "absence is unknown, not zero" imputation any missing V1
+  // dimension already gets (ADR-19) -- scoring tolerates it; only training
+  // requires the complete vector.
   private fingerprintVector(fingerprint: Title['fingerprint']): FingerprintVector {
+    const v1 = fingerprint as unknown as Record<string, unknown> | null | undefined;
+    const v2Features = fingerprint?.v2?.features as Record<string, number> | undefined;
     return FINGERPRINT_DIMENSIONS.map((dimension) => {
-      const value = fingerprint?.[dimension];
+      const value = dimension.includes('.') ? v2Features?.[dimension] : v1?.[dimension];
       return typeof value === 'number' && Number.isFinite(value) ? value : null;
     });
   }

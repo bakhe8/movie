@@ -8,7 +8,7 @@ import { UserModelSnapshot } from '../../entities/user-model-snapshot.entity';
 import { UserTitleState } from '../../entities/user-title-state.entity';
 import { RecommendationsService } from './recommendations.service';
 
-const FINGERPRINT_DIMENSIONS = [
+const FINGERPRINT_V1_DIMENSIONS = [
   'pacing',
   'rhythmVariance',
   'ambiguity',
@@ -23,17 +23,51 @@ const FINGERPRINT_DIMENSIONS = [
   'soundscapeComplexity',
   'colorSaturation',
 ];
+// ADR-69: 15 namespaced "family.feature" dimensions, matching
+// title-fingerprint.type.ts's FINGERPRINT_V2_DIMENSIONS exactly.
+const FINGERPRINT_V2_DIMENSIONS = [
+  'narrative.revelation',
+  'narrative.perspective',
+  'narrative.unreliability',
+  'tone.irony',
+  'tone.unease',
+  'tone.catharsis',
+  'tone.compassion',
+  'characters.agency',
+  'characters.moralAmbiguity',
+  'characters.transformation',
+  'characters.relationshipCentrality',
+  'ending.openness',
+  'ending.twist',
+  'ending.justice',
+  'ending.optimism',
+];
+const FINGERPRINT_DIMENSIONS = [...FINGERPRINT_V1_DIMENSIONS, ...FINGERPRINT_V2_DIMENSIONS];
 
+// V1 keys flat at the top level, V2 keys nested under fingerprint.v2.features
+// -- the real published shape (FINGERPRINT_SCHEMA.md §3.1), not a flat
+// 28-key object, so fingerprintVector()'s two read paths are both actually
+// exercised by every existing test that builds a "complete" fingerprint.
 function zeroFingerprint(overrides: Record<string, number> = {}) {
-  return FINGERPRINT_DIMENSIONS.reduce<Record<string, number>>((acc, dim) => {
-    acc[dim] = overrides[dim] ?? 0;
-    return acc;
-  }, {});
+  const fingerprint: Record<string, unknown> = {};
+  for (const dim of FINGERPRINT_V1_DIMENSIONS) {
+    fingerprint[dim] = overrides[dim] ?? 0;
+  }
+  const features: Record<string, number> = {};
+  for (const dim of FINGERPRINT_V2_DIMENSIONS) {
+    features[dim] = overrides[dim] ?? 0;
+  }
+  fingerprint.v2 = { features };
+  return fingerprint;
 }
 
-function withoutDimension(fingerprint: Record<string, number>, dimension: string) {
-  const copy = { ...fingerprint };
-  delete copy[dimension];
+function withoutDimension(fingerprint: Record<string, unknown>, dimension: string) {
+  const copy = JSON.parse(JSON.stringify(fingerprint)) as Record<string, unknown>;
+  if (dimension.includes('.')) {
+    delete (copy.v2 as { features: Record<string, unknown> }).features[dimension];
+  } else {
+    delete copy[dimension];
+  }
   return copy;
 }
 
@@ -596,7 +630,7 @@ describe('RecommendationsService', () => {
     // middle -- had it been zero-filled it would have come last with score 0.
     expect(result.map((item) => item.title.id)).toEqual(['warm', 'warmth-unknown', 'cold']);
     expect(result[1].personalFitScore).toBeCloseTo(0.5);
-    expect(result[1].fingerprintCoverage).toBeCloseTo(12 / 13);
+    expect(result[1].fingerprintCoverage).toBeCloseTo(27 / 28);
   });
 
   it('demotes the confidence band one step for a title with unknown dimensions', async () => {
@@ -630,5 +664,70 @@ describe('RecommendationsService', () => {
     const result = await service.findForProfile('user-1', 'profile-1', 10);
 
     expect(result.map((item) => item.title.id)).toEqual(['described']);
+  });
+
+  // ADR-69: the second half of the 28-dimension vector is namespaced and
+  // nested under fingerprint.v2.features rather than flat like V1.
+  describe('V2 fingerprint families (ADR-69)', () => {
+    it('scores a title on a V2 dimension the same way it scores a V1 one', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue({
+        weights: FINGERPRINT_DIMENSIONS.map((dim) => (dim === 'tone.irony' ? 1 : 0)),
+        biasTerms: {},
+        modelVersion: 'test-v2',
+        trainingTriadCount: 25,
+      });
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [
+        { id: 'ironic', fingerprint: zeroFingerprint({ 'tone.irony': 0.9 }) },
+        { id: 'earnest', fingerprint: zeroFingerprint({ 'tone.irony': 0.1 }) },
+      ] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+      expect(result.map((item) => item.title.id)).toEqual(['ironic', 'earnest']);
+    });
+
+    it('imputes a whole missing v2 block with the pool mean rather than excluding the title (ADR-19)', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot());
+      statesRepository.find.mockResolvedValue([]);
+      const v1Only = { schemaVersion: 'film-fingerprint-v1', ...Object.fromEntries(FINGERPRINT_V1_DIMENSIONS.map((dim) => [dim, dim === 'warmth' ? 0.6 : 0])) };
+      const titles = [
+        { id: 'v1-only', fingerprint: v1Only },
+        { id: 'v1-and-v2', fingerprint: zeroFingerprint({ warmth: 0.6 }) },
+      ] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+      // A title with no "v2" block at all (true of the original 15 seed
+      // titles today) is still scored -- it is not dropped the way a
+      // fingerprint with zero known dimensions is (the test above this one).
+      expect(result.map((item) => item.title.id).sort()).toEqual(['v1-and-v2', 'v1-only']);
+      const v1OnlyResult = result.find((item) => item.title.id === 'v1-only');
+      expect(v1OnlyResult?.fingerprintCoverage).toBeCloseTo(FINGERPRINT_V1_DIMENSIONS.length / FINGERPRINT_DIMENSIONS.length);
+    });
+
+    it('can cite a V2 dimension in the reason (blueprint §9.4)', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue({
+        weights: FINGERPRINT_DIMENSIONS.map((dim) => (dim === 'ending.optimism' ? 1 : 0)),
+        biasTerms: {},
+        modelVersion: 'test-v2',
+        trainingTriadCount: 25,
+      });
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [
+        { id: 'hopeful', fingerprint: zeroFingerprint({ 'ending.optimism': 0.9 }) },
+        { id: 'bitter', fingerprint: zeroFingerprint({ 'ending.optimism': 0.1 }) },
+      ] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+      expect(result[0].reason.features).toEqual([{ key: 'ending.optimism', direction: 'higher' }]);
+    });
   });
 });

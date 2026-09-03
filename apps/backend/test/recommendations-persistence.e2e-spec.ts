@@ -10,7 +10,7 @@ import { Title } from '../src/entities/title.entity';
 import { UserModelSnapshot } from '../src/entities/user-model-snapshot.entity';
 import { UserTitleState } from '../src/entities/user-title-state.entity';
 
-const FINGERPRINT_DIMENSIONS = [
+const FINGERPRINT_V1_DIMENSIONS = [
   'pacing',
   'rhythmVariance',
   'ambiguity',
@@ -25,13 +25,44 @@ const FINGERPRINT_DIMENSIONS = [
   'soundscapeComplexity',
   'colorSaturation',
 ] as const;
+// ADR-69: matches title-fingerprint.type.ts's FINGERPRINT_V2_DIMENSIONS.
+const FINGERPRINT_V2_DIMENSIONS = [
+  'narrative.revelation',
+  'narrative.perspective',
+  'narrative.unreliability',
+  'tone.irony',
+  'tone.unease',
+  'tone.catharsis',
+  'tone.compassion',
+  'characters.agency',
+  'characters.moralAmbiguity',
+  'characters.transformation',
+  'characters.relationshipCentrality',
+  'ending.openness',
+  'ending.twist',
+  'ending.justice',
+  'ending.optimism',
+] as const;
+const FINGERPRINT_DIMENSIONS = [...FINGERPRINT_V1_DIMENSIONS, ...FINGERPRINT_V2_DIMENSIONS] as const;
 
+// V1 keys flat at the top level, V2 keys nested under fingerprint.v2.features
+// -- the real published shape (FINGERPRINT_SCHEMA.md §3.1).
 function fullFingerprint(overrides: Record<string, number> = {}) {
-  const base = FINGERPRINT_DIMENSIONS.reduce<Record<string, number>>((acc, dim) => {
+  const base = FINGERPRINT_V1_DIMENSIONS.reduce<Record<string, number>>((acc, dim) => {
     acc[dim] = overrides[dim] ?? 0.5;
     return acc;
   }, {});
-  return { schemaVersion: 'film-fingerprint-v1' as const, ...base, themes: [], confidence: {} };
+  const features = FINGERPRINT_V2_DIMENSIONS.reduce<Record<string, number>>((acc, dim) => {
+    acc[dim] = overrides[dim] ?? 0.5;
+    return acc;
+  }, {});
+  return {
+    schemaVersion: 'film-fingerprint-v1' as const,
+    ...base,
+    themes: [],
+    confidence: {},
+    v2: { schemaVersion: 'film-fingerprint-v2' as const, features, themes: [], confidence: {} },
+  };
 }
 
 async function registerUser(app: INestApplication, label: string) {

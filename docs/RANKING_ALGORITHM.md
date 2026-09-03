@@ -1,6 +1,6 @@
 # Model Service Specification — Ranking, Selection, Confidence, Attribution
 
-**Status**: Derived from blueprint `§7` (utility model, Plackett–Luce, time layers, exceptions, shared latent space, silent vs disclosed use), `§8` (triad selection policy), `§9` (confidence and explanation), `§10.3` (public quality vs personal fit), `§14.1` (candidate generation and reranking), `§16` (evaluation). Decisions: ADR-3, ADR-8, ADR-13, ADR-19–ADR-22, ADR-25, ADR-59, ADR-62, ADR-64.
+**Status**: Derived from blueprint `§7` (utility model, Plackett–Luce, time layers, exceptions, shared latent space, silent vs disclosed use), `§8` (triad selection policy), `§9` (confidence and explanation), `§10.3` (public quality vs personal fit), `§14.1` (candidate generation and reranking), `§16` (evaluation). Decisions: ADR-3, ADR-8, ADR-13, ADR-19–ADR-22, ADR-25, ADR-59, ADR-62, ADR-64, ADR-69.
 **Version**: 2.0 — 2026-09-03 (rewrite of the 2025-dated implementation guide; the base Plackett–Luce math is unchanged, everything around it now matches the blueprint).
 
 This is the contract for `services/workers` (the Python model service). What exists today is in §16.
@@ -41,7 +41,7 @@ $$\hat\theta_u = \arg\min_\theta \; -\sum_{t \in \mathcal{T}_u^{train}} \ell_t(\
 - Solver: BFGS (`scipy.optimize.minimize`) with the log-sum-exp trick; gradient of one event is $(\phi_A - \mathbb{E}_{S_{ABC}}[\phi]) + (\phi_B - \mathbb{E}_{S_{BC}}[\phi])$.
 - Initialization: $\theta_0 = 0$ (deterministic; the objective is convex, so nothing is lost, and reproducibility is an Alpha DoD item, `BP §18.1`). Implemented in `ranker.py`; a test asserts two fits on the same events give identical weights.
 - $b(m)$ is fixed during the fit (not optimized), supplied by the population layer.
-- Hyperparameters ($\lambda$, $\lambda_\delta$, `gtol`, `maxiter`) are part of `model_versions.thresholds` and tuned on held-out NLL, never hard-coded in docs.
+- Hyperparameters ($\lambda$, $\lambda_\delta$, `gtol`, `maxiter`) are part of `model_versions.thresholds` and tuned on held-out NLL, never hard-coded in docs. Implemented 2026-09-04 for $\lambda$ (ADR-69): `train_and_evaluate()` fits every candidate in a small grid (`0.01, 0.03, 0.1, 0.3`) on the same train/held-out split and keeps the one with the lowest held-out NLL, refitting the served weights with that value — below the 5-triad floor it defaults to the grid's smallest entry. Not yet persisted to `model_versions.thresholds`: that table exists (M4) but nothing writes to it yet (a separate, still-open gap this didn't need to close).
 
 ### 2.2 Per-profile calibration (once the shared space exists, `BP §7.5`)
 
@@ -66,7 +66,7 @@ Timestamps (`shownAt`, `answeredAt`) are mandatory on every event now, even thou
 
 ## 5. Unknown features (`BP §11.3`, ADR-19)
 
-Missing feature = unknown. Training excludes triads with incomplete vectors; scoring imputes the candidate-pool mean and applies a fingerprint-quality penalty to the confidence input (one band down, plus a `fingerprintCoverage` field on every item); reasons never cite an unknown feature. Implemented 2026-09-03 in the trainer, the ranker (which refuses undescribed titles) and the scorer; zero-filling is gone.
+Missing feature = unknown. Training excludes triads with incomplete vectors; scoring imputes the candidate-pool mean and applies a fingerprint-quality penalty to the confidence input (one band down, plus a `fingerprintCoverage` field on every item); reasons never cite an unknown feature. Implemented 2026-09-03 in the trainer, the ranker (which refuses undescribed titles) and the scorer; zero-filling is gone. Since 2026-09-04 (ADR-69), the vector is 28 dimensions (13 V1 + 15 V2 families, `FINGERPRINT_SCHEMA.md` §3.1) and "complete" means all 28 known — a title enriched with V1 only (no `v2` block, true of the original 15 seed titles) is a valid scoring candidate (imputed like any missing dimension) but excludes any triad it appears in from training until it gets one.
 
 ## 6. Training protocol (`BP §16.1`, ADR-22)
 
