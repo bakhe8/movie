@@ -289,7 +289,11 @@ export function WorkScreen({
               {title.description}
             </p>
           )}
-          {title.posterSource?.attribution && <p className={styles.credit}>{title.posterSource.attribution}</p>}
+          {title.posterSource?.attribution && (
+            <p className={styles.credit} dir="auto">
+              {title.posterSource.attribution}
+            </p>
+          )}
         </div>
       </div>
 

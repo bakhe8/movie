@@ -254,6 +254,16 @@
   .poster {
     width: 64px;
   }
+
+  /* Four separate values, one row: the card is wide enough to keep each
+     cell readable (the library's two-cell variant keeps two). */
+  .cells {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .cellsTwo {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 /* Library ranking variant: two cells side by side (position + confidence). */
