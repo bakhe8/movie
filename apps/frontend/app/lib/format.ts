@@ -36,3 +36,11 @@ export function formatPersonalFit(position: number, count: number): PersonalFitD
 export function formatNumber(value: number, lang: Lang): string {
   return new Intl.NumberFormat(lang === 'ar' ? 'ar-SA' : 'en-US').format(value);
 }
+
+// Gregorian in both languages (ar-SA would default to the Umm al-Qura
+// calendar), digits following the locale like formatNumber.
+export function formatDate(iso: string, lang: Lang): string {
+  return new Intl.DateTimeFormat(lang === 'ar' ? 'ar-SA-u-ca-gregory' : 'en-US', { dateStyle: 'medium' }).format(
+    new Date(iso),
+  );
+}

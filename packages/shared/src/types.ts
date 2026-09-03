@@ -152,6 +152,15 @@ export interface Triad {
 export type ConfidenceBand = 'initial' | 'likely' | 'strong' | 'inconclusive';
 export type RecommendationTrack = 'safe' | 'discovery' | 'outside_usual';
 
+/** The library's personal ranking (§5.3): watched titles ordered by the latest snapshot, positions only (ADR-33). */
+export interface LibraryRankingItem {
+  title: Title;
+  position: number;
+  confidenceBand: ConfidenceBand;
+  fingerprintCoverage: number;
+  modelVersion: string;
+}
+
 export interface Recommendation {
   title: Title;
   personalFitScore: number;

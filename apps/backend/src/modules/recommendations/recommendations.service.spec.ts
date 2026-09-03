@@ -89,6 +89,80 @@ describe('RecommendationsService', () => {
     );
   });
 
+  // The library's personal ranking (blueprint §5.3, SPECIFICATION §5.4): the
+  // same scoring path, pointed at the watched set instead of the unwatched one,
+  // and exposed as positions only (ADR-33).
+  describe('rankLibrary', () => {
+    it("throws 404 (not 403) for another user's profile", async () => {
+      profilesRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.rankLibrary('attacker-user', 'someone-elses-profile')).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('refuses to rank before the preference model has been trained', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.rankLibrary('user-1', 'profile-1')).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('returns an empty ranking, without querying titles, when nothing is watched', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot());
+      statesRepository.find.mockResolvedValue([]);
+
+      expect(await service.rankLibrary('user-1', 'profile-1')).toEqual([]);
+      expect(titlesRepository.createQueryBuilder).not.toHaveBeenCalled();
+    });
+
+    it('ranks only the watched, fingerprinted titles by the model, as positions without a score', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot());
+      statesRepository.find.mockResolvedValue([{ titleId: 'a' }, { titleId: 'b' }, { titleId: 'c' }]);
+      const titles = [
+        { id: 'a', fingerprint: zeroFingerprint({ warmth: 0.2 }) },
+        { id: 'b', fingerprint: zeroFingerprint({ warmth: 0.9 }) },
+        { id: 'c', fingerprint: zeroFingerprint({ warmth: 0.5 }) },
+      ] as unknown as Title[];
+      const builder = queryBuilderMock(titles);
+      titlesRepository.createQueryBuilder.mockReturnValue(builder);
+
+      const result = await service.rankLibrary('user-1', 'profile-1');
+
+      // Watched set in, not out -- the mirror image of the recommendation query.
+      expect(builder.andWhere).toHaveBeenCalledWith('title.id IN (:...watchedTitleIds)', {
+        watchedTitleIds: ['a', 'b', 'c'],
+      });
+      expect(result.map((item) => [item.title.id, item.position])).toEqual([
+        ['b', 1],
+        ['c', 2],
+        ['a', 3],
+      ]);
+      // A library ranking is a prediction surface: ordinal positions only, the
+      // score never leaves the server (ADR-33).
+      expect(result[0]).not.toHaveProperty('personalFitScore');
+      expect(result[0].confidenceBand).toBe('strong');
+      expect(result[0].modelVersion).toBe('test-v1');
+    });
+
+    it('demotes the band one step for a watched title with an unknown dimension (ADR-19)', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot());
+      statesRepository.find.mockResolvedValue([{ titleId: 'full' }, { titleId: 'partial' }]);
+      const titles = [
+        { id: 'full', fingerprint: zeroFingerprint({ warmth: 0.9 }) },
+        { id: 'partial', fingerprint: withoutDimension(zeroFingerprint({ warmth: 0.8 }), 'pacing') },
+      ] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const result = await service.rankLibrary('user-1', 'profile-1');
+
+      expect(result.find((item) => item.title.id === 'full')?.confidenceBand).toBe('strong');
+      expect(result.find((item) => item.title.id === 'partial')?.confidenceBand).toBe('likely');
+      expect(result.find((item) => item.title.id === 'partial')?.fingerprintCoverage).toBeLessThan(1);
+    });
+  });
+
   it('refuses to recommend before the preference model has been trained', async () => {
     profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
     snapshotsRepository.findOne.mockResolvedValue(null);

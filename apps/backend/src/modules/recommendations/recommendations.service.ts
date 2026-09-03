@@ -58,6 +58,26 @@ export interface RecommendationResult {
   modelVersion: string;
 }
 
+// The library's personal ranking (blueprint §5.3 "ترتيب شخصي", SPECIFICATION
+// §5.4): the profile's watched, fingerprinted titles ordered by the same
+// snapshot that ranks recommendations. Positions only -- the score is
+// deliberately not exposed, because a library ranking is a prediction surface
+// and is shown as ordinal positions, never as numbers (ADR-33).
+export interface LibraryRankingItem {
+  title: Title;
+  position: number;
+  confidenceBand: ConfidenceBand;
+  fingerprintCoverage: number;
+  modelVersion: string;
+}
+
+interface ScoredTitle {
+  title: Title;
+  personalFitScore: number;
+  confidenceBand: ConfidenceBand;
+  fingerprintCoverage: number;
+}
+
 // null = unknown, never coerced to 0 (blueprint §6, §11.3).
 type FingerprintVector = (number | null)[];
 
@@ -75,6 +95,60 @@ export class RecommendationsService {
   ) {}
 
   async findForProfile(userId: string, profileId: string, limit: number): Promise<RecommendationResult[]> {
+    const snapshot = await this.loadSnapshot(userId, profileId);
+
+    // Only titles the profile has actually watched leave the candidate pool. A
+    // `not_watched` mark means unknown exposure, not a negative signal, so those
+    // titles are exactly the recommendation candidates (blueprint §2.4 principle #3).
+    const excludedTitleIds = await this.watchedTitleIds(profileId);
+    const queryBuilder = this.titlesRepository.createQueryBuilder('title').where('title.fingerprint IS NOT NULL');
+    if (excludedTitleIds.length > 0) {
+      queryBuilder.andWhere('title.id NOT IN (:...excludedTitleIds)', { excludedTitleIds });
+    }
+    const titles = await queryBuilder.getMany();
+
+    return this.scoreTitles(titles, snapshot)
+      .map((scored) => ({
+        title: scored.title,
+        personalFitScore: scored.personalFitScore,
+        publicQualityScore: null,
+        watchabilityScore: null,
+        confidenceBand: scored.confidenceBand,
+        fingerprintCoverage: scored.fingerprintCoverage,
+        track: 'safe' as const,
+        modelVersion: snapshot.modelVersion,
+      }))
+      .slice(0, limit);
+  }
+
+  // The profile's own library ordered by the same model that ranks
+  // recommendations (blueprint §5.3 "ترتيب شخصي"). Only watched titles with a
+  // fingerprint can be placed; the rest of the library is simply absent here.
+  async rankLibrary(userId: string, profileId: string): Promise<LibraryRankingItem[]> {
+    const snapshot = await this.loadSnapshot(userId, profileId);
+
+    const watchedTitleIds = await this.watchedTitleIds(profileId);
+    if (watchedTitleIds.length === 0) {
+      return [];
+    }
+    const titles = await this.titlesRepository
+      .createQueryBuilder('title')
+      .where('title.fingerprint IS NOT NULL')
+      .andWhere('title.id IN (:...watchedTitleIds)', { watchedTitleIds })
+      .getMany();
+
+    return this.scoreTitles(titles, snapshot).map((scored, index) => ({
+      title: scored.title,
+      position: index + 1,
+      confidenceBand: scored.confidenceBand,
+      fingerprintCoverage: scored.fingerprintCoverage,
+      modelVersion: snapshot.modelVersion,
+    }));
+  }
+
+  // Ownership, then the latest snapshot; both surfaces refuse to guess
+  // before a model exists or against a model of the wrong shape.
+  private async loadSnapshot(userId: string, profileId: string): Promise<UserModelSnapshot> {
     const profile = await this.profilesRepository.findOne({ where: { id: profileId, userId } });
     if (!profile) {
       throw new NotFoundException('Profile not found');
@@ -90,21 +164,21 @@ export class RecommendationsService {
     if (snapshot.weights.length !== FINGERPRINT_DIMENSIONS.length) {
       throw new ConflictException('The latest preference model has an incompatible fingerprint dimension');
     }
+    return snapshot;
+  }
 
-    // Only titles the profile has actually watched leave the candidate pool. A
-    // `not_watched` mark means unknown exposure, not a negative signal, so those
-    // titles are exactly the recommendation candidates (blueprint §2.4 principle #3).
+  private async watchedTitleIds(profileId: string): Promise<string[]> {
     const watchedStates = await this.statesRepository.find({
       where: { profileId, state: 'watched' },
       select: { titleId: true },
     });
-    const excludedTitleIds = watchedStates.map((state) => state.titleId);
-    const queryBuilder = this.titlesRepository.createQueryBuilder('title').where('title.fingerprint IS NOT NULL');
-    if (excludedTitleIds.length > 0) {
-      queryBuilder.andWhere('title.id NOT IN (:...excludedTitleIds)', { excludedTitleIds });
-    }
-    const titles = await queryBuilder.getMany();
+    return watchedStates.map((state) => state.titleId);
+  }
 
+  // Score a set of titles against a snapshot and order them best-fit first.
+  // Unknown dimensions are imputed with the mean of this very set (never zero)
+  // and cost one confidence band (ADR-19).
+  private scoreTitles(titles: Title[], snapshot: UserModelSnapshot): ScoredTitle[] {
     const candidates = titles
       .map((title) => ({ title, vector: this.fingerprintVector(title.fingerprint) }))
       // A fingerprint object with no numeric dimension at all is no fingerprint.
@@ -119,16 +193,11 @@ export class RecommendationsService {
         return {
           title,
           personalFitScore: this.personalFitScore(title, vector, poolMeans, snapshot),
-          publicQualityScore: null,
-          watchabilityScore: null,
           confidenceBand: fingerprintCoverage < 1 ? BAND_DEMOTION[baseBand] : baseBand,
           fingerprintCoverage,
-          track: 'safe' as const,
-          modelVersion: snapshot.modelVersion,
         };
       })
-      .sort((left, right) => right.personalFitScore - left.personalFitScore)
-      .slice(0, limit);
+      .sort((left, right) => right.personalFitScore - left.personalFitScore);
   }
 
   private fingerprintVector(fingerprint: Title['fingerprint']): FingerprintVector {

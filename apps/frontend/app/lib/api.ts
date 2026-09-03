@@ -102,6 +102,17 @@ export interface Recommendation {
   modelVersion: string;
 }
 
+// The library's personal ranking (blueprint §5.3): watched titles ordered by
+// the same model that ranks recommendations. Positions only -- the API never
+// sends the score, and the screen never shows a number (ADR-33).
+export interface LibraryRankingItem {
+  title: Title;
+  position: number;
+  confidenceBand: ConfidenceBand;
+  fingerprintCoverage: number;
+  modelVersion: string;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -182,6 +193,9 @@ export const api = {
   getWatchedTitles: (profileId: string) => request<UserTitleState[]>(`/profiles/${profileId}/watched-titles`),
 
   getWatchlist: (profileId: string) => request<UserTitleState[]>(`/profiles/${profileId}/watchlist`),
+
+  // 409 until a model snapshot exists, like recommendations.
+  getLibraryRanking: (profileId: string) => request<LibraryRankingItem[]>(`/profiles/${profileId}/library/ranking`),
 
   getCurrentTriad: (profileId: string) => request<Triad>(`/profiles/${profileId}/triads/current`),
 

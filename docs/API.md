@@ -37,6 +37,7 @@ Verified against `apps/backend/src/modules/**` on 2026-09-03. Every profile-scop
 | GET | `/api/profiles/:profileId/triads` | JWT | — | Triad[] | completed only |
 | POST | `/api/triads/:triadId/rank` | JWT | `{ ranking: string[3] (titleIds, best first), sessionId? }`, header `Idempotency-Key?` (UUID) | Triad | 400 if already completed or `ranking` isn't exactly this triad's own title ids; a repeated `Idempotency-Key` for the same triad returns the original result instead of erroring; reusing one for a different triad is `409` |
 | POST | `/api/triads/:triadId/replace` | JWT | `{ titleId, reason: 'not_watched' \| 'not_remembered' }` | Triad | the two neutral replacement controls (ADR-17): swaps only that item for a random other eligible watched title (never one from the previous completed triad) and redraws `displayOrder`; writes a `triad_replacements` row; `not_watched` sets the title's state to `not_watched` (stays a recommendation candidate), `not_remembered` keeps it watched but clears `triadEligible`; no preference signal. 400 if the triad is not active or `titleId` is not one of its three. Returns `status: 'skipped'` (event still logged with `replacementTitleId: null`) when nothing eligible is left or a 4th replacement is requested on one triad — the client then calls `GET …/triads/current` again |
+| GET | `/api/profiles/:profileId/library/ranking` | JWT | — | LibraryRankingItem[] | the profile's watched, fingerprinted titles ordered by the latest snapshot (`BP §5.3` "ترتيب شخصي"); positions only, the score never leaves the server (ADR-33); same band/demotion rules as recommendations; 409 until a snapshot exists; `[]` when nothing is watched |
 | GET | `/api/profiles/:profileId/recommendations` | JWT | `?limit(≤50, default 10)` | Recommendation[] | 409 until a model snapshot exists; excludes watched titles only (`not_watched` stays a candidate); unknown fingerprint dimensions imputed with the pool mean, never zero; results not persisted |
 
 Response shapes in use (from `apps/frontend/app/lib/api.ts`, which mirrors the entities):
@@ -53,6 +54,7 @@ Recommendation { title, personalFitScore, publicQualityScore|null, watchabilityS
                  confidenceBand: 'initial'|'likely'|'strong'|'inconclusive',
                  fingerprintCoverage: number /* 0–1 share of known dimensions; < 1 costs one band (ADR-19) */,
                  track: 'safe'|'discovery'|'outside_usual', modelVersion }
+LibraryRankingItem { title, position /* 1-based, best fit first */, confidenceBand, fingerprintCoverage, modelVersion }
 ```
 
 Known gaps versus `BP §14` are tracked row-by-row in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md); the target below is the fix.
@@ -160,6 +162,7 @@ Ranking is sent as title ids (not indices), on both the unversioned route and th
 ---
 
 **Changelog**
+- 1.5 (2026-09-03): `GET /api/profiles/:profileId/library/ranking` -- the library's personal ranking, positions only (ADR-33), sharing the recommendation scoring path.
 - 1.4 (2026-09-03): replacement endpoint implemented (ADR-17) -- `POST /api/triads/:triadId/replace`; `UserTitleState` gains `triadEligible`; `GET …/triads/current` draws from eligible titles only and its 400 carries `{ reason: 'need_more_watched', needed }`.
 - 1.3 (2026-09-03): `personalFit` display note cites ADR-33 (verbal confidence, no percentage on any prediction surface).
 - 1.2 (2026-09-03): gap 3 closed -- `POST /api/triads/:triadId/rank` takes title ids (not indices) and an optional `Idempotency-Key`; `Triad` gains `shownAt`, `answeredAt`, `modelVersion`, `idempotencyKey`.
