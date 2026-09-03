@@ -186,7 +186,7 @@ Both new fields are `NULL` below the same 5-triad floor `heldOutTriadCount` alre
 |---|---|---|
 | Enrichment worker diverged from `§15.3`/ADR-23: Chat Completions instead of the Responses API, no `store=false`, hard-coded default model id, Pydantic field `schema_version` vs TypeScript `schemaVersion`, no provenance fields | `enrichment.py` rewritten onto `client.responses.parse()`/`.create()` with `store=False`; `FilmEnrichmentWorker` now requires `OPENAI_FINGERPRINT_MODEL`/`OPENAI_EXPLANATION_MODEL` (raises if unset, no hard-coded default — added to `.env.example`); Pydantic field renamed `schemaVersion`; `generate_fingerprint()` stamps `generatedBy`/`generatedAt`/`modelVersion`/`extractorVersion`/`sourceIds` after the call (the model can't know these about itself) and `licenseStatus: 'unknown'`/`reviewStatus: 'unreviewed'` (honest placeholders — no `source_records`/review queue exists yet, gap 1) | `services/workers/tests/test_enrichment.py` rewritten against the new API shape, 2 new tests (provenance stamping, missing-config error); 28 Python tests pass |
 
-Still open: `§15.4` acceptance tests, and the worker has still never run against the actual catalog (only unit-tested against a mocked client) — both need the rights registry from gap 1 first.
+Still open: `§15.4` acceptance tests need the rights registry from gap 1. The provider itself moved again the same day — see ADR-63: no `OPENAI_API_KEY` was available, so the owner chose Anthropic; `enrichment.py` now runs on `messages.parse()`/`.create()`, `EXTRACTOR_VERSION` is `enrichment-worker-v2`. This did get a real (if tiny) run against the actual catalog on 2026-09-03: of the 300-title demo fixture, 1 title extracted successfully (`claude-opus-5`), 1 failed on a transient `529 overloaded_error`, 298 not yet attempted — see the *Demo catalog fixture* row below.
 
 ## Closed on 2026-09-03 (gap 2 — temporal hold-out in training)
 
@@ -370,10 +370,11 @@ Still open (design, not spec): the visual direction itself (dark cinematic vs. l
 | Monorepo (Next.js, NestJS, Python, shared types) | ✅ | — | ADR-1 |
 | Database schema (PostgreSQL) | 🟡 | ❌ | 8 tables, 9 migrations (the 5th–7th add constraints/columns; the 8th adds `triad_replacements` and `triadEligible`, ADR-17; the 9th adds `profiles.market`/`platforms`, `§4.1`); target set and plan in [SCHEMA.md](SCHEMA.md) §2. pgvector image runs but `embeddings.vector` is `real[]` (`§12.1`) |
 | Docker Compose: Postgres + Redis + disposable `postgres-test` | ✅ | — | |
-| Environment template | ✅ | — | `FRONTEND_URL` not yet in `.env.example`; `OPENAI_FINGERPRINT_MODEL`/`OPENAI_EXPLANATION_MODEL` added 2026-09-03 (gap 9) |
+| Environment template | ✅ | — | `FRONTEND_URL` not yet in `.env.example`; `ANTHROPIC_FINGERPRINT_MODEL`/`ANTHROPIC_EXPLANATION_MODEL` (ADR-63; replaced the `OPENAI_*` pair added 2026-09-03 for gap 9) |
 | Documentation set | ✅ | — | reorganized 2026-09-03; index in [README.md](README.md) |
 | Plackett–Luce ranker (Python) | ✅ | ✅ | `§7.2`: listwise event, not three pairwise comparisons; deterministic init; refuses undescribed titles |
-| Enrichment worker (Python) | ✅ | 🟡 | structured output via the Responses API ✅ (gap 9 closed above); `§15.4` acceptance tests ❌; never run against the actual catalog, only unit-tested |
+| Enrichment worker (Python) | ✅ | 🟡 | structured output, now via Anthropic's Messages API (ADR-63, supersedes the Responses-API close of gap 9 above); `§15.4` acceptance tests ❌; run once for real on 2026-09-03 against 2 of the 300-title demo fixture (1 succeeded, 1 failed on a transient `529`) — see *Demo catalog fixture* below |
+| Demo catalog fixture (300 titles) | 🟡 | — | `fetch-catalog.ts` (WS1, `18db8b9`) and `enrich_catalog.py` (WS2, `47f3219`) are code-complete and tested; of the fixture's 300 titles, 1 has a real extracted fingerprint (`enrichment-worker-v2`, served by `claude-opus-5`), 1 recorded a retryable failure, 298 are unattempted — `apps/backend/src/scripts/fixtures/catalog.demo.enrichment-report.md` |
 | Shared TypeScript types package | ✅ | ✅ | API-aligned types, compiles; not yet consumed by the apps (ADR-1) — see *Frontend ↔ backend boundary* |
 | Makefile | ✅ | — | mirrors npm scripts; `poetry` assumed for Python |
 | CI | ❌ | ❌ | `§12.1` |
