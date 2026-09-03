@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import type { Repository } from 'typeorm';
 import { User } from '../../entities/user.entity';
 import { AuthService } from './auth.service';
 
-vi.mock('bcrypt', () => ({
+vi.mock('bcryptjs', () => ({
   hash: vi.fn(),
   compare: vi.fn(),
 }));
@@ -126,6 +126,34 @@ describe('AuthService', () => {
       usersRepository.findOne.mockResolvedValue(null);
 
       await expect(service.getProfile('missing-id')).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+  });
+
+  describe('validateUser', () => {
+    // JwtStrategy.validate() returns this value as req.user on every guarded
+    // route -- the password hash must never travel with it.
+    it('never returns the password hash', async () => {
+      usersRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        email: 'user@example.com',
+        password: 'hashed-password',
+        firstName: 'A',
+        lastName: 'B',
+        active: true,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+
+      const result = await service.validateUser('user-1');
+
+      expect(result).not.toHaveProperty('password');
+      expect(result).toMatchObject({ id: 'user-1', email: 'user@example.com' });
+    });
+
+    it('returns null when the user id no longer resolves to a user', async () => {
+      usersRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.validateUser('missing-id')).resolves.toBeNull();
     });
   });
 });

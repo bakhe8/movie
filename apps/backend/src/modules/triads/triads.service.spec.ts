@@ -17,6 +17,16 @@ function repoMock() {
   };
 }
 
+function titlesQueryBuilderMock(titles: Title[], poolSize: number) {
+  return {
+    orderBy: vi.fn().mockReturnThis(),
+    take: vi.fn().mockReturnThis(),
+    where: vi.fn().mockReturnThis(),
+    andWhere: vi.fn().mockReturnThis(),
+    getManyAndCount: vi.fn().mockResolvedValue([titles, poolSize]),
+  };
+}
+
 describe('TriadsService', () => {
   let profilesRepository: ReturnType<typeof repoMock>;
   let titlesRepository: ReturnType<typeof repoMock>;
@@ -125,6 +135,41 @@ describe('TriadsService', () => {
 
       await expect(service.getCurrent('user-1', 'profile-1')).rejects.toBeInstanceOf(BadRequestException);
       expect(titlesRepository.createQueryBuilder).not.toHaveBeenCalled();
+    });
+
+    it('returns the winning row instead of a duplicate when it loses a race to create the active triad', async () => {
+      // Two concurrent getCurrent() calls for the same profile can both see
+      // "no active triad" and both attempt to insert one; the DB's partial
+      // unique index (migration AddOneActiveTriadPerProfileConstraint) lets
+      // only one succeed, and the loser must return that row, not error.
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      const winner = { id: 'triad-winner', profileId: 'profile-1', status: 'active' as const };
+      triadsRepository.findOne
+        .mockResolvedValueOnce(null) // no active triad yet, when we first check
+        .mockResolvedValueOnce(winner); // re-fetched after losing the insert race
+      triadsRepository.find.mockResolvedValue([]); // no completed triads
+      statesRepository.find.mockResolvedValue([{ titleId: 't1' }, { titleId: 't2' }, { titleId: 't3' }]);
+      titlesRepository.createQueryBuilder.mockReturnValue(
+        titlesQueryBuilderMock([{ id: 't1' }, { id: 't2' }, { id: 't3' }] as Title[], 3),
+      );
+      triadsRepository.save.mockRejectedValue({ code: '23505' });
+
+      const result = await service.getCurrent('user-1', 'profile-1');
+
+      expect(result).toBe(winner);
+    });
+
+    it('does not swallow a save error unrelated to the unique constraint', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      triadsRepository.findOne.mockResolvedValue(null);
+      triadsRepository.find.mockResolvedValue([]);
+      statesRepository.find.mockResolvedValue([{ titleId: 't1' }, { titleId: 't2' }, { titleId: 't3' }]);
+      titlesRepository.createQueryBuilder.mockReturnValue(
+        titlesQueryBuilderMock([{ id: 't1' }, { id: 't2' }, { id: 't3' }] as Title[], 3),
+      );
+      triadsRepository.save.mockRejectedValue(new Error('connection lost'));
+
+      await expect(service.getCurrent('user-1', 'profile-1')).rejects.toThrow('connection lost');
     });
   });
 

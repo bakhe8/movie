@@ -1,6 +1,11 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, JoinColumn, Index } from 'typeorm';
 import { Profile } from './profile.entity';
 
+// At most one active triad per profile -- TriadsService.getCurrent() checks
+// for an active triad and creates one when there is none, and without this
+// constraint two concurrent requests can both pass that check and both
+// insert a row (migration AddOneActiveTriadPerProfileConstraint).
+@Index('IDX_triads_one_active_per_profile', ['profileId'], { unique: true, where: "status = 'active'" })
 @Entity('triads')
 export class Triad {
   @PrimaryGeneratedColumn('uuid')

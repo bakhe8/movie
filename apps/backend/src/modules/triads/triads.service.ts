@@ -58,21 +58,40 @@ export class TriadsService {
 
     const titleIds = titles.map((title) => title.id);
 
-    return this.triadsRepository.save(
-      this.triadsRepository.create({
-        profileId,
-        titleIds,
-        // Shuffled independently of titleIds so position bias in the UI can
-        // be measured and corrected for (blueprint section 4.3).
-        displayOrder: this.shuffle([...titleIds]),
-        policyVersion: TRIAD_POLICY_VERSION,
-        // Probability this exact unordered triple was selected: uniform
-        // random draw of 3 from the eligible pool.
-        selectionPropensity: 1 / this.combinations(poolSize, 3),
-        status: 'active',
-        metadata: { reasonForSelection: 'random-watched-unranked' },
-      }),
-    );
+    try {
+      return await this.triadsRepository.save(
+        this.triadsRepository.create({
+          profileId,
+          titleIds,
+          // Shuffled independently of titleIds so position bias in the UI can
+          // be measured and corrected for (blueprint section 4.3).
+          displayOrder: this.shuffle([...titleIds]),
+          policyVersion: TRIAD_POLICY_VERSION,
+          // Probability this exact unordered triple was selected: uniform
+          // random draw of 3 from the eligible pool.
+          selectionPropensity: 1 / this.combinations(poolSize, 3),
+          status: 'active',
+          metadata: { reasonForSelection: 'random-watched-unranked' },
+        }),
+      );
+    } catch (error) {
+      if (!this.isUniqueConstraintError(error)) {
+        throw error;
+      }
+      // Lost a race against a concurrent call for the same profile (DB
+      // partial unique index IDX_triads_one_active_per_profile enforces at
+      // most one active triad per profile): the winner's row is the current
+      // one, so return that instead of a duplicate or an error.
+      const winner = await this.triadsRepository.findOne({ where: { profileId, status: 'active' } });
+      if (!winner) {
+        throw error;
+      }
+      return winner;
+    }
+  }
+
+  private isUniqueConstraintError(error: unknown): boolean {
+    return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505';
   }
 
   async rank(userId: string, triadId: string, rankTriadDto: RankTriadDto): Promise<Triad> {

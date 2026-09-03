@@ -2,10 +2,18 @@ import { Injectable, ConflictException, UnauthorizedException } from '@nestjs/co
 import { JwtService } from '@nestjs/jwt';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
-import * as bcrypt from 'bcrypt';
+// bcryptjs, not bcrypt: same hash/compare API, but pure JS -- no native
+// compile step via node-pre-gyp/tar, which is what pulled a critical
+// path-traversal advisory into `npm audit` (tar <=7.5.20, GHSA-34x7-hfp2-rc4v
+// and related).
+import * as bcrypt from 'bcryptjs';
 import { User } from '../../entities/user.entity';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+
+// What JwtStrategy.validate() puts on req.user for every guarded route --
+// the password hash must never travel with it (see validateUser below).
+export type SafeUser = Omit<User, 'password'>;
 
 @Injectable()
 export class AuthService {
@@ -94,8 +102,22 @@ export class AuthService {
     };
   }
 
-  async validateUser(userId: string): Promise<User | null> {
-    return this.usersRepository.findOne({ where: { id: userId } });
+  // Called by JwtStrategy on every guarded request; the result becomes
+  // req.user, so it must never carry the password hash (see SafeUser).
+  async validateUser(userId: string): Promise<SafeUser | null> {
+    const user = await this.usersRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      return null;
+    }
+    return {
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      active: user.active,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
   }
 
   async getProfile(userId: string): Promise<Partial<User>> {

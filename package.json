@@ -13,6 +13,7 @@
     "dev": "concurrently \"npm run dev -w apps/frontend\" \"npm run dev -w apps/backend\"",
     "build": "npm run build -w apps/frontend && npm run build -w apps/backend",
     "test": "npm run test -w apps/frontend && npm run test -w apps/backend",
+    "lint": "npm run lint -w apps/frontend && npm run lint -w apps/backend",
     "docker:up": "docker-compose -f docker/docker-compose.yml up -d",
     "docker:down": "docker-compose -f docker/docker-compose.yml down",
     "db:migrate": "npm run migrate -w apps/backend",
@@ -21,5 +22,13 @@
   "devDependencies": {
     "concurrently": "^9.0.1",
     "typescript": "^5.5.0"
+  },
+  "overrides": {
+    "qs": "6.16.0",
+    "lodash": "4.18.1",
+    "uuid": "11.1.1",
+    "body-parser": "1.20.6",
+    "multer": "2.3.0",
+    "file-type": "22.0.2"
   }
 }

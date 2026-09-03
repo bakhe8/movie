@@ -1,7 +1,7 @@
 # Architecture Decision Records
 
 **Status**: Living log. Every decision cites the blueprint section it serves (`BP §x.y`) or states that it is this repository's own engineering choice within the blueprint's constraints. A decision that contradicts the blueprint is a bug in this file. Product-level open questions that must be settled by experiment are **not** decided here — they are listed in `BP App. C` and [SPECIFICATION.md §11](SPECIFICATION.md).
-**Version**: 2.0 — 2026-09-03 (ADR-1…13 rewritten for consistency; ADR-14…26 added to close the gaps found in the documentation audit).
+**Version**: 2.1 — 2026-09-03 (ADR-1…13 rewritten for consistency; ADR-14…26 added to close the gaps found in the documentation audit; ADR-27…28 added from a code-quality/security audit).
 
 Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 
@@ -167,7 +167,23 @@ Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 
 ## ADR-26 — Authentication and authorization
 
-**Decision.** JWT bearer tokens (as built) with refresh tokens added before Alpha; bcrypt passwords; per-endpoint throttling on auth; owner-only profile routes verified by the e2e IDOR suite on every change; `users.role` (`user`/`admin`) gates the internal board; staff actions are audit-logged; optional MFA later (`BP §21.3`).
+**Decision.** JWT bearer tokens (as built) with refresh tokens added before Alpha; bcrypt passwords (library choice: ADR-27); per-endpoint throttling on auth; owner-only profile routes verified by the e2e IDOR suite on every change; `users.role` (`user`/`admin`) gates the internal board; staff actions are audit-logged; optional MFA later (`BP §21.3`).
+
+## ADR-27 — Password hashing library: `bcryptjs`, not `bcrypt`
+
+**Context.** `bcrypt` compiles a native module via `node-pre-gyp`, which pulls in `tar`; a 2026-09-03 dependency audit found this chain carried a critical path-traversal advisory (`tar <=7.5.20`, e.g. GHSA-34x7-hfp2-rc4v) with no fix available inside `bcrypt`'s current major version.
+**Decision.** Use `bcryptjs` — a pure-JavaScript implementation of the same bcrypt algorithm, with the same `hash`/`compare` API — instead of `bcrypt`. No native compile step, so no `node-pre-gyp`/`tar` dependency chain at all.
+**Rationale.** Removes a critical, unpatchable-without-a-major-bump vulnerability from the production dependency tree at zero API cost; this app's request volume does not need native `bcrypt`'s raw hashing throughput.
+**Consequences.** Hashing/comparison is measurably slower per call than the native binding (acceptable at this scale, verified by the e2e auth suite over real HTTP); ADR-26's "bcrypt passwords" still holds exactly — same algorithm, same cost factor, different implementation.
+**Revisit when.** Login-endpoint throughput becomes measurably bottlenecked by hash cost.
+
+## ADR-28 — At most one active triad per profile, enforced by a DB constraint
+
+**Context.** `TriadsService.getCurrent()` checks for an existing active triad and creates one when there is none; without a database-level constraint, two concurrent requests for the same profile can both pass that check and both insert an active row. Found by a 2026-09-03 code audit — the blueprint assumes one open ranking round per profile (`BP §4.3`) without specifying how to enforce it under concurrency.
+**Decision.** A Postgres partial unique index, `IDX_triads_one_active_per_profile` on `triads(profileId) WHERE status = 'active'`, makes the invariant a database guarantee instead of an application-level assumption. `TriadsService.getCurrent()` catches the resulting unique-violation on the losing request and returns the winning row instead of erroring or silently creating a duplicate.
+**Rationale.** A check-then-insert pattern in application code cannot be made race-free without either a DB constraint or an explicit lock; a partial unique index is the standard Postgres tool for "at most one row matching a condition" and costs nothing on the read path.
+**Consequences.** Any future change to the triad lifecycle must keep `'active'` meaning "the one open round for this profile" — a second concurrently-valid "in progress" status would need its own partial index or a rethink of this constraint.
+**Revisit when.** The triad lifecycle grows a second concurrently-valid in-progress status (e.g. simultaneous ranking modes).
 
 ---
 
@@ -201,6 +217,8 @@ Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 | 24 | Hosting undecided, requirements fixed | `BP §12.1`, `§18.1` | Alpha prep |
 | 25 | FastAPI model service, queue later | `BP §12.1`, `§12.3` | `§12.3` signals |
 | 26 | Auth & roles | `BP §21.3` | — |
+| 27 | `bcryptjs` over `bcrypt` | audit | throughput bottleneck |
+| 28 | One active triad per profile (DB constraint) | `BP §4.3` | second in-progress status |
 
 ## How to add a decision
 

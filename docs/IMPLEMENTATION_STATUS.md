@@ -1,7 +1,7 @@
 # Implementation Status — code versus blueprint
 
-> **Snapshot 2026-09-03, after the "close the six cheap gaps" change** (base `3eb88e2`).
-> Verified for this revision: backend vitest suite **41 tests / 5 files pass**; backend e2e suite **12 tests pass** over real HTTP against `postgres-test` with all four migrations applied; Python pytest **26 tests pass**; `tsc --noEmit` clean for `apps/backend`, `apps/frontend` and `packages/shared`; frontend `eslint` clean; the new migration applied to the local dev database. The manual browser pass (register → Discover → Rank → My list → Profile → language toggle → logout) was verified in the previous snapshot and is carried forward; the copy and `lang`/`dir` changes since then are covered by type-check and lint only.
+> **Snapshot 2026-09-03, after the "close the six cheap gaps" change plus a security/code-quality audit** (base `a405b0e`; the audit fixes below were uncommitted at time of writing).
+> Verified for this revision: backend vitest suite **48 tests / 6 files pass**; backend e2e suite **12 tests pass** over real HTTP against `postgres-test` with all five migrations applied; Python pytest **26 tests pass**; `tsc --noEmit` clean for `apps/backend`, `apps/frontend` and `packages/shared`; `eslint` clean for **both** `apps/frontend` and `apps/backend` (backend `eslint` could not even run before today — see the audit table below); the new migrations applied to the local dev database; `npm audit --omit=dev` down from 14 (1 critical, 5 high, 7 moderate, 1 low) to 3, all moderate (0 critical, 0 high, 0 low) — the sole remainder is `@nestjs/core`'s own CVE, fixed only by a NestJS 10→12 major upgrade (not attempted; see the audit table below). The manual browser pass (register → Discover → Rank → My list → Profile → language toggle → logout) was verified in an earlier snapshot and is carried forward; nothing in today's audit touched the frontend UI.
 >
 > Two verdicts per row, because "the code exists and runs" and "it does what the blueprint requires" are different claims:
 >
@@ -25,6 +25,20 @@
 | Not Arabic-first (`§2`, `§5.1`) | entity + service default `'ar'`; migration `1788418200000-ArabicFirstProfileDefault`; `<html lang="ar" dir="rtl">` synced to the UI language | profiles spec; migration ran on dev and test DBs |
 | Stale shared types (`§4.4`, ADR-1) | `packages/shared/src/types.ts` rewritten to the API shapes (no merged score, no `preferredGenres`); committed build artifacts removed; package compiles | `tsc --noEmit -p packages/shared` |
 
+## Also closed on 2026-09-03 (security and code-quality audit)
+
+Found by an independent audit of the code itself (not blueprint conformance — these are general engineering-integrity defects with no blueprint section to cite), fixed the same day.
+
+| Issue | What changed | Proof |
+|---|---|---|
+| Backend `eslint` had never run successfully in this repo — `npm run lint` in `apps/backend` failed outright with "ESLint couldn't find the plugin `@typescript-eslint/eslint-plugin`" | `.eslintrc.json` moved from the repo root into `apps/backend/` (its only real consumer — the frontend has its own flat `eslint.config.mjs`, `packages/shared` has no lint script — so plugin resolution now happens where the plugin is actually installed); root `package.json` gained the `lint` script it never had (`make lint` was calling a script that didn't exist) | `npm run lint` from the repo root now exits 0 across both workspaces |
+| 14 known vulnerabilities in production dependencies (`npm audit --omit=dev`): 1 critical (`tar`/`node-pre-gyp`, pulled in by `bcrypt`), 5 high, 7 moderate, 1 low | `bcrypt` replaced with `bcryptjs` (identical `hash`/`compare` API, pure JS, no native compile step); `qs`, `lodash`, `uuid`, `body-parser`, `multer`, `file-type` pinned to patched, same-line versions via root `package.json` `overrides` | `npm audit --omit=dev`: 14 → 3 (all moderate); full backend test suite (48 unit + 12 e2e, including a real register→login HTTP round trip) still green |
+| `JwtStrategy.validate()` put the full `User` entity — bcrypt hash included — on `req.user` for every guarded route (not exploited today; every controller only reads `.id`, but a latent leak risk) | `AuthService.validateUser()` now returns a `SafeUser` projection (`Omit<User, 'password'>`) instead of the raw entity; `JwtStrategy`/`AuthController` typed (`JwtPayload`, `{user:{id:string}}`) instead of `any` | new test: `validateUser` never returns `password` (`auth.service.spec.ts`) |
+| `TriadsService.getCurrent()` race: two concurrent requests for a profile with no active triad could both pass the check and both insert one | DB partial unique index `IDX_triads_one_active_per_profile` on `triads(profileId) WHERE status='active'` (migration `AddOneActiveTriadPerProfileConstraint`); the service now catches the resulting `23505` on the losing insert and returns the winner's row instead of erroring or duplicating | new tests in `triads.service.spec.ts`; migration applied cleanly to both `postgres-test` and the local dev DB (no pre-existing duplicates) |
+| `PATCH /profiles/:id {name: ""}` silently blanked a profile's name — `UpdateProfileDto` lacked the `@IsNotEmpty()` that `CreateProfileDto` has | added `@IsNotEmpty()` to `UpdateProfileDto.name` | new `update-profile.dto.spec.ts` (DTO validation runs at the `ValidationPipe` boundary, not inside the service, so this needed its own test) |
+
+Not fixed, left open: `@nestjs/core`'s own moderate CVE (GHSA-36xv-jgw5-4q75) and a chain of `@nestjs/cli`-only dev-tooling vulnerabilities, both of which require a NestJS 10→12 major-version migration — a real framework upgrade with regression risk beyond what today's test suite would catch, so it needs its own dedicated pass rather than folding into an audit-fix session.
+
 ## Blueprint gaps hiding behind working code (fix before adding features)
 
 These run today and contradict or fall short of the blueprint; a green test suite makes them invisible.
@@ -46,7 +60,7 @@ These run today and contradict or fall short of the blueprint; a green test suit
 | Item | Built | Blueprint | Evidence / gap |
 |---|---|---|---|
 | Monorepo (Next.js, NestJS, Python, shared types) | ✅ | — | ADR-1 |
-| Database schema (PostgreSQL) | 🟡 | ❌ | 7 tables, 4 migrations; target set and plan in [SCHEMA.md](SCHEMA.md) §2. pgvector image runs but `embeddings.vector` is `real[]` (`§12.1`) |
+| Database schema (PostgreSQL) | 🟡 | ❌ | 7 tables, 5 migrations (the 5th adds a constraint, not a table); target set and plan in [SCHEMA.md](SCHEMA.md) §2. pgvector image runs but `embeddings.vector` is `real[]` (`§12.1`) |
 | Docker Compose: Postgres + Redis + disposable `postgres-test` | ✅ | — | |
 | Environment template | ✅ | — | `FRONTEND_URL` and `OPENAI_FINGERPRINT_MODEL` not yet in `.env.example` |
 | Documentation set | ✅ | — | reorganized 2026-09-03; index in [README.md](README.md) |
@@ -176,8 +190,8 @@ These run today and contradict or fall short of the blueprint; a green test suit
 
 | Item | Built | Blueprint | Evidence / gap |
 |---|---|---|---|
-| Backend unit tests (5 files, 41 tests) | ✅ | — | re-run 2026-09-03 |
-| Backend e2e: auth guard + IDOR over real HTTP + `postgres-test` (12 tests) | ✅ | ✅ | `§21.3` object-level authorization; re-run 2026-09-03 with all four migrations; not functional coverage |
+| Backend unit tests (6 files, 48 tests) | ✅ | — | re-run 2026-09-03 |
+| Backend e2e: auth guard + IDOR over real HTTP + `postgres-test` (12 tests) | ✅ | ✅ | `§21.3` object-level authorization; re-run 2026-09-03 with all five migrations; not functional coverage |
 | Functional API tests (titles, triads, recommendations) | ❌ | — | |
 | Frontend tests | ❌ | — | |
 | Python tests (26) | ✅ | — | re-run 2026-09-03 |
@@ -217,4 +231,4 @@ These run today and contradict or fall short of the blueprint; a green test suit
 
 **Next milestone (in order):** migration M1 with `shownAt`/`answeredAt`/`modelVersion`/idempotency on triads (gap 3) and the replacement endpoint + two UI buttons (ADR-17); then temporal hold-out in training (gap 2) and a training trigger through the FastAPI service (ADR-25); then M5 + persisted recommendations and outcomes (gap 4) so the post-watch loop can close; then consent/onboarding (gap 7) and the admin board; the enrichment worker fixes (gap 9) can run in parallel.
 
-**Last updated**: 2026-09-03 · **Status**: core loop (auth → mark watched → rank → train by CLI → recommend) runs locally; six cheap gaps closed today; nine pieces still fall short of the blueprint (list above).
+**Last updated**: 2026-09-03 · **Status**: core loop (auth → mark watched → rank → train by CLI → recommend) runs locally; six blueprint gaps and five security/code-quality audit findings closed today; nine blueprint-conformance pieces still fall short (list above); one moderate framework CVE deliberately left open pending a NestJS major-version migration.
