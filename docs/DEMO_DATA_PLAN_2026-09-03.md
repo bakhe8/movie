@@ -271,6 +271,7 @@ About a day and a half remains. First visible result (Discover with 300 titles, 
 | Watchability | `null` in code; no `availability_snapshots`; profile `platforms` only just being added | gap 1, gap 7 |
 | Reason text per recommendation (`§9.4`) | not generated; `evidenceSource` absent | [RANKING_ALGORITHM.md](RANKING_ALGORITHM.md) §8 |
 | Discovery / outside-usual tracks | every result is `safe` | `§8`, adaptive policy |
+| V2 fingerprint families in the model | extracted and published in `fingerprint.v2` for the demo catalog (§7.2); the trainer and scorer still read the 13 V1 keys | board request C9; [FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md) §3.1 |
 | Posters, runtime, credits | no columns; posters need a rights row first | `localized_titles`, `credits`, `source_records` |
 | Recommendations log, outcomes, post-watch loop | tables missing | gap 4 |
 | Calibrated confidence | band is a count heuristic | gap 5, ADR-21 |
@@ -311,6 +312,34 @@ The four answers, written by the ranker:
 
 What this changes in the plan: nothing in WS1–WS5; it sharpens §6's "not built" list — the V2 fingerprint families are now the first thing a real ranker misses, and the confidence band needs a held-out floor. The owner's own pass (§7) stays the Phase 0 gate input.
 
+### 7.2 The V2 families, first pass — extracted and evaluated 2026-09-04
+
+Owner's directive after §7.1: start the second fingerprint families. Delivered (commits `46eab2e`, `538c4af`): the specification of fifteen namespaced features plus a controlled theme vocabulary ([FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md) §3.1), `generate_fingerprint_v2()` in the worker, `enrich_catalog --v2`, the V2 block extracted for all 300 titles (0 failures, mean confidence 0.58, per-feature sd 0.16–0.24) and published inside `titles.fingerprint.v2` on the dev database (V1 keys untouched, every V1 reader unaffected), and a read-only offline evaluation (`fingerprint_v2_eval.py`) that fits the trainer's own Plackett–Luce ranker with the trainer's temporal hold-out on three feature sets.
+
+Spot values on the titles §7.1 mis-ranked, exactly the distinctions V1 could not make: Fight Club irony 0.85 / compassion 0.40; Where Is the Friend's House? compassion 0.85 / moral ambiguity 0.15; In the Mood for Love compassion 0.90 / catharsis 0.30; Paradise Now unease 0.90 / optimism 0.05.
+
+**Evaluation on Claude's account**, first at the 25 rounds of §7.1, then after 25 more rounds answered from the same written order (50 in all; 47 usable, three dropped because they contain a deliberately partial title):
+
+| Rounds | Regularization | Feature set | Held-out accuracy | Held-out NLL | Spearman with Claude's order |
+|---|---|---|---|---|---|
+| 25 | 0.01 (trainer default) | V1 | 0.67 | 1.99 | 0.73 |
+| 25 | 0.01 | V1+V2 | 0.67 | 2.55 | 0.79 |
+| 25 | 0.1 | V1 | 0.73 | 1.62 | 0.75 |
+| 25 | 0.1 | V1+V2 | 0.67 | 1.54 | 0.76 |
+| **50** | **0.01** | V1 | 0.85 | 0.91 | 0.79 |
+| **50** | **0.01** | **V1+V2** | **0.85** | **0.82** | **0.83** |
+| 50 | 0.1 | V1 | 0.81 | 1.10 | 0.77 |
+| 50 | 0.1 | V1+V2 | 0.85 | 1.12 | 0.82 |
+| 50 | any | V2 alone | 0.53–0.57 | 1.9–2.1 | 0.59–0.62 |
+
+Where the six misses land under V1 versus V1+V2 at 50 rounds (regularization 0.1): Fight Club (Claude #59) #33 → **#48**; Eternal Sunshine (#20) #32 → **#21**; Cairo Station (#14) #35 → **#26**; In the Mood for Love (#1) #8 → **#3**; My Neighbor Totoro (#39) #53 → **#36**; Children of Heaven (#33) #45 → **#38**; Paradise Now (#48) #26 → #27; Fargo (#29) #51 → #47.
+
+On the four synthetic personas (generated from V1 alone, so a control): V1+V2 improves `spectacle`'s held-out NLL (0.41 → 0.20) and overfits `slow-burn` and `warm-talky` at 0.01 with 6–19 training triads; V2 alone reconstructs `slow-burn` (held-out accuracy 0.93) because the new features correlate with the V1 axes it was built from.
+
+**Reading.** The families carry the signal §7.1 said was missing: the cynical and the compassionate separate, and the films V1 put in the wrong half move to the right one. They complement V1 rather than replace it (V2 alone is weak). At 25 rounds a 28-dimensional vector overfits under the trainer's regularization; at 50 rounds V1+V2 is best on every measure. So the wiring must come with shrinkage: either a stronger L2 (0.1 held its own at 25 and 50) or, better, the blueprint's own answer — a hierarchical prior with the V2 block shrunk separately (`BP §7.1`), and the regularization chosen by held-out NLL rather than fixed.
+
+**Proposed next steps** (model-service owner, board request C9): read the 28 keys in `training.py` and `RecommendationsService` (V2 from `fingerprint.v2.features`, unknown → dropped/imputed exactly as V1), record `fingerprintSchemaVersion` on the snapshot so old weights are never applied to a new vector, and choose the regularization by held-out NLL. Catalog side (this scope): the per-feature `content_features` provenance rows for the V2 block, and Style/People/Cultural blocks when their evidence exists.
+
 ---
 
 ## 8. Provider decision — LLM enrichment through the Anthropic Messages API
@@ -340,3 +369,4 @@ Owner's decision, 2026-09-03, in answer to "what is the alternative to an OpenAI
 | 2026-09-03 | Dev database loaded and the four personas trained; noise temperature calibrated 0.5 → 0.2 against the real fingerprints; WS4 acceptance met (`slow-burn` recovery 0.83, held-out accuracy 0.75). WS5 (browser judgment pass) is next |
 | 2026-09-03 | WS5 done on an isolated HEAD stack (3110/3111): every persona in its expected band, rankings and recommendations match the designed tastes, the partial-title demotion is visible; two frontend copy/select findings recorded for session B. QUICKSTART §6.1 documents `make demo` and the persona logins. Remaining: WS6's status row (session A's file) and the owner's real-account judgment (§7) |
 | 2026-09-03 | §7.1 added: the first non-synthetic ranker (Claude, 61 watched, 25 rounds by its own order): Spearman 0.72 with the model's ranking, held-out accuracy 0.67 yet band `strong`; the misses map onto the missing V2 fingerprint families; band calibration flagged to session A (C8) |
+| 2026-09-04 | §7.2 added: V2 families specified, extracted for all 300 titles and published inside `fingerprint.v2`; offline evaluation at 25 and 50 rounds — V1+V2 best on every measure at 50 (held-out NLL 0.82 vs 0.91, Spearman 0.83 vs 0.79), the six misses move to the right half; wiring with shrinkage proposed to the model-service owner (C9) |
