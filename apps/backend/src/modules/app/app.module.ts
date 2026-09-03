@@ -8,6 +8,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseConfig } from '../../config/database.config';
 import { AuthModule } from '../auth/auth.module';
+import { ConsentsModule } from '../consents/consents.module';
 import { ProfilesModule } from '../profiles/profiles.module';
 import { TitlesModule } from '../titles/titles.module';
 import { TriadsModule } from '../triads/triads.module';
@@ -30,6 +31,7 @@ import { UserTitleStateModule } from '../user-title-state/user-title-state.modul
     TriadsModule,
     RecommendationsModule,
     UserTitleStateModule,
+    ConsentsModule,
   ],
   controllers: [AppController],
   providers: [

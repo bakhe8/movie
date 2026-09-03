@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { api, ApiError, type PreferredLanguage } from '../lib/api';
+import { api, ApiError, CONSENT_VERSION, type PreferredLanguage } from '../lib/api';
 import { MARKETS, PLATFORMS } from '../lib/onboarding-options';
 import { formatNumber } from '../lib/format';
 import { useSession } from '../lib/session';
@@ -111,6 +111,8 @@ export function OnboardingScreen({
   const [platforms, setPlatforms] = useState<Set<string>>(new Set(profile?.platforms ?? []));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [consentSaving, setConsentSaving] = useState(false);
+  const [consentError, setConsentError] = useState<string | null>(null);
 
   function togglePlatform(id: string) {
     setPlatforms((current) => {
@@ -138,6 +140,30 @@ export function OnboardingScreen({
       setError(err instanceof ApiError ? t.saveFailed : t.saveFailed);
     } finally {
       setSaving(false);
+    }
+  }
+
+  // Records the two purposes step 2's copy already discloses and that are
+  // mandatory for the core loop (PRIVACY.md §3: watch_history,
+  // personalization_individual are both "no for the core loop" -- proceeding
+  // past this screen is the consent). personalization_pooled and
+  // analytics_first_party are declinable and need their own disclosure copy
+  // and an opt-out control neither of which exists on this screen yet
+  // (blueprint gap 7, still open) -- deliberately not granted here rather
+  // than silently opted in without asking.
+  async function acknowledgeAndContinue() {
+    setConsentSaving(true);
+    setConsentError(null);
+    try {
+      await api.updateConsents([
+        { purpose: 'watch_history', version: CONSENT_VERSION, granted: true },
+        { purpose: 'personalization_individual', version: CONSENT_VERSION, granted: true },
+      ]);
+      setStep(3);
+    } catch (err) {
+      setConsentError(err instanceof ApiError ? t.saveFailed : t.saveFailed);
+    } finally {
+      setConsentSaving(false);
     }
   }
 
@@ -230,8 +256,6 @@ export function OnboardingScreen({
           <h2>{t.step2Title}</h2>
           <p className={styles.lead}>{t.step2Lead}</p>
         </div>
-        {/* Informational, not a consent record: the consents table (gap 7)
-            does not exist yet, so nothing here pretends to have been signed. */}
         <ul className={styles.list}>
           {t.collect.map((item) => (
             <li key={item.head}>
@@ -240,9 +264,14 @@ export function OnboardingScreen({
             </li>
           ))}
         </ul>
+        {consentError && (
+          <p className={styles.status} role="alert">
+            {consentError}
+          </p>
+        )}
         <div className={styles.actions}>
-          <button type="button" className={styles.primary} onClick={() => setStep(3)}>
-            {t.understood}
+          <button type="button" className={styles.primary} onClick={acknowledgeAndContinue} disabled={consentSaving}>
+            {consentSaving ? t.saving : t.understood}
           </button>
           <button type="button" className={styles.ghost} onClick={() => setStep(1)}>
             {t.back}

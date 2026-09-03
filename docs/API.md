@@ -39,7 +39,9 @@ Verified against `apps/backend/src/modules/**` on 2026-09-03. Every profile-scop
 | POST | `/api/triads/:triadId/rank` | JWT | `{ ranking: string[3] (titleIds, best first), sessionId? }`, header `Idempotency-Key?` (UUID) | Triad | 400 if already completed or `ranking` isn't exactly this triad's own title ids; a repeated `Idempotency-Key` for the same triad returns the original result instead of erroring; reusing one for a different triad is `409` |
 | POST | `/api/triads/:triadId/replace` | JWT | `{ titleId, reason: 'not_watched' \| 'not_remembered' }` | Triad | the two neutral replacement controls (ADR-17): swaps only that item for a random other eligible watched title (never one from the previous completed triad) and redraws `displayOrder`; writes a `triad_replacements` row; `not_watched` sets the title's state to `not_watched` (stays a recommendation candidate), `not_remembered` keeps it watched but clears `triadEligible`; no preference signal. 400 if the triad is not active or `titleId` is not one of its three. Returns `status: 'skipped'` (event still logged with `replacementTitleId: null`) when nothing eligible is left or a 4th replacement is requested on one triad — the client then calls `GET …/triads/current` again |
 | GET | `/api/profiles/:profileId/library/ranking` | JWT | — | LibraryRankingItem[] | the profile's watched, fingerprinted titles ordered by the latest snapshot (`BP §5.3` "ترتيب شخصي"); positions only, the score never leaves the server (ADR-33); same band/demotion rules as recommendations; 409 until a snapshot exists; `[]` when nothing is watched |
-| GET | `/api/profiles/:profileId/recommendations` | JWT | `?limit(≤50, default 10)` | Recommendation[] | 409 until a model snapshot exists; excludes watched titles only (`not_watched` stays a candidate); unknown fingerprint dimensions imputed with the pool mean, never zero; results not persisted |
+| GET | `/api/profiles/:profileId/recommendations` | JWT | `?limit(≤50, default 10)` | Recommendation[] | 409 until a model snapshot exists; excludes watched titles only (`not_watched` stays a candidate); unknown fingerprint dimensions imputed with the pool mean, never zero; since 2026-09-03 persists one `recommendations` row per result shown (ADR-58) |
+| GET | `/api/consents` | JWT | — | Consent[] | the caller's own rows only |
+| PUT | `/api/consents` | JWT | `{ consents: [{ purpose, version, granted }] }` | Consent[] | upserts per `(userId, purpose, version)`; `purpose` restricted to the six live purposes in [PRIVACY.md](PRIVACY.md) §3 — `email_recommendations`/`taste_card_sharing` (reserved for later) are rejected; `revokedAt` set/cleared on decline/re-grant, `grantedAt` preserved across a revoke (ADR-60). Kept unversioned rather than at the `§2.2` target's `/api/v1/consents` path — ADR-15 migrates the whole API to `/api/v1` in one step, not per-endpoint |
 
 Response shapes in use (from `apps/frontend/app/lib/api.ts`, which mirrors the entities):
 
@@ -60,6 +62,7 @@ Recommendation { title, personalFitScore, publicQualityScore|null, watchabilityS
                            evidenceSource: 'individual' } }
 LibraryRankingItem { title, position /* 1-based, best fit first */, confidenceBand, fingerprintCoverage, modelVersion,
                      reason /* same shape as Recommendation.reason, relative to the watched set */ }
+Consent { id, userId, purpose, version, granted, grantedAt, revokedAt|null }
 ```
 
 Known gaps versus `BP §14` are tracked row-by-row in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md); the target below is the fix.

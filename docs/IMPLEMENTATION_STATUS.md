@@ -50,7 +50,7 @@ These run today and contradict or fall short of the blueprint; a green test suit
 4. **Recommendations are now persisted; the post-watch loop still can't close** — `RecommendationsService.findForProfile()` writes a `recommendations` row per result shown since 2026-09-03 (reason, display propensity, `requestId` all included — see the closed table below). Still missing: no `outcomes`/`watch_events` are ever recorded, so `§4.5`'s post-watch loop has a log to write into but nothing writes to it, and `§16`'s evaluation has recommendations to read but no outcomes to join against.
 5. **Confidence band is still not the full `§9.2`/`§9.3` system, but two of five criteria are wired in** — evidence quantity (triad count, interim heuristic, ADR-21), fingerprint quality (one-band demotion), and now held-out prediction success (`inconclusive` override at/below chance accuracy, ADR-59, 2026-09-03). Still missing: stable posterior direction (needs the trainer to compute per-weight uncertainty — real ML work) and diversity of directors/languages/genres (needs a metric definition that hasn't been decided — a product decision, not an implementation detail).
 6. **Fingerprints carry no provenance and cover part of `§6.1`** — the 15 seeded rows leave `confidence` empty; families characters/ending/people/cultural context are absent (V1 is frozen; V2 planned — [FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md)). `source_records`/`content_features` — the tables that would actually hold that provenance — exist since M3 but no ingestion pass has ever written a row to either.
-7. **Onboarding records no consent** (`§4.1`, `§13.1`, `§2.4 #9`) — market and platforms are collected since 2026-09-03 (onboarding section below); the `consents` table exists since M2 but no screen or endpoint writes a row to it yet.
+7. **Onboarding now records two of the four purposes it should** (`§4.1`, `§13.1`, `§2.4 #9`) — `watch_history`/`personalization_individual` are granted via `GET/PUT /api/consents` (new, ADR-60) when the user proceeds past step 2, since 2026-09-03. Still missing: `personalization_pooled`/`analytics_first_party` (declinable, need disclosure copy the current screen doesn't have plus an opt-out control) and `terms_privacy` (registration-time, no UI yet).
 8. **Not a PWA yet** — no web manifest or service worker (`§5.1`, ADR-5).
 
 (Numbering keeps gaps 1, 4–8 as originally assigned; gaps 2, 3 and 9 are closed — see the tables below.)
@@ -144,6 +144,16 @@ The first application-layer work built on the M1–M7 schema plan, not a schema 
 | `confidenceBand()` used `trainingTriadCount` and fingerprint coverage only — `heldOutPairwiseAccuracy` has existed on `UserModelSnapshot` since gap 2 (ADR-31, `training.py` computes it every run) but was never read | When `heldOutPairwiseAccuracy` is known and at or below `0.5` (chance level for a binary pairwise comparison — `§9.3`'s own definition of "conflicting evidence," not an invented threshold), the band is `'inconclusive'` outright, overriding the triad-count band. Unknown (below the 5-triad floor) behaves exactly as before (ADR-59) | 4 new unit tests (chance-level and below-chance both demote regardless of triad count; meaningfully-above-chance keeps the triad-count band; unknown/null falls back unchanged); full suites green (104 unit, 42 e2e); `tsc`/`eslint` clean. `rankLibrary()` shares the same method, so the library ranking's bands are covered too |
 
 **Still open**: posterior stability and diversity, the two remaining `§9.2` criteria — see above for why each needs real work (ML estimation; a product decision) rather than another wiring pass.
+
+## Closed on 2026-09-03 (blueprint gap 7, partial — onboarding records two of four purposes)
+
+`consents` has existed since M2 (schema step) but nothing wrote to it. `API.md` §2.2 specs `GET/PUT /api/v1/consents`, but ADR-15 commits the whole API to a one-step `/api/v1` migration when the first v1 endpoint ships — so this landed under the existing unversioned `/api` prefix instead, matching every other route built this session, not the literal target path.
+
+| Gap | What changed | Proof |
+|---|---|---|
+| No screen or endpoint ever wrote a `consents` row; `OnboardingScreen` step 2 showed PRIVACY.md-derived copy but was, per its own comment, "informational, not a consent record" | New `GET/PUT /api/consents` (`ConsentsModule`), user-scoped (not profile-scoped — `terms_privacy` is asked at registration, before any profile exists). `PUT` upserts per `(userId, purpose, version)`, matching the table's unique constraint: `grantedAt` set once and preserved across a later revoke, `revokedAt` stamped on decline and cleared on re-grant, a no-op when the request matches current state. Only the six live purposes are accepted — the two reserved-for-later ones (`email_recommendations`, `taste_card_sharing`) are rejected with `400`. `OnboardingScreen`'s "understood, continue" now calls it, granting `watch_history` and `personalization_individual` — the two purposes its existing copy already discloses and that are mandatory for the core loop (PRIVACY.md §3: both "no for the core loop," so proceeding past the screen *is* the consent) (ADR-60) | 7 new unit tests (upsert semantics) and 3 new e2e tests over real HTTP against real Postgres (auth guard, reserved-purpose rejection, full grant/list/decline/re-list flow with cross-user isolation); full suites green (111 unit, 45 e2e); `tsc`/`eslint` clean on both apps. Live browser verification of the onboarding flow was not possible — see ADR-60 for why (shared dev instances, same constraint as ADR-43) |
+
+**Still open**: `personalization_pooled` and `analytics_first_party` — both declinable, both needing disclosure copy the current screen doesn't have (neither pooled training nor analytics is mentioned in step 2's five bullets today) and an opt-out control, deliberately not granted rather than silently opted in. `terms_privacy` needs its own UI on the registration flow. Restrictions (`no_pooled`, `pause_all`, PRIVACY.md §4) are a separate, still-untouched piece of work.
 
 ---
 
@@ -374,7 +384,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Refresh tokens | ❌ | — | ADR-26, before Alpha |
 | Roles (`users.role`) for the admin board | ❌ | ❌ | `§5.1` |
 | Unit tests | ✅ | — | `auth.service.spec.ts`, 10 tests |
-| Frontend: login / register (`AuthScreen`) + onboarding (`OnboardingScreen`) | ✅ | 🟡 | `§4.1`: language, market and platforms collected and saved; the "what we collect and why" step is informational — consent rows (gap 7) and CSV import still missing |
+| Frontend: login / register (`AuthScreen`) + onboarding (`OnboardingScreen`) | ✅ | 🟡 | `§4.1`: language, market and platforms collected and saved; the "what we collect and why" step now records `watch_history`/`personalization_individual` consent (ADR-60) — `personalization_pooled`/`analytics_first_party` disclosure+opt-out, `terms_privacy` at registration, and CSV import still missing (gap 7) |
 | Frontend: session persistence, auto-redirect, logout | ✅ | — | `localStorage` via `lib/session.tsx` |
 | Password reset | ❌ | — | |
 
@@ -474,7 +484,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 
 | Item | Built | Blueprint | Evidence / gap |
 |---|---|---|---|
-| Consent capture (`consents`) | ❌ | ❌ | `§13.1`, `§2.4 #9`; table exists since M2, no screen/endpoint writes a row yet; purposes in [PRIVACY.md](PRIVACY.md) §3 |
+| Consent capture (`consents`) | 🟡 | 🟡 | `§13.1`, `§2.4 #9`; `GET/PUT /api/consents` records `watch_history`/`personalization_individual` from onboarding since 2026-09-03 (ADR-60); `personalization_pooled`/`analytics_first_party`/`terms_privacy` still unrecorded; purposes in [PRIVACY.md](PRIVACY.md) §3 |
 | Export / delete / reset endpoints | ❌ | ❌ | `§14`, `§18.1`; `privacy_requests` table exists since M2, unused; `DELETE /profiles/:id` cascades one profile only |
 | Restrictions (`no_pooled`, `pause_all`) | ❌ | ❌ | [PRIVACY.md](PRIVACY.md) §4; `profiles.pausedAt` exists since M1, unused |
 | Audit log | ❌ | ❌ | `§21.3`; `audit_log` table exists since M2, nothing writes to it yet |

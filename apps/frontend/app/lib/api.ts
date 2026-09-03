@@ -15,6 +15,32 @@ export interface AuthResponse {
 
 export type PreferredLanguage = 'ar' | 'en';
 
+// The closed purpose list (PRIVACY.md §3). email_recommendations and
+// taste_card_sharing are reserved for later -- no feature asks for them yet,
+// so the backend rejects them (blueprint gap 7).
+export type ConsentPurpose =
+  | 'terms_privacy'
+  | 'watch_history'
+  | 'personalization_individual'
+  | 'personalization_pooled'
+  | 'import_processing'
+  | 'analytics_first_party';
+
+// The policy text version this client currently shows -- matches PRIVACY.md's
+// own "Version: 2.0" header, not an arbitrary string. Bump alongside that
+// document; a version bump re-asks every purpose (PRIVACY.md §3).
+export const CONSENT_VERSION = 'privacy-2.0';
+
+export interface Consent {
+  id: string;
+  userId: string;
+  purpose: ConsentPurpose;
+  version: string;
+  granted: boolean;
+  grantedAt: string;
+  revokedAt: string | null;
+}
+
 export interface Profile {
   id: string;
   userId: string;
@@ -264,4 +290,13 @@ export const api = {
 
   getRecommendations: (profileId: string, limit = 10) =>
     request<Recommendation[]>(`/profiles/${profileId}/recommendations?limit=${limit}`),
+
+  getConsents: () => request<Consent[]>('/consents'),
+
+  // User-scoped, not profile-scoped (blueprint gap 7): terms_privacy is
+  // asked at registration, before any profile exists (PRIVACY.md §3).
+  // Upserts per (purpose, version); a repeat call with the same values is a
+  // safe no-op.
+  updateConsents: (consents: { purpose: ConsentPurpose; version: string; granted: boolean }[]) =>
+    request<Consent[]>('/consents', { method: 'PUT', body: JSON.stringify({ consents }) }),
 };
