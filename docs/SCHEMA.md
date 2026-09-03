@@ -2,7 +2,7 @@
 
 **Status**: Derived from blueprint `§13` (entities and event shapes), `§11` (rights registry), `§7.5`–`§7.6`, `§21`. Two layers, kept apart on purpose:
 
-- **§1 Current physical schema** — exactly what the eighteen TypeORM migrations in `apps/backend/src/migrations/` create (verified 2026-09-03). This is the truth for anyone writing SQL today.
+- **§1 Current physical schema** — exactly what the eighteen TypeORM migrations in `apps/backend/src/migrations/` create (verified 2026-09-04). This is the truth for anyone writing SQL today.
 - **§2 Target schema** — the `BP §13.1` entity set expressed as tables, plus the migration plan from §1 to §2.
 
 Naming (ADR-16): tables `snake_case` plural; columns are TypeORM's default `camelCase` and therefore **quoted** in raw SQL (`"profileId"`); primary keys `uuid` via `uuid_generate_v4()`; timestamps `TIMESTAMP` (UTC by convention). The one plural-naming exception (`user_title_state`) was renamed to `user_title_states` in M1. Schema changes go through `npm run migration:generate` / `npm run db:migrate` only — `synchronize` is off in every environment.
@@ -271,7 +271,7 @@ What is **not** in the database today (see §2 for the target): nothing — ever
 | users / identities | `users` (+ `role`, since M1), `profiles` (+ `market`/`platforms` since `AddProfileMarketAndPlatforms`, `pausedAt` since M1) | partial — no admin board or `pause_all` flow reads these columns yet |
 | content_items / editions | `titles`, `title_editions` | `title_editions` present since M3, empty; search is still ILIKE on `titles` |
 | localized_titles | `localized_titles` | present since M3, empty — search is still ILIKE on two `titles` columns, not yet switched to the GIN index on `localized_titles.title` |
-| credits / people | `people`, `credits` | present since M3, empty |
+| credits / people | `people`, `credits` | present since M3; populated 2026-09-04 — 232 people, 313 director credits (`role: 'director'`) across 295 of 300 demo titles, loaded from a Wikidata fetch (ADR-65/ADR-70). Only the `director` role exists; `cast`/`writer` are unbuilt |
 | content_features | `content_features` (per-feature rows) + `titles.fingerprint` (published snapshot) | `content_features` present since M3, empty; `titles.fingerprint` still the only populated provenance |
 | watch_events | `watch_events` | present since M5, empty — watches are still folded into `user_title_states.watchedAt` only |
 | triad_events | `triads` | present; `shownAt`/`answeredAt`/`modelVersion`/`idempotencyKey` exist (ADR-32), `holdout`/`correctsTriadId` since M1 — both always their default today, no policy sets `holdout` and no correction flow exists |
@@ -281,7 +281,7 @@ What is **not** in the database today (see §2 for the target): nothing — ever
 | outcomes | `outcomes` | present since M5, empty |
 | model_versions / experiments | `model_versions`, `experiments`, `experiment_assignments` | present since M4, empty — random-v1 runs no experiments, `training.py` stamps no model-version row |
 | consents / privacy_requests | `consents`, `privacy_requests` | present since M2 — no route reads/writes them yet (blueprint gap 7, PRIVACY.md §5) |
-| (rights registry, `§11.1`) | `source_records` | present since M3, empty |
+| (rights registry, `§11.1`) | `source_records` | present since M3; 313 rows since 2026-09-04, one per director credit (`fieldName: 'director'`, `source: 'wikidata'`, `license: 'CC0'`) (ADR-70). No row cites any other field yet |
 | (Public Quality / Watchability, `§10.3`, `§6`) | `public_quality_sources`, `availability_snapshots` | present since M6, empty — both need a licensed data source that doesn't exist |
 | (shared latent space, `§7.5`) | `shared_latent_space_versions` | present since M7, empty — `user_model_snapshots.calibratedAgainst`'s FK now points here (added by M7) but no version has ever been created |
 | (audit, `§21.3`) | `audit_log` | present since M2 — nothing writes to it yet |
@@ -475,7 +475,7 @@ Each step is one TypeORM migration; none require data backfill beyond defaults b
 |---|---|---|
 | M1 ✅ | rename `user_title_state` → `user_title_states`; `profiles.pausedAt`; `users.role`; `triads.holdout`/`correctsTriadId` + two indexes — all applied by `CompleteM1Plan` (`market`/`platforms` were already done by `AddProfileMarketAndPlatforms`; `shownAt`/`answeredAt`/`modelVersion`/`idempotencyKey` by `AddTriadEventCompleteness`, ADR-32; `triad_replacements`/`triadEligible` by `AddTriadReplacements`, ADR-17) | event completeness (`BP §13.2`, `§14`) — closed. No application logic reads `role`/`pausedAt`/`holdout`/`correctsTriadId` yet; that's the admin board, `pause_all`, and a future correction flow respectively, none built |
 | M2 ✅ | `consents`, `privacy_requests`, `audit_log` — all applied by `AddM2ConsentAndAuditTables` | onboarding consent, export/delete/reset — schema only; no application logic writes to these tables yet |
-| M3 ✅ | `source_records`, `content_features`, `localized_titles`, `people`, `credits`, `title_editions` — all applied by `AddM3RightsRegistryAndCatalogProvenance` | rights registry, FTS search, provenance — schema only; nothing populates these tables yet, and search hasn't switched off ILIKE |
+| M3 ✅ | `source_records`, `content_features`, `localized_titles`, `people`, `credits`, `title_editions` — all applied by `AddM3RightsRegistryAndCatalogProvenance` | rights registry, FTS search, provenance — `people`/`credits`/`source_records` populated 2026-09-04 (director credits, ADR-70); `content_features`, `localized_titles`, `title_editions` still schema-only, and search hasn't switched off ILIKE |
 | M4 ✅ | `model_versions`, `experiments`, `experiment_assignments`; `user_model_snapshots` additions (`posterior`, `recentWeights`, `exceptions`, `calibratedAgainst` — held-out metrics already exist, ADR-31) — all applied by `AddM4ModelVersioningAndExperiments` | reproducibility, calibration — schema only; `calibratedAgainst`'s FK to `shared_latent_space_versions` is deferred to M7 (that table doesn't exist yet, ADR-54) |
 | M5 ✅ | `recommendations`, `outcomes`, `watch_events`, `library_imports` — all applied by `AddM5RecommendationsAndWatchEvents` | persisted recommendations, post-watch loop, imports — schema step only; `recommendations` (ADR-58), `outcomes` and `watch_events` (ADR-66) are now written, `library_imports` still isn't |
 | M6 ✅ | `public_quality_sources`, `availability_snapshots` — all applied by `AddM6PublicQualityAndAvailability` | Public Quality and Watchability layers — schema only; still need licensed sources before anything can populate them |

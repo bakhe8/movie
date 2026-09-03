@@ -5,24 +5,32 @@ import { User } from './user.entity';
 export type PrivacyRequestType = 'export' | 'delete' | 'reset';
 export type PrivacyRequestStatus = 'requested' | 'verifying' | 'scheduled' | 'running' | 'done' | 'cancelled';
 
-// No onDelete on the userId FK, matching SCHEMA.md's DDL exactly: PRIVACY.md
-// §5 treats this row as a tombstone that should survive the user it names,
-// which is in tension with a NOT NULL FK to a row a future delete flow would
-// remove. No delete flow exists yet (blueprint gap 7) -- left for whoever
-// builds it to resolve deliberately (SET NULL vs. a denormalized snapshot),
-// not to decide silently in a schema-only migration.
+// A request is a tombstone: it outlives the user it names (PRIVACY.md §5,
+// §9 "permanent record without personal data after deletion"). The FK is
+// therefore ON DELETE SET NULL (migration PrivacyRequestsTombstone), and
+// subjectKey -- a SHA-256 of the user id -- keeps a user's requests linked
+// to each other after userId has been nulled, without keeping the id.
 @Entity('privacy_requests')
 export class PrivacyRequest {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => User)
+  @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'userId' })
-  user: User;
+  user: User | null;
 
   @Index('IDX_privacy_requests_userId')
-  @Column()
-  userId: string;
+  @Column({ type: 'uuid', nullable: true })
+  userId: string | null;
+
+  @Index('IDX_privacy_requests_subjectKey')
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  subjectKey: string | null;
+
+  // The profile a 'reset' applied to. Bare uuid, no FK: the profile may be
+  // wiped later and this row must still say what happened.
+  @Column({ type: 'uuid', nullable: true })
+  profileId: string | null;
 
   @Column({ type: 'varchar' })
   type: PrivacyRequestType;

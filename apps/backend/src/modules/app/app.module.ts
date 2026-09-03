@@ -17,6 +17,7 @@ import { UserTitleStateModule } from '../user-title-state/user-title-state.modul
 import { WatchEventsModule } from '../watch-events/watch-events.module';
 import { OutcomesModule } from '../outcomes/outcomes.module';
 import { TrainingModule } from '../training/training.module';
+import { PrivacyModule } from '../privacy/privacy.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { TrainingModule } from '../training/training.module';
     WatchEventsModule,
     OutcomesModule,
     TrainingModule,
+    PrivacyModule,
   ],
   controllers: [AppController],
   providers: [
