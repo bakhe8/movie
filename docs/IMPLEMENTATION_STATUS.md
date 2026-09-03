@@ -46,8 +46,8 @@ Nothing left open from this line of audit.
 
 These run today and contradict or fall short of the blueprint; a green test suite makes them invisible.
 
-1. **Schema covers 20 of the target tables** — `recommendations`, `outcomes`, `watch_events`, `shared_latent_space_versions` are still missing (`§13.1`, `§11.1`; [SCHEMA.md](SCHEMA.md) §2.4 migration plan M1–M7). Steps 1–4/7 of that plan (M1–M4) are closed today — see the tables below; none of M1–M4's new tables/columns have any application logic reading or writing them yet. One design tension found while implementing M4: `user_model_snapshots.calibratedAgainst`'s FK target (`shared_latent_space_versions`) doesn't exist until M7, three steps later — the column exists unconstrained until then (ADR-54).
-4. **Recommendations are never persisted** — no reason, no display propensity, no `experimentId`/`requestId` (`§13.1`, `§14`, `§14.1`). Without the log the post-watch loop (`§4.5`) cannot close and `§16` has nothing to read.
+1. **Schema covers 24 of the target tables** — only `shared_latent_space_versions` (M7) is still missing (`§13.1`, `§11.1`; [SCHEMA.md](SCHEMA.md) §2.4 migration plan M1–M7). Steps 1–5/7 of that plan (M1–M5) are closed today — see the tables below; none of M1–M5's new tables/columns have any application logic reading or writing them yet. One design tension found while implementing M4: `user_model_snapshots.calibratedAgainst`'s FK target (`shared_latent_space_versions`) doesn't exist until M7, three steps later — the column exists unconstrained until then (ADR-54).
+4. **Recommendations are never persisted** — no reason, no display propensity, no `experimentId`/`requestId` (`§13.1`, `§14`, `§14.1`). Without the log the post-watch loop (`§4.5`) cannot close and `§16` has nothing to read. The `recommendations`/`outcomes`/`watch_events`/`library_imports` tables exist since M5, but `RecommendationsService` still computes scores per-request without writing a row to any of them — this gap is now purely an application-layer one, not a schema one.
 5. **Confidence band is a triad-count heuristic** — `§9.2`/`§9.3` require evidence diversity, held-out prediction success and fingerprint quality (ADR-21). The fingerprint-quality and held-out-prediction inputs now exist (gaps 6's one-band demotion, gap 2); the rest does not.
 6. **Fingerprints carry no provenance and cover part of `§6.1`** — the 15 seeded rows leave `confidence` empty; families characters/ending/people/cultural context are absent (V1 is frozen; V2 planned — [FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md)). `source_records`/`content_features` — the tables that would actually hold that provenance — exist since M3 but no ingestion pass has ever written a row to either.
 7. **Onboarding records no consent** (`§4.1`, `§13.1`, `§2.4 #9`) — market and platforms are collected since 2026-09-03 (onboarding section below); the `consents` table exists since M2 but no screen or endpoint writes a row to it yet.
@@ -93,7 +93,17 @@ Not itself the close of gap 1 — schema only, the fourth step of [SCHEMA.md](SC
 |---|---|---|
 | Three of the remaining tables blueprint gap 1 needs were missing — `model_versions`, `experiments`, `experiment_assignments` — plus four columns on `user_model_snapshots` (`posterior`, `recentWeights`, `exceptions`, `calibratedAgainst`) | One migration, `AddM4ModelVersioningAndExperiments`, plus three new entities, implementing SCHEMA.md §2.2's target DDL — with one deliberate deviation: `calibratedAgainst` is added as a plain nullable `varchar`, not the FK the DDL names, because its target table doesn't exist until M7. The constraint itself is deferred to M7's own migration rather than invented early against a table that isn't there (ADR-54) | Verified with a real `up()` → `down()` → `up()` round trip against `postgres-test` (every new table/column/index both directions), then the full e2e suite (41/41) on the final state; `tsc`, the full unit suite (98 tests) and `eslint` all clean |
 
-All three new tables and four new columns exist but nothing writes to them — random-v1 runs no experiments, `training.py` stamps no `model_versions` row, `PlackettLuceRanker.fit()` never populates `posterior`/`exceptions`. Next: M5 (`recommendations`, `outcomes`, `watch_events`, `library_imports`) — persisted recommendations and the post-watch loop, the step blueprint gap 4 is directly blocked on.
+All three new tables and four new columns exist but nothing writes to them — random-v1 runs no experiments, `training.py` stamps no `model_versions` row, `PlackettLuceRanker.fit()` never populates `posterior`/`exceptions`.
+
+## Closed on 2026-09-03 (M5 migration plan step, 5 of 7 toward gap 1)
+
+Not itself the close of gap 1 or gap 4 (recommendations never persisted) — schema only, the fifth step of [SCHEMA.md](SCHEMA.md) §2.4's plan, but the one gap 4 is directly blocked on: without a `recommendations` row the post-watch loop (`§4.5`) has nothing to close.
+
+| Gap | What changed | Proof |
+|---|---|---|
+| The last four tables blueprint gap 1's original twelve needed — `recommendations`, `outcomes`, `watch_events`, `library_imports` (`§13.1`, `§4.5`, `§14`/`§14.1`) | One migration, `AddM5RecommendationsAndWatchEvents`, plus four new entities, implementing SCHEMA.md §2.2's target DDL verbatim — schema only, `RecommendationsService` unchanged. Tables created in FK-dependency order: `library_imports`, `recommendations`, `outcomes`, `watch_events`. `watch_events.importId` carries no FK at all, matching the target DDL literally even though `library_imports` already exists (ADR-55) | Verified with a real `up()` → `down()` → `up()` round trip against `postgres-test` (all four tables, every FK/index both directions), then the full e2e suite (41/41) on the final state; `tsc`, the full unit suite (98 tests) and `eslint` all clean |
+
+All four tables exist but are empty and unread. This closes schema step 5/7, not gap 4 itself: closing gap 4 for real still needs `RecommendationsService` (or a new endpoint) to actually write a `recommendations` row per request shown, and something to record `outcomes`/`watch_events` as users act — application-layer work this migration only makes possible. Only two schema steps of the original plan remain: M6 (`public_quality_sources`, `availability_snapshots` — blocked on licensed sources) and M7 (`shared_latent_space_versions`, pgvector conversion).
 
 ---
 
@@ -393,7 +403,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 
 | Item | Built | Blueprint | Evidence / gap |
 |---|---|---|---|
-| `GET /profiles/:id/recommendations` (409 until a snapshot exists) | ✅ | ❌ | `§13.1`/`§14`: not persisted, no reason, no propensity, no `requestId` (gap 4) |
+| `GET /profiles/:id/recommendations` (409 until a snapshot exists) | ✅ | ❌ | `§13.1`/`§14`: not persisted, no reason, no propensity, no `requestId` (gap 4) — the `recommendations` table exists since M5, but nothing writes to it |
 | `GET /profiles/:id/library/ranking` (personal ranking of the watched set) | ✅ | ✅ | `§5.3` "ترتيب شخصي": the same scoring path, positions only — no score leaves the server (ADR-33); 409 until a snapshot exists |
 | Personal Fit from latest snapshot; dimension-mismatch guard | ✅ | — | |
 | Four separate values, never merged | ✅ | ✅ | `§4.4`: Public Quality and Watchability are explicit `null` (no source), not fabricated |
@@ -403,7 +413,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Confidence band (verbal, no %) | ✅ | ❌ | band from triad count (+ fingerprint-quality demotion) only (gap 5) |
 | Internal rerank blend (`§10.3`, ADR-20) | ❌ | ❌ | |
 | Attribution gate + `evidenceSource` | 🟡 | 🟡 | every reason carries `evidenceSource: 'individual'` (MVP phase 1 of `§7.6`, SPECIFICATION §5.3) and the screen labels it "from your own choices"; the gate itself (`population_enriched`, `§12.2`) waits for the shared space (ADR-13) |
-| Outcomes endpoint | ❌ | ❌ | `§13.1 outcomes` |
+| Outcomes endpoint | ❌ | ❌ | `§13.1 outcomes` — table exists since M5, empty |
 | Unit tests | ✅ | — | `recommendations.service.spec.ts`, 19 tests |
 | Frontend: recommendations screen (`RecommendationsScreen`, home view) | ✅ | 🟡 | rebuilt 2026-09-03 under ADR-33 (table above): three track sections (only `safe` populated — backend), four separate labelled cells, Personal Fit as level + position (never the score), `§9.3` confidence copy, unknown values shown as unknown, model version; add to watchlist ✅, mark watched ✅; still missing from the backend: reason with `evidenceSource`, availability, "not relevant" outcome |
 | Explanations (template / LLM rephrase) | 🟡 | 🟡 | template reasons since 2026-09-03: `RecommendationsService.reason()` returns the ≤ 2 fingerprint dimensions whose weighted deviation from the candidate pool lifted the score (`w_i × (φ_i − mean_i) > 0`, ≥ 20 % of the strongest), imputed dimensions never cited, `[]` when nothing lifted it; the client composes the line from fixed abstract phrases (`FEATURE_REASON_COPY`, `formatReason`) — no plot, no sensitive trait — and adds "the evidence is still thin" on weak bands (`§9.4`); LLM rephrasing (`§15`) and the dominant-component wording once Public Quality exists (ADR-20) still open |
@@ -412,10 +422,10 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 
 | Item | Built | Blueprint | Evidence / gap |
 |---|---|---|---|
-| `PATCH …/titles/:titleId/state` (watched / not_watched / watchlist / interested) | ✅ | 🟡 | `§13.1 watch_events`/`§6.2`: no source, edition, audio, subtitles, provider; single state row |
+| `PATCH …/titles/:titleId/state` (watched / not_watched / watchlist / interested) | ✅ | 🟡 | `§13.1 watch_events`/`§6.2`: no source, edition, audio, subtitles, provider; single state row; `watch_events` table exists since M5, unused |
 | `GET …/watched-titles`, `GET …/watchlist` | ✅ | — | |
 | No in-app rating; `importedRating` + `ratingSource='import'` reserved | ✅ | ✅ | `§2.4 #2`, `§4.2`, `§4.5` |
-| `POST /watch-events` with source; `POST /library/imports` | ❌ | ❌ | `§14`, `§4.2` |
+| `POST /watch-events` with source; `POST /library/imports` | ❌ | ❌ | `§14`, `§4.2` — `library_imports` table exists since M5, empty |
 | `triadEligible` flag (ADR-17) | ✅ | ✅ | migration `AddTriadReplacements`; cleared only by a `not_remembered` replacement; read by the triad pool query; never by training |
 | Unit tests | ✅ | — | `user-title-state.service.spec.ts`, 5 tests |
 | Frontend: mark watched ✅; not watched ✅ (Discover undo, or a triad replacement); watchlist ✅ (Discover or a recommendation; managed in `ListScreen`: watched / remove); history ✅ (`ListScreen` timeline with dates, undo, and a diary: editable watch date + private note); state shown in search ✅ | ✅ | 🟡 | `§4.2`, `§5.1` |

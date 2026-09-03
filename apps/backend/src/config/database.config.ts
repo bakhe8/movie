@@ -9,11 +9,14 @@ import { Credit } from '../entities/credit.entity';
 import { Embedding } from '../entities/embedding.entity';
 import { ExperimentAssignment } from '../entities/experiment-assignment.entity';
 import { Experiment } from '../entities/experiment.entity';
+import { LibraryImport } from '../entities/library-import.entity';
 import { LocalizedTitle } from '../entities/localized-title.entity';
 import { ModelVersion } from '../entities/model-version.entity';
+import { Outcome } from '../entities/outcome.entity';
 import { Person } from '../entities/person.entity';
 import { PrivacyRequest } from '../entities/privacy-request.entity';
 import { Profile } from '../entities/profile.entity';
+import { Recommendation } from '../entities/recommendation.entity';
 import { SourceRecord } from '../entities/source-record.entity';
 import { Title } from '../entities/title.entity';
 import { TitleEdition } from '../entities/title-edition.entity';
@@ -22,6 +25,7 @@ import { TriadReplacement } from '../entities/triad-replacement.entity';
 import { User } from '../entities/user.entity';
 import { UserModelSnapshot } from '../entities/user-model-snapshot.entity';
 import { UserTitleState } from '../entities/user-title-state.entity';
+import { WatchEvent } from '../entities/watch-event.entity';
 
 // override: false (dotenv's default) so env vars already set on the process
 // -- e.g. by the test suite's setup file -- take precedence over the .env
@@ -74,6 +78,10 @@ export function getConnectionOptions(): ConnectionOptions {
       ModelVersion,
       Experiment,
       ExperimentAssignment,
+      LibraryImport,
+      Recommendation,
+      Outcome,
+      WatchEvent,
     ],
   };
 }
