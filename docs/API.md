@@ -32,7 +32,7 @@ Verified against `apps/backend/src/modules/**` on 2026-09-03. Every profile-scop
 | GET | `/api/titles` | — | `?query&page&limit(≤100)` | `{ items, page, limit, total, totalPages }` | ILIKE on `titleEn`/`titleAr`, plus Arabic folding on both sides (hamza forms of alef → ا, ة → ه, ى → ي, tashkeel/tatweel ignored) so «احلام» finds «أحلام»; alternate titles (`localized_titles`, FTS) still M3 |
 | GET | `/api/titles/search` | — | same as above | same | alias of `GET /api/titles` |
 | GET | `/api/titles/starter` | JWT | `?limit(≤30, default 12)` | Title[] | the diverse starter list of `BP §4.2`: a deterministic round-robin across primary genres (largest genre first, newest first within a genre) over the first 300 titles by name; no taste input |
-| GET | `/api/titles/:titleId` | — | — | Title (incl. `fingerprint`) | |
+| GET | `/api/titles/:titleId` | JWT | — | Title (public columns; never `fingerprint`/`externalIds`) + `publicQuality: { value, votes, sources: [{ source, value, scale, votes, capturedAt, attribution }] } \| null` + `descriptionSource: { name, attribution, url } \| null` | Public Quality per source, never averaged (`BP §10.3`; IMDb since 2026-09-04, ALPHA_PLAN 5.3); the description's credit from the rights registry (5.1); both `null` when nothing displayable, never 0 |
 | PATCH | `/api/profiles/:profileId/titles/:titleId/state` | JWT | `{ state: watched\|not_watched\|watchlist\|interested, watchedAt?, notes? }` | UserTitleState | never accepts a rating |
 | GET | `/api/profiles/:profileId/watched-titles` | JWT | — | UserTitleState[] (+title) | |
 | GET | `/api/profiles/:profileId/watchlist` | JWT | — | UserTitleState[] (+title) | |
