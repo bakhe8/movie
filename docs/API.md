@@ -58,7 +58,8 @@ Recommendation { title, personalFitScore, publicQualityScore|null, watchabilityS
                  track: 'safe'|'discovery'|'outside_usual', modelVersion,
                  reason: { features: [{ key: FingerprintDimension, direction: 'higher'|'lower' }] /* ≤ 2, only dimensions that lifted the score (BP §9.4); [] when none did */,
                            evidenceSource: 'individual' } }
-LibraryRankingItem { title, position /* 1-based, best fit first */, confidenceBand, fingerprintCoverage, modelVersion }
+LibraryRankingItem { title, position /* 1-based, best fit first */, confidenceBand, fingerprintCoverage, modelVersion,
+                     reason /* same shape as Recommendation.reason, relative to the watched set */ }
 ```
 
 Known gaps versus `BP §14` are tracked row-by-row in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md); the target below is the fix.
@@ -166,6 +167,7 @@ Ranking is sent as title ids (not indices), on both the unversioned route and th
 ---
 
 **Changelog**
+- 1.10 (2026-09-03): `LibraryRankingItem` gains `reason` (the driving dimensions relative to the watched set, BP §9.4).
 - 1.9 (2026-09-03): `GET /api/titles/starter` (diverse starter list, `BP §4.2`); catalogue search folds Arabic hamza/taa marbuta/alef maqsura on both sides.
 - 1.8 (2026-09-03): `Recommendation` gains `reason` -- the ≤ 2 fingerprint dimensions whose weighted deviation from the candidate pool lifted the score, with a direction, and `evidenceSource: 'individual'` (BP §9.4, ADR-20; wording is the client's).
 - 1.7 (2026-09-03): every `Triad` response (`current`, `rank`, `replace`) carries `items` — the three titles in `displayOrder`, public columns only — so the triad screen needs no per-title fetch (the target contract's inline items, brought forward).

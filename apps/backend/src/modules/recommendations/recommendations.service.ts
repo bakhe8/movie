@@ -84,6 +84,9 @@ export interface LibraryRankingItem {
   confidenceBand: ConfidenceBand;
   fingerprintCoverage: number;
   modelVersion: string;
+  // Why the model places it here: the same driving-feature reason as a
+  // recommendation (blueprint §9.4), relative to the watched set.
+  reason: RecommendationReason;
 }
 
 interface ScoredTitle {
@@ -160,6 +163,7 @@ export class RecommendationsService {
       confidenceBand: scored.confidenceBand,
       fingerprintCoverage: scored.fingerprintCoverage,
       modelVersion: snapshot.modelVersion,
+      reason: scored.reason,
     }));
   }
 

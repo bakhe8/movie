@@ -197,6 +197,10 @@ describe('RecommendationsService', () => {
       expect(result[0]).not.toHaveProperty('personalFitScore');
       expect(result[0].confidenceBand).toBe('strong');
       expect(result[0].modelVersion).toBe('test-v1');
+      // The same driving-feature reason as a recommendation, relative to
+      // the watched set: warmth lifted the top title, nothing lifted the last.
+      expect(result[0].reason).toEqual({ features: [{ key: 'warmth', direction: 'higher' }], evidenceSource: 'individual' });
+      expect(result[2].reason.features).toEqual([]);
     });
 
     it('demotes the band one step for a watched title with an unknown dimension (ADR-19)', async () => {

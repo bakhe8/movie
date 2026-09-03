@@ -164,6 +164,59 @@
   font-size: 13px;
 }
 
+/* The user's own diary note, shown as written. */
+.noteText {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border-inline-start: 3px solid #e4e8ea;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.cardEditing {
+  grid-template-columns: minmax(0, 1fr);
+  border-color: var(--accent);
+}
+
+.diary {
+  display: grid;
+  gap: 10px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.field label {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.field input,
+.field textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #dfe4e8;
+  border-radius: 12px;
+  background: #fff;
+  font: inherit;
+}
+
+.field textarea {
+  resize: vertical;
+}
+
+.field input:focus,
+.field textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .empty {
   margin: 0;
   color: var(--muted);

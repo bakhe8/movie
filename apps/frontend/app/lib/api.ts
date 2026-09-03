@@ -144,6 +144,8 @@ export interface LibraryRankingItem {
   confidenceBand: ConfidenceBand;
   fingerprintCoverage: number;
   modelVersion: string;
+  // Why the model places it here, relative to the watched set (§9.4).
+  reason: RecommendationReason;
 }
 
 export class ApiError extends Error {
@@ -224,7 +226,9 @@ export const api = {
   getStarterTitles: (limit = 12) => request<Title[]>(`/titles/starter?limit=${limit}`),
 
   // No `rating` here: the only explicit preference signal is a triad ranking (blueprint §2.4 #2).
-  setTitleState: (profileId: string, titleId: string, data: { state: TitleState; watchedAt?: string; notes?: string }) =>
+  // `notes` omitted = left alone; `null` = cleared (PATCH semantics). Notes are
+  // the user's private diary and never enter the model.
+  setTitleState: (profileId: string, titleId: string, data: { state: TitleState; watchedAt?: string; notes?: string | null }) =>
     request<UserTitleState>(`/profiles/${profileId}/titles/${titleId}/state`, {
       method: 'PATCH',
       body: JSON.stringify(data),

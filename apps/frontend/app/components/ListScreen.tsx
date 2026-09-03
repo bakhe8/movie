@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError, type LibraryRankingItem, type Title, type UserTitleState } from '../lib/api';
-import { formatConfidence, formatDate, formatNumber } from '../lib/format';
+import { formatConfidence, formatDate, formatNumber, formatReason } from '../lib/format';
 import styles from './ListScreen.module.css';
 
 type Lang = 'ar' | 'en';
@@ -29,6 +29,15 @@ const labels = {
     timeline: 'سجل المشاهدة',
     timelineEmpty: 'لم تُسجَّل أفلام مشاهَدة بعد.',
     noDate: 'تاريخ غير مسجّل',
+    // Diary (blueprint §5.3 "يوميات"): a private note and a corrected watch date.
+    diary: 'اليوميات',
+    diaryEdit: 'تعديل اليوميات',
+    diaryDate: 'تاريخ المشاهدة',
+    diaryNotes: 'ملاحظاتك',
+    diaryHint: 'خاصة بك، ولا تدخل النموذج. الترتيب وحده يعلّمه.',
+    diarySave: 'حفظ',
+    diaryCancel: 'إلغاء',
+    diarySaved: (title: string) => `حُفظت يوميات «${title}».`,
     noMatch: 'لا شيء يطابق التصفية.',
     watched: 'شاهدته',
     remove: 'إزالة',
@@ -58,6 +67,14 @@ const labels = {
     timeline: 'Watch history',
     timelineEmpty: 'No watched films recorded yet.',
     noDate: 'Date not recorded',
+    diary: 'Diary',
+    diaryEdit: 'Edit diary',
+    diaryDate: 'Watch date',
+    diaryNotes: 'Your notes',
+    diaryHint: 'Private to you, and never fed to the model. Only ranking teaches it.',
+    diarySave: 'Save',
+    diaryCancel: 'Cancel',
+    diarySaved: (title: string) => `Diary for “${title}” saved.`,
     noMatch: 'Nothing matches the filter.',
     watched: 'Watched it',
     remove: 'Remove',
@@ -83,6 +100,8 @@ export function ListScreen({ lang, profileId }: { lang: Lang; profileId: string 
   const [filter, setFilter] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // The diary editor open on one timeline item: date as yyyy-mm-dd, notes as typed.
+  const [diary, setDiary] = useState<{ titleId: string; date: string; notes: string } | null>(null);
 
   const loadRanking = useCallback(async () => {
     setRanking({ kind: 'loading' });
@@ -164,6 +183,38 @@ export function ListScreen({ lang, profileId }: { lang: Lang; profileId: string 
       setWatched((current) => current.filter((item) => item.titleId !== state.titleId));
       setNotice(noticeFor(name));
       if (wasWatched) await loadRanking();
+    } catch {
+      setNotice(t.actionFailed);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function openDiary(state: UserTitleState) {
+    setDiary({
+      titleId: state.titleId,
+      date: state.watchedAt ? state.watchedAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
+      notes: state.notes ?? '',
+    });
+  }
+
+  // The diary (blueprint §5.3): a private note and a corrected watch date on
+  // an already-watched title. Free text and a date -- never a rating, and
+  // never read by training (ADR-4).
+  async function saveDiary(state: UserTitleState) {
+    if (!diary) return;
+    const name = nameOf(state.title, state.titleId);
+    setBusyId(state.titleId);
+    try {
+      const notes = diary.notes.trim();
+      const updated = await api.setTitleState(profileId, state.titleId, {
+        state: 'watched',
+        watchedAt: new Date(`${diary.date}T12:00:00`).toISOString(),
+        notes: notes.length > 0 ? notes : null,
+      });
+      setWatched((current) => current.map((item) => (item.titleId === state.titleId ? { ...updated, title: state.title } : item)));
+      setDiary(null);
+      setNotice(t.diarySaved(name));
     } catch {
       setNotice(t.actionFailed);
     } finally {
@@ -306,6 +357,8 @@ export function ListScreen({ lang, profileId }: { lang: Lang; profileId: string 
                           <span className={styles.chip}>{confidence.label}</span>
                         </h4>
                         {altOf(item.title) && <p className={styles.alt}>{altOf(item.title)}</p>}
+                        {/* Why the model places it here -- the driving traits only (§9.4). */}
+                        {formatReason(item.reason, lang) && <p className={styles.note}>{formatReason(item.reason, lang)}</p>}
                         {item.fingerprintCoverage < 1 && <p className={styles.note}>{t.partialFingerprint}</p>}
                       </div>
                     </li>
@@ -332,18 +385,64 @@ export function ListScreen({ lang, profileId }: { lang: Lang; profileId: string 
           <ul className={styles.list}>
             {visibleWatched.map((state) => {
               const busy = busyId === state.titleId;
+              const editing = diary?.titleId === state.titleId;
               return (
-                <li key={state.id} className={styles.card}>
+                <li key={state.id} className={editing ? `${styles.card} ${styles.cardEditing}` : styles.card}>
                   <div>
                     <h4 className={styles.title}>{nameOf(state.title, state.titleId)}</h4>
                     {altOf(state.title) && <p className={styles.alt}>{altOf(state.title)}</p>}
                     <p className={styles.meta}>{state.watchedAt ? formatDate(state.watchedAt, lang) : t.noDate}</p>
+                    {!editing && state.notes && <p className={styles.noteText}>{state.notes}</p>}
                   </div>
-                  <div className={styles.actions}>
-                    <button type="button" className={styles.ghost} onClick={() => clearState(state, t.undoNotice)} disabled={busy}>
-                      {t.undo}
-                    </button>
-                  </div>
+                  {editing && diary ? (
+                    <form
+                      className={styles.diary}
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        saveDiary(state);
+                      }}
+                    >
+                      <div className={styles.field}>
+                        <label htmlFor={`diary-date-${state.titleId}`}>{t.diaryDate}</label>
+                        <input
+                          id={`diary-date-${state.titleId}`}
+                          type="date"
+                          value={diary.date}
+                          max={new Date().toISOString().slice(0, 10)}
+                          onChange={(event) => setDiary({ ...diary, date: event.target.value })}
+                          required
+                        />
+                      </div>
+                      <div className={styles.field}>
+                        <label htmlFor={`diary-notes-${state.titleId}`}>{t.diaryNotes}</label>
+                        <textarea
+                          id={`diary-notes-${state.titleId}`}
+                          value={diary.notes}
+                          maxLength={1000}
+                          rows={3}
+                          onChange={(event) => setDiary({ ...diary, notes: event.target.value })}
+                        />
+                        <p className={styles.note}>{t.diaryHint}</p>
+                      </div>
+                      <div className={styles.actions}>
+                        <button type="submit" className={styles.ghost} disabled={busy}>
+                          {t.diarySave}
+                        </button>
+                        <button type="button" className={styles.ghost} onClick={() => setDiary(null)} disabled={busy}>
+                          {t.diaryCancel}
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className={styles.actions}>
+                      <button type="button" className={styles.ghost} onClick={() => openDiary(state)} disabled={busy}>
+                        {state.notes ? t.diaryEdit : t.diary}
+                      </button>
+                      <button type="button" className={styles.ghost} onClick={() => clearState(state, t.undoNotice)} disabled={busy}>
+                        {t.undo}
+                      </button>
+                    </div>
+                  )}
                 </li>
               );
             })}

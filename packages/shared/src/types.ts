@@ -165,6 +165,8 @@ export interface LibraryRankingItem {
   confidenceBand: ConfidenceBand;
   fingerprintCoverage: number;
   modelVersion: string;
+  /** The same driving-feature reason as a recommendation, relative to the watched set (§9.4). */
+  reason: RecommendationReason;
 }
 
 /** Why a title ranks where it does (§9.4, ADR-20): only the dimensions that raised its score; wording is the client's. */
