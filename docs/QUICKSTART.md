@@ -150,6 +150,7 @@ cd apps/backend && npm run migration:generate -- src/migrations/<Name>
 | Rank tab says "mark at least three films" | fewer than 3 watched titles for the profile | Discover → mark more |
 | My list shows "not ready yet" | no model snapshot | run the trainer (step 6.4) |
 | e2e fails to connect on 5544 | `postgres-test` not healthy yet | `docker ps`, retry |
+| fresh clone: backend can't authenticate to Postgres (`password authentication failed`) | Compose resolves `.env` relative to the *compose file's* directory (`docker/`), not the repo root, so `POSTGRES_PASSWORD` silently fell back to `postgres` on first `docker:up` while the backend's own `.env` expects `dev_password_change_in_production` (H5, [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) ADR-38) | already fixed in `docker:up`/`docker:down`/`test:e2e:up`/`docker-logs` (`--project-directory .`, or `../..` from `apps/backend`) as of this revision — if you still hit it, your Postgres volume was initialized before the fix; `docker compose -f docker/docker-compose.yml down -v` and re-run step 2 |
 | CRLF warnings from git | Windows autocrlf | harmless |
 
 ## 10. Where to go next
@@ -161,4 +162,5 @@ cd apps/backend && npm run migration:generate -- src/migrations/<Name>
 ---
 
 **Changelog**
+- 2.1 (2026-09-03): added the fresh-clone Postgres-password troubleshooting row (H5, ADR-38) now that `docker:up`/`docker:down`/`test:e2e:up`/`docker-logs` correctly resolve the root `.env`.
 - 2.0 (2026-09-03): added the missing migrate/seed/train steps (the previous guide went from `docker:up` straight to `npm run dev`, which cannot work with `synchronize: false`), corrected framework versions, removed the OpenAI-key prerequisite and the ad-hoc endpoint list, added Windows notes.

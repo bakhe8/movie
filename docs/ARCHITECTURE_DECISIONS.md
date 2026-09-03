@@ -1,7 +1,7 @@
 # Architecture Decision Records
 
 **Status**: Living log. Every decision cites the blueprint section it serves (`BP §x.y`) or states that it is this repository's own engineering choice within the blueprint's constraints. A decision that contradicts the blueprint is a bug in this file. Product-level open questions that must be settled by experiment are **not** decided here — they are listed in `BP App. C` and [SPECIFICATION.md §11](SPECIFICATION.md).
-**Version**: 2.9 — 2026-09-03 (ADR-1…13 rewritten for consistency; ADR-14…26 added to close the gaps found in the documentation audit; ADR-27…28 added from a code-quality/security audit; ADR-29 added for the NestJS 10→11 migration; ADR-30 added for the `@typescript-eslint`/`vitest` dev-tooling bump; ADR-31 added for the training temporal hold-out, gap 2; ADR-32 added for triad event completeness, gap 3; ADR-33 added for prediction display formatting; ADR-34 added for the H1 triad-reuse fix; ADR-35 added for the H2 deactivated-account fix; ADR-36 added for the H3 lazy-OpenAI-client fix; ADR-37 added for the H4 `ParseUUIDPipe` fix).
+**Version**: 3.0 — 2026-09-03 (ADR-1…13 rewritten for consistency; ADR-14…26 added to close the gaps found in the documentation audit; ADR-27…28 added from a code-quality/security audit; ADR-29 added for the NestJS 10→11 migration; ADR-30 added for the `@typescript-eslint`/`vitest` dev-tooling bump; ADR-31 added for the training temporal hold-out, gap 2; ADR-32 added for triad event completeness, gap 3; ADR-33 added for prediction display formatting; ADR-34 added for the H1 triad-reuse fix; ADR-35 added for the H2 deactivated-account fix; ADR-36 added for the H3 lazy-OpenAI-client fix; ADR-37 added for the H4 `ParseUUIDPipe` fix; ADR-38 added for the H5 `docker compose --project-directory` fix).
 
 Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 
@@ -257,6 +257,13 @@ Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 **Consequences.** `GET /titles/not-a-uuid`, `GET /profiles/not-a-uuid`, `PATCH /profiles/:id/titles/not-a-uuid/state` and `GET /profiles/not-a-uuid/recommendations` now return `400` instead of `500`. No behavior change for well-formed ids (valid-but-nonexistent or valid-but-wrong-owner ids still resolve through the service layer to `404`, unchanged — verified against the existing IDOR e2e suite). `TriadsController` still 500s on a malformed `:triadId`/`:profileId` until the follow-up lands.
 **Revisit when.** `TriadsController`'s pending concurrent edit (triad replacement) lands — apply the same `ParseUUIDPipe` treatment there and remove this ADR's caveat.
 
+## ADR-38 — `docker compose` invocations pin `--project-directory .` (H5)
+
+**Context.** Every compose invocation (`npm run docker:up`/`docker:down` at the repo root, `test:e2e:up` in `apps/backend`, `docker-logs` in the `Makefile`) passed only `-f docker/docker-compose.yml`. Compose derives the *project directory* — where it looks for a `.env` to interpolate `${VAR}` references — from the directory of the first `-f` file when `--project-directory` isn't given, i.e. `docker/`, which has no `.env`. Only the repo root does (`POSTGRES_PASSWORD=dev_password_change_in_production`), so `POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}` in `docker-compose.yml` silently fell back to `postgres` on `postgres`'s *first* `initdb` (a fresh clone) — a password the backend's own `.env` never uses, so `npm run docker:up && npm run db:migrate` fails authentication on a clean checkout. The `postgres-test` service is unaffected (its credentials are hard-coded, not interpolated). Found by an independent audit ([AUDIT_2026-09-03.md](AUDIT_2026-09-03.md) §2 H5), reproduced independently before fixing: `docker compose -f docker/docker-compose.yml config` resolved `POSTGRES_PASSWORD: postgres`; adding `--project-directory .` resolved the correct `dev_password_change_in_production` from the root `.env`.
+**Decision.** Add `--project-directory <path-to-repo-root>` to every compose invocation: `.` where the script's cwd is already the repo root (root `package.json`, `Makefile`), `../..` where it's `apps/backend`. Chosen over moving `docker-compose.yml` to the repo root (the audit's alternative) to avoid touching an unrelated, working file layout for what is purely an invocation-flag fix.
+**Consequences.** A fresh clone's first `docker:up` now initializes Postgres with the password the rest of the stack (backend, seed, CLI, trainer `.env`) actually expects, closing the authentication-failure trap. No effect on this development machine's already-running `movie-postgres` container — its data volume was already initialized (evidently under different, working conditions; see the audit) and Postgres passwords are fixed at `initdb` time, not re-read from `POSTGRES_PASSWORD` on every restart — so this fix was deliberately *not* forced onto the live container (no `docker compose up` was run for real; verified via `config` only) to avoid disrupting a concurrently-running session's database connections. Documented as a `QUICKSTART.md` §9 troubleshooting row with the manual recovery path (`down -v` + re-run) for anyone who already has a volume initialized under the old, broken behavior.
+**Revisit when.** Never, barring a repo-layout change that moves `docker-compose.yml` (at which point re-derive the relative `--project-directory` paths, or drop the flag if the file moves to the root).
+
 ---
 
 ## Summary
@@ -300,6 +307,7 @@ Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 | 35 | `validateUser()` checks `active` (H2) | `BP §21.3` | refresh-token work (ADR-26) |
 | 36 | `services/workers` OpenAI client built lazily, not at import time (H3) | engineering choice | multi-worker client sharing, if ever needed |
 | 37 | `ParseUUIDPipe` on every UUID path param (H4) | `BP §21.3` (input handling) | `TriadsController` still pending |
+| 38 | `docker compose --project-directory .` on every invocation (H5) | engineering choice (dev environment correctness) | compose file moves in the repo layout |
 
 ## How to add a decision
 

@@ -50,7 +50,7 @@ docker-down:
 	npm run docker:down
 
 docker-logs:
-	docker-compose -f docker/docker-compose.yml logs -f
+	docker-compose --project-directory . -f docker/docker-compose.yml logs -f
 
 db-migrate:
 	npm run db:migrate

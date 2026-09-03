@@ -14,8 +14,8 @@
     "build": "npm run build -w apps/frontend && npm run build -w apps/backend",
     "test": "npm run test -w apps/frontend && npm run test -w apps/backend",
     "lint": "npm run lint -w apps/frontend && npm run lint -w apps/backend",
-    "docker:up": "docker-compose -f docker/docker-compose.yml up -d",
-    "docker:down": "docker-compose -f docker/docker-compose.yml down",
+    "docker:up": "docker-compose --project-directory . -f docker/docker-compose.yml up -d",
+    "docker:down": "docker-compose --project-directory . -f docker/docker-compose.yml down",
     "db:migrate": "npm run migrate -w apps/backend",
     "db:seed": "npm run seed -w apps/backend"
   },

@@ -17,7 +17,7 @@
     "lint": "eslint src/",
     "test": "vitest run -c vitest.config.ts",
     "test:cov": "vitest run -c vitest.config.ts --coverage",
-    "test:e2e:up": "docker compose -f ../../docker/docker-compose.yml up -d postgres-test",
+    "test:e2e:up": "docker compose --project-directory ../.. -f ../../docker/docker-compose.yml up -d postgres-test",
     "test:e2e:migrate": "node scripts/migrate-test-db.js",
     "test:e2e": "npm run test:e2e:up && npm run test:e2e:migrate && vitest run -c vitest.e2e.config.ts",
     "typeorm": "node scripts/typeorm-cli.js -d src/data-source.ts",
