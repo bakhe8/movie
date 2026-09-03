@@ -408,8 +408,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         def run(entry: Dict[str, Any]) -> None:
             try:
                 finish(entry, enrich_entry(worker, entry), None)
-            except (ValueError, RuntimeError) as error:
-                finish(entry, None, str(error))
+            except Exception as error:  # noqa: BLE001 -- one bad title must not kill the pool; it is reported
+                finish(entry, None, f"{type(error).__name__}: {error}")
 
         with ThreadPoolExecutor(max_workers=max(1, args.concurrency)) as pool:
             for future in as_completed([pool.submit(run, entry) for entry in candidates]):
