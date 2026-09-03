@@ -46,7 +46,7 @@ Nothing left open from this line of audit.
 
 These run today and contradict or fall short of the blueprint; a green test suite makes them invisible.
 
-1. **Schema covers 24 of the target tables** — only `shared_latent_space_versions` (M7) is still missing (`§13.1`, `§11.1`; [SCHEMA.md](SCHEMA.md) §2.4 migration plan M1–M7). Steps 1–5/7 of that plan (M1–M5) are closed today — see the tables below; none of M1–M5's new tables/columns have any application logic reading or writing them yet. One design tension found while implementing M4: `user_model_snapshots.calibratedAgainst`'s FK target (`shared_latent_space_versions`) doesn't exist until M7, three steps later — the column exists unconstrained until then (ADR-54).
+1. **Schema covers 26 of the target tables** — only `shared_latent_space_versions` (M7) is still missing (`§13.1`, `§11.1`; [SCHEMA.md](SCHEMA.md) §2.4 migration plan M1–M7). Steps 1–6/7 of that plan (M1–M6) are closed today — see the tables below; none of M1–M6's new tables/columns have any application logic reading or writing them yet, and M6's two tables (`public_quality_sources`, `availability_snapshots`) are further behind than the rest — they also need a licensed data source that doesn't exist. One design tension found while implementing M4: `user_model_snapshots.calibratedAgainst`'s FK target (`shared_latent_space_versions`) doesn't exist until M7, three steps later — the column exists unconstrained until then (ADR-54).
 4. **Recommendations are never persisted** — no reason, no display propensity, no `experimentId`/`requestId` (`§13.1`, `§14`, `§14.1`). Without the log the post-watch loop (`§4.5`) cannot close and `§16` has nothing to read. The `recommendations`/`outcomes`/`watch_events`/`library_imports` tables exist since M5, but `RecommendationsService` still computes scores per-request without writing a row to any of them — this gap is now purely an application-layer one, not a schema one.
 5. **Confidence band is a triad-count heuristic** — `§9.2`/`§9.3` require evidence diversity, held-out prediction success and fingerprint quality (ADR-21). The fingerprint-quality and held-out-prediction inputs now exist (gaps 6's one-band demotion, gap 2); the rest does not.
 6. **Fingerprints carry no provenance and cover part of `§6.1`** — the 15 seeded rows leave `confidence` empty; families characters/ending/people/cultural context are absent (V1 is frozen; V2 planned — [FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md)). `source_records`/`content_features` — the tables that would actually hold that provenance — exist since M3 but no ingestion pass has ever written a row to either.
@@ -103,7 +103,17 @@ Not itself the close of gap 1 or gap 4 (recommendations never persisted) — sch
 |---|---|---|
 | The last four tables blueprint gap 1's original twelve needed — `recommendations`, `outcomes`, `watch_events`, `library_imports` (`§13.1`, `§4.5`, `§14`/`§14.1`) | One migration, `AddM5RecommendationsAndWatchEvents`, plus four new entities, implementing SCHEMA.md §2.2's target DDL verbatim — schema only, `RecommendationsService` unchanged. Tables created in FK-dependency order: `library_imports`, `recommendations`, `outcomes`, `watch_events`. `watch_events.importId` carries no FK at all, matching the target DDL literally even though `library_imports` already exists (ADR-55) | Verified with a real `up()` → `down()` → `up()` round trip against `postgres-test` (all four tables, every FK/index both directions), then the full e2e suite (41/41) on the final state; `tsc`, the full unit suite (98 tests) and `eslint` all clean |
 
-All four tables exist but are empty and unread. This closes schema step 5/7, not gap 4 itself: closing gap 4 for real still needs `RecommendationsService` (or a new endpoint) to actually write a `recommendations` row per request shown, and something to record `outcomes`/`watch_events` as users act — application-layer work this migration only makes possible. Only two schema steps of the original plan remain: M6 (`public_quality_sources`, `availability_snapshots` — blocked on licensed sources) and M7 (`shared_latent_space_versions`, pgvector conversion).
+All four tables exist but are empty and unread. This closes schema step 5/7, not gap 4 itself: closing gap 4 for real still needs `RecommendationsService` (or a new endpoint) to actually write a `recommendations` row per request shown, and something to record `outcomes`/`watch_events` as users act — application-layer work this migration only makes possible.
+
+## Closed on 2026-09-03 (M6 migration plan step, 6 of 7 toward gap 1)
+
+Not itself the close of gap 1 — schema only, the sixth step of [SCHEMA.md](SCHEMA.md) §2.4's plan, and the one furthest from being usable even after landing: every other step's tables are blocked only by missing application code, but these two additionally need a licensed data source that doesn't exist at all.
+
+| Gap | What changed | Proof |
+|---|---|---|
+| The Public Quality and Watchability layers had no tables — `public_quality_sources` (`§10.3`, per-source, never averaged) and `availability_snapshots` (`§6`, dated snapshots from a licensed partner) | One migration, `AddM6PublicQualityAndAvailability`, plus two new entities, implementing SCHEMA.md §2.2's target DDL verbatim — schema only. Both tables cascade `titleId` with their title and require a `sourceRecordId` pointing at M3's rights registry (ADR-56) | Verified with a real `up()` → `down()` → `up()` round trip against `postgres-test` (both tables, every FK/index both directions), then the full e2e suite (41/41) on the final state; `tsc`, the full unit suite (98 tests) and `eslint` all clean |
+
+Both tables exist but are unreachable in practice, not just unread — no public-quality or availability partner is integrated, so there is nothing to write even if the application code existed. Only one schema step of the original plan remains: M7 (`shared_latent_space_versions`, pgvector conversion, and the `calibratedAgainst` FK deferred from M4 per ADR-54).
 
 ---
 
@@ -394,7 +404,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Unknown-feature handling | ✅ | ✅ | trainer excludes triads with incomplete fingerprints; ranker refuses undescribed titles (ADR-19) |
 | BFGS listwise MLE with L2 | ✅ | ✅ | `§7.2` |
 | Snapshot persistence (`user_model_snapshots`) | ✅ | 🟡 | `§13.1 taste_profiles`: no posterior, time layers, exceptions, held-out metrics, `calibratedAgainst` |
-| Population prior source (Public Quality) | ❌ | ❌ | needs a licensed source ([DATA_LICENSING.md](DATA_LICENSING.md)) |
+| Population prior source (Public Quality) | ❌ | ❌ | needs a licensed source ([DATA_LICENSING.md](DATA_LICENSING.md)); `public_quality_sources` table exists since M6, empty |
 | Shared latent space (`§7.5`) | ❌ | ❌ | ADR-13; external seed license-blocked without GroupLens permission |
 | FastAPI model service (`train`, `triads/select`, `score`, `taste-profile`) | ❌ | ❌ | ADR-25 |
 | Python tests | ✅ | — | 26 tests (`test_ranker.py`, `test_training.py`, `test_enrichment.py`) |

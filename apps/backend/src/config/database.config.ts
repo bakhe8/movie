@@ -3,6 +3,7 @@ import { DataSourceOptions } from 'typeorm';
 import { config } from 'dotenv';
 import { resolve } from 'node:path';
 import { AuditLog } from '../entities/audit-log.entity';
+import { AvailabilitySnapshot } from '../entities/availability-snapshot.entity';
 import { Consent } from '../entities/consent.entity';
 import { ContentFeature } from '../entities/content-feature.entity';
 import { Credit } from '../entities/credit.entity';
@@ -16,6 +17,7 @@ import { Outcome } from '../entities/outcome.entity';
 import { Person } from '../entities/person.entity';
 import { PrivacyRequest } from '../entities/privacy-request.entity';
 import { Profile } from '../entities/profile.entity';
+import { PublicQualitySource } from '../entities/public-quality-source.entity';
 import { Recommendation } from '../entities/recommendation.entity';
 import { SourceRecord } from '../entities/source-record.entity';
 import { Title } from '../entities/title.entity';
@@ -82,6 +84,8 @@ export function getConnectionOptions(): ConnectionOptions {
       Recommendation,
       Outcome,
       WatchEvent,
+      PublicQualitySource,
+      AvailabilitySnapshot,
     ],
   };
 }
