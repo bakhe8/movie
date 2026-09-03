@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { api, CONSENT_VERSION } from '../lib/api';
 import { useSession } from '../lib/session';
 import { LanguageToggle } from './AppShell';
 import styles from './AuthScreen.module.css';
@@ -15,9 +16,12 @@ const labels = {
     hint: 'ترتّب ما شاهدت حسب إعجابك، فنبدأ بفهم ذوقك. لا نجوم ولا إعجاب.',
     login: 'تسجيل الدخول',
     register: 'إنشاء حساب',
+    // terms_privacy: required to use the service (PRIVACY.md §3). Plain text
+    // until /terms and /privacy pages exist (docs/CONSENT_COPY_2026-09-04.md §3).
+    terms: 'أوافق على الشروط وإشعار الخصوصية.',
     email: 'البريد الإلكتروني',
     password: 'كلمة المرور',
-    passwordHint: 'من ٨ إلى ٦٤ حرفًا.',
+    passwordHint: 'من 8 إلى 64 حرفًا.',
     firstName: 'الاسم الأول',
     lastName: 'اسم العائلة',
     switchToRegister: 'ليس لديك حساب؟ أنشئ واحدًا',
@@ -33,6 +37,7 @@ const labels = {
     hint: 'Rank what you have watched by how much you liked it, and we start learning your taste. No stars, no likes.',
     login: 'Log in',
     register: 'Create account',
+    terms: 'I agree to the Terms and Privacy Notice.',
     email: 'Email',
     password: 'Password',
     passwordHint: '8 to 64 characters.',
@@ -61,6 +66,8 @@ export function AuthScreen({
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  // Unchecked by default; registration cannot be submitted without it.
+  const [agreed, setAgreed] = useState(false);
   const t = labels[lang];
 
   async function handleSubmit(event: React.FormEvent) {
@@ -71,6 +78,20 @@ export function AuthScreen({
         await login(email, password);
       } else {
         await register({ email, password, firstName, lastName });
+        // The account exists and the token is set: record the agreement the
+        // checkbox expressed. A failed write must not trap the user on the
+        // door (the same non-blocking pattern as onboarding's consent write);
+        // one retry, then the account proceeds and the consent screen later
+        // re-asks nothing -- terms are re-recorded with the next consent write.
+        try {
+          await api.updateConsents([{ purpose: 'terms_privacy', version: CONSENT_VERSION, granted: true }]);
+        } catch {
+          try {
+            await api.updateConsents([{ purpose: 'terms_privacy', version: CONSENT_VERSION, granted: true }]);
+          } catch {
+            // Left unrecorded for now; see the comment above.
+          }
+        }
       }
     } catch {
       // error state already set by useSession
@@ -145,12 +166,18 @@ export function AuthScreen({
             />
             {mode === 'register' && <p className={styles.hint}>{t.passwordHint}</p>}
           </div>
+          {mode === 'register' && (
+            <label className={styles.terms}>
+              <input type="checkbox" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} required />
+              <span>{t.terms}</span>
+            </label>
+          )}
           {error && (
             <p className={styles.error} role="alert">
               {error}
             </p>
           )}
-          <button className={styles.submit} type="submit" disabled={submitting}>
+          <button className={styles.submit} type="submit" disabled={submitting || (mode === 'register' && !agreed)}>
             {submitting ? t.loading : mode === 'login' ? t.submitLogin : t.submitRegister}
           </button>
         </form>

@@ -278,3 +278,29 @@
     font-size: var(--fs-34);
   }
 }
+
+/* A declinable purpose's switch: a native checkbox in the accent, on its own
+   line under the item's body; the whole label is the tap target. */
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--tap);
+  margin-top: var(--sp-1);
+  color: var(--text);
+  font-size: var(--fs-14);
+  font-weight: var(--w-medium);
+  cursor: pointer;
+}
+
+.toggle input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.toggle input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

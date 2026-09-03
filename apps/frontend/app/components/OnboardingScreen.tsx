@@ -41,6 +41,22 @@ const labels = {
       { head: 'خاص افتراضيًا', body: 'لا صفحة عامة، ولا مشاركة إلا بقرارك، ولا يُباع ملف ذوقك، ولا نستنتج سمات حساسة من مشاهداتك.' },
       { head: 'حقوقك', body: 'مسح ملف الذوق متاح الآن من الملف الشخصي. التصدير وحذف الحساب قيد البناء.' },
     ],
+    // Declinable purposes (PRIVACY.md §3; docs/CONSENT_COPY_2026-09-04.md):
+    // shown as items with a switch, recorded with the mandatory two.
+    optional: [
+      {
+        purpose: 'personalization_pooled' as const,
+        head: 'ترتيباتك تُسهم أيضاً في نموذج جماعي (اختياري)',
+        body: 'إلى جانب نموذج ذوقك الخاص، تساعد ترتيباتك المستعارة — دون أن تُنسب إليك — في تدريب نموذج جماعي يُحسّن اختيار الثلاثيات والترشيحات للجميع. لا تُعرض لأحد أبداً. يمكنك إيقاف هذا في أي وقت دون أن يتأثر نموذجك الشخصي.',
+        toggle: 'المساهمة في النموذج الجماعي',
+      },
+      {
+        purpose: 'analytics_first_party' as const,
+        head: 'تحليلات المنتج الأولى (اختياري)',
+        body: 'نستخدم أحداثاً تشغيلية على أنظمتنا فقط — لا طرف ثالث، لا إعلانات — لقياس أداء التوصيات وتحسينها. يمكنك المشاركة أو الاعتذار الآن، وتغيير قرارك لاحقاً من الملف الشخصي.',
+        toggle: 'تحليلات المنتج',
+      },
+    ],
     understood: 'فهمت، متابعة',
     // Step 3: the loop ahead
     step3Title: 'ثلاث خطوات لأول نتيجة',
@@ -80,6 +96,20 @@ const labels = {
       { head: 'Your rankings train a model about you', body: 'The only question is ranking three films you have watched. No stars, no likes, and the model serves your profile only.' },
       { head: 'Private by default', body: 'No public page, no sharing unless you choose it, your taste profile is never sold, and no sensitive traits are inferred from what you watch.' },
       { head: 'Your rights', body: 'Wiping the taste profile is available now from the profile screen. Export and account deletion are being built.' },
+    ],
+    optional: [
+      {
+        purpose: 'personalization_pooled' as const,
+        head: 'Your rankings also help a shared model (optional)',
+        body: 'Beyond your own taste model, your pseudonymous rankings — never attributed to you — help train a shared model that improves triad and recommendation selection for everyone. Never shown to anyone. Turn this off any time without affecting your personal model.',
+        toggle: 'Contribute to the shared model',
+      },
+      {
+        purpose: 'analytics_first_party' as const,
+        head: 'First-party product analytics (optional)',
+        body: 'We use operational events on our own systems only — no third party, no advertising — to measure and improve recommendation quality. Opt in or skip now, and change your choice later from your profile.',
+        toggle: 'Product analytics',
+      },
     ],
     understood: 'Understood, continue',
     step3Title: 'Three steps to a first result',
@@ -141,6 +171,15 @@ export function OnboardingScreen({
   const [error, setError] = useState<string | null>(null);
   const [consentSaving, setConsentSaving] = useState(false);
   const [consentError, setConsentError] = useState<string | null>(null);
+  // Declinable purposes, recorded with the mandatory two on "understood".
+  // personalization_pooled defaults on (PRIVACY.md §3 says so explicitly);
+  // analytics_first_party defaults off -- PRIVACY.md names no default for it,
+  // and opt-in is the safer reading until the owner decides otherwise
+  // (docs/CONSENT_COPY_2026-09-04.md §2).
+  const [optional, setOptional] = useState<Record<'personalization_pooled' | 'analytics_first_party', boolean>>({
+    personalization_pooled: true,
+    analytics_first_party: false,
+  });
 
   function togglePlatform(id: string) {
     setPlatforms((current) => {
@@ -171,14 +210,10 @@ export function OnboardingScreen({
     }
   }
 
-  // Records the two purposes step 2's copy already discloses and that are
-  // mandatory for the core loop (PRIVACY.md §3: watch_history,
-  // personalization_individual are both "no for the core loop" -- proceeding
-  // past this screen is the consent). personalization_pooled and
-  // analytics_first_party are declinable and need their own disclosure copy
-  // and an opt-out control neither of which exists on this screen yet
-  // (blueprint gap 7, still open) -- deliberately not granted here rather
-  // than silently opted in without asking.
+  // Records the two purposes step 2's copy discloses and that are mandatory
+  // for the core loop (PRIVACY.md §3: proceeding past this screen is the
+  // consent), plus the two declinable ones exactly as their switches stand
+  // (blueprint gap 7, closed on the write side; ADR-60).
   async function acknowledgeAndContinue() {
     setConsentSaving(true);
     setConsentError(null);
@@ -186,6 +221,8 @@ export function OnboardingScreen({
       await api.updateConsents([
         { purpose: 'watch_history', version: CONSENT_VERSION, granted: true },
         { purpose: 'personalization_individual', version: CONSENT_VERSION, granted: true },
+        { purpose: 'personalization_pooled', version: CONSENT_VERSION, granted: optional.personalization_pooled },
+        { purpose: 'analytics_first_party', version: CONSENT_VERSION, granted: optional.analytics_first_party },
       ]);
       setStep(3);
     } catch (err) {
@@ -289,6 +326,22 @@ export function OnboardingScreen({
             <li key={item.head}>
               <strong>{item.head}</strong>
               <span>{item.body}</span>
+            </li>
+          ))}
+          {/* Declinable purposes: the same list, each with its own switch. */}
+          {t.optional.map((item) => (
+            <li key={item.purpose}>
+              <strong>{item.head}</strong>
+              <span>{item.body}</span>
+              <label className={styles.toggle}>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  checked={optional[item.purpose]}
+                  onChange={(event) => setOptional((current) => ({ ...current, [item.purpose]: event.target.checked }))}
+                />
+                <span>{item.toggle}</span>
+              </label>
             </li>
           ))}
         </ul>
