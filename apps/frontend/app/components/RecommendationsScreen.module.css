@@ -308,3 +308,8 @@
     animation: none;
   }
 }
+
+/* Wrapper for the work card (components/WorkCard.tsx); the card styles itself. */
+.item {
+  list-style: none;
+}

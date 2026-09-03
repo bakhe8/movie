@@ -1,0 +1,257 @@
+/* Work card — four separate values in four visual languages
+   (docs/WORK_CARD_DESIGN_2026-09-03.md; decisions Q13, Q14, Q16, Q17).
+   Tokens only (app/styles/tokens.css): both themes come from the tokens.
+   The only saturated colour on the card is the personal-fit meter. */
+
+.card {
+  display: grid;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-4) var(--sp-3);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+}
+
+/* --- Head: position badge, poster (licensed only), titles ----------------- */
+
+.head {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--sp-3);
+  align-items: center;
+}
+
+.withPoster {
+  grid-template-columns: auto auto 1fr;
+}
+
+.badge {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--well);
+  color: var(--muted);
+  font-size: var(--fs-13);
+  font-weight: var(--w-semibold);
+}
+
+.first {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.poster {
+  width: 56px;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border: 1px solid var(--poster-edge);
+  border-radius: var(--r-chip);
+  background: var(--well);
+}
+
+.titles {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: var(--fs-16);
+  font-weight: var(--w-semibold);
+  line-height: var(--lh-ui);
+  overflow-wrap: anywhere;
+}
+
+.alt {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-13);
+  font-weight: var(--w-medium);
+  line-height: var(--lh-ui);
+}
+
+/* --- Reason (blueprint §9.4) ---------------------------------------------- */
+
+.reason {
+  margin: 0;
+  font-size: var(--fs-14);
+  line-height: var(--lh-body);
+}
+
+.reasonSource {
+  margin-inline-start: var(--sp-2);
+  color: var(--muted);
+  font-size: var(--fs-13);
+}
+
+/* --- The four cells ------------------------------------------------------- */
+
+.cells {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3) var(--sp-4);
+  margin: 0;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+}
+
+.cell {
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.cell dt {
+  color: var(--muted);
+  font-size: var(--fs-12);
+  font-weight: var(--w-medium);
+  line-height: var(--lh-ui);
+}
+
+.cell dd {
+  display: grid;
+  gap: var(--sp-1);
+  margin: 0;
+  font-size: var(--fs-14);
+  line-height: var(--lh-ui);
+}
+
+/* 1) Personal fit: an unlabelled three-segment meter in the accent, then a
+   word, then the position in its track. Confidence is applied to the fill as
+   a limit on the claim (paper §3, owner decision 1): not a second value. */
+.meter {
+  display: flex;
+  gap: 3px;
+  height: 6px;
+}
+
+.meter i {
+  flex: 1;
+  border-radius: 3px;
+  background: var(--line);
+}
+
+.meter i.on {
+  background: var(--accent);
+}
+
+.likely i.on {
+  opacity: 0.75;
+}
+
+.initial i.on {
+  opacity: 0.5;
+}
+
+.inconclusive i.on {
+  background: transparent;
+  border: 1px dashed var(--accent);
+}
+
+.word {
+  font-weight: var(--w-semibold);
+}
+
+.pos {
+  color: var(--muted);
+  font-size: var(--fs-12);
+}
+
+/* 2) Public quality: a muted number with its source; never the accent. */
+.num {
+  color: var(--text);
+  font-weight: var(--w-semibold);
+}
+
+.numSub {
+  color: var(--muted);
+  font-size: var(--fs-12);
+}
+
+/* 3) Availability: provider chips, no semantic colour. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: max-content;
+  max-width: 100%;
+  padding: 2px var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-chip);
+  background: var(--well);
+  font-size: var(--fs-13);
+  font-weight: var(--w-medium);
+  line-height: 1.6;
+}
+
+/* Unknown or absent: hollow, never zero (Q16). */
+.hollow {
+  border-style: dashed;
+  background: transparent;
+  color: var(--muted);
+}
+
+/* 4) Confidence: the band word in an outlined chip, then its copy. */
+.band {
+  display: inline-flex;
+  width: max-content;
+  padding: 2px var(--sp-2);
+  border: 1px solid var(--text);
+  border-radius: var(--r-chip);
+  font-size: var(--fs-13);
+  font-weight: var(--w-semibold);
+  line-height: 1.6;
+}
+
+.copy {
+  color: var(--muted);
+  font-size: var(--fs-12);
+  line-height: var(--lh-body);
+}
+
+/* --- Actions -------------------------------------------------------------- */
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.ghost {
+  min-height: 40px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-button);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-14);
+  font-weight: var(--w-medium);
+  line-height: var(--lh-ui);
+}
+
+.ghost:disabled {
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.ghost:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (min-width: 900px) {
+  .poster {
+    width: 64px;
+  }
+}

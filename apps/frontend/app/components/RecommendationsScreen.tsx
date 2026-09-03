@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError, type Recommendation, type RecommendationTrack } from '../lib/api';
 import { TRACK_COPY } from '../lib/copy';
-import { formatConfidence, formatNumber, formatPersonalFit, formatReason, type PersonalFitLevel } from '../lib/format';
+import { formatNumber, type PersonalFitLevel } from '../lib/format';
+import { WorkCard } from './WorkCard';
 import styles from './RecommendationsScreen.module.css';
 
 type Lang = 'ar' | 'en';
@@ -235,87 +236,23 @@ export function RecommendationsScreen({
             ) : (
               <>
               <ol className={styles.list}>
-                {shown.map((rec, index) => {
-                  const name = lang === 'ar' ? rec.title.titleAr : rec.title.titleEn;
-                  const alt = lang === 'ar' ? rec.title.titleEn : rec.title.titleAr;
-                  const meta = [rec.title.releaseYear, rec.title.genres?.join(' · ')].filter(Boolean).join(' · ');
-                  // Relative forms only: position inside the track and a tertile
-                  // level -- never the raw score (ADR-33).
-                  const fit = formatPersonalFit(index + 1, trackItems.length);
-                  const confidence = formatConfidence(rec.confidenceBand, lang);
-                  // The reason names only the dimensions that lifted the score
-                  // (§9.4); when confidence is weak it says so (§9.4 last rule).
-                  const reason = formatReason(rec.reason, lang);
-                  const weak = rec.confidenceBand === 'inconclusive' || rec.confidenceBand === 'initial';
-                  const busy = busyTitleId === rec.title.id;
-                  const onList = listed.has(rec.title.id);
-
-                  return (
-                    <li key={rec.title.id} className={styles.card}>
-                      <div className={styles.top}>
-                        <span className={styles.badge} aria-hidden="true">
-                          {formatNumber(index + 1, lang)}
-                        </span>
-                        <div>
-                          <h4 className={styles.title}>{name}</h4>
-                          {alt && alt !== name && <p className={styles.alt}>{alt}</p>}
-                          {meta && <p className={styles.meta}>{meta}</p>}
-                          {rec.title.description && <p className={styles.desc}>{rec.title.description}</p>}
-                          {reason && (
-                            <p className={styles.reason}>
-                              {reason} {weak && t.reasonWeak}
-                              <span className={styles.reasonSource}>{t.reasonSource}</span>
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Four separate values in four labelled cells; no cell
-                          repeats another and nothing is merged (blueprint §4.4,
-                          ADR-20, ADR-33). Unknown stays unknown, never 0. */}
-                      <dl className={styles.cells}>
-                        <div className={styles.cell}>
-                          <dt>{t.fit}</dt>
-                          <dd>
-                            <span className={`${styles.chip} ${styles[fit.level]}`}>{t.fitLevel[fit.level]}</span>
-                            <span className={styles.sub}>
-                              {t.fitPosition(formatNumber(fit.position, lang), formatNumber(fit.count, lang))}
-                            </span>
-                          </dd>
-                        </div>
-                        <div className={styles.cell}>
-                          <dt>{t.quality}</dt>
-                          <dd className={rec.publicQualityScore === null ? styles.unknown : undefined}>
-                            {rec.publicQualityScore === null ? t.qualityUnknown : formatNumber(rec.publicQualityScore, lang)}
-                          </dd>
-                        </div>
-                        <div className={styles.cell}>
-                          <dt>{t.availability}</dt>
-                          <dd className={rec.watchabilityScore === null ? styles.unknown : undefined}>
-                            {rec.watchabilityScore === null ? t.availabilityUnknown : formatNumber(rec.watchabilityScore, lang)}
-                          </dd>
-                        </div>
-                        <div className={styles.cell}>
-                          <dt>{t.confidence}</dt>
-                          <dd>
-                            <span className={`${styles.chip} ${styles.band}`}>{confidence.label}</span>
-                            <span className={styles.sub}>{confidence.copy}</span>
-                            {rec.fingerprintCoverage < 1 && <span className={styles.sub}>{t.partialFingerprint}</span>}
-                          </dd>
-                        </div>
-                      </dl>
-
-                      <div className={styles.actions}>
-                        <button type="button" className={styles.ghost} onClick={() => addToList(rec)} disabled={busy || onList}>
-                          {onList ? t.added : t.addToList}
-                        </button>
-                        <button type="button" className={styles.ghost} onClick={() => markWatched(rec)} disabled={busy}>
-                          {t.markWatched}
-                        </button>
-                      </div>
-                    </li>
-                  );
-                })}
+                {shown.map((rec, index) => (
+                  <li key={rec.title.id} className={styles.item}>
+                    {/* The work card owns the four values and the reason
+                        (docs/WORK_CARD_DESIGN_2026-09-03.md); this screen keeps
+                        the tracks, the list state and the actions' effects. */}
+                    <WorkCard
+                      lang={lang}
+                      position={index + 1}
+                      count={trackItems.length}
+                      recommendation={rec}
+                      listed={listed.has(rec.title.id)}
+                      busy={busyTitleId === rec.title.id}
+                      onAddToList={() => addToList(rec)}
+                      onMarkWatched={() => markWatched(rec)}
+                    />
+                  </li>
+                ))}
               </ol>
               {(hidden > 0 || isExpanded) && (
                 <button
