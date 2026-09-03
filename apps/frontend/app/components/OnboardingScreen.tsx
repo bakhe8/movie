@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, ApiError, CONSENT_VERSION, type PreferredLanguage } from '../lib/api';
 import { MARKETS, PLATFORMS } from '../lib/onboarding-options';
 import { formatNumber } from '../lib/format';
@@ -51,6 +51,8 @@ const labels = {
       'تظهر توصياتك الأولى وترتيب مكتبتك بثقة «أولية» تتحسن مع كل جولة.',
     ],
     start: 'ابدأ بتسجيل ما شاهدت',
+    // With three watched titles already logged, the loop's first step is done.
+    startRanking: 'ابدأ الترتيب',
     back: 'رجوع',
   },
   en: {
@@ -88,6 +90,7 @@ const labels = {
       'Your first recommendations and library ranking appear with “initial” confidence that improves every round.',
     ],
     start: 'Start marking what you watched',
+    startRanking: 'Start ranking',
     back: 'Back',
   },
 };
@@ -100,12 +103,34 @@ export function OnboardingScreen({
 }: {
   lang: Lang;
   onLanguageChange?: (lang: Lang) => void;
-  onDone: () => void;
+  // Where the last step's button lands: the triad when three watched titles
+  // are already logged, otherwise Discover -- one tap, not a blocked triad
+  // and then a second tap (owner decision 2026-09-03).
+  onDone: (destination: 'rank' | 'discover') => void;
   onSkip: () => void;
 }) {
   const t = labels[lang];
   const { profile, refreshProfile } = useSession();
   const [step, setStep] = useState<Step>(1);
+  // null until the count arrives (or if it fails): treated as "not enough".
+  const [watchedCount, setWatchedCount] = useState<number | null>(null);
+  const profileId = profile?.id;
+
+  useEffect(() => {
+    if (step !== 3 || !profileId) return;
+    let cancelled = false;
+    api
+      .getWatchedTitles(profileId)
+      .then((watched) => {
+        if (!cancelled) setWatchedCount(watched.length);
+      })
+      .catch(() => {
+        if (!cancelled) setWatchedCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [step, profileId]);
   const [language, setLanguage] = useState<PreferredLanguage>(profile?.preferredLanguage ?? lang);
   const [market, setMarket] = useState(profile?.market ?? '');
   const [platforms, setPlatforms] = useState<Set<string>>(new Set(profile?.platforms ?? []));
@@ -294,8 +319,8 @@ export function OnboardingScreen({
         ))}
       </ol>
       <div className={styles.actions}>
-        <button type="button" className={styles.primary} onClick={onDone}>
-          {t.start}
+        <button type="button" className={styles.primary} onClick={() => onDone(watchedCount !== null && watchedCount >= 3 ? 'rank' : 'discover')}>
+          {watchedCount !== null && watchedCount >= 3 ? t.startRanking : t.start}
         </button>
         <button type="button" className={styles.ghost} onClick={() => setStep(2)}>
           {t.back}

@@ -117,9 +117,9 @@ export default function Home() {
           // product's one question -- not on a catalogue. The triad screen
           // itself explains the watched-set gate (blueprint §4.1) and offers
           // the one tap to Discover when it cannot be drawn yet.
-          onDone={() => {
+          onDone={(destination) => {
             setOnboarding('done');
-            setView('rank');
+            setView(destination);
           }}
           onSkip={() => {
             setOnboarding('done');
