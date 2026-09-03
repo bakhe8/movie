@@ -2,6 +2,17 @@ import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, Primary
 import { Profile } from './profile.entity';
 import { SharedLatentSpaceVersion } from './shared-latent-space-version.entity';
 
+// Per-weight uncertainty (BP §13.1, blueprint gap 5's "stable posterior
+// direction" criterion, BP §9.2). standardErrors[i] is the Laplace/BFGS
+// approximation to weights[i]'s standard error -- sqrt(diag(hess_inv)) from
+// the same regularized-MLE fit that produced `weights` (services/workers's
+// ranker.py); the L2 term makes this a MAP estimate under a Gaussian prior,
+// so the inverse Hessian at the optimum is the standard Laplace
+// approximation to the posterior covariance, not an invented statistic.
+export interface UserModelSnapshotPosterior {
+  standardErrors: number[];
+}
+
 @Index('IDX_user_model_snapshots_profileId_createdAt', ['profileId', 'createdAt'])
 @Entity('user_model_snapshots')
 export class UserModelSnapshot {
@@ -48,10 +59,11 @@ export class UserModelSnapshot {
   @Column('real', { nullable: true })
   heldOutPairwiseAccuracy: number | null;
 
-  // Per-weight uncertainty (BP §13.1); PlackettLuceRanker.fit() never
-  // populates this yet, so it is always NULL today.
+  // See UserModelSnapshotPosterior above. NULL when trainingTriadCount < 5,
+  // the same floor heldOutTriadCount uses (ADR-31): a standard error from a
+  // handful of triads is too unstable to report as evidence either way.
   @Column({ type: 'json', nullable: true })
-  posterior: Record<string, unknown> | null;
+  posterior: UserModelSnapshotPosterior | null;
 
   // Recent-window layer (BP §7.3); NULL in MVP -- no recency weighting exists.
   @Column('real', { array: true, nullable: true })
@@ -72,6 +84,16 @@ export class UserModelSnapshot {
 
   @Column({ type: 'varchar', nullable: true })
   calibratedAgainst: string | null;
+
+  // Distinct genre count across the titles in the triads this snapshot was
+  // trained on (blueprint gap 5, BP §9.2's "sufficient effective evidence
+  // (not one series repeated)" and "diversity of ... genres" read together).
+  // The only one of §9.2's three named diversity axes (directors/languages/
+  // genres) with real data today -- people/credits/source_records are still
+  // empty (blueprint gap 6). NULL for snapshots trained before this column
+  // existed.
+  @Column({ type: 'integer', nullable: true })
+  trainingGenreDiversity: number | null;
 
   @CreateDateColumn()
   createdAt: Date;

@@ -59,6 +59,10 @@ class PlackettLuceRanker:
         self.regularization = regularization
         self.weights: Optional[np.ndarray] = None
         self.bias_terms: Dict[str, float] = {}
+        # Inverse-Hessian approximation from the BFGS optimizer in fit()
+        # (blueprint gap 5, BP §9.2's "stable posterior direction"
+        # criterion). Populated only after fit() runs -- see standard_errors().
+        self.hess_inv: Optional[np.ndarray] = None
         # b_i in the utility formula above. Not fit by this class — it comes from a
         # population-level model shared across users (e.g. a shrunk popularity/critic
         # prior), which doesn't exist yet in this codebase. Defaults to {} (all zero)
@@ -151,6 +155,26 @@ class PlackettLuceRanker:
         )
 
         self.weights = result.x
+        # scipy's BFGS always returns a dense inverse-Hessian approximation
+        # (unlike L-BFGS-B, which doesn't). Because the objective adds the L2
+        # term, this optimum is a MAP estimate under a Gaussian prior, so
+        # this is the standard Laplace approximation to the posterior
+        # covariance -- not the true posterior, but a well-established
+        # approximation to it, not an invented statistic.
+        self.hess_inv = result.hess_inv
+
+    def standard_errors(self) -> np.ndarray:
+        """
+        Per-weight standard error from the Laplace approximation to the
+        posterior (see the note on `hess_inv` in fit()): sqrt of the inverse
+        Hessian's diagonal. A small value means that dimension's weight is
+        well-pinned by the data fit() saw; a large one means it could
+        plausibly be far from its fitted value under similar evidence
+        (blueprint gap 5, BP §9.2 "stable posterior direction").
+        """
+        if self.hess_inv is None:
+            raise ValueError("Model has not been fitted yet")
+        return np.sqrt(np.diag(self.hess_inv))
 
     def predict_score(self, title_id: str, fingerprint: np.ndarray) -> float:
         """

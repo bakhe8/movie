@@ -60,6 +60,22 @@ def fingerprint_vector(fingerprint: dict[str, Any]) -> np.ndarray | None:
     return np.array(values)
 
 
+def compute_genre_diversity(triads: List[TriadEvent], genres: Dict[str, List[str]]) -> int:
+    """
+    Distinct genre count across every title in `triads` (blueprint gap 5,
+    BP §9.2's "sufficient effective evidence (not one series repeated)" and
+    "diversity of ... genres" read together). Titles missing from `genres`
+    (no genres recorded) contribute nothing, the same "absence is unknown,
+    not a failure" treatment as a missing fingerprint dimension -- they are
+    simply not evidence of diversity either way, not evidence against it.
+    """
+    seen = set()
+    for triad_ids, _ in triads:
+        for title_id in triad_ids:
+            seen.update(genres.get(title_id, []))
+    return len(seen)
+
+
 def ranking_to_indices(triad_ids: Tuple[str, str, str], ranking_title_ids: List[Any]) -> List[int]:
     """
     Convert a triads.ranking row -- title ids in ranked order, best first
@@ -79,9 +95,18 @@ class TrainingResult:
     held_out_triad_count: int
     held_out_nll: Optional[float]
     held_out_pairwise_accuracy: Optional[float]
+    # Blueprint gap 5 (BP §9.2). Both NULL/None below the same 5-triad floor
+    # held-out metrics use (ADR-31) -- too little data for either to mean
+    # anything (RecommendationsService.confidenceBand()).
+    standard_errors: Optional[np.ndarray]
+    training_genre_diversity: Optional[int]
 
 
-def train_and_evaluate(complete_triads: List[TriadEvent], fingerprints: Dict[str, np.ndarray]) -> TrainingResult:
+def train_and_evaluate(
+    complete_triads: List[TriadEvent],
+    fingerprints: Dict[str, np.ndarray],
+    genres: Optional[Dict[str, List[str]]] = None,
+) -> TrainingResult:
     """
     Temporal hold-out, fit, evaluate, refit for serving -- no I/O (RANKING_ALGORITHM.md
     §6, ADR-22). `complete_triads` must already be ordered oldest-first by
@@ -97,6 +122,10 @@ def train_and_evaluate(complete_triads: List[TriadEvent], fingerprints: Dict[str
     refit on the full `complete_triads` (this is unchanged from before the
     hold-out existed) -- the held-out slice affects only which metrics get
     reported, never what the profile is actually served.
+
+    `genres` (title_id -> genre list) is optional and used only for
+    `training_genre_diversity` (blueprint gap 5); omitting it (or passing an
+    empty dict) is equivalent to no title having any known genre.
     """
     fingerprint_dim = next(iter(fingerprints.values())).shape[0]
     n = len(complete_triads)
@@ -104,6 +133,8 @@ def train_and_evaluate(complete_triads: List[TriadEvent], fingerprints: Dict[str
     held_out_nll: Optional[float] = None
     held_out_pairwise_accuracy: Optional[float] = None
     held_out_triad_count = 0
+    standard_errors: Optional[np.ndarray] = None
+    training_genre_diversity: Optional[int] = None
 
     if n >= 5:
         held_out_triad_count = max(1, n // 5)  # floor(0.2n), exact since 0.2 == 1/5
@@ -119,6 +150,8 @@ def train_and_evaluate(complete_triads: List[TriadEvent], fingerprints: Dict[str
         held_out_nll = compute_nll(held_out_triads, fingerprints, eval_ranker)
         held_out_pairwise_accuracy = compute_pairwise_accuracy(held_out_triads, fingerprints, eval_ranker)
 
+        training_genre_diversity = compute_genre_diversity(complete_triads, genres or {})
+
     serving_ranker = PlackettLuceRanker(fingerprint_dim)
     # No population_priors source exists yet (no shared/cross-user popularity or
     # critic-prior model in this codebase) -- explicit None rather than omitting
@@ -126,6 +159,8 @@ def train_and_evaluate(complete_triads: List[TriadEvent], fingerprints: Dict[str
     # See PlackettLuceRanker.population_priors and blueprint §7.1 (b(m) term).
     serving_ranker.fit(complete_triads, fingerprints, population_priors=None)
     pairwise_accuracy = compute_pairwise_accuracy(complete_triads, fingerprints, serving_ranker)
+    if n >= 5:
+        standard_errors = serving_ranker.standard_errors()
 
     return TrainingResult(
         weights=serving_ranker.weights,
@@ -135,6 +170,8 @@ def train_and_evaluate(complete_triads: List[TriadEvent], fingerprints: Dict[str
         held_out_triad_count=held_out_triad_count,
         held_out_nll=held_out_nll,
         held_out_pairwise_accuracy=held_out_pairwise_accuracy,
+        standard_errors=standard_errors,
+        training_genre_diversity=training_genre_diversity,
     )
 
 
@@ -177,15 +214,26 @@ def train_profile(profile_id: str) -> TrainingResult:
         # this raised UndefinedFunction on every real invocation -- caught
         # only by actually running train_profile() against a live database,
         # something no existing test does (found while verifying gap 2).
-        cursor.execute('SELECT id, fingerprint FROM titles WHERE id = ANY(%s::uuid[])', (title_ids,))
+        cursor.execute('SELECT id, fingerprint, genres FROM titles WHERE id = ANY(%s::uuid[])', (title_ids,))
+        rows = cursor.fetchall()
         vectors = {
             str(title_id): fingerprint_vector(json.loads(fingerprint) if isinstance(fingerprint, str) else fingerprint)
-            for title_id, fingerprint in cursor.fetchall()
+            for title_id, fingerprint, _genres in rows
             if fingerprint is not None
         }
         # Only fully described titles enter training; a partial fingerprint is unknown,
         # not zero (ADR-19), so the whole triad is left out rather than distorted.
         fingerprints = {title_id: vector for title_id, vector in vectors.items() if vector is not None}
+        # "genres" is TypeORM's simple-array: a comma-joined text column, not
+        # a Postgres array -- no title has ever had a genre with a comma in
+        # it, so a plain split is exact. A NULL/empty column means no known
+        # genres, not zero diversity contributed (compute_genre_diversity
+        # treats a missing entry the same way).
+        genres = {
+            str(title_id): [genre for genre in genre_text.split(',') if genre]
+            for title_id, _fingerprint, genre_text in rows
+            if genre_text
+        }
         # Order is preserved from the ORDER BY above -- list comprehensions don't reshuffle.
         complete_triads = [
             (triad_ids, ranking)
@@ -195,13 +243,16 @@ def train_profile(profile_id: str) -> TrainingResult:
         if not complete_triads:
             raise ValueError("Completed triads need complete fingerprints on all three titles before model training")
 
-        result = train_and_evaluate(complete_triads, fingerprints)
+        result = train_and_evaluate(complete_triads, fingerprints, genres)
+        # posterior holds UserModelSnapshotPosterior's shape (apps/backend's
+        # user-model-snapshot.entity.ts) -- keep the two in sync by hand.
+        posterior = json.dumps({"standardErrors": result.standard_errors.tolist()}) if result.standard_errors is not None else None
         cursor.execute(
             '''
             INSERT INTO user_model_snapshots
               ("profileId", weights, "biasTerms", "modelVersion", "trainingTriadCount", "pairwiseAccuracy",
-               "heldOutTriadCount", "heldOutNll", "heldOutPairwiseAccuracy")
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+               "heldOutTriadCount", "heldOutNll", "heldOutPairwiseAccuracy", posterior, "trainingGenreDiversity")
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ''',
             (
                 profile_id,
@@ -213,6 +264,8 @@ def train_profile(profile_id: str) -> TrainingResult:
                 result.held_out_triad_count,
                 result.held_out_nll,
                 result.held_out_pairwise_accuracy,
+                posterior,
+                result.training_genre_diversity,
             ),
         )
 
@@ -230,8 +283,9 @@ def main() -> None:
             f"Held out {result.held_out_triad_count} most recent triads for evaluation: "
             f"NLL={result.held_out_nll:.4f}, pairwise accuracy={result.held_out_pairwise_accuracy:.2%}"
         )
+        print(f"Training evidence spanned {result.training_genre_diversity} distinct genre(s) (blueprint gap 5)")
     else:
-        print("Fewer than 5 completed triads -- no held-out evaluation yet (RANKING_ALGORITHM.md §6)")
+        print("Fewer than 5 completed triads -- no held-out evaluation or posterior/diversity metrics yet (RANKING_ALGORITHM.md §6, blueprint gap 5)")
 
 
 if __name__ == "__main__":

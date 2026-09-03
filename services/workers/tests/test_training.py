@@ -1,7 +1,13 @@
 import numpy as np
 
 from src.ranker import PlackettLuceRanker
-from src.training import FINGERPRINT_DIMENSIONS, fingerprint_vector, ranking_to_indices, train_and_evaluate
+from src.training import (
+    FINGERPRINT_DIMENSIONS,
+    compute_genre_diversity,
+    fingerprint_vector,
+    ranking_to_indices,
+    train_and_evaluate,
+)
 
 
 def make_triads(n: int):
@@ -91,6 +97,36 @@ class TestRankingToIndices:
         assert ranking_to_indices(triad_ids, ["C", FakeUuid(), "A"]) == [2, 1, 0]
 
 
+class TestComputeGenreDiversity:
+    # Blueprint gap 5 (BP §9.2): "sufficient effective evidence (not one
+    # series repeated)" and "diversity of ... genres" read together.
+    def test_counts_distinct_genres_across_every_title_in_every_triad(self):
+        triads, _ = make_triads(2)
+        genres = {
+            "A0": ["Thriller"], "B0": ["Drama"], "C0": ["Thriller", "Romance"],
+            "A1": ["Comedy"], "B1": ["Drama"], "C1": ["Comedy"],
+        }
+
+        assert compute_genre_diversity(triads, genres) == 4  # Thriller, Drama, Romance, Comedy
+
+    def test_one_genre_repeated_across_every_title_scores_one(self):
+        triads, _ = make_triads(3)
+        genres = {tid: ["Thriller"] for triad_ids, _ in triads for tid in triad_ids}
+
+        assert compute_genre_diversity(triads, genres) == 1
+
+    def test_a_title_missing_from_the_genres_mapping_contributes_nothing_not_a_failure(self):
+        triads, _ = make_triads(1)  # ("A0", "B0", "C0")
+        genres = {"A0": ["Thriller"], "B0": ["Drama"]}  # C0 has no known genres
+
+        assert compute_genre_diversity(triads, genres) == 2
+
+    def test_no_titles_have_any_known_genre_scores_zero(self):
+        triads, _ = make_triads(2)
+
+        assert compute_genre_diversity(triads, {}) == 0
+
+
 class TestTrainAndEvaluate:
     # RANKING_ALGORITHM.md §6 step 2: below 5 completed triads there isn't
     # enough data left after a split to make held-out metrics meaningful, so
@@ -104,6 +140,10 @@ class TestTrainAndEvaluate:
         assert result.held_out_triad_count == 0
         assert result.held_out_nll is None
         assert result.held_out_pairwise_accuracy is None
+        # Blueprint gap 5: too little data for either to mean anything either,
+        # same floor as the held-out metrics above (ADR-31).
+        assert result.standard_errors is None
+        assert result.training_genre_diversity is None
 
     def test_five_or_more_triads_holds_out_floor_0_2n_most_recent(self):
         for n, expected_held_out in [(5, 1), (9, 1), (10, 2), (25, 5)]:
@@ -114,6 +154,18 @@ class TestTrainAndEvaluate:
             assert result.held_out_triad_count == expected_held_out, f"n={n}"
             assert result.held_out_nll is not None
             assert result.held_out_pairwise_accuracy is not None
+            assert result.standard_errors is not None
+            assert result.standard_errors.shape == (1,)  # one per fingerprint dimension
+            # No genres passed in this test -- absence, not zero diversity.
+            assert result.training_genre_diversity == 0
+
+    def test_genre_diversity_reflects_the_genres_mapping_passed_in(self):
+        triads, fingerprints = make_triads(5)
+        genres = {"A0": ["Thriller"], "B1": ["Drama"], "C2": ["Comedy"]}
+
+        result = train_and_evaluate(triads, fingerprints, genres)
+
+        assert result.training_genre_diversity == 3
 
     def test_served_weights_are_still_fit_on_every_triad_not_just_the_training_slice(self):
         # Step 6: the held-out split affects only which metrics get reported;

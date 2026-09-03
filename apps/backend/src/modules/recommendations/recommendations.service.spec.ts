@@ -53,13 +53,19 @@ function queryBuilderMock(titles: Title[]) {
   return builder;
 }
 
-function warmthOnlySnapshot(trainingTriadCount = 25, heldOutPairwiseAccuracy: number | null = null) {
+function warmthOnlySnapshot(
+  trainingTriadCount = 25,
+  heldOutPairwiseAccuracy: number | null = null,
+  options: { posterior?: { standardErrors: number[] } | null; trainingGenreDiversity?: number | null } = {},
+) {
   return {
     weights: FINGERPRINT_DIMENSIONS.map((dim) => (dim === 'warmth' ? 1 : 0)),
     biasTerms: {},
     modelVersion: 'test-v1',
     trainingTriadCount,
     heldOutPairwiseAccuracy,
+    posterior: options.posterior ?? null,
+    trainingGenreDiversity: options.trainingGenreDiversity ?? null,
   };
 }
 
@@ -390,6 +396,107 @@ describe('RecommendationsService', () => {
       const result = await service.findForProfile('user-1', 'profile-1', 10);
 
       // Unknown is not treated as failing -- 30 triads still bands 'strong'.
+      expect(result[0].confidenceBand).toBe('strong');
+    });
+  });
+
+  // Blueprint gap 5: §9.2's "stable posterior direction beyond a pre-set
+  // threshold" -- z = |weight| / standardError, the Laplace approximation
+  // to the posterior from ranker.py's BFGS inverse Hessian.
+  describe('confidence band factors in posterior stability (blueprint gap 5)', () => {
+    function standardErrors(overrides: Record<string, number> = {}) {
+      return FINGERPRINT_DIMENSIONS.map((dim) => overrides[dim] ?? 1);
+    }
+
+    it('demotes to inconclusive when no dimension is even one standard error from zero', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(
+        warmthOnlySnapshot(30, null, { posterior: { standardErrors: standardErrors({ warmth: 10 }) } }),
+      );
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+      expect(result[0].confidenceBand).toBe('inconclusive');
+    });
+
+    it('keeps the triad-count band when at least one dimension is stable', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(
+        warmthOnlySnapshot(30, null, { posterior: { standardErrors: standardErrors({ warmth: 0.5 }) } }),
+      );
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+      expect(result[0].confidenceBand).toBe('strong');
+    });
+
+    it('falls back to the triad-count heuristic when posterior is unknown (below the 5-triad floor)', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot(30, null, { posterior: null }));
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+      expect(result[0].confidenceBand).toBe('strong');
+    });
+  });
+
+  // Blueprint gap 5: §9.2's "sufficient effective evidence (not one series
+  // repeated)" and "diversity of ... genres" read together.
+  describe('confidence band factors in training genre diversity (blueprint gap 5)', () => {
+    it('demotes to inconclusive when every triad drew from the same one genre', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot(30, null, { trainingGenreDiversity: 1 }));
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+      expect(result[0].confidenceBand).toBe('inconclusive');
+    });
+
+    it('demotes to inconclusive when no title in training had a known genre', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot(30, null, { trainingGenreDiversity: 0 }));
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+      expect(result[0].confidenceBand).toBe('inconclusive');
+    });
+
+    it('keeps the triad-count band with at least 2 distinct genres', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot(30, null, { trainingGenreDiversity: 5 }));
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+      expect(result[0].confidenceBand).toBe('strong');
+    });
+
+    it('falls back to the triad-count heuristic when diversity is unknown (below the 5-triad floor)', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot(30, null, { trainingGenreDiversity: null }));
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
       expect(result[0].confidenceBand).toBe('strong');
     });
   });

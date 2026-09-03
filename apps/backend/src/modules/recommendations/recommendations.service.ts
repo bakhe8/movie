@@ -55,6 +55,19 @@ const REASON_MIN_SHARE_OF_TOP = 0.2;
 // it is the domain-standard floor for a binary comparison.
 const HELD_OUT_CHANCE_ACCURACY = 0.5;
 
+// z = |weight| / standardError. 1.0 is the most permissive defensible bar --
+// "at least one standard error from zero", not a strict significance test
+// (that would be ~1.96 for 95% confidence) -- consistent with
+// confidenceBand()'s own "deliberately conservative... a soft heuristic, not
+// a rigorous test" posture (blueprint gap 5, BP §9.2 "stable posterior
+// direction beyond a pre-set threshold").
+const POSTERIOR_STABILITY_Z = 1.0;
+
+// Fewer than 2 distinct genres across the triads a snapshot was trained on
+// is exactly "one series repeated" (BP §9.2's own phrase) -- the minimal
+// floor for "not just one thing".
+const MIN_TRAINING_GENRE_DIVERSITY = 2;
+
 // One step down per band. A title with unknown fingerprint dimensions cannot be
 // recommended with the same confidence as a fully described one (blueprint §9.1
 // "fingerprint confidence", §9.2 last criterion; ADR-19).
@@ -343,23 +356,39 @@ export class RecommendationsService {
     return weightedScore + (snapshot.biasTerms?.[title.id] ?? 0);
   }
 
-  // Provisional heuristic banding by evidence quantity (blueprint §9.2's first
-  // criterion: "عدد أدلة فعال كافٍ") plus held-out prediction success (§9.2's
-  // fourth criterion, gap 5). Still NOT the fully calibrated confidence system
-  // blueprint §9.3/§16.2 describes -- posterior stability and
-  // director/language/genre diversity (§9.2's other two criteria) aren't
-  // wired in, and no Brier/ECE calibration exists yet (ADR-21). Until then
-  // this thresholding is deliberately conservative and must never be
-  // presented to the user as a precise probability; it only decides which
-  // verbal band copy to show.
+  // Provisional heuristic banding covering four of blueprint §9.2's five
+  // criteria: evidence quantity ("عدد أدلة فعال كافٍ"), held-out prediction
+  // success, stable posterior direction, and diversity of evidence (gap 5).
+  // Still NOT the fully calibrated confidence system blueprint §9.3/§16.2
+  // describes -- director/language diversity has no data yet (people/credits
+  // are empty, blueprint gap 6; only genre diversity is checked below), and
+  // no Brier/ECE calibration exists (ADR-21). Until then this thresholding
+  // is deliberately conservative and must never be presented to the user as
+  // a precise probability; it only decides which verbal band copy to show.
   private confidenceBand(snapshot: UserModelSnapshot): ConfidenceBand {
-    // heldOutPairwiseAccuracy is NULL below the 5-triad floor (ADR-31) --
-    // falls through to the triad-count heuristic below, same as always.
+    // Each of these three is NULL below the same 5-triad floor (ADR-31) --
+    // below it, every check here is a no-op and banding falls through to the
+    // triad-count heuristic alone, same as before gap 5.
+
     // At or below chance, the evidence is conflicting by definition (§9.3):
-    // this overrides the triad-count band outright, not a one-step demotion.
+    // the model hasn't been shown to predict held-out comparisons at all.
     if (snapshot.heldOutPairwiseAccuracy !== null && snapshot.heldOutPairwiseAccuracy <= HELD_OUT_CHANCE_ACCURACY) {
       return 'inconclusive';
     }
+
+    // No dimension's weight is even one standard error from zero: the
+    // model's strongest claimed direction isn't statistically distinguishable
+    // from noise under its own fit (BP §9.2 "stable posterior direction").
+    if (!this.hasStablePosteriorDirection(snapshot)) {
+      return 'inconclusive';
+    }
+
+    // Fewer than 2 distinct genres across the training evidence: "one series
+    // repeated" by BP §9.2's own phrase, not diverse evidence.
+    if (snapshot.trainingGenreDiversity !== null && snapshot.trainingGenreDiversity < MIN_TRAINING_GENRE_DIVERSITY) {
+      return 'inconclusive';
+    }
+
     if (snapshot.trainingTriadCount < 3) {
       return 'inconclusive';
     }
@@ -370,5 +399,13 @@ export class RecommendationsService {
       return 'likely';
     }
     return 'strong';
+  }
+
+  private hasStablePosteriorDirection(snapshot: UserModelSnapshot): boolean {
+    const standardErrors = snapshot.posterior?.standardErrors;
+    if (!standardErrors) {
+      return true;
+    }
+    return snapshot.weights.some((weight, index) => Math.abs(weight) / standardErrors[index] > POSTERIOR_STABILITY_Z);
   }
 }

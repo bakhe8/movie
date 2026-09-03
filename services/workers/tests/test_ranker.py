@@ -58,6 +58,40 @@ class TestPlackettLuceRankerFit:
         assert order[0] == 2  # "C" (highest fingerprint value) predicted first
 
 
+class TestPlackettLuceRankerStandardErrors:
+    # Blueprint gap 5 (BP §9.2 "stable posterior direction"): the Laplace
+    # approximation to the posterior, from fit()'s BFGS inverse Hessian.
+    def test_raises_before_the_model_has_been_fitted(self):
+        ranker = PlackettLuceRanker(fingerprint_dim=1)
+
+        with pytest.raises(ValueError):
+            ranker.standard_errors()
+
+    def test_returns_one_positive_finite_value_per_dimension_after_fitting(self):
+        triads, fingerprints = make_triad_dataset()
+        ranker = PlackettLuceRanker(fingerprint_dim=1, regularization=0.001)
+        ranker.fit(triads, fingerprints)
+
+        errors = ranker.standard_errors()
+
+        assert errors.shape == (1,)
+        assert np.isfinite(errors[0])
+        assert errors[0] > 0
+
+    def test_a_clearly_informative_dimension_is_stable_relative_to_its_own_uncertainty(self):
+        # A weight several standard errors from zero is the "beyond a pre-set
+        # threshold" signal RecommendationsService.confidenceBand() uses --
+        # this pins that the ratio is actually large for unambiguous evidence,
+        # not just that the method returns *something*.
+        triads, fingerprints = make_triad_dataset()
+        ranker = PlackettLuceRanker(fingerprint_dim=1, regularization=0.001)
+        ranker.fit(triads, fingerprints)
+
+        z_score = abs(ranker.weights[0]) / ranker.standard_errors()[0]
+
+        assert z_score > 1.0
+
+
 class TestPlackettLuceRankerPredictScore:
     def test_raises_before_the_model_has_been_fitted(self):
         ranker = PlackettLuceRanker(fingerprint_dim=1)
