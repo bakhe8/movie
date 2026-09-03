@@ -149,7 +149,11 @@ Placeholders (`--placeholder`): deterministic genre-centroid vectors with seeded
 
 Acceptance — **met**: 295 complete fingerprints, 5 partial; every complete one has 13 finite numbers in [0, 1], a `confidence` entry per dimension, `sourceIds`, `extractorVersion: 'enrichment-worker-v2'`, `modelVersion` set, `licenseStatus: 'unknown'`, `reviewStatus: 'unreviewed'` (checked by script over the committed fixture). This was the first time the enrichment worker ran against a real catalog: zero failures and zero refusals is the `§15.4` acceptance-test input for this run; human review sampling (§7 below, the owner's 30 films) is still open.
 
-### WS3 — Personas and activity (`db:seed:demo`, 4–6 h incl. tests)
+### WS3 — Personas and activity — **code done 2026-09-03, verified on `postgres-test`; the dev-database load is announced on the board before it runs**
+
+**Delivered**: `apps/backend/src/scripts/seed-demo.ts` (writer + CLI: `--clean`, `--dry-run`, `--seed`), `seed-demo.lib.ts` (pure, seeded generators), `fixtures/personas.demo.json` (the persona table below as data, read by the seed and by the trainer runner), `seed-demo.lib.spec.ts` (17 unit tests), `test/seed-demo.e2e-spec.ts` (a full double run against `postgres-test`: 4 accounts, 8 consents, 45 completed + 1 active triads, 3 replacements, every triad's titles watched, replaced titles never in a triad, rankings identical across the two runs), `npm run db:seed:demo` / `db:seed:demo:clean` at the root, `make demo` / `make demo-clean`. The seed writes `titles.originalLanguage` from the fixture only when the database has that column (migration `AddTrainingLanguageDiversity`), so it runs on either schema.
+
+The original specification follows; the numbers it gives are what the e2e test asserts.
 
 **Deliverable**: `apps/backend/src/scripts/seed-demo.ts`, `npm run db:seed:demo` at the root (and `make demo`), unit-tested pure generators.
 
@@ -184,7 +188,7 @@ Acceptance (printed by the script and checked by hand once):
 | replacements | 3 |
 | a second run | same numbers, same rankings, no duplicates |
 
-### WS4 — Training runner (1 h)
+### WS4 — Training runner — **code done 2026-09-03 (`train_demo.py`, 4 tests); its first real run follows the dev-database load**
 
 **Deliverable**: `services/workers/src/train_demo.py` (`python -m src.train_demo`): lists profiles whose user email ends in `@demo.local`, runs the existing `train_profile()` for each, prints one row per persona with `trainingTriadCount`, the band it will produce, `heldOutPairwiseAccuracy`, and the **recovery score** = cosine similarity between the learned `weights` and the persona's hidden θ (θ is read from the persona table, exported by WS3 to `apps/backend/src/scripts/fixtures/personas.demo.json`).
 
@@ -223,8 +227,8 @@ The pass is judged against ADR-33 (no percentage, no merged score) and `§4.4` (
 | WS0 | ½ h | — | — |
 | WS1 curation + fetch script | **done** | — | the owner's review of the Arabic slice and the nine forced swaps |
 | WS2 | **done** (300/300 in 439 s) | — | — |
-| WS3 | 4–6 h | WS1/WS2 | `postgres-test` for the double-run check |
-| WS4 | 1 h | — | WS3 output |
+| WS3 | **code done**, verified on `postgres-test` | — | the announced load into `movie-postgres` |
+| WS4 | **code done** | — | WS3's load, then `make demo` |
 | WS5 | 1–2 h | — | a fresh backend build on a side port (do not restart a concurrent session's server) |
 | WS6 | 1 h | — | WS5 screenshots |
 
@@ -281,3 +285,4 @@ Owner's decision, 2026-09-03, in answer to "what is the alternative to an OpenAI
 | 2026-09-03 | WS1 delivered at 300 titles: curated list, `fetch-catalog.ts`, `catalog.demo.json`, build report, `catalog:fetch` scripts; WS2/WS3 inputs updated to the fixture's real fields (`descriptionSource`, `descriptionAr`, `evidence`) |
 | 2026-09-03 | D1 decided (Anthropic) and recorded as §8 in ADR form; WS2 code delivered: worker ported, batch runner `enrich_catalog.py`, 31 tests, `make catalog-enrich`; the extraction run itself waits for the owner's key |
 | 2026-09-03 | WS2 run completed: 300/300 fingerprints on Sonnet 5 (Opus 5 structured outputs were returning 529 at the time), 0 failures; fixture and enrichment report committed; §8's ADR text was verified and written by session A as ADR-63 |
+| 2026-09-03 | WS3 and WS4 code delivered: `seed-demo.ts` + pure library + `personas.demo.json`, 17 unit tests and a double-run e2e on `postgres-test`; `train_demo.py` + 4 tests; `db:seed:demo` scripts and `make demo`. The load into the dev database is announced on the session board before it runs |

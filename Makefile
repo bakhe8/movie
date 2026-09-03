@@ -1,4 +1,4 @@
-.PHONY: help install dev build test docker-up docker-down db-migrate db-seed catalog-fetch catalog-enrich catalog-enrich-placeholder lint clean
+.PHONY: help install dev build test docker-up docker-down db-migrate db-seed catalog-fetch catalog-enrich catalog-enrich-placeholder demo demo-clean lint clean
 
 help:
 	@echo "🎬 Movie Recommendation System"
@@ -24,6 +24,8 @@ help:
 	@echo "  make catalog-fetch              Rebuild the 300-title fixture from Wikidata/Wikipedia"
 	@echo "  make catalog-enrich             Fingerprint the fixture through the enrichment worker (Anthropic key)"
 	@echo "  make catalog-enrich-placeholder Fill labelled placeholder vectors, no credentials"
+	@echo "  make demo                       Seed the four demo personas into the dev DB and train them"
+	@echo "  make demo-clean                 Remove the demo persona accounts (titles stay)"
 	@echo ""
 	@echo "Utility Commands:"
 	@echo "  make clean         Remove build artifacts"
@@ -75,6 +77,15 @@ catalog-enrich:
 # Same, without credentials: deterministic placeholder vectors labelled as such.
 catalog-enrich-placeholder:
 	cd services/workers && python -m src.enrich_catalog --placeholder
+
+# Demo personas: rebuild the four @demo.local accounts with their activity (idempotent),
+# then train each one and print the recovery table. Writes to the dev database (announce first).
+demo:
+	npm run db:seed:demo
+	cd services/workers && python -m src.train_demo
+
+demo-clean:
+	npm run db:seed:demo:clean
 
 db-reset:
 	@echo "⚠️  This will delete all data!"

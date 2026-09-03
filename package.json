@@ -18,6 +18,8 @@
     "docker:down": "docker-compose --project-directory . -f docker/docker-compose.yml down",
     "db:migrate": "npm run migrate -w apps/backend",
     "db:seed": "npm run seed -w apps/backend",
+    "db:seed:demo": "npm run seed:demo -w apps/backend",
+    "db:seed:demo:clean": "npm run seed:demo:clean -w apps/backend",
     "catalog:fetch": "npm run catalog:fetch -w apps/backend"
   },
   "devDependencies": {
