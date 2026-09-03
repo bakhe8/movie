@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { api } from './lib/api';
 import { AuthScreen } from './components/AuthScreen';
 import { DiscoverScreen } from './components/DiscoverScreen';
 import { ListScreen } from './components/ListScreen';
@@ -18,7 +19,7 @@ const labels = {
 };
 
 export default function Home() {
-  const { ready, user, profile } = useSession();
+  const { ready, user, profile, refreshProfile } = useSession();
   const [lang, setLang] = useState<'ar' | 'en'>('ar');
   const [view, setView] = useState<View>('home');
   // Onboarding (blueprint §4.1) starts when a profile arrives with no market
@@ -67,12 +68,31 @@ export default function Home() {
     return <p className="muted">{lang === 'ar' ? 'جارٍ إعداد ملفك…' : 'Setting up your profile…'}</p>;
   }
 
+  // M9: the header toggle used to be a local-only preview -- profile.preferredLanguage
+  // never changed, so a reload silently reverted it. Flips immediately for a snappy
+  // toggle, then persists the same way the profile screen's language field does
+  // (PATCH + refreshProfile); a failed PATCH is left uncorrected for this session
+  // rather than reverted (blueprint §4.1 binds language to the profile, but M4's
+  // "don't destroy state on a transient error" applies here too) -- the next reload
+  // falls back to whatever was last actually saved.
+  const currentProfileId = profile.id;
+  async function toggleLanguage() {
+    const next = lang === 'ar' ? 'en' : 'ar';
+    setLang(next);
+    try {
+      await api.updateProfile(currentProfileId, { preferredLanguage: next });
+      await refreshProfile();
+    } catch {
+      // Transient failure -- this session keeps showing `next`; unchanged on the server.
+    }
+  }
+
   const chrome = (
     <header>
       <div className="brand">
         <span>R</span>Reel
       </div>
-      <button className="language" onClick={() => setLang(lang === 'ar' ? 'en' : 'ar')}>
+      <button className="language" onClick={toggleLanguage}>
         {lang === 'ar' ? 'EN' : 'عربي'}
       </button>
     </header>
