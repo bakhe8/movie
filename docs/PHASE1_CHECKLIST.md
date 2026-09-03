@@ -106,7 +106,7 @@
   - [ ] Submit button
   - [ ] "Haven't watched? Replace" and "Don't remember it well? Replace" as two separate buttons
 - [ ] Film replacement dialog (show similar films to replace with)
-- [ ] Progress indicator (X of 20 triads completed)
+- [ ] Progress indicator (X of N triads completed — N is not a fixed constant; first-value target is 3-5 triads and Alpha completion target is 20-30 triads per blueprint §17.2, exact count is an open question per blueprint Appendix C)
 - [ ] Confirmation on submit
 - [ ] Next triad automatically loads
 - [ ] Tests: Ranking component behavior
@@ -165,14 +165,14 @@
   - [ ] Show top reasons (dimensions that drove recommendation), no-spoiler
   - [ ] Show similar films
   - [ ] "Add to watchlist" button
-  - [ ] Feedback buttons (thumbs up/down) — engagement signal only, not a substitute for a triad ranking
+  - [ ] "Not relevant to me" dismiss action, logged as an outcome event only — no thumbs-up/down or star rating: the blueprint's only explicit preference question, permanently, is the triad ranking (blueprint §2.4 principle #2, §4.5)
 - [ ] Clickable dimensions to learn more
 - [ ] Tests: Recommendations rendering
 
 ### Explanation Module (Optional for MVP)
 - [ ] `ExplanationService` - Call OpenAI for natural language explanation
 - [ ] Template for explanation (no LLM needed initially)
-- [ ] Example: "You enjoy psychological dramas with complex narratives. Interstellar matches your taste for ambiguity (score: 8.7/10) and narrative complexity."
+- [ ] Example: "You enjoy psychological dramas with complex narratives. Interstellar matches your taste for narrative ambiguity and complexity." (no bare numeric feature score shown to the user — explanations describe the evidence qualitatively; a calibrated percentage is never shown pre-calibration, blueprint §7.2, §9.4)
 
 ---
 

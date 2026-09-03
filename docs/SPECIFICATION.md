@@ -163,7 +163,7 @@ Each film is analyzed across ~30-50 semantic dimensions, generating a "fingerpri
   
   // Metadata
   generatedBy: "openai",
-  modelVersion: "gpt-4o",
+  modelVersion: "<current-openai-model-id>", // pin whatever OpenAI model is actually selected at build time — the blueprint (§15.3) only specifies "OpenAI Responses API" generically and never commits to a model name; do not hard-code one here
   generatedAt: "2025-01-02T10:00:00Z"
 }
 ```
@@ -426,11 +426,11 @@ like Inception and The Prestige show this pattern."
 
 ### First Interaction: Seed Triads
 
-4. **Initial Triads** (6-10 structured comparisons)
+4. **Initial Triads** (3-5 triads, per blueprint §4.1/§8 gate 2/Appendix B — exact count is one of the blueprint's open experimental questions, Appendix C, not fixed above 5)
    - Display diverse films (different genres, styles)
-   - Question: "Which would you rather watch right now?"
+   - Question: "Rank these by your personal enjoyment, most to least" — never a moment/mood framing like "right now" (blueprint §2.4 principle 4, §4.3: ranking means stable personal liking, not this session's mood; mood-based fit is deferred as Session Fit, §7.3)
    - Allow "Haven't watched? Pick replacement" for each
-   - Show progress: "3 of 10"
+   - Show progress: "3 of 5"
 
 5. **First Recommendations**
    - Show top 10 with clear "Still Learning" label
@@ -485,7 +485,7 @@ fingerprint = enrichment_worker.generate_fingerprint(
 
 # Store with metadata
 title.fingerprint = fingerprint.model_dump()
-title.fingerprint_model_version = "gpt-4o"
+title.fingerprint_model_version = settings.OPENAI_FINGERPRINT_MODEL  # whatever model is actually configured — never hard-code a model name (blueprint §15.3 names no specific model)
 title.save()
 ```
 
@@ -541,7 +541,7 @@ batch_job = openai_client.beta.batch.create(requests=[...])
 ```python
 # ALWAYS set store=false
 response = openai_client.messages.create(
-    model="gpt-4o",
+    model=settings.OPENAI_FINGERPRINT_MODEL,  # configured model id — don't hard-code (blueprint §15.3 specifies "OpenAI Responses API" generically, no model name)
     messages=[...],
     extra_headers={"openai-internal-store": "false"}
 )
@@ -619,9 +619,13 @@ Once MVP succeeds:
 
 3. **Correct Data** (Right to Correction)
    ```
-   PATCH /api/triads/{id}/ranking
-   → User can adjust past rankings
+   POST /api/triads/{id}/corrections
+   → Creates a new triad event linked to the original via corrects_event_id
+   → Original event is never edited or deleted; history stays intact
+   → Model/exports read the latest linked event per triad, but the full chain is retained
    ```
+   (Triad events are append-only — a correction must produce a new linked event, never
+   overwrite the original in place; blueprint §13.2, §11.3)
 
 4. **Restrict Processing** (Right to Restrict)
    ```
@@ -768,7 +772,7 @@ See [docs/privacy.md](privacy.md) for full compliance checklist.
    - Mitigation: Fixed question ("your overall taste")
    - Later: Add context-specific models
 
-5. **No Cold-Start Solutions**: New users need 15+ triads
+5. **No Cold-Start Solutions**: a new user needs several triads before the model is useful — first perceived value targets 3-5 triads (blueprint §4.1/§8 gate 2), full stabilization is closer to the 20-30-triad Alpha figure (blueprint §17.2); "15+" is not a blueprint-sourced number and has been removed
    - Mitigation: Show "still learning" honestly
    - Later: Intelligent triad selection to minimize needed data
 
@@ -810,7 +814,7 @@ See [docs/privacy.md](privacy.md) for full compliance checklist.
 - Unclear if benefits individual-level understanding
 - Better to prove content-based model works first
 
-**When to Add**: Once 50+ active users with 20+ triads each
+**When to Add**: once there is enough overlapping-preference data for the collaborative term to be fit safely without leaking future interactions — the blueprint deliberately does not fix a user/triad-count trigger for this (§7.1: "لا تدخل مبكرًا ولا تسرب بيانات المستقبل"); "50+ active users with 20+ triads each" was this doc's own invented number and is not a blueprint-sourced or pre-committed threshold
 
 ### Why PWA Over Native App?
 

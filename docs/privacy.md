@@ -58,13 +58,14 @@ This document outlines privacy commitments and compliance measures for the Movie
    │   └── Covers: account management, authentication
    │
 2. First Login
-   ├── Purpose-specific consent (separate toggles)
+   ├── Purpose-specific consent (separate toggles, scoped to what MVP Phase 1
+   │   │  actually implements — see "Exclusions from MVP" below)
    │   ├── [x] Use my rankings to improve recommendations
-   │   ├── [x] Store my watched list for personalization
-   │   ├── [ ] Include my taste profile in global trend analysis
-   │   └── [ ] Send me recommendations via email
+   │   └── [x] Store my watched list for personalization
    │
-3. Feature Activation (Future)
+3. Feature Activation (Future — not built in Phase 1; toggle appears when shipped)
+   ├── "Include my taste profile in aggregated, anonymized trend analysis" - cross-user use
+   ├── "Send me recommendations via email"
    ├── "Share your profile" - collaborative filtering
    ├── "Export data" - download my preferences
    └── "AI explanations" - use my data for natural language explanations
@@ -131,18 +132,23 @@ POST /api/profiles/{id}/triads/{triadId}/corrections
 ```
 
 ### Right to Erasure
+
+Per the blueprint (§14, `POST /v1/privacy/delete`), deletion goes through an
+announced safety period before anything is irreversibly purged, not an
+instant no-warning wipe — see "Data Deletion Flow" below for the sequence.
+
 ```bash
 DELETE /api/profiles/{id}
-→ Deletes:
+→ After the safety-period window, deletes:
   - All triadic rankings
   - All watched/not-watched states
   - All preference weights
   - Recommendation history
-  (Keeps anonymized global statistics if user consented)
+  (Keeps anonymized global statistics only if user consented)
 
 DELETE /api/users/{id}
-→ Completely removes user account and ALL related data
-   (Permanent, cannot be recovered)
+→ Completely removes user account and ALL related data once the
+   safety-period window has elapsed (then permanent, cannot be recovered)
 ```
 
 ### Right to Data Portability
@@ -170,7 +176,7 @@ POST /api/profiles/{id}/restrictions
 - Model version used to generate this recommendation
 - Top 3 factors influencing the recommendation
 - Similar films that contributed to this suggestion
-- Confidence score
+- Confidence as a verbal band (e.g. "initial/likely/strong"), never a raw score or percentage until calibrated against confirmed post-watch outcomes (blueprint §7.2/§9.3)
 - Ability to feedback on recommendation
 
 **Example** (illustrative copy only — per blueprint §7.2/§9.3, dimension "match %" figures and a bare confidence percentage are not shown until calibrated against confirmed post-watch outcomes; the shown confidence is a verbal band):

@@ -2,7 +2,7 @@
 
 A detailed technical reference for implementing the Plackett-Luce model for learning user preferences from triadic rankings.
 
-> See [movie_taste_platform_blueprint_ar.md](movie_taste_platform_blueprint_ar.md) §7 for the authoritative utility model (adds a shrunk population prior term $b(m)$, absent below) and §16 for the full evaluation/calibration requirements (this doc's "pairwise accuracy" is one of several required metrics, not the only one — calibration (Brier/ECE) and per-language/country slices are release gates too).
+> See [movie_taste_platform_blueprint_ar.md](movie_taste_platform_blueprint_ar.md) §7 for the authoritative utility model — the population prior term $b(m)$ from blueprint §7.1 is carried through the formula and the implementation below — and §16 for the full evaluation/calibration requirements (this doc's "pairwise accuracy" is one of several required metrics, not the only one — calibration (Brier/ECE) and per-language/country slices are release gates too).
 
 ---
 
@@ -112,16 +112,23 @@ from scipy.optimize import minimize
 import numpy as np
 
 class PlackettLuceRanker:
-    def fit(self, triads, fingerprints, regularization=0.01):
+    def fit(self, triads, fingerprints, population_priors=None, regularization=0.01):
         """
         triads: List[Tuple[ids, ranking]]
             - ids: [id_A, id_B, id_C]
             - ranking: [0, 1, 2]  (A is 1st, B is 2nd, C is 3rd)
         fingerprints: Dict[id -> np.array of shape (d,)]
+        population_priors: Dict[id -> float], the heavily-shrunk b(i) term
+            from blueprint §7.1. Optional — defaults to 0 for every film,
+            which is an acceptable first-pass value per the note above —
+            but the parameter stays part of the signature so cold-start
+            smoothing has somewhere principled to live instead of being
+            bolted on later.
         """
         
         self.fingerprint_dim = fingerprints[triads[0][0][0]].shape[0]
         self.regularization = regularization
+        self.population_priors = population_priors or {}
         
         # Initialize weights randomly
         w0 = np.random.randn(self.fingerprint_dim) * 0.01
@@ -130,11 +137,12 @@ class PlackettLuceRanker:
         def objective(w):
             nll = 0.0
             for ids, ranking in triads:
-                # Get fingerprints
+                # Get fingerprints and population priors b(i)
                 x = np.array([fingerprints[ids[i]] for i in range(3)])
+                b = np.array([self.population_priors.get(ids[i], 0.0) for i in range(3)])
                 
-                # Compute utilities
-                U = x @ w  # Shape (3,)
+                # Compute utilities: U = b(i) + w^T x  (delta_{u,i} omitted here; see §7.4)
+                U = b + x @ w  # Shape (3,)
                 
                 # Compute log-likelihood for this triad
                 # ranking[0] = index of 1st place
@@ -157,7 +165,7 @@ class PlackettLuceRanker:
                 log_prob_triad = log_prob_1 + log_prob_2
                 nll -= log_prob_triad
             
-            # Add L2 regularization
+            # Add L2 regularization (on w only; b(i) is shrunk separately upstream)
             nll += regularization * np.sum(w ** 2)
             return nll
         
@@ -172,13 +180,16 @@ class PlackettLuceRanker:
         self.weights = result.x
         return self
     
-    def predict_score(self, fingerprint):
-        """Compute utility score for a film."""
-        return float(fingerprint @ self.weights)
+    def predict_score(self, fingerprint, population_prior=0.0):
+        """Compute utility score for a film: b(i) + w^T x (delta_{u,i} omitted; see §7.4)."""
+        return float(population_prior + fingerprint @ self.weights)
     
     def predict_ranking(self, ids, fingerprints):
         """Rank films by predicted preference."""
-        scores = [self.predict_score(fingerprints[id]) for id in ids]
+        scores = [
+            self.predict_score(fingerprints[id], self.population_priors.get(id, 0.0))
+            for id in ids
+        ]
         return np.argsort(scores)[::-1]  # Descending order
 ```
 
@@ -224,20 +235,19 @@ log_prob = u[i] - logsumexp(u)  # Won't overflow/underflow
 
 ### Data Requirements
 
-**Minimum triads for stable model**: 15-20
+**Illustrative triad count for a stable $w_u$**: 15-20, as a starting rule of thumb — not a fixed product promise. Per blueprint §16.5/§17, the actual thresholds for each gate are set experimentally, not fixed in this document.
 
-**Rationale**:
+**Rationale** (rough degrees-of-freedom heuristic for $w_u$ alone, not for the blueprint's early-value gate below):
 - 3 triads = 9 pairwise constraints
 - ~30 degrees of freedom (weight dimensions)
 - Rule of thumb: 2-3 observations per degree of freedom
 - 15 triads = 45 pairwise constraints = ~50 to 150 degrees of freedom coverage
 
-**Growth**:
+This is about when $w_u$ (personal weights) stops being noisy — it is not the same question as the blueprint's Gate 2 ("does the user see a useful result after 3-5 triads?", blueprint §§0/3.3). Those first 3-5 triads are expected to produce directionally usable initial recommendations because the population prior $b(i)$ and content-fingerprint similarity already carry signal before $w_u$ has converged — the model is not "random" in that window. A rough, non-promised growth curve, to be validated experimentally per blueprint §16.5 rather than treated as settled:
 ```
-After 5 triads:   Random predictions
-After 10 triads:  Model starts to stabilize
-After 15 triads:  Initial accuracy achievable
-After 20 triads:  Model confident, good recommendations
+After 3-5 triads: Early value — initial profile, library ranking, first recommendations (blueprint Gate 2)
+After 10 triads:  w_u starts to stabilize
+After 15-20 triads: w_u reasonably stable
 After 30+ triads: Personalization strong, rare films handled
 ```
 
@@ -414,11 +424,12 @@ def recommend_films(user_id, num_recommendations=10):
         # Fallback: use database
         weights = database.query_latest_weights(user_id)
     
-    # Score all unwatched films
+    # Score all unwatched films: U = b(i) + w^T x (blueprint §7.1)
     scores = {}
     for film_id in unwatched_films:
         fingerprint = get_fingerprint(film_id)
-        score = fingerprint @ weights
+        prior = get_population_prior(film_id)  # heavily-shrunk b(i); 0.0 if unset
+        score = prior + fingerprint @ weights
         scores[film_id] = score
     
     # Top 10

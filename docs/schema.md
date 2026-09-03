@@ -80,6 +80,10 @@ CREATE TABLE user_title_state (
   title_id UUID NOT NULL REFERENCES titles(id) ON DELETE CASCADE,
   state VARCHAR(50) NOT NULL, -- 'watched', 'not_watched', 'not_remembered', 'watchlist', 'interested'
   watched_date TIMESTAMP,
+  watch_source VARCHAR(50), -- 'import' | 'manual' | 'in_app'; how we know they watched it
+  watched_audio_language VARCHAR(10), -- the edition/version watched, when known (blueprint §6.2, §13.1 watch_events)
+  watched_subtitle_language VARCHAR(10), -- optional; a viewing-experience signal feeding Watchability, never the work-level fingerprint
+  watch_provider VARCHAR(100), -- platform/market watched on, when known
   imported_rating NUMERIC(2, 1), -- optional, from an imported list only (e.g. CSV import)
   rating_source VARCHAR(50), -- 'import' only; never written by an in-app post-watch prompt
   notes TEXT,
@@ -89,7 +93,7 @@ CREATE TABLE user_title_state (
 );
 ```
 
-> Per the blueprint (§4.5, §4.2): the app never asks for a star rating after a watch. The only explicit preference signal is a triad ranking. `imported_rating` exists solely to hold a rating that arrived with an imported watch list (e.g. a CSV of a user's history) — it is a low-confidence auxiliary signal, never a substitute for triads, and no UI flow should collect it directly. `not_remembered` is a distinct neutral state from `not_watched`: both are exposure-unknown, not a negative preference signal, but they trigger different UI copy ("haven't watched" vs "don't recall it well enough to rank").
+> Per the blueprint (§4.5, §4.2): the app never asks for a star rating after a watch. The only explicit preference signal is a triad ranking. `imported_rating` exists solely to hold a rating that arrived with an imported watch list (e.g. a CSV of a user's history) — it is a low-confidence auxiliary signal, never a substitute for triads, and no UI flow should collect it directly. `not_remembered` is a distinct neutral state from `not_watched`: both are exposure-unknown, not a negative preference signal, but they trigger different UI copy ("haven't watched" vs "don't recall it well enough to rank"). `watch_source`, `watched_audio_language`, `watched_subtitle_language`, and `watch_provider` are optional and inferred from the provider when possible — the blueprint separates the work itself from the edition/version and the individual watch event, and treats dub/subtitle quality as a viewing-experience signal that feeds Watchability, not a work-level attribute (§6.2, §13.1 `watch_events`).
 
 ## Triadic Rankings
 
@@ -166,11 +170,13 @@ CREATE TABLE recommendations (
   selection_propensity NUMERIC(10, 8), -- P(this candidate was shown), for unbiased off-policy eval
   generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   
-  -- Tracking engagement
+  -- Tracking engagement (implicit outcomes only — save/click/watch/later re-rank; see blueprint §13.1 `outcomes`)
   shown_at TIMESTAMP,
   clicked_at TIMESTAMP,
   watched_at TIMESTAMP,
-  feedback_score INTEGER, -- -1 (dislike), 0 (neutral), 1 (like)
+  -- No like/dislike/thumbs field here: per blueprint principle #2 (§2.4) and §4.5, the triad
+  -- ranking is the ONLY explicit preference signal. A watched title's real feedback is captured
+  -- by feeding it back into a later triad, not by a direct rating widget on the recommendation.
   
   INDEX (profile_id, personal_fit_score DESC),
   INDEX (profile_id, generated_at DESC)
@@ -212,7 +218,7 @@ CREATE TABLE global_model_versions (
   ranker_type VARCHAR(50), -- 'plackett-luce'
   
   -- Fingerprinting model
-  fingerprint_model_name VARCHAR(100), -- 'gpt-4o'
+  fingerprint_model_name VARCHAR(100), -- vendor/model actually used for extraction; not fixed by the blueprint (an implementation choice under §15.3), so don't hard-code an example model name here
   fingerprint_model_version VARCHAR(50),
   
   -- Benchmark results
@@ -256,7 +262,7 @@ CREATE TABLE source_records (
 -- Fast lookups
 CREATE INDEX idx_titles_internal_id ON titles(internal_id);
 CREATE INDEX idx_triads_profile_created ON triads(profile_id, created_at DESC);
-CREATE INDEX idx_recommendations_profile_score ON recommendations(profile_id, confidence DESC);
+CREATE INDEX idx_recommendations_profile_confidence ON recommendations(profile_id, confidence_raw DESC); -- was `confidence`, a leftover from before personal_fit_score/public_quality_score/watchability_score/confidence_band were split apart
 
 -- pgvector similarity search
 CREATE INDEX idx_embeddings_vector ON embeddings USING IVFFLAT (vector vector_cosine_ops);

@@ -131,7 +131,7 @@ See [docs/schema.md](docs/schema.md) for detailed schema.
 
 ## Film Fingerprint Schema (V1)
 
-Each film is analyzed across ~30-50 semantic dimensions:
+Each film is analyzed across multiple semantic dimensions spanning the families in blueprint §6.1 (narrative, pacing, tone/emotion, characters, dialogue, style, theme, ending, people, cultural context) — the blueprint does not fix a total dimension count, so treat "~30-50" as this repo's own unverified draft, not a blueprint decision:
 
 ```typescript
 {
@@ -153,16 +153,17 @@ Each film is analyzed across ~30-50 semantic dimensions:
 ## Ranking Engine
 
 ### Plackett-Luce Model
-The system learns user preferences using:
+The system learns user preferences using the full utility model from blueprint §7.1 (this README previously showed a truncated version missing the population prior — fixed here to match):
 
-$$U_{u,i} = w_u^T x_i + \delta_{u,i}$$
+$$s(u,m) = b(m) + \theta_u^{\top}\phi_m + p_u^{\top}q_m + \delta_{u,m}$$
 
 Where:
-- $x_i$ = film fingerprint (feature vector)
-- $w_u$ = user's taste weights
-- $\delta_{u,i}$ = per-film bias term
+- $b(m)$ = weak population prior / general quality, heavily shrunk and kept visually separate from Personal Fit
+- $\phi_m$ = film fingerprint (feature vector), $\theta_u$ = user's interpretable taste weights
+- $p_u^{\top}q_m$ = collaborative signal, only added once enough data exists — not used early (blueprint §7.1)
+- $\delta_{u,m}$ = this user's exceptional-film residual, heavily shrunk so it doesn't generalize (blueprint §7.4)
 
-**Training:** Complete rankings from triadic comparisons using maximum likelihood estimation.
+**Training:** Complete rankings from triadic comparisons using maximum likelihood estimation, treating each A>B>C ranking as one listwise Plackett–Luce event rather than three independent pairwise comparisons (blueprint §7.2).
 
 **Evaluation:** Pairwise comparison accuracy on held-out triads.
 
@@ -173,7 +174,7 @@ Where:
 - [ ] Individual profile creation
 - [ ] Film search and discovery
 - [ ] Triadic ranking interface (3 cards, click to rank)
-- [ ] Replacement for "haven't watched" films
+- [ ] Replacement for "haven't watched" and "don't remember it well" — two distinct neutral states, neither a preference signal (blueprint §2.4 principle #3, §4.3)
 - [ ] Initial recommendations display
 - [ ] Admin dashboard for model inspection
 
@@ -310,9 +311,10 @@ npm install
 1. **Implement Phase 1 endpoints** - User auth, film CRUD, triad API
 2. **Build frontend UI** - Triadic ranking interface
 3. **Add fingerprinting worker** - OpenAI integration for first 300-500 films
-4. **Collect seed data** - Test with 15-20 users
-5. **Validate MVP hypothesis** - Prove Plackett-Luce > baselines
-6. **Phase 2** - General model, Expo app, JustWatch integration
+4. **Phase 0 UX validation** - Clickable prototype, 15-20 people, UX/question validation only — not a beta and not real ranking-model data collection (blueprint §17.1)
+5. **Alpha data collection** - 80-150 users; accepters complete 20-30 triads across short sessions (blueprint §17.2)
+6. **Validate MVP hypothesis** - Prove Plackett-Luce > baselines, gated on the Alpha outcome, not a fixed accuracy promise (blueprint §16.5)
+7. **Phase 2** - General model, native app only if PWA proves the need (blueprint §5.2), JustWatch-style availability integration
 
 ## Resources
 

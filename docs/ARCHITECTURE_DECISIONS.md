@@ -206,7 +206,7 @@ Need to serve users on mobile and desktop. React Native (Expo) or Next.js PWA?
 | **Flutter** | Excellent performance, fast compile | Not JavaScript, fragmented from backend |
 
 ### Decision
-**Phase 1: PWA (Next.js)** → **Phase 2: React Native (Expo)** with shared types
+**PWA (Next.js) first.** Native (React Native/Expo) is not a scheduled next phase — it is built only if the PWA proves a real need for performance or push notifications that the PWA cannot meet (blueprint §5.2: "تطبيقات iOS/Android أصلية: تُبنى فقط إذا أثبتت PWA حاجة أداء أو إشعارات"). The "Phase 2" rationale and migration steps below describe what that native build would look like *if* that gate is crossed, not a committed roadmap item.
 
 ### Rationale (Phase 1)
 1. **Fastest time to MVP** = single codebase
@@ -215,10 +215,10 @@ Need to serve users on mobile and desktop. React Native (Expo) or Next.js PWA?
 4. **Instant testing** = share link to users, no installation
 5. **Easier A/B testing** = change UI without coordination
 
-### Rationale (Phase 2)
+### Rationale (Phase 2) — only if the gate below is crossed
 1. **Share types with backend** = TypeScript throughout
 2. **Share business logic** = recommendation algorithm unchanged
-3. **Native performance** = if PWA feels slow
+3. **Native performance** = only relevant if PWA measurably feels slow (the actual trigger, per blueprint §5.2)
 4. **App store presence** = credibility + discoverability
 5. **Offline support** = critical for some markets
 
@@ -229,7 +229,8 @@ Need to serve users on mobile and desktop. React Native (Expo) or Next.js PWA?
 
 ### Migration Path
 ```
-Phase 2 (after MVP proves hypothesis):
+Only if the PWA proves insufficient — measured performance or push-notification
+need it cannot meet (blueprint §5.2), not a default "after MVP" step:
 ├── Create apps/mobile (React Native + Expo)
 ├── Share packages/shared (TypeScript types)
 ├── Reuse services/workers (Python, no change)
@@ -364,11 +365,11 @@ Should recommendations be purely personalized or include surprise/discovery?
 
 > Blueprint amendment (§4.4, §5.1): the blueprint puts three recommendation tracks — safe / discovery / outside-usual — in MVP scope, not Phase 2. This isn't full bandit-style stochastic ranking; each track is still deterministically score-ranked internally, but "discovery" and "outside-usual" exist specifically to prevent the filter-bubble risk this decision's original Phase-1 plan accepted as a known tradeoff. Treat the "Phase 2" step below (mix-it-up button, 10% randomness A/B) as optional polish on top of the three tracks, not as the thing that first introduces exploration.
 
-### Rationale (Phase 1)
-1. **Measurable** = can evaluate if "best picks" are better than baselines
-2. **Simple to explain** = "Top 10 films you'd love, ranked by our model"
-3. **Fast implementation** = no extra complexity
-4. **Aligns with hypothesis** = "Can we find users' true preferences?"
+### Rationale (MVP)
+1. **Measurable** = can evaluate if each track's picks are better than baselines
+2. **Simple to explain** = each track has a clear framing (safe / discovery / outside-usual, blueprint §4.4), each internally ranked by our model
+3. **Fast implementation** = deterministic scoring per track, no bandit complexity
+4. **Aligns with hypothesis** = "Can we find users' true preferences?", while the discovery/outside-usual tracks guard against the filter-bubble risk from day one
 
 ### Tradeoffs Given Up
 - Full stochastic/bandit exploration (still deferred — the three tracks mitigate but don't replace it)
@@ -594,8 +595,8 @@ Phase 3+ (if sharding needed):
 | Monorepo | npm workspaces | Shared types | Scaling devops |
 | Database | PostgreSQL + pgvector | Single DB, vector search | Need 10M+ vectors |
 | Ranking | Plackett-Luce | Interpretable, proven | Need neural nets |
-| Feedback | Triadic ranking | Rich data, unambiguous | User complaints |
-| Frontend | PWA (Next.js) | Fast iteration | Need app store |
+| Feedback | Triadic ranking | Rich data, unambiguous | Never — the only explicit preference question, permanently (blueprint §2.4 #2); only UX mechanics like tie-handling are open to testing (Appendix C) |
+| Frontend | PWA (Next.js) | Fast iteration | PWA proves insufficient performance or push-notification need (blueprint §5.2) |
 | Fingerprints | OpenAI API | Quality, structured output | Costs too high |
 | Profiles | Individual only | Clean data, privacy | User demand for family |
 | Recommendations | Real-time + cache | Fresh, responsive | Compute bottleneck |

@@ -13,7 +13,7 @@
 | **Wikidata** | CC0 (Public Domain) | Free | ✅ Yes | ✅ Yes | ✅ YES | Best for MVP |
 | **IMDb Free** | Personal use only | Free | ❌ No | ⚠️ Limited | ❌ NO | Illegal in production |
 | **IMDb Commercial** | AWS Data Exchange | $$$$ | ✅ Yes | ⚠️ Limited | ❌ Phase 3+ | Expensive |
-| **TMDB Free** | CC0 (limited) | Free | ⚠️ Conditional | ✅ Yes | ⚠️ Risky | Requires written agreement |
+| **TMDB Free** | Custom ToS, attribution required (not CC0) | Free | ⚠️ Conditional | ✅ Yes | ❌ Not for ML/recs (display-only, w/ attribution) | Requires written agreement |
 | **TMDB Commercial** | Partnership | $$$$ | ✅ Yes | ✅ Yes | ❌ Phase 2+ | Best overall but needs negotiation |
 | **JustWatch** | Partnership | $$$$ | ✅ Conditional | ✅ Saudi Arabia | ❌ Phase 2+ | Critical for availability |
 
@@ -242,7 +242,9 @@ Phase 1 Data Strategy:
 │
 ├── Step 2: Fetch base metadata
 │   ├── Primary: Wikidata API (CC0, free)
-│   ├── Secondary: Google Knowledge Graph (free)
+│   ├── Secondary: Google Knowledge Graph (verify its ToS/usage limits before
+│   │   relying on it — "free to query" is not a usage license per blueprint
+│   │   §11.1; give it its own source_records entry like every other source)
 │   └── Fallback: Manual entry
 │
 ├── Step 3: Create fingerprints
@@ -293,6 +295,7 @@ CREATE TABLE titles (
   }'
 );
 
+-- Simplified excerpt; schema.md's `source_records` definition is authoritative.
 CREATE TABLE source_records (
   id UUID PRIMARY KEY,
   title_id UUID REFERENCES titles,
@@ -300,6 +303,10 @@ CREATE TABLE source_records (
   value TEXT,
   source VARCHAR,  -- 'wikidata', 'openai', 'manual'
   license VARCHAR,  -- 'CC0', 'proprietary'
+  license_status VARCHAR,  -- 'commercial_allowed', 'non_commercial_only', 'pending_review'
+  confidence NUMERIC,  -- required per blueprint §11.3 for every extracted attribute
+  extractor_version VARCHAR,  -- schema/model version that produced this value, if generated
+  review_status VARCHAR,  -- 'unreviewed', 'sampled', 'human_verified'
   retrieved_at TIMESTAMP
 );
 ```
