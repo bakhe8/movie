@@ -1,5 +1,10 @@
 @import url("https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap");
 
+/* Global styles: fonts, tokens, resets, the sign-in frame and the few shared
+   utilities (.eyebrow, .muted, .cta/.full) every screen uses. Everything
+   else lives in a CSS module next to its component (AppShell for the
+   header/navigation/content frame, one module per screen). */
+
 body,
 button,
 input,
@@ -31,7 +36,6 @@ body {
   margin: 0;
   background: var(--canvas);
   color: var(--ink);
-  font-family: Arial, sans-serif;
 }
 
 button,
@@ -44,6 +48,7 @@ button {
   cursor: pointer;
 }
 
+/* Sign-in / create-account frame (the form itself is AuthScreen.module.css). */
 .auth {
   min-height: 100vh;
   display: grid;
@@ -61,30 +66,18 @@ button {
   box-shadow: 0 24px 60px #16212a19;
 }
 
-.mark,
-.brand span {
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  background: var(--accent);
-  color: #fff;
-  border-radius: 14px;
-  font-size: 22px;
-  font-weight: 900;
+.auth h1 {
+  font-size: clamp(34px, 8vw, 52px);
+  line-height: 1.04;
+  margin: 18px 0;
 }
 
+/* Shared utilities. */
 .eyebrow {
   color: var(--accent);
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.1em;
-}
-
-.auth h1 {
-  font-size: clamp(34px, 8vw, 52px);
-  line-height: 1.04;
-  margin: 18px 0;
 }
 
 .muted {
@@ -122,246 +115,18 @@ select {
   opacity: 0.45;
 }
 
-.link,
-.language {
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font-weight: 700;
-}
-
-.language {
-  position: absolute;
-  top: 22px;
-  right: 22px;
-  border: 1px solid #dfe4e8;
-  border-radius: 10px;
-  padding: 7px 9px;
-}
-
-.notice {
-  color: var(--accent);
-}
-
-.app {
-  min-height: 100vh;
-  padding-bottom: 84px;
-}
-
-header {
-  height: 72px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px max(20px, calc((100vw - 1080px) / 2));
-  background: #fff;
-  border-bottom: 1px solid #e8ecee;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 20px;
-  font-weight: 900;
-}
-
-.brand span {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  font-size: 17px;
-}
-
-header select {
-  width: auto;
-  min-height: 38px;
-  max-width: 130px;
-}
-
-.app .language {
-  position: static;
-}
-
-.content {
-  width: min(100%, 1080px);
-  margin: auto;
-  padding: 42px 20px;
-}
-
-.content h2 {
-  font-size: clamp(32px, 6vw, 48px);
-  margin: 8px 0;
-}
-
-.cards {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-  margin-top: 28px;
-}
-
-.film {
-  position: relative;
-  min-height: 290px;
-  text-align: start;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  border: 1px solid #e1e6e9;
-  border-radius: 16px;
-  padding: 22px;
-  background: var(--card);
-  box-shadow: 0 5px 15px #17212a0d;
-}
-
-.film:hover,
-.film.picked {
-  border-color: var(--accent);
-  box-shadow: 0 12px 25px #ec5b3e24;
-}
-
-.film span {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: #f2f5f6;
-  color: var(--accent);
-  font-weight: 900;
-}
-
-.film.picked span {
-  background: var(--accent);
-  color: #fff;
-}
-
-.film small {
-  color: var(--muted);
-}
-
-.film strong {
-  font-size: 23px;
-}
-
-.film em {
-  color: var(--accent);
-  font-style: normal;
-}
-
-.film p,
-.results p {
-  color: var(--muted);
-  line-height: 1.45;
-}
-
 .full {
   display: block;
   width: min(100%, 350px);
   margin: 28px auto;
 }
 
-.search {
-  margin: 18px 0;
-}
-
-.results {
-  display: grid;
-  gap: 10px;
-}
-
-.results article {
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 18px 0;
-  border-bottom: 1px solid #dfe4e8;
-}
-
-.results h3 {
-  margin: 4px 0;
-}
-
-.results button {
-  align-self: center;
-  border: 0;
-  border-radius: 9px;
-  padding: 9px;
-  background: #eaf3f5;
-  color: var(--ink);
-  font-weight: 700;
-}
-
-nav {
-  position: fixed;
-  z-index: 2;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: center;
-  gap: 56px;
-  padding: 12px;
-  background: #fff;
-  border-top: 1px solid #e4e8ea;
-}
-
-nav button {
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font-weight: 800;
-  padding: 8px;
-}
-
-nav .active {
-  color: var(--accent);
-}
-
-[dir="rtl"] .language {
-  right: auto;
-  left: 22px;
-}
-
 @media (max-width: 720px) {
-  .cards {
-    grid-template-columns: 1fr;
-  }
-
-  .film {
-    min-height: 210px;
-  }
-
-  .content {
-    padding-top: 30px;
-  }
-
   .auth section {
     padding: 38px 24px;
   }
 
   .auth h1 {
     padding-top: 22px;
-  }
-
-  .results article {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  header {
-    gap: 9px;
-  }
-
-  nav {
-    justify-content: space-between;
-    gap: 4px;
-    padding: 10px 8px;
-  }
-
-  nav button {
-    padding: 8px 4px;
-    font-size: 13px;
   }
 }

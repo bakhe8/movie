@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useSession } from '../lib/session';
+import { LanguageToggle } from './AppShell';
 import styles from './AuthScreen.module.css';
 
 type Mode = 'login' | 'register';
@@ -45,7 +46,13 @@ const labels = {
   },
 };
 
-export function AuthScreen({ lang }: { lang: 'ar' | 'en' }) {
+export function AuthScreen({
+  lang,
+  onLanguageChange,
+}: {
+  lang: 'ar' | 'en';
+  onLanguageChange?: (lang: 'ar' | 'en') => void;
+}) {
   const { login, register, error, clearError } = useSession();
   const [mode, setMode] = useState<Mode>('login');
   const [submitting, setSubmitting] = useState(false);
@@ -74,6 +81,15 @@ export function AuthScreen({ lang }: { lang: 'ar' | 'en' }) {
   return (
     <main className="auth" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
       <section>
+        {/* The door has the same toggle as the shell: a reader who cannot read
+            the current language must be able to switch before signing in. */}
+        {onLanguageChange && (
+          <LanguageToggle
+            lang={lang}
+            onToggle={() => onLanguageChange(lang === 'ar' ? 'en' : 'ar')}
+            className={styles.language}
+          />
+        )}
         <p className="eyebrow">{t.brand}</p>
         <h1>{t.welcome}</h1>
         <p className="muted">{t.hint}</p>

@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from './lib/api';
+import { AppShell, type View } from './components/AppShell';
 import { AuthScreen } from './components/AuthScreen';
 import { DiscoverScreen } from './components/DiscoverScreen';
 import { ListScreen } from './components/ListScreen';
@@ -10,13 +11,6 @@ import { ProfileScreen } from './components/ProfileScreen';
 import { RankScreen } from './components/RankScreen';
 import { RecommendationsScreen } from './components/RecommendationsScreen';
 import { useSession } from './lib/session';
-
-type View = 'home' | 'rank' | 'discover' | 'list' | 'profile';
-
-const labels = {
-  ar: { home: 'الرئيسية', rank: 'رتّب', discover: 'اكتشف', list: 'قائمتي', profile: 'الملف الشخصي' },
-  en: { home: 'Home', rank: 'Rank', discover: 'Discover', list: 'My list', profile: 'Profile' },
-};
 
 export default function Home() {
   const { ready, user, profile, refreshProfile } = useSession();
@@ -27,7 +21,9 @@ export default function Home() {
   // market, so the flow cannot be keyed on the market alone. "Later" hides it
   // for this session only; with the market still unset it returns next time.
   const [onboarding, setOnboarding] = useState<'unknown' | 'active' | 'done'>('unknown');
-  const t = labels[lang];
+  // A language chosen at the door (before sign-in) is the user's most recent
+  // explicit choice; it wins over the profile's saved preference on arrival.
+  const doorChoice = useRef<'ar' | 'en' | null>(null);
 
   // Keep the document's language and direction in step with the UI language
   // so assistive tech, fonts and layout follow the toggle (blueprint §4.3 RTL).
@@ -42,10 +38,12 @@ export default function Home() {
   // not change the preference never undoes the toggle.
   const preferredLanguage = profile?.preferredLanguage;
   useEffect(() => {
-    if (preferredLanguage) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setLang(preferredLanguage);
+    if (!preferredLanguage) return;
+    if (doorChoice.current) {
+      doorChoice.current = null;
+      return;
     }
+    setLang(preferredLanguage);
   }, [preferredLanguage]);
 
   const profileMarket = profile?.market;
@@ -61,7 +59,15 @@ export default function Home() {
   }
 
   if (!user) {
-    return <AuthScreen lang={lang} />;
+    return (
+      <AuthScreen
+        lang={lang}
+        onLanguageChange={(next) => {
+          doorChoice.current = next;
+          setLang(next);
+        }}
+      />
+    );
   }
 
   if (!profile) {
@@ -87,59 +93,35 @@ export default function Home() {
     }
   }
 
-  const chrome = (
-    <header>
-      <div className="brand">
-        <span>R</span>Reel
-      </div>
-      <button className="language" onClick={toggleLanguage}>
-        {lang === 'ar' ? 'EN' : 'عربي'}
-      </button>
-    </header>
-  );
-
   if (onboarding === 'active') {
     return (
-      <main className="app" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-        {chrome}
-        <section className="content">
-          <OnboardingScreen
-            lang={lang}
-            onLanguageChange={setLang}
-            onDone={() => {
-              setOnboarding('done');
-              setView('discover');
-            }}
-            onSkip={() => setOnboarding('done')}
-          />
-        </section>
-      </main>
+      <AppShell lang={lang} onToggleLanguage={toggleLanguage}>
+        <OnboardingScreen
+          lang={lang}
+          onLanguageChange={setLang}
+          onDone={() => {
+            setOnboarding('done');
+            setView('discover');
+          }}
+          onSkip={() => setOnboarding('done')}
+        />
+      </AppShell>
     );
   }
 
   return (
-    <main className="app" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-      {chrome}
-      <section className="content">
-        {/* Home is "tonight's decision" (blueprint §5.3): the recommendation
-            tracks, or the honest "still learning" state before a model exists. */}
-        {view === 'home' && (
-          <RecommendationsScreen lang={lang} profileId={profile.id} onGoToRank={() => setView('rank')} />
-        )}
-        {view === 'rank' && <RankScreen lang={lang} profileId={profile.id} />}
-        {view === 'discover' && (
-          <DiscoverScreen lang={lang} profileId={profile.id} onGoToRank={() => setView('rank')} />
-        )}
-        {view === 'list' && <ListScreen lang={lang} profileId={profile.id} />}
-        {view === 'profile' && <ProfileScreen lang={lang} onLanguageChange={setLang} />}
-      </section>
-      <nav>
-        {(['home', 'rank', 'discover', 'list', 'profile'] as View[]).map((item) => (
-          <button key={item} className={view === item ? 'active' : ''} onClick={() => setView(item)}>
-            {t[item]}
-          </button>
-        ))}
-      </nav>
-    </main>
+    <AppShell lang={lang} onToggleLanguage={toggleLanguage} view={view} onNavigate={setView}>
+      {/* Home is "tonight's decision" (blueprint §5.3): the recommendation
+          tracks, or the honest "still learning" state before a model exists. */}
+      {view === 'home' && (
+        <RecommendationsScreen lang={lang} profileId={profile.id} onGoToRank={() => setView('rank')} />
+      )}
+      {view === 'rank' && <RankScreen lang={lang} profileId={profile.id} />}
+      {view === 'discover' && (
+        <DiscoverScreen lang={lang} profileId={profile.id} onGoToRank={() => setView('rank')} />
+      )}
+      {view === 'list' && <ListScreen lang={lang} profileId={profile.id} />}
+      {view === 'profile' && <ProfileScreen lang={lang} onLanguageChange={setLang} />}
+    </AppShell>
   );
 }

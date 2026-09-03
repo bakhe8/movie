@@ -81,6 +81,27 @@
   font-size: 12px;
 }
 
+/* Language toggle in the card's top end corner (logical, so it flips with
+   the direction); `.auth h1` in globals.css keeps clear of it on phones. */
+.language {
+  position: absolute;
+  top: 18px;
+  inset-inline-end: 18px;
+  min-height: 40px;
+  min-width: 44px;
+  padding: 6px 10px;
+  border: 1px solid #dfe4e8;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.language:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 @media (max-width: 480px) {
   .two {
     grid-template-columns: minmax(0, 1fr);

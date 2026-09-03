@@ -1,0 +1,158 @@
+/* App shell: the header (identity + language), the navigation (fixed to the
+   bottom on small screens, inside the header on wide ones) and the content
+   frame. Screens own their titles (an eyebrow and an h2); the shell carries
+   only what every screen shares. Blueprint §4.3 (RTL first): logical
+   properties throughout, no left/right. */
+
+.shell {
+  min-height: 100vh;
+  /* Room for the fixed bottom navigation on small screens (65px + a gap). */
+  padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px max(16px, calc((100vw - 1080px) / 2));
+  background: var(--card);
+  border-bottom: 1px solid #e8ecee;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.language {
+  min-height: 40px;
+  min-width: 44px;
+  padding: 6px 10px;
+  border: 1px solid #dfe4e8;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.language:focus-visible,
+.tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.content {
+  width: min(100%, 1080px);
+  margin: 0 auto;
+  padding: 30px 20px 42px;
+}
+
+/* Navigation: five equal cells within thumb reach, icon over label, the
+   active cell in the accent colour and announced as the current page. */
+.nav {
+  position: fixed;
+  z-index: 2;
+  inset-inline: 0;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+  background: var(--card);
+  border-top: 1px solid #e4e8ea;
+}
+
+.tab {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  min-height: 52px;
+  padding: 6px 2px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.tab span {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tab svg {
+  width: 24px;
+  height: 24px;
+}
+
+.tab[aria-current="page"] {
+  color: var(--accent);
+}
+
+.tab[aria-current="page"] svg {
+  stroke-width: 2.4;
+}
+
+@media (min-width: 900px) {
+  .shell {
+    padding-bottom: 0;
+  }
+
+  .header {
+    min-height: 64px;
+  }
+
+  /* Wide screens: the navigation sits in the header between brand and
+     language, labels beside icons. */
+  .nav {
+    position: static;
+    display: flex;
+    gap: 4px;
+    padding: 0;
+    background: transparent;
+    border: 0;
+  }
+
+  .tab {
+    grid-auto-flow: column;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 6px 12px;
+    font-size: 14px;
+  }
+
+  .tab svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .tab[aria-current="page"] {
+    background: #fff0eb;
+  }
+
+  .content {
+    padding: 42px 20px;
+  }
+}
