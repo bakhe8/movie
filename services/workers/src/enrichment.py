@@ -135,7 +135,13 @@ class FilmEnrichmentWorker:
         # fail on a machine without credentials. The zero-argument client
         # resolves ANTHROPIC_API_KEY (or an `ant auth login` profile) itself.
         if self._client is None:
-            self._client = anthropic.Anthropic()
+            # An identity-linked API key must name the workspace it acts in
+            # (the API answers 400 "anthropic-workspace-id is required"
+            # otherwise). Plain workspace keys need no header, so the id is
+            # optional configuration, never a hard-coded value.
+            workspace_id = os.environ.get("ANTHROPIC_WORKSPACE_ID")
+            headers = {"anthropic-workspace-id": workspace_id} if workspace_id else None
+            self._client = anthropic.Anthropic(default_headers=headers)
         return self._client
 
     def _resolve_model(self, env_var: str) -> str:

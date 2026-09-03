@@ -114,6 +114,20 @@ class TestGenerateFingerprint:
         with pytest.raises(ValueError):
             worker.generate_fingerprint("Arrival", "desc", "plot")
 
+    def test_sends_the_workspace_header_only_when_a_workspace_id_is_configured(self, monkeypatch):
+        import src.enrichment as enrichment_module
+
+        constructed = []
+        monkeypatch.setattr(enrichment_module.anthropic, "Anthropic", lambda **kwargs: constructed.append(kwargs) or MagicMock())
+
+        monkeypatch.delenv("ANTHROPIC_WORKSPACE_ID", raising=False)
+        FilmEnrichmentWorker(model="claude-test")._get_client()
+        monkeypatch.setenv("ANTHROPIC_WORKSPACE_ID", "wrkspc_test")
+        FilmEnrichmentWorker(model="claude-test")._get_client()
+
+        assert constructed[0] == {"default_headers": None}
+        assert constructed[1] == {"default_headers": {"anthropic-workspace-id": "wrkspc_test"}}
+
     def test_requires_a_configured_model_when_no_override_is_given(self, monkeypatch):
         monkeypatch.delenv("ANTHROPIC_FINGERPRINT_MODEL", raising=False)
         unconfigured_worker = FilmEnrichmentWorker()

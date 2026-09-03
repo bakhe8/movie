@@ -51,6 +51,7 @@ cp .env.example .env
 | `FRONTEND_URL` | not set → `http://localhost:3000` | backend CORS origin |
 | `JWT_SECRET` | placeholder — **required** | backend |
 | `ANTHROPIC_API_KEY` | empty — add yours, or sign in with `ant auth login` | enrichment worker only |
+| `ANTHROPIC_WORKSPACE_ID` | empty — needed only for an identity-linked key (the API otherwise answers 400 "anthropic-workspace-id is required") | enrichment worker only |
 | `ANTHROPIC_FINGERPRINT_MODEL` / `ANTHROPIC_EXPLANATION_MODEL` | a current model id | enrichment worker — it refuses to start without them (ADR-6: model ids are configuration) |
 
 ## 3. Infrastructure
