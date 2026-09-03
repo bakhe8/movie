@@ -598,7 +598,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Functional API tests (titles, triads, recommendations) | ❌ | — | |
 | Frontend tests | ❌ | — | |
 | Python tests (36) | ✅ | — | re-run 2026-09-03; +2 with the gap-9 enrichment-worker fix, +8 with the gap-2 temporal hold-out |
-| Offline evaluation protocol (`§16.1`), metrics beyond in-sample pairwise (`§16.2`), baselines (`§16.3`), acceptance gate (`§16.5`) | ❌ | ❌ | |
+| Offline evaluation protocol (`§16.1`), metrics beyond in-sample pairwise (`§16.2`), baselines (`§16.3`), acceptance gate (`§16.5`) | 🟡 | 🟡 | protocol and gate built (`services/workers/src/evaluation.py`, `make evaluate`, ALPHA_PLAN 6.1): temporal split, held-out pairwise/top-1/Kendall τ/NLL with cluster-bootstrap CIs, language/evidence-size slices, three baselines (random/popularity/genre-match) plus the pre-ADR-69 V1-only ablation, five fixed thresholds (`§8` above) — automatically reads whatever `FINGERPRINT_DIMENSIONS` currently serves. First real run on `movie-postgres` (no synthetic personas): 1 profile, 14 held-out triads — below the ≥30/≥3 floor, correctly reports "insufficient data" rather than a false pass; indicative accuracy 0.81 (model) vs 0.76 (V1-only) vs 0.66 (popularity). Registering/activating a version after a real pass is the owner's call (ADR-76 makes activation actually take effect), not automatic. Still open: Brier/ECE calibration, per-minute learning curves |
 | Automated tests for triad, replacement, delete, export (`§18.1`) | ✅ | ❌ | triad ranking, replacement, and privacy export/delete/reset (`privacy.service.spec.ts`, `privacy.e2e-spec.ts`, `9bc53d4`) all covered |
 | Performance with 100+ titles / 50+ triads | ❌ | — | |
 

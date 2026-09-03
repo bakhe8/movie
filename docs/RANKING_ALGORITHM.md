@@ -1,7 +1,7 @@
 # Model Service Specification — Ranking, Selection, Confidence, Attribution
 
 **Status**: Derived from blueprint `§7` (utility model, Plackett–Luce, time layers, exceptions, shared latent space, silent vs disclosed use), `§8` (triad selection policy), `§9` (confidence and explanation), `§10.3` (public quality vs personal fit), `§14.1` (candidate generation and reranking), `§16` (evaluation). Decisions: ADR-3, ADR-8, ADR-13, ADR-19–ADR-22, ADR-25, ADR-59, ADR-62, ADR-64, ADR-69, ADR-71, ADR-75.
-**Version**: 2.0 — 2026-09-04 (rewrite of the 2025-dated implementation guide; the base Plackett–Luce math is unchanged, everything around it now matches the blueprint; ADR-71 closes `§9.2`'s diversity criterion on all three named axes; ADR-75 wires the third fingerprint block, 28 to 40 dimensions).
+**Version**: 2.0 — 2026-09-04 (rewrite of the 2025-dated implementation guide; the base Plackett–Luce math is unchanged, everything around it now matches the blueprint; ADR-71 closes `§9.2`'s diversity criterion on all three named axes; ADR-75 wires the third fingerprint block, 28 to 40 dimensions; §8 records the acceptance gate's real implementation and thresholds, `services/workers/src/evaluation.py`).
 
 This is the contract for `services/workers` (the Python model service). What exists today is in §16.
 
@@ -97,6 +97,8 @@ Separate new-user and new-item experiments use frozen features at the cutoff; a 
 Fair baselines: popularity / critic prior (from the Public Quality source — IMDb ratings under their non-commercial terms during the free period, owner decision 2026-09-04, [DATA_LICENSING.md](DATA_LICENSING.md) §3.2); simple genre/content similarity; Bradley–Terry pairwise; collaborative filtering/BPR once internal data exists; random or semi-fixed triads vs adaptive; in the Phase 0 lab: triads vs pairs vs single ratings under equal time.
 
 **Gate for any model version**: it must improve NLL, learning per minute, calibration and post-watch outcomes, without increasing fatigue or degrading language/country coverage, and must beat the best simpler alternative — measured on a cohort with confidence intervals fixed before the test. Raising one accuracy number is not enough.
+
+**Implemented** (`services/workers/src/evaluation.py`, `make evaluate`, ALPHA_PLAN item 6.1): reads whatever `training.FINGERPRINT_DIMENSIONS` currently serves (40 keys since ADR-75), so a fingerprint-block wiring change is picked up automatically with no separate gate update. Baselines: random, popularity (watch count), genre match, and the pre-ADR-69 V1-only Plackett–Luce model as an ablation. Thresholds, fixed before any run (CLI flags, not tuned to the data): **≥ 30** held-out triads and **≥ 3** profiles to have an opinion at all; beats the best baseline by a **≥ 0.03** pairwise-accuracy margin; the model-vs-baseline difference's 95% cluster-bootstrap interval (resampling profiles, since one profile's triads aren't independent) excludes zero; NLL better than both the random baseline and the V1-only ablation; no language slice with at least 20 triads falls more than **0.05** behind the best baseline. All five must pass, and there must be enough held-out data to evaluate them at all — short of that the gate reports "insufficient data" rather than a false pass or fail. The report is JSON `POST /admin/models` accepts as `evalReport`; registering and activating a version on `movie-postgres` after a real pass is the owner's call, not automatic.
 
 ## 9. Triad selection policy (`BP §8`)
 
