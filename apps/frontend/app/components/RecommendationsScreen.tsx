@@ -22,6 +22,7 @@ const labels = {
     pendingTitle: 'ما زلنا نتعلم ذوقك',
     pendingBody: 'التوصيات تظهر بعد أن يُدرَّب نموذجك على جولات ترتيب كافية.',
     goRank: 'إلى الترتيب',
+    goDiscover: 'اختر أفلامًا شاهدتها',
     emptyTrack: 'لا اقتراحات في هذا المسار بعد.',
     emptyAll: 'لا توجد توصيات حاليًا. سجّل مزيدًا من الأفلام أو أكمل جولات ترتيب أكثر.',
     failed: 'تعذّر تحميل التوصيات.',
@@ -54,6 +55,7 @@ const labels = {
     pendingTitle: 'Still learning your taste',
     pendingBody: 'Recommendations appear once your model has been trained on enough ranking rounds.',
     goRank: 'Go to ranking',
+    goDiscover: 'Pick films you have watched',
     emptyTrack: 'Nothing on this track yet.',
     emptyAll: 'No recommendations right now. Log more films or complete more ranking rounds.',
     failed: 'Recommendations could not be loaded.',
@@ -81,17 +83,21 @@ const labels = {
   },
 };
 
-type Phase = { kind: 'loading' } | { kind: 'ready' } | { kind: 'pending' } | { kind: 'failed' };
+// `pending` carries the watched count so its one action leads where progress
+// is possible: the triad needs three watched titles first (SPEC §5.1).
+type Phase = { kind: 'loading' } | { kind: 'ready' } | { kind: 'pending'; watched: number | null } | { kind: 'failed' };
 
 export function RecommendationsScreen({
   lang,
   profileId,
   onGoToRank,
+  onGoToDiscover,
   onOpenTitle,
 }: {
   lang: Lang;
   profileId: string;
   onGoToRank?: () => void;
+  onGoToDiscover?: () => void;
   // Opens the work page with this recommendation as its context (blueprint §5.3).
   onOpenTitle?: (rec: Recommendation, position: number, count: number, listed: boolean) => void;
 }) {
@@ -115,7 +121,17 @@ export function RecommendationsScreen({
     } catch (err) {
       // 409 is the backend's honest "no trained preference model yet"
       // (RecommendationsService); anything else is a real failure.
-      setPhase(err instanceof ApiError && err.status === 409 ? { kind: 'pending' } : { kind: 'failed' });
+      if (err instanceof ApiError && err.status === 409) {
+        let watched: number | null = null;
+        try {
+          watched = (await api.getWatchedTitles(profileId)).length;
+        } catch {
+          watched = null;
+        }
+        setPhase({ kind: 'pending', watched });
+      } else {
+        setPhase({ kind: 'failed' });
+      }
     }
   }, [profileId]);
 
@@ -187,10 +203,18 @@ export function RecommendationsScreen({
         <div className={styles.pending} role="status">
           <h3>{t.pendingTitle}</h3>
           <p>{t.pendingBody}</p>
-          {onGoToRank && (
-            <button type="button" className={styles.cta} onClick={onGoToRank}>
-              {t.goRank}
+          {/* One tap towards progress: Discover until three watched titles
+              exist (the triad is blocked below that), then the triad. */}
+          {phase.watched !== null && phase.watched < 3 && onGoToDiscover ? (
+            <button type="button" className={styles.cta} onClick={onGoToDiscover}>
+              {t.goDiscover}
             </button>
+          ) : (
+            onGoToRank && (
+              <button type="button" className={styles.cta} onClick={onGoToRank}>
+                {t.goRank}
+              </button>
+            )
           )}
         </div>
       </div>

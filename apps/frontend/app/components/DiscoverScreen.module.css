@@ -200,6 +200,7 @@
 .desc {
   display: -webkit-box;
   margin: var(--sp-1) 0 0;
+  text-align: start;
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;

@@ -14,6 +14,8 @@ const labels = {
   ar: {
     eyebrow: 'ثلاثية',
     title: TRIAD_INSTRUCTION.ar,
+    // Blocked: there are no films to rank yet, so the instruction would lie.
+    blockedTitle: 'قبل أول ثلاثية',
     hint: 'اسحب من المقبض أو استخدم الأسهم. البطاقة الأولى هي الأكثر إعجابًا.',
     save: 'حفظ الترتيب',
     saving: 'جارٍ الحفظ…',
@@ -52,6 +54,7 @@ const labels = {
   en: {
     eyebrow: 'Triad',
     title: TRIAD_INSTRUCTION.en,
+    blockedTitle: 'Before your first triad',
     hint: 'Drag by the handle or use the arrows. The first card is the one you liked most.',
     save: 'Save ranking',
     saving: 'Saving…',
@@ -326,7 +329,7 @@ export function RankScreen({
   const header = (
     <div className={styles.header}>
       <p className={styles.eyebrow}>{t.eyebrow}</p>
-      <h2>{t.title}</h2>
+      <h2>{phase.kind === 'blocked' ? t.blockedTitle : t.title}</h2>
       {phase.kind === 'ready' && <p className={styles.hint}>{t.hint}</p>}
       {completedRounds !== null && (
         <p className={styles.rounds}>

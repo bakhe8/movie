@@ -155,6 +155,7 @@ export default function Home() {
               lang={lang}
               profileId={profile.id}
               onGoToRank={() => setView('rank')}
+              onGoToDiscover={() => setView('discover')}
               onOpenTitle={(recommendation, position, count, listed) =>
                 setWork({
                   title: recommendation.title,

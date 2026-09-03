@@ -315,7 +315,12 @@ export function DiscoverScreen({
                   </h4>
                   {alt && alt !== name && <p className={styles.alt}>{alt}</p>}
                   {meta && <p className={styles.meta}>{meta}</p>}
-                  {title.description && <p className={styles.desc}>{title.description}</p>}
+                  {/* Catalogue descriptions arrive in their own language: direction from the text. */}
+                  {title.description && (
+                    <p className={styles.desc} dir="auto">
+                      {title.description}
+                    </p>
+                  )}
                 </div>
                 <div className={styles.actions}>
                   {state === 'watched' ? (
