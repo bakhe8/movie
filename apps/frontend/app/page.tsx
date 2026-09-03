@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { api } from './lib/api';
+import { api, type Title, type TitleState } from './lib/api';
 import { AppShell, type View } from './components/AppShell';
 import { AuthScreen } from './components/AuthScreen';
 import { DiscoverScreen } from './components/DiscoverScreen';
@@ -10,12 +10,16 @@ import { OnboardingScreen } from './components/OnboardingScreen';
 import { ProfileScreen } from './components/ProfileScreen';
 import { RankScreen } from './components/RankScreen';
 import { RecommendationsScreen } from './components/RecommendationsScreen';
+import { WorkScreen, type WorkContext } from './components/WorkScreen';
 import { useSession } from './lib/session';
 
 export default function Home() {
   const { ready, user, profile, refreshProfile } = useSession();
   const [lang, setLang] = useState<'ar' | 'en'>('ar');
   const [view, setView] = useState<View>('home');
+  // The work page (blueprint §5.3) opens over the current section from a
+  // card, carrying that card's context; any tab or "back" closes it.
+  const [work, setWork] = useState<{ title: Title; context: WorkContext; state: TitleState | null } | null>(null);
   // Onboarding (blueprint §4.1) starts when a profile arrives with no market
   // and stays open until its last step (or "later") -- step 1 saves the
   // market, so the flow cannot be keyed on the market alone. "Later" hides it
@@ -126,21 +130,63 @@ export default function Home() {
     );
   }
 
+  function navigate(next: View) {
+    setWork(null);
+    setView(next);
+  }
+
   return (
-    <AppShell lang={lang} onToggleLanguage={toggleLanguage} view={view} onNavigate={setView}>
-      {/* Home is "tonight's decision" (blueprint §5.3): the recommendation
-          tracks, or the honest "still learning" state before a model exists. */}
-      {view === 'home' && (
-        <RecommendationsScreen lang={lang} profileId={profile.id} onGoToRank={() => setView('rank')} />
+    <AppShell lang={lang} onToggleLanguage={toggleLanguage} view={view} onNavigate={navigate}>
+      {work ? (
+        <WorkScreen
+          lang={lang}
+          profileId={profile.id}
+          title={work.title}
+          context={work.context}
+          initialState={work.state}
+          onBack={() => setWork(null)}
+        />
+      ) : (
+        <>
+          {/* Home is "tonight's decision" (blueprint §5.3): the recommendation
+              tracks, or the honest "still learning" state before a model exists. */}
+          {view === 'home' && (
+            <RecommendationsScreen
+              lang={lang}
+              profileId={profile.id}
+              onGoToRank={() => setView('rank')}
+              onOpenTitle={(recommendation, position, count, listed) =>
+                setWork({
+                  title: recommendation.title,
+                  context: { kind: 'recommendation', recommendation, position, count },
+                  state: listed ? 'watchlist' : null,
+                })
+              }
+            />
+          )}
+          {view === 'rank' && (
+            <RankScreen lang={lang} profileId={profile.id} onGoToDiscover={() => setView('discover')} />
+          )}
+          {view === 'discover' && (
+            <DiscoverScreen
+              lang={lang}
+              profileId={profile.id}
+              onGoToRank={() => setView('rank')}
+              onOpenTitle={(title, state) => setWork({ title, context: { kind: 'none' }, state })}
+            />
+          )}
+          {view === 'list' && (
+            <ListScreen
+              lang={lang}
+              profileId={profile.id}
+              onOpenTitle={(item, count) =>
+                setWork({ title: item.title, context: { kind: 'ranking', item, position: item.position, count }, state: 'watched' })
+              }
+            />
+          )}
+          {view === 'profile' && <ProfileScreen lang={lang} onLanguageChange={setLang} />}
+        </>
       )}
-      {view === 'rank' && (
-        <RankScreen lang={lang} profileId={profile.id} onGoToDiscover={() => setView('discover')} />
-      )}
-      {view === 'discover' && (
-        <DiscoverScreen lang={lang} profileId={profile.id} onGoToRank={() => setView('rank')} />
-      )}
-      {view === 'list' && <ListScreen lang={lang} profileId={profile.id} />}
-      {view === 'profile' && <ProfileScreen lang={lang} onLanguageChange={setLang} />}
     </AppShell>
   );
 }

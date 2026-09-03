@@ -87,10 +87,13 @@ export function RecommendationsScreen({
   lang,
   profileId,
   onGoToRank,
+  onOpenTitle,
 }: {
   lang: Lang;
   profileId: string;
   onGoToRank?: () => void;
+  // Opens the work page with this recommendation as its context (blueprint §5.3).
+  onOpenTitle?: (rec: Recommendation, position: number, count: number, listed: boolean) => void;
 }) {
   const t = labels[lang];
   const tracks = TRACK_COPY[lang];
@@ -250,6 +253,7 @@ export function RecommendationsScreen({
                       busy={busyTitleId === rec.title.id}
                       onAddToList={() => addToList(rec)}
                       onMarkWatched={() => markWatched(rec)}
+                      onOpen={onOpenTitle ? () => onOpenTitle(rec, index + 1, trackItems.length, listed.has(rec.title.id)) : undefined}
                     />
                   </li>
                 ))}

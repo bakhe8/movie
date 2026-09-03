@@ -92,7 +92,16 @@ const labels = {
 type Phase = { kind: 'loading' } | { kind: 'ready' } | { kind: 'failed' };
 type Ranking = { kind: 'loading' } | { kind: 'ready'; items: LibraryRankingItem[] } | { kind: 'pending' } | { kind: 'failed' };
 
-export function ListScreen({ lang, profileId }: { lang: Lang; profileId: string }) {
+export function ListScreen({
+  lang,
+  profileId,
+  onOpenTitle,
+}: {
+  lang: Lang;
+  profileId: string;
+  // Opens the work page with this ranking row as its context (blueprint §5.3).
+  onOpenTitle?: (item: LibraryRankingItem, count: number) => void;
+}) {
   const t = labels[lang];
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   const [watched, setWatched] = useState<UserTitleState[]>([]);
@@ -349,7 +358,14 @@ export function ListScreen({ lang, profileId }: { lang: Lang; profileId: string 
                     {/* The work card in its ranking kind (SPEC §5.4, ADR-33): the
                         position inside the whole watched set -- kept even under a
                         filter -- plus confidence and the driving traits. */}
-                    <WorkCard lang={lang} kind="ranking" item={item} position={item.position} count={ranking.items.length} />
+                    <WorkCard
+                      lang={lang}
+                      kind="ranking"
+                      item={item}
+                      position={item.position}
+                      count={ranking.items.length}
+                      onOpen={onOpenTitle ? () => onOpenTitle(item, ranking.items.length) : undefined}
+                    />
                   </li>
                 ))}
               </ol>

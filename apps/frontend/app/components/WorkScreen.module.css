@@ -1,0 +1,258 @@
+/* Work page (blueprint §5.3 "صفحة العمل": content fingerprint, the reason for
+   the fit, public quality and availability, kept separate). On
+   app/styles/tokens.css only; both themes from the tokens. The backdrop
+   image with its gradient (decision Q21) waits for a licensed image field. */
+
+.screen {
+  display: grid;
+  gap: var(--sp-6);
+  width: min(100%, 720px);
+  margin-inline: auto;
+}
+
+/* --- Back ----------------------------------------------------------------- */
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: max-content;
+  min-height: 40px;
+  padding: 0 var(--sp-3) 0 var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-button);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-14);
+  font-weight: var(--w-medium);
+}
+
+.back svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* A chevron is a reading-direction arrow: it mirrors in RTL (decision Q22). */
+[dir="rtl"] .back svg {
+  transform: scaleX(-1);
+}
+
+/* --- Header --------------------------------------------------------------- */
+
+.header {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--accent);
+  font-size: var(--fs-13);
+  font-weight: var(--w-semibold);
+}
+
+.header h2 {
+  margin: 0;
+  font-size: var(--fs-26);
+  text-wrap: balance;
+}
+
+.alt {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-14);
+  font-weight: var(--w-medium);
+}
+
+.genres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin: var(--sp-1) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.genres li {
+  padding: 2px var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-chip);
+  background: var(--well);
+  color: var(--muted);
+  font-size: var(--fs-13);
+  font-weight: var(--w-medium);
+}
+
+.desc {
+  margin: var(--sp-2) 0 0;
+  max-width: 65ch;
+  text-align: start;
+  color: var(--text);
+  font-size: var(--fs-16);
+  line-height: var(--lh-body);
+}
+
+/* --- Sections ------------------------------------------------------------- */
+
+.section {
+  display: grid;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+}
+
+.section h3 {
+  margin: 0;
+  font-size: var(--fs-20);
+}
+
+.sectionNote {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-13);
+  line-height: var(--lh-body);
+}
+
+.reason {
+  margin: 0;
+  font-size: var(--fs-16);
+  line-height: var(--lh-body);
+}
+
+.reasonSource {
+  display: inline-block;
+  margin-inline-start: var(--sp-2);
+  color: var(--muted);
+  font-size: var(--fs-13);
+  white-space: nowrap;
+}
+
+/* Unknown or not yet published: hollow, never zero (decision Q16). */
+.hollow {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  padding: 2px var(--sp-2);
+  border: 1px dashed var(--line);
+  border-radius: var(--r-chip);
+  color: var(--muted);
+  font-size: var(--fs-13);
+  font-weight: var(--w-medium);
+  line-height: 1.6;
+}
+
+/* --- Fingerprint (13 reviewed dimensions, as levels, never numbers) -------- */
+
+.dims {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3) var(--sp-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dim {
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.dimName {
+  color: var(--muted);
+  font-size: var(--fs-12);
+  font-weight: var(--w-medium);
+}
+
+.dimWord {
+  font-size: var(--fs-14);
+  font-weight: var(--w-semibold);
+}
+
+.meter {
+  display: flex;
+  gap: 3px;
+  height: 6px;
+}
+
+.meter i {
+  flex: 1;
+  border-radius: 3px;
+  background: var(--line);
+}
+
+/* Content descriptors are not predictions: they take the text colour, and
+   the accent stays reserved for personal fit. */
+.meter i.on {
+  background: var(--muted);
+}
+
+/* --- State actions -------------------------------------------------------- */
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.primary,
+.ghost {
+  min-height: 44px;
+  padding: 0 var(--sp-3);
+  border-radius: var(--r-button);
+  font: inherit;
+  font-size: var(--fs-14);
+  font-weight: var(--w-medium);
+}
+
+.primary {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: var(--w-semibold);
+}
+
+.ghost {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+}
+
+.primary:disabled,
+.ghost:disabled {
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.status {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border-inline-start: 3px solid var(--accent);
+  border-radius: var(--r-chip);
+  background: var(--surface);
+  font-size: var(--fs-14);
+}
+
+.back:focus-visible,
+.primary:focus-visible,
+.ghost:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (min-width: 900px) {
+  .screen {
+    gap: var(--sp-8);
+  }
+
+  .header h2 {
+    font-size: var(--fs-34);
+  }
+
+  .dims {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}

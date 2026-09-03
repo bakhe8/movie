@@ -263,3 +263,38 @@
 .cellsTwo {
   grid-template-columns: 1fr 1fr;
 }
+
+/* The title as a button when the card opens the work page: text only, the
+   full tap target is the title line, no button chrome. */
+.titleButton {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.titleButton:hover {
+  color: var(--accent);
+}
+
+.titleButton:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-chip);
+}
+
+/* Inside the work page: cells only, no card frame of their own. */
+.headless {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+}
+
+.headless .cells {
+  padding-top: 0;
+  border-top: 0;
+}

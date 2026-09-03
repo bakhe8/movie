@@ -87,10 +87,13 @@ export function DiscoverScreen({
   lang,
   profileId,
   onGoToRank,
+  onOpenTitle,
 }: {
   lang: Lang;
   profileId: string;
   onGoToRank?: () => void;
+  // Opens the work page for a catalogue title (no fit context here).
+  onOpenTitle?: (title: Title, state: TitleState | null) => void;
 }) {
   const t = labels[lang];
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
@@ -301,7 +304,15 @@ export function DiscoverScreen({
             return (
               <li key={title.id} className={state === 'watched' ? `${styles.card} ${styles.cardWatched}` : styles.card}>
                 <div>
-                  <h4 className={styles.title}>{name}</h4>
+                  <h4 className={styles.title}>
+                    {onOpenTitle ? (
+                      <button type="button" className={styles.titleButton} onClick={() => onOpenTitle(title, state ?? null)}>
+                        {name}
+                      </button>
+                    ) : (
+                      name
+                    )}
+                  </h4>
                   {alt && alt !== name && <p className={styles.alt}>{alt}</p>}
                   {meta && <p className={styles.meta}>{meta}</p>}
                   {title.description && <p className={styles.desc}>{title.description}</p>}

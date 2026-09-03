@@ -318,3 +318,24 @@
     font-size: var(--fs-34);
   }
 }
+
+/* The title as a button when the card opens the work page: text only. */
+.titleButton {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.titleButton:hover {
+  color: var(--accent);
+}
+
+.titleButton:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-chip);
+}

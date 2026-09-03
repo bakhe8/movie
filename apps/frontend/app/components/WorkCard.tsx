@@ -93,6 +93,10 @@ type Shared = {
   // 1-based position inside the item's own set (track or watched set), and that set's size.
   position: number;
   count: number;
+  // Opens the work page for this title; the title becomes a button.
+  onOpen?: () => void;
+  // Inside the work page: the cells only (the page owns the head and the actions).
+  headless?: boolean;
 };
 
 type RecommendationProps = Shared & {
@@ -100,8 +104,8 @@ type RecommendationProps = Shared & {
   recommendation: Recommendation;
   listed: boolean;
   busy: boolean;
-  onAddToList: () => void;
-  onMarkWatched: () => void;
+  onAddToList?: () => void;
+  onMarkWatched?: () => void;
 };
 
 type RankingProps = Shared & {
@@ -150,26 +154,38 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
     </div>
   );
 
+  const { onOpen, headless } = props;
+
   return (
-    <article className={styles.card} aria-label={name}>
-      <div className={poster ? `${styles.head} ${styles.withPoster}` : styles.head}>
-        <span className={position === 1 ? `${styles.badge} ${styles.first}` : styles.badge} aria-label={t.position(position)}>
-          {formatNumber(position, lang)}
-        </span>
-        {/* Plain <img>: poster hosts come from the licensing registry, not next.config. */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        {poster && <img className={styles.poster} src={poster} alt="" loading="lazy" />}
-        <div className={styles.titles}>
-          <h4 className={styles.title}>{name}</h4>
-          {(showAlt || title.releaseYear) && (
-            <p className={styles.alt}>
-              {showAlt && <bdi>{alt}</bdi>}
-              {showAlt && title.releaseYear ? ' · ' : ''}
-              {title.releaseYear ? String(title.releaseYear) : ''}
-            </p>
-          )}
+    <article className={headless ? `${styles.card} ${styles.headless}` : styles.card} aria-label={name}>
+      {!headless && (
+        <div className={poster ? `${styles.head} ${styles.withPoster}` : styles.head}>
+          <span className={position === 1 ? `${styles.badge} ${styles.first}` : styles.badge} aria-label={t.position(position)}>
+            {formatNumber(position, lang)}
+          </span>
+          {/* Plain <img>: poster hosts come from the licensing registry, not next.config. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          {poster && <img className={styles.poster} src={poster} alt="" loading="lazy" />}
+          <div className={styles.titles}>
+            <h4 className={styles.title}>
+              {onOpen ? (
+                <button type="button" className={styles.titleButton} onClick={onOpen}>
+                  {name}
+                </button>
+              ) : (
+                name
+              )}
+            </h4>
+            {(showAlt || title.releaseYear) && (
+              <p className={styles.alt}>
+                {showAlt && <bdi>{alt}</bdi>}
+                {showAlt && title.releaseYear ? ' · ' : ''}
+                {title.releaseYear ? String(title.releaseYear) : ''}
+              </p>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {reason && (
         <p className={styles.reason}>
@@ -256,7 +272,7 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
         </div>
       </dl>
 
-      {!isRanking && (
+      {!isRanking && !headless && (
         <div className={styles.actions}>
           <button type="button" className={styles.ghost} onClick={props.onAddToList} disabled={props.busy || props.listed}>
             {props.listed ? t.added : t.addToList}
