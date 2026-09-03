@@ -210,7 +210,7 @@ export function DiscoverScreen({
 
   const header = (
     <div className={styles.header}>
-      <p className="eyebrow">{t.eyebrow}</p>
+      <p className={styles.eyebrow}>{t.eyebrow}</p>
       <h2>{t.title}</h2>
       <p className={styles.hint}>{t.hint}</p>
     </div>
@@ -233,7 +233,7 @@ export function DiscoverScreen({
         <p className={`${styles.status} ${styles.error}`} role="alert">
           {t.loadFailed}
         </p>
-        <button type="button" className="cta full" onClick={loadStates}>
+        <button type="button" className={styles.retry} onClick={loadStates}>
           {t.retry}
         </button>
       </div>
@@ -256,7 +256,7 @@ export function DiscoverScreen({
         </div>
         <p className={styles.progressNote}>{remaining > 0 ? t.needMore(remaining) : t.unlocked}</p>
         {remaining === 0 && onGoToRank && (
-          <button type="button" className="cta" onClick={onGoToRank}>
+          <button type="button" className={styles.cta} onClick={onGoToRank}>
             {t.goRank}
           </button>
         )}

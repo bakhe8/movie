@@ -1,128 +1,171 @@
-/* Onboarding (blueprint §4.1, SPECIFICATION.md §5.1): language, market and
-   platforms -> what we collect and why -> off to Discover. */
+/* Onboarding (blueprint §4.1, SPEC §5.1): three short steps. On
+   app/styles/tokens.css only; both themes from the tokens. One filled button
+   per step (decision Q6); everything else outlined or plain. */
 
 .screen {
   display: grid;
-  gap: 18px;
-  max-width: 640px;
+  gap: var(--sp-6);
+  width: min(100%, 640px);
+  margin-inline: auto;
 }
+
+/* --- Progress: "step n of 3" + three dots --------------------------------- */
 
 .progress {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
+  gap: var(--sp-3);
   color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: var(--fs-13);
+  font-weight: var(--w-medium);
 }
 
 .dots {
   display: flex;
-  gap: 6px;
+  gap: var(--sp-2);
 }
 
 .dot {
   width: 10px;
   height: 10px;
+  border: 1px solid var(--line);
   border-radius: 50%;
-  background: #e4e8ea;
+  background: transparent;
 }
 
 .dotOn {
+  border-color: var(--accent);
   background: var(--accent);
 }
 
+/* --- Header --------------------------------------------------------------- */
+
+.header {
+  display: grid;
+  gap: var(--sp-2);
+}
+
 .header h2 {
-  font-size: clamp(26px, 5vw, 40px);
-  line-height: 1.15;
-  margin: 6px 0;
+  margin: 0;
+  font-size: var(--fs-26);
+  text-wrap: balance;
 }
 
 .lead {
   margin: 0;
   color: var(--muted);
-  line-height: 1.55;
+  font-size: var(--fs-14);
+  line-height: var(--lh-body);
 }
+
+/* --- Step 1 form ---------------------------------------------------------- */
 
 .card {
   display: grid;
-  gap: 14px;
-  padding: 18px;
-  border: 1px solid #e1e6e9;
-  border-radius: 18px;
-  background: var(--card);
+  gap: var(--sp-4);
+  padding: var(--sp-4);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
 }
 
 .field {
   display: grid;
-  gap: 6px;
+  gap: var(--sp-1);
 }
 
 .field label,
-.field legend {
+.fieldset legend {
   color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
-  padding: 0;
+  font-size: var(--fs-13);
+  font-weight: var(--w-medium);
 }
 
 .field select {
-  min-height: 48px;
-  width: 100%;
-  padding: 10px 14px;
-  border: 1px solid #dfe4e8;
-  border-radius: 14px;
-  background: #fff;
+  min-height: 44px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-button);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-16);
 }
 
-.field select:focus {
+.field select:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline-offset: 2px;
 }
 
 .fieldset {
   margin: 0;
   padding: 0;
   border: 0;
+  min-width: 0;
+}
+
+.fieldset legend {
+  padding: 0;
+  margin-bottom: var(--sp-1);
 }
 
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
 }
 
-/* A platform chip is a real toggle button, 44px tall. */
+/* Platform chips: selected = accent outline + soft fill, never a filled button. */
 .chip {
-  min-height: 44px;
-  padding: 8px 14px;
-  border: 1px solid #dfe4e8;
-  border-radius: 999px;
-  background: #fff;
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 700;
+  min-height: 40px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-button);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-14);
+  font-weight: var(--w-medium);
 }
 
 .chipOn {
   border-color: var(--accent);
-  background: #fff0eb;
+  background: var(--accent-soft);
   color: var(--accent);
+  font-weight: var(--w-semibold);
 }
 
+.chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The blueprint's own sentence about language and region: quoted, not boxed. */
 .note {
   margin: 0;
-  padding: 10px 14px;
-  border-radius: 12px;
-  background: #f5f7f8;
+  padding-inline-start: var(--sp-3);
+  border-inline-start: 2px solid var(--line);
   color: var(--muted);
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: var(--fs-13);
+  line-height: var(--lh-body);
 }
+
+.status {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border-inline-start: 3px solid var(--muted);
+  border-radius: var(--r-chip);
+  background: var(--surface);
+  font-size: var(--fs-14);
+}
+
+/* --- Step 2 list, step 3 loop --------------------------------------------- */
 
 .list {
   display: grid;
-  gap: 10px;
+  gap: var(--sp-3);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -130,80 +173,108 @@
 
 .list li {
   display: grid;
-  gap: 2px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: #f5f7f8;
-  line-height: 1.45;
+  gap: var(--sp-1);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  font-size: var(--fs-14);
+  line-height: var(--lh-body);
 }
 
 .list strong {
-  font-size: 15px;
+  font-weight: var(--w-semibold);
 }
 
 .list span {
   color: var(--muted);
-  font-size: 14px;
 }
 
+/* A numbered sequence: the loop the user is about to enter, so the order carries
+   meaning; numerals from the tokens' tabular digits. */
 .steps {
   display: grid;
-  gap: 8px;
+  gap: var(--sp-3);
   margin: 0;
-  padding: 0 0 0 1.3em;
-  color: var(--ink);
-  line-height: 1.5;
+  padding-inline-start: var(--sp-6);
+  font-size: var(--fs-16);
+  line-height: var(--lh-body);
 }
 
-[dir='rtl'] .steps {
-  padding: 0 1.3em 0 0;
+.steps li {
+  padding-inline-start: var(--sp-1);
 }
+
+.steps li::marker {
+  color: var(--accent);
+  font-weight: var(--w-semibold);
+}
+
+/* --- Actions -------------------------------------------------------------- */
 
 .actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-3);
 }
 
 .primary {
+  flex: 1 1 200px;
   min-height: 48px;
-  padding: 12px 22px;
+  padding: 0 var(--sp-4);
   border: 0;
-  border-radius: 999px;
-  background: var(--ink);
-  color: #fff;
-  font-weight: 800;
+  border-radius: var(--r-button);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: var(--fs-16);
+  font-weight: var(--w-semibold);
 }
 
 .primary:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .ghost {
-  min-height: 44px;
-  padding: 10px 16px;
-  border: 1px solid #dfe4e8;
-  border-radius: 999px;
-  background: #fff;
-  color: var(--ink);
-  font-weight: 700;
+  min-height: 48px;
+  padding: 0 var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-button);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-16);
+  font-weight: var(--w-medium);
 }
 
+/* "Later": a link-like button, deliberately quieter than "back". */
 .link {
+  min-height: 44px;
+  padding: 0 var(--sp-3);
   border: 0;
   background: transparent;
   color: var(--muted);
-  font-weight: 700;
-  padding: 8px;
+  font: inherit;
+  font-size: var(--fs-14);
+  font-weight: var(--w-medium);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
-.status {
-  margin: 0;
-  padding: 10px 14px;
-  border-radius: 12px;
-  background: #fff0eb;
-  color: var(--accent);
-  font-weight: 600;
+.primary:focus-visible,
+.ghost:focus-visible,
+.link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (min-width: 900px) {
+  .screen {
+    gap: var(--sp-8);
+  }
+
+  .header h2 {
+    font-size: var(--fs-34);
+  }
 }

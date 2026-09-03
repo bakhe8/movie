@@ -79,8 +79,8 @@ export function AuthScreen({
   }
 
   return (
-    <main className="auth" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-      <section>
+    <main className={styles.auth} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+      <section className={styles.panel}>
         {/* The door has the same toggle as the shell: a reader who cannot read
             the current language must be able to switch before signing in. */}
         {onLanguageChange && (
@@ -90,9 +90,9 @@ export function AuthScreen({
             className={styles.language}
           />
         )}
-        <p className="eyebrow">{t.brand}</p>
+        <p className={styles.brand}>{t.brand}</p>
         <h1>{t.welcome}</h1>
-        <p className="muted">{t.hint}</p>
+        <p className={styles.lead}>{t.hint}</p>
         <form className={styles.form} onSubmit={handleSubmit} noValidate={false}>
           {mode === 'register' && (
             <div className={styles.two}>

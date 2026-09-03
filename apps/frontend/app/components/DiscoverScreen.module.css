@@ -1,243 +1,320 @@
-/* Discover screen (blueprint §4.2, SPECIFICATION.md §5.1 step 3): build the
-   watched set fast -- search or pick from known titles, mark "watched". */
+/* Discover (blueprint §4.2, SPEC §5.1 step 3): build the watched set fast --
+   a starter list, search, and the progress toward the three titles that unlock
+   ranking. On app/styles/tokens.css only; both themes from the tokens.
+   The screen's one filled button is "go to ranking" once unlocked (decision Q6);
+   per-card "watched" is outlined in the accent so three of them do not shout. */
 
 .screen {
   display: grid;
-  gap: 16px;
+  gap: var(--sp-6);
+  width: min(100%, 720px);
+  margin-inline: auto;
+}
+
+/* --- Header --------------------------------------------------------------- */
+
+.header {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--accent);
+  font-size: var(--fs-13);
+  font-weight: var(--w-semibold);
 }
 
 .header h2 {
-  font-size: clamp(26px, 5vw, 40px);
-  line-height: 1.15;
-  margin: 6px 0;
+  margin: 0;
+  font-size: var(--fs-26);
+  text-wrap: balance;
 }
 
 .hint {
   margin: 0;
   color: var(--muted);
-  line-height: 1.5;
+  font-size: var(--fs-14);
 }
 
-/* Progress toward the three watched titles that unlock ranking. */
+/* --- Status --------------------------------------------------------------- */
+
+.status {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border-inline-start: 3px solid var(--accent);
+  border-radius: var(--r-chip);
+  background: var(--surface);
+  font-size: var(--fs-14);
+}
+
+.error {
+  border-inline-start-color: var(--muted);
+}
+
+/* --- Progress toward the first triad -------------------------------------- */
+
 .progress {
   display: grid;
-  gap: 10px;
-  padding: 14px 16px;
-  border: 1px solid #e1e6e9;
-  border-radius: 16px;
-  background: var(--card);
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
 }
 
 .progressRow {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: var(--sp-3);
 }
 
 .progressText {
   margin: 0;
-  font-weight: 700;
-}
-
-.dots {
-  display: flex;
-  gap: 6px;
-}
-
-.dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #e4e8ea;
-}
-
-.dotOn {
-  background: var(--accent);
+  font-size: var(--fs-16);
+  font-weight: var(--w-semibold);
 }
 
 .progressNote {
   margin: 0;
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--fs-13);
+  line-height: var(--lh-body);
 }
+
+/* Three dots, one per unlocking title: filled in the accent as they land. */
+.dots {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: transparent;
+}
+
+.dotOn {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+/* --- Search --------------------------------------------------------------- */
 
 .search {
   display: grid;
-  gap: 6px;
+  gap: var(--sp-1);
 }
 
 .search label {
   color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: var(--fs-13);
+  font-weight: var(--w-medium);
 }
 
 .search input {
-  min-height: 48px;
-  width: 100%;
-  padding: 12px 14px;
-  border: 1px solid #dfe4e8;
-  border-radius: 14px;
-  background: #fff;
+  min-height: 44px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-button);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-16);
 }
 
-.search input:focus {
+.search input:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline-offset: 2px;
 }
 
 .sectionTitle {
-  margin: 4px 0 0;
-  font-size: 18px;
+  margin: 0;
+  font-size: var(--fs-20);
 }
+
+.empty {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px dashed var(--line);
+  border-radius: var(--r-card);
+  color: var(--muted);
+  font-size: var(--fs-14);
+}
+
+/* --- Title cards in the well (decision Q5) -------------------------------- */
 
 .list {
   display: grid;
-  gap: 10px;
+  gap: var(--sp-3);
   margin: 0;
-  padding: 0;
+  padding: var(--sp-3);
   list-style: none;
+  background: var(--well);
+  border-radius: var(--r-card);
 }
 
 .card {
   display: grid;
-  gap: 12px;
-  padding: 14px 16px;
-  border: 1px solid #e1e6e9;
-  border-radius: 16px;
-  background: var(--card);
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
 }
 
+/* A watched title is settled: it recedes instead of shouting. */
 .cardWatched {
-  border-color: #cfe5d8;
-  background: #f4faf6;
+  background: transparent;
+  border-style: dashed;
 }
 
 .title {
   margin: 0;
-  font-size: 19px;
-  line-height: 1.2;
+  font-family: var(--font-ui);
+  font-size: var(--fs-16);
+  font-weight: var(--w-semibold);
+  line-height: var(--lh-ui);
+  overflow-wrap: anywhere;
 }
 
 .alt {
-  margin: 2px 0 0;
+  margin: 0;
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--fs-13);
+  font-weight: var(--w-medium);
+  line-height: var(--lh-ui);
 }
 
 .meta {
-  margin: 4px 0 0;
+  margin: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--fs-13);
+  line-height: var(--lh-ui);
 }
 
+/* The synopsis helps recognition here (not on the triad, Q17): two lines. */
 .desc {
   display: -webkit-box;
-  margin: 6px 0 0;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1.45;
+  margin: var(--sp-1) 0 0;
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  color: var(--muted);
+  font-size: var(--fs-13);
+  line-height: var(--lh-body);
 }
+
+/* --- Actions -------------------------------------------------------------- */
 
 .actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-}
-
-.primary {
-  min-height: 44px;
-  padding: 10px 18px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--ink);
-  color: #fff;
-  font-weight: 800;
-}
-
-.primary:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.ghost {
-  min-height: 44px;
-  padding: 10px 16px;
-  border: 1px solid #dfe4e8;
-  border-radius: 999px;
-  background: #fff;
-  color: var(--ink);
-  font-weight: 700;
-}
-
-.ghost:hover {
-  border-color: var(--accent);
-}
-
-.ghost:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
+  gap: var(--sp-2);
 }
 
 .chip {
-  display: inline-block;
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: #dff3e6;
-  color: #1d6b3f;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.status {
-  margin: 0;
-  padding: 10px 14px;
-  border-radius: 12px;
-  background: #eaf3f5;
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.error {
-  background: #fff0eb;
-  color: var(--accent);
-}
-
-.empty {
-  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 var(--sp-3);
+  border: 1px dashed var(--line);
+  border-radius: var(--r-button);
   color: var(--muted);
+  font-size: var(--fs-13);
+  font-weight: var(--w-medium);
+}
+
+.primary,
+.ghost {
+  min-height: 40px;
+  padding: 0 var(--sp-3);
+  border-radius: var(--r-button);
+  font: inherit;
+  font-size: var(--fs-14);
+  font-weight: var(--w-medium);
+  line-height: var(--lh-ui);
+}
+
+/* "Watched it": outlined in the accent -- the card's main action without
+   competing with the screen's filled button. */
+.primary {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: var(--w-semibold);
+}
+
+.ghost {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+}
+
+.primary:disabled,
+.ghost:disabled {
+  color: var(--muted);
+  opacity: 0.7;
 }
 
 .more {
-  justify-self: center;
+  width: 100%;
+  min-height: 44px;
 }
+
+/* The screen's single filled action (Q6): on to the ranking, once unlocked. */
+.cta {
+  width: 100%;
+  min-height: 48px;
+  margin-top: var(--sp-2);
+  border: 0;
+  border-radius: var(--r-button);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: var(--fs-16);
+  font-weight: var(--w-semibold);
+}
+
+.retry {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-button);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-16);
+  font-weight: var(--w-semibold);
+}
+
+.primary:focus-visible,
+.ghost:focus-visible,
+.cta:focus-visible,
+.retry:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* --- Loading -------------------------------------------------------------- */
 
 .skeleton {
-  height: 120px;
-  border-radius: 16px;
-  background: linear-gradient(90deg, #eef1f3, #f7f9fa, #eef1f3);
-  background-size: 200% 100%;
-  animation: shimmer 1.2s infinite;
+  height: 96px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface);
 }
 
-@keyframes shimmer {
-  from {
-    background-position: 200% 0;
+@media (min-width: 900px) {
+  .screen {
+    gap: var(--sp-8);
   }
 
-  to {
-    background-position: -200% 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .skeleton {
-    animation: none;
+  .header h2 {
+    font-size: var(--fs-34);
   }
 }

@@ -161,7 +161,7 @@ export function RecommendationsScreen({
 
   const header = (
     <div className={styles.header}>
-      <p className="eyebrow">{t.eyebrow}</p>
+      <p className={styles.eyebrow}>{t.eyebrow}</p>
       <h2>{t.title}</h2>
       {phase.kind === 'ready' && <p className={styles.hint}>{t.hint}</p>}
     </div>
@@ -185,7 +185,7 @@ export function RecommendationsScreen({
           <h3>{t.pendingTitle}</h3>
           <p>{t.pendingBody}</p>
           {onGoToRank && (
-            <button type="button" className="cta" onClick={onGoToRank}>
+            <button type="button" className={styles.cta} onClick={onGoToRank}>
               {t.goRank}
             </button>
           )}
@@ -201,7 +201,7 @@ export function RecommendationsScreen({
         <p className={`${styles.status} ${styles.error}`} role="alert">
           {t.failed}
         </p>
-        <button type="button" className="cta full" onClick={load}>
+        <button type="button" className={styles.retry} onClick={load}>
           {t.retry}
         </button>
       </div>

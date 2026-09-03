@@ -1,315 +1,195 @@
-/* Recommendations screen (SPECIFICATION.md §5.3, ADR-33). Scoped so the
-   four-value cells and track sections don't leak into globals.css. */
+/* Home: "tonight's decision" (blueprint §5.3, §4.4). Three short tracks of
+   work cards (components/WorkCard), or the honest "still learning" state
+   before a model exists. On app/styles/tokens.css only; both themes from the
+   tokens. The screen's one filled button is "go to ranking" in the pending
+   state (decision Q6); the cards' own actions are outlined. */
 
 .screen {
   display: grid;
-  gap: 18px;
+  gap: var(--sp-6);
+  width: min(100%, 720px);
+  margin-inline: auto;
+}
+
+/* --- Header --------------------------------------------------------------- */
+
+.header {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--accent);
+  font-size: var(--fs-13);
+  font-weight: var(--w-semibold);
 }
 
 .header h2 {
-  font-size: clamp(26px, 5vw, 40px);
-  line-height: 1.15;
-  margin: 6px 0;
+  margin: 0;
+  font-size: var(--fs-26);
+  text-wrap: balance;
 }
 
 .hint {
   margin: 0;
   color: var(--muted);
-  line-height: 1.5;
+  font-size: var(--fs-14);
+  line-height: var(--lh-body);
 }
+
+/* --- Status and empty states ---------------------------------------------- */
 
 .status {
   margin: 0;
-  padding: 10px 14px;
-  border-radius: 12px;
-  background: #eaf3f5;
-  color: var(--ink);
-  font-weight: 600;
+  padding: var(--sp-3) var(--sp-4);
+  border-inline-start: 3px solid var(--accent);
+  border-radius: var(--r-chip);
+  background: var(--surface);
+  font-size: var(--fs-14);
 }
 
 .error {
-  background: #fff0eb;
-  color: var(--accent);
+  border-inline-start-color: var(--muted);
 }
 
-/* "Still learning" -- the honest state before a model exists. */
+.empty {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px dashed var(--line);
+  border-radius: var(--r-card);
+  color: var(--muted);
+  font-size: var(--fs-14);
+}
+
+/* "Still learning your taste": a plain statement, not an error. */
 .pending {
   display: grid;
-  gap: 10px;
-  padding: 22px;
-  border: 1px dashed #d5dbe0;
-  border-radius: 18px;
-  background: var(--card);
+  gap: var(--sp-3);
+  padding: var(--sp-6) var(--sp-4);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
 }
 
 .pending h3 {
   margin: 0;
-  font-size: 20px;
+  font-size: var(--fs-20);
 }
 
 .pending p {
   margin: 0;
   color: var(--muted);
-  line-height: 1.5;
+  font-size: var(--fs-14);
+  line-height: var(--lh-body);
 }
+
+/* --- Tracks --------------------------------------------------------------- */
 
 .track {
   display: grid;
-  gap: 12px;
+  gap: var(--sp-3);
 }
 
 .trackHeader {
   display: grid;
-  gap: 2px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #e4e8ea;
+  gap: var(--sp-1);
 }
 
 .trackHeader h3 {
   margin: 0;
-  font-size: 19px;
+  font-size: var(--fs-20);
 }
 
 .trackHeader p {
   margin: 0;
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--fs-13);
+  line-height: var(--lh-body);
 }
 
-.empty {
-  margin: 0;
-  color: var(--muted);
-  font-size: 14px;
-}
-
+/* The cards of a track sit in the well (decision Q5). */
 .list {
   display: grid;
-  gap: 12px;
+  gap: var(--sp-3);
   margin: 0;
-  padding: 0;
+  padding: var(--sp-3);
   list-style: none;
-}
-
-.card {
-  display: grid;
-  gap: 14px;
-  padding: 16px;
-  border: 1px solid #e1e6e9;
-  border-radius: 18px;
-  background: var(--card);
-  box-shadow: 0 4px 14px #17212a0d;
-}
-
-.top {
-  display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
-  gap: 12px;
-  align-items: start;
-}
-
-.badge {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  background: #fff0eb;
-  color: var(--accent);
-  font-size: 16px;
-  font-weight: 900;
-}
-
-.title {
-  margin: 2px 0 4px;
-  font-size: 20px;
-  line-height: 1.2;
-}
-
-.meta {
-  margin: 0;
-  color: var(--muted);
-  font-size: 14px;
-}
-
-.desc {
-  display: -webkit-box;
-  margin: 8px 0 0;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1.45;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.alt {
-  margin: 2px 0 0;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-/* The reason line (§9.4): the driving traits, from the user's own choices. */
-.reason {
-  margin: 8px 0 0;
-  color: var(--ink);
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.reasonSource {
-  display: inline-block;
-  margin-inline-start: 6px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: #eef1f3;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.more {
-  justify-self: start;
-  min-height: 40px;
-  padding: 8px 14px;
-  border: 1px solid #dfe4e8;
-  border-radius: 999px;
-  background: #fff;
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 700;
-}
-
-/* The four values, each in its own labelled cell; nothing is merged
-   (blueprint §4.4, ADR-20, ADR-33). */
-.cells {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin: 0;
-}
-
-.cell {
-  display: grid;
-  gap: 4px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: #f5f7f8;
-}
-
-.cell dt {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.cell dd {
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.4;
-}
-
-.unknown {
-  color: var(--muted);
-}
-
-.chip {
-  display: inline-block;
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.high {
-  background: #fff0eb;
-  color: var(--accent);
-}
-
-.medium {
-  background: #eaf3f5;
-  color: var(--ink);
-}
-
-.low {
-  background: #eef1f3;
-  color: var(--muted);
-}
-
-.band {
-  background: #eaf3f5;
-  color: var(--ink);
-}
-
-.sub {
-  display: block;
-  margin-top: 2px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.ghost {
-  min-height: 40px;
-  padding: 8px 14px;
-  border: 1px solid #dfe4e8;
-  border-radius: 999px;
-  background: #fff;
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.ghost:hover {
-  border-color: var(--accent);
-}
-
-.ghost:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.model {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.skeleton {
-  height: 220px;
-  border-radius: 18px;
-  background: linear-gradient(90deg, #eef1f3, #f7f9fa, #eef1f3);
-  background-size: 200% 100%;
-  animation: shimmer 1.2s infinite;
-}
-
-@keyframes shimmer {
-  from {
-    background-position: 200% 0;
-  }
-
-  to {
-    background-position: -200% 0;
-  }
-}
-
-@media (min-width: 721px) {
-  .cells {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .skeleton {
-    animation: none;
-  }
+  background: var(--well);
+  border-radius: var(--r-card);
 }
 
 /* Wrapper for the work card (components/WorkCard.tsx); the card styles itself. */
 .item {
   list-style: none;
+}
+
+.more {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-button);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-14);
+  font-weight: var(--w-medium);
+}
+
+.model {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-12);
+}
+
+/* --- Buttons -------------------------------------------------------------- */
+
+.cta {
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  border-radius: var(--r-button);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: var(--fs-16);
+  font-weight: var(--w-semibold);
+}
+
+.retry {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-button);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-16);
+  font-weight: var(--w-semibold);
+}
+
+.more:focus-visible,
+.cta:focus-visible,
+.retry:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* --- Loading -------------------------------------------------------------- */
+
+.skeleton {
+  height: 120px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+@media (min-width: 900px) {
+  .screen {
+    gap: var(--sp-8);
+  }
+
+  .header h2 {
+    font-size: var(--fs-34);
+  }
 }

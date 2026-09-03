@@ -228,7 +228,7 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
   return (
     <div className={styles.screen}>
       <div className={styles.header}>
-        <p className="eyebrow">{t.eyebrow}</p>
+        <p className={styles.eyebrow}>{t.eyebrow}</p>
         <h2>{t.title}</h2>
       </div>
 
