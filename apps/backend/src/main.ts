@@ -6,6 +6,10 @@ import { AppModule } from './modules/app/app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Matches NEXT_PUBLIC_API_URL=http://localhost:3101/api in
+  // apps/frontend/.env.local -- keep both in sync.
+  app.setGlobalPrefix('api');
+
   // Global validation pipe
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
