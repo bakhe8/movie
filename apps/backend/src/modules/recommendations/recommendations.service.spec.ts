@@ -89,6 +89,60 @@ describe('RecommendationsService', () => {
     );
   });
 
+  // The reason names only the dimensions that lifted a title above the pool
+  // (blueprint §9.4, ADR-20): w_i × (φ_i − mean_i) > 0, top two, and never an
+  // imputed dimension. Wording is the client's; the API sends keys.
+  describe('reason', () => {
+    it('cites the driving dimensions with their direction, and nothing else', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue({
+        // Likes warmth, dislikes darkness, indifferent to everything else.
+        weights: FINGERPRINT_DIMENSIONS.map((dim) => (dim === 'warmth' ? 1 : dim === 'darkness' ? -1 : 0)),
+        biasTerms: {},
+        modelVersion: 'test-v1',
+        trainingTriadCount: 25,
+      });
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [
+        { id: 'warm-and-bright', fingerprint: zeroFingerprint({ warmth: 0.9, darkness: 0.1, pacing: 0.9 }) },
+        { id: 'cold-and-dark', fingerprint: zeroFingerprint({ warmth: 0.1, darkness: 0.9, pacing: 0.1 }) },
+      ] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const [top, bottom] = await service.findForProfile('user-1', 'profile-1', 10);
+
+      expect(top.title.id).toBe('warm-and-bright');
+      // Warmth above the pool mean with a positive weight, darkness below it
+      // with a negative weight -- both lifted the score; pacing has zero
+      // weight and is never cited even though the title is fast.
+      expect(top.reason).toEqual({
+        features: [
+          { key: 'warmth', direction: 'higher' },
+          { key: 'darkness', direction: 'lower' },
+        ],
+        evidenceSource: 'individual',
+      });
+      // Nothing lifted the bottom title: an honest empty reason, not a made-up one.
+      expect(bottom.reason.features).toEqual([]);
+    });
+
+    it('never cites a dimension the title does not know (imputed = no contribution)', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot());
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [
+        { id: 'unknown-warmth', fingerprint: withoutDimension(zeroFingerprint({ pacing: 0.9 }), 'warmth') },
+        { id: 'known-warmth', fingerprint: zeroFingerprint({ warmth: 0.2 }) },
+      ] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+      const unknown = result.find((item) => item.title.id === 'unknown-warmth');
+      expect(unknown?.reason.features).toEqual([]);
+    });
+  });
+
   // The library's personal ranking (blueprint §5.3, SPECIFICATION §5.4): the
   // same scoring path, pointed at the watched set instead of the unwatched one,
   // and exposed as positions only (ADR-33).

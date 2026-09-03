@@ -25,6 +25,20 @@ const FINGERPRINT_DIMENSIONS = [
 export type ConfidenceBand = 'initial' | 'likely' | 'strong' | 'inconclusive';
 export type RecommendationTrack = 'safe' | 'discovery' | 'outside_usual';
 
+// Why a title ranks where it does (blueprint §9.4, ADR-20): only the
+// fingerprint dimensions that actually raised its score, as keys and a
+// direction -- the client owns the wording. `evidenceSource` is always
+// 'individual' in MVP (SPECIFICATION §5.3; phase 1 of BP §7.6).
+export interface RecommendationReason {
+  features: { key: (typeof FINGERPRINT_DIMENSIONS)[number]; direction: 'higher' | 'lower' }[];
+  evidenceSource: 'individual';
+}
+
+// At most this many driving features per reason; each must carry at least
+// this share of the strongest one, so a reason never lists noise.
+const REASON_MAX_FEATURES = 2;
+const REASON_MIN_SHARE_OF_TOP = 0.2;
+
 // One step down per band. A title with unknown fingerprint dimensions cannot be
 // recommended with the same confidence as a fully described one (blueprint §9.1
 // "fingerprint confidence", §9.2 last criterion; ADR-19).
@@ -56,6 +70,7 @@ export interface RecommendationResult {
   // policy implemented yet (blueprint §4.4, §8). Not fabricated, just not built.
   track: RecommendationTrack;
   modelVersion: string;
+  reason: RecommendationReason;
 }
 
 // The library's personal ranking (blueprint §5.3 "ترتيب شخصي", SPECIFICATION
@@ -76,6 +91,7 @@ interface ScoredTitle {
   personalFitScore: number;
   confidenceBand: ConfidenceBand;
   fingerprintCoverage: number;
+  reason: RecommendationReason;
 }
 
 // null = unknown, never coerced to 0 (blueprint §6, §11.3).
@@ -117,6 +133,7 @@ export class RecommendationsService {
         fingerprintCoverage: scored.fingerprintCoverage,
         track: 'safe' as const,
         modelVersion: snapshot.modelVersion,
+        reason: scored.reason,
       }))
       .slice(0, limit);
   }
@@ -195,9 +212,38 @@ export class RecommendationsService {
           personalFitScore: this.personalFitScore(title, vector, poolMeans, snapshot),
           confidenceBand: fingerprintCoverage < 1 ? BAND_DEMOTION[baseBand] : baseBand,
           fingerprintCoverage,
+          reason: this.reason(vector, poolMeans, snapshot),
         };
       })
       .sort((left, right) => right.personalFitScore - left.personalFitScore);
+  }
+
+  // The dimensions that actually lifted this title above the pool: the
+  // contribution of dimension i is w_i × (φ_i − pool mean_i), so a feature
+  // only appears when the user's weight and the title's deviation point the
+  // same way (blueprint §9.4 "only from the features that drove the score").
+  // Imputed (unknown) dimensions contribute nothing and can never be cited.
+  private reason(vector: FingerprintVector, poolMeans: (number | null)[], snapshot: UserModelSnapshot): RecommendationReason {
+    const contributions = FINGERPRINT_DIMENSIONS.map((key, index) => {
+      const value = vector[index];
+      const mean = poolMeans[index];
+      if (value === null || mean === null) {
+        return { key, contribution: 0 };
+      }
+      return { key, contribution: snapshot.weights[index] * (value - mean) };
+    })
+      .filter((entry) => entry.contribution > 0)
+      .sort((left, right) => right.contribution - left.contribution);
+    const strongest = contributions[0]?.contribution ?? 0;
+    const features = contributions
+      .filter((entry) => entry.contribution >= strongest * REASON_MIN_SHARE_OF_TOP)
+      .slice(0, REASON_MAX_FEATURES)
+      .map((entry) => ({
+        key: entry.key,
+        // A positive weight rewards higher values, a negative one lower ones.
+        direction: snapshot.weights[FINGERPRINT_DIMENSIONS.indexOf(entry.key)] > 0 ? ('higher' as const) : ('lower' as const),
+      }));
+    return { features, evidenceSource: 'individual' };
   }
 
   private fingerprintVector(fingerprint: Title['fingerprint']): FingerprintVector {

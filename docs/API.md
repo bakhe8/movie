@@ -54,7 +54,9 @@ Triad { id, profileId, titleIds: string[3], displayOrder: string[3]|null, items:
 Recommendation { title, personalFitScore, publicQualityScore|null, watchabilityScore|null,
                  confidenceBand: 'initial'|'likely'|'strong'|'inconclusive',
                  fingerprintCoverage: number /* 0–1 share of known dimensions; < 1 costs one band (ADR-19) */,
-                 track: 'safe'|'discovery'|'outside_usual', modelVersion }
+                 track: 'safe'|'discovery'|'outside_usual', modelVersion,
+                 reason: { features: [{ key: FingerprintDimension, direction: 'higher'|'lower' }] /* ≤ 2, only dimensions that lifted the score (BP §9.4); [] when none did */,
+                           evidenceSource: 'individual' } }
 LibraryRankingItem { title, position /* 1-based, best fit first */, confidenceBand, fingerprintCoverage, modelVersion }
 ```
 
@@ -163,6 +165,7 @@ Ranking is sent as title ids (not indices), on both the unversioned route and th
 ---
 
 **Changelog**
+- 1.8 (2026-09-03): `Recommendation` gains `reason` -- the ≤ 2 fingerprint dimensions whose weighted deviation from the candidate pool lifted the score, with a direction, and `evidenceSource: 'individual'` (BP §9.4, ADR-20; wording is the client's).
 - 1.7 (2026-09-03): every `Triad` response (`current`, `rank`, `replace`) carries `items` — the three titles in `displayOrder`, public columns only — so the triad screen needs no per-title fetch (the target contract's inline items, brought forward).
 - 1.6 (2026-09-03): `Profile` gains `market` and `platforms` (onboarding, `BP §4.1`); accepted by `POST /profiles` and `PATCH /profiles/:profileId`.
 - 1.5 (2026-09-03): `GET /api/profiles/:profileId/library/ranking` -- the library's personal ranking, positions only (ADR-33), sharing the recommendation scoring path.

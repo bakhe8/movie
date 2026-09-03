@@ -142,6 +142,43 @@
   -webkit-line-clamp: 2;
 }
 
+.alt {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* The reason line (§9.4): the driving traits, from the user's own choices. */
+.reason {
+  margin: 8px 0 0;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.reasonSource {
+  display: inline-block;
+  margin-inline-start: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #eef1f3;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.more {
+  justify-self: start;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid #dfe4e8;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+
 /* The four values, each in its own labelled cell; nothing is merged
    (blueprint §4.4, ADR-20, ADR-33). */
 .cells {

@@ -170,7 +170,7 @@ Second screen from [UI_MOCKUP_REVIEW_2026-09-03.md](UI_MOCKUP_REVIEW_2026-09-03.
 |---|---|---|
 | Recommendations were a flat title + description list inside `ListScreen`; no tracks, no separate values, no confidence copy, no actions (`§4.4`, `§5.3`, `§9.3`; ADR-33) | `RecommendationsScreen` is now the **home view** (`§5.3` "الرئيسية: قرار الليلة"). Three track sections in `§4.4` order with the blueprint's own names and purposes (`TRACK_COPY`); only `safe` is populated because the backend has no discovery/outside-usual policy yet — the other two say so honestly. Four separate labelled cells per film: Personal Fit as a tertile level plus position inside its track (`formatPersonalFit`, never the score), Public Quality and Watchability shown as "no licensed source yet" / "unknown yet" when `null` (never 0), confidence as the `§9.3` band label + copy (`formatConfidence`, `CONFIDENCE_BAND_COPY`) with a one-line note when a partial fingerprint cost a band (ADR-19). Model version shown under the list (PRIVACY §12). Actions: add to watchlist (`PATCH …/state watchlist`), mark watched (leaves the list, enters the triad pool — no rating, ADR-4). 409 → "still learning" state with a button to the ranking screen. `lib/format.ts` is the only path from a model value to the screen; `formatNumber` gives one numeral system per locale (also applied to the triad screen's position badges). `ListScreen` is now the library: watchlist + watched. Fixed on the way: the bottom nav overflowed a 375 px viewport (Home and Profile were off-screen) — it now fits | `tsc`/`eslint` clean; **verified in the browser** at 375×812: the 409 state before training, then `python -m src.training` on the test profile (3 triads → `initial`), the populated `safe` track with all four cells, add-to-list → shown in the library, mark-watched → card removed and the title in the watched list, both `PATCH` calls 200 in the network log |
 
-Still open, all backend: the `reason { text, features, evidenceSource }` the spec puts on every item (`§9.4`; no explanation generator yet), availability/providers (no licensed source), the "not relevant" outcome (no `outcomes` table, gap 4), and the discovery/outside-usual tracks (gap: policy). The screen has no frontend tests (none exist in the app yet).
+Second pass, 2026-09-03: every item now carries a `reason` (the driving fingerprint dimensions, `§9.4`/ADR-20 — see *Recommendations*), rendered as one abstract line with its evidence source, and each track shows five items on the home screen with "show more" (`§5.3`). Still open, all backend: availability/providers (no licensed source), the "not relevant" outcome (no `outcomes` table, gap 4), and the discovery/outside-usual tracks (gap: policy). The screen has no frontend tests (none exist in the app yet).
 
 ---
 
@@ -343,11 +343,11 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Unknown dimensions | ✅ | ✅ | pool-mean imputation, `fingerprintCoverage`, one-band demotion (`§11.3`, ADR-19) |
 | Confidence band (verbal, no %) | ✅ | ❌ | band from triad count (+ fingerprint-quality demotion) only (gap 5) |
 | Internal rerank blend (`§10.3`, ADR-20) | ❌ | ❌ | |
-| Attribution gate + `evidenceSource` | ❌ | ❌ | `§7.6`, `§12.2`, `§14` |
+| Attribution gate + `evidenceSource` | 🟡 | 🟡 | every reason carries `evidenceSource: 'individual'` (MVP phase 1 of `§7.6`, SPECIFICATION §5.3) and the screen labels it "from your own choices"; the gate itself (`population_enriched`, `§12.2`) waits for the shared space (ADR-13) |
 | Outcomes endpoint | ❌ | ❌ | `§13.1 outcomes` |
-| Unit tests | ✅ | — | `recommendations.service.spec.ts`, 17 tests |
+| Unit tests | ✅ | — | `recommendations.service.spec.ts`, 19 tests |
 | Frontend: recommendations screen (`RecommendationsScreen`, home view) | ✅ | 🟡 | rebuilt 2026-09-03 under ADR-33 (table above): three track sections (only `safe` populated — backend), four separate labelled cells, Personal Fit as level + position (never the score), `§9.3` confidence copy, unknown values shown as unknown, model version; add to watchlist ✅, mark watched ✅; still missing from the backend: reason with `evidenceSource`, availability, "not relevant" outcome |
-| Explanations (template / LLM rephrase) | ❌ | — | `enrichment.py` has an unused generator; `§9.4` rules not implemented |
+| Explanations (template / LLM rephrase) | 🟡 | 🟡 | template reasons since 2026-09-03: `RecommendationsService.reason()` returns the ≤ 2 fingerprint dimensions whose weighted deviation from the candidate pool lifted the score (`w_i × (φ_i − mean_i) > 0`, ≥ 20 % of the strongest), imputed dimensions never cited, `[]` when nothing lifted it; the client composes the line from fixed abstract phrases (`FEATURE_REASON_COPY`, `formatReason`) — no plot, no sensitive trait — and adds "the evidence is still thin" on weak bands (`§9.4`); LLM rephrasing (`§15`) and the dominant-component wording once Public Quality exists (ADR-20) still open |
 
 ## Exposure and watch history
 
@@ -377,7 +377,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 
 | Item | Built | Blueprint | Evidence / gap |
 |---|---|---|---|
-| Backend unit tests (7 files, 91 tests) | ✅ | — | re-run 2026-09-03; +8 with the gap-3 triad rework, +3 with the H1 title-reuse fix, +12 with the ADR-17 replacement endpoint, +5 with the library ranking, +3 with the onboarding profile fields, +1 for inline triad items |
+| Backend unit tests (7 files, 93 tests) | ✅ | — | re-run 2026-09-03; +8 with the gap-3 triad rework, +3 with the H1 title-reuse fix, +12 with the ADR-17 replacement endpoint, +5 with the library ranking, +3 with the onboarding profile fields, +1 for inline triad items, +2 for recommendation reasons |
 | Backend e2e: auth guard + IDOR + rate limiting + triad ranking + triad replacement over real HTTP + `postgres-test` (4 files, 25 tests) | ✅ | ✅ | `§21.3` object-level authorization; re-run 2026-09-03 with all eight migrations; `test/throttling.e2e-spec.ts` (ADR-29), `test/triad-rank.e2e-spec.ts` (gap 3/ADR-32, H1/ADR-34) and `test/triad-replace.e2e-spec.ts` (ADR-17) added today; still not full functional coverage of every route |
 | Functional API tests (titles, triads, recommendations) | ❌ | — | |
 | Frontend tests | ❌ | — | |

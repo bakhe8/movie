@@ -3,13 +3,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError, type Recommendation, type RecommendationTrack } from '../lib/api';
 import { TRACK_COPY } from '../lib/copy';
-import { formatConfidence, formatNumber, formatPersonalFit, type PersonalFitLevel } from '../lib/format';
+import { formatConfidence, formatNumber, formatPersonalFit, formatReason, type PersonalFitLevel } from '../lib/format';
 import styles from './RecommendationsScreen.module.css';
 
 type Lang = 'ar' | 'en';
 
 // Blueprint §4.4 order: the safe track first, then the two exploratory ones.
 const TRACK_ORDER: RecommendationTrack[] = ['safe', 'discovery', 'outside_usual'];
+// "Each track short: 3–5 items on the home screen" (blueprint §5.3).
+const TRACK_PREVIEW = 5;
 
 const labels = {
   ar: {
@@ -32,6 +34,10 @@ const labels = {
     availabilityUnknown: 'غير معروف بعد',
     confidence: 'الثقة',
     partialFingerprint: 'بعض سمات هذا الفيلم غير معروفة، فخُفّضت الثقة درجة.',
+    reasonSource: 'من اختياراتك أنت',
+    reasonWeak: 'والدليل ما زال قليلًا.',
+    showMore: (n: string) => `عرض ${n} أخرى`,
+    showLess: 'عرض أقل',
     addToList: 'أضف إلى قائمتي',
     added: 'في قائمتك',
     markWatched: 'شاهدته',
@@ -60,6 +66,10 @@ const labels = {
     availabilityUnknown: 'Unknown yet',
     confidence: 'Confidence',
     partialFingerprint: 'Some of this film’s traits are unknown, so confidence was lowered one band.',
+    reasonSource: 'from your own choices',
+    reasonWeak: 'The evidence is still thin.',
+    showMore: (n: string) => `Show ${n} more`,
+    showLess: 'Show less',
     addToList: 'Add to my list',
     added: 'On your list',
     markWatched: 'Watched it',
@@ -88,6 +98,7 @@ export function RecommendationsScreen({
   const [notice, setNotice] = useState<string | null>(null);
   const [busyTitleId, setBusyTitleId] = useState<string | null>(null);
   const [listed, setListed] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<RecommendationTrack>>(new Set());
 
   const load = useCallback(async () => {
     setPhase({ kind: 'loading' });
@@ -210,6 +221,9 @@ export function RecommendationsScreen({
 
       {TRACK_ORDER.map((track) => {
         const trackItems = items.filter((item) => item.track === track);
+        const isExpanded = expanded.has(track);
+        const shown = isExpanded ? trackItems : trackItems.slice(0, TRACK_PREVIEW);
+        const hidden = trackItems.length - shown.length;
         return (
           <section key={track} className={styles.track} aria-label={tracks[track].name}>
             <div className={styles.trackHeader}>
@@ -219,14 +233,20 @@ export function RecommendationsScreen({
             {trackItems.length === 0 ? (
               <p className={styles.empty}>{t.emptyTrack}</p>
             ) : (
+              <>
               <ol className={styles.list}>
-                {trackItems.map((rec, index) => {
+                {shown.map((rec, index) => {
                   const name = lang === 'ar' ? rec.title.titleAr : rec.title.titleEn;
+                  const alt = lang === 'ar' ? rec.title.titleEn : rec.title.titleAr;
                   const meta = [rec.title.releaseYear, rec.title.genres?.join(' · ')].filter(Boolean).join(' · ');
                   // Relative forms only: position inside the track and a tertile
                   // level -- never the raw score (ADR-33).
                   const fit = formatPersonalFit(index + 1, trackItems.length);
                   const confidence = formatConfidence(rec.confidenceBand, lang);
+                  // The reason names only the dimensions that lifted the score
+                  // (§9.4); when confidence is weak it says so (§9.4 last rule).
+                  const reason = formatReason(rec.reason, lang);
+                  const weak = rec.confidenceBand === 'inconclusive' || rec.confidenceBand === 'initial';
                   const busy = busyTitleId === rec.title.id;
                   const onList = listed.has(rec.title.id);
 
@@ -238,8 +258,15 @@ export function RecommendationsScreen({
                         </span>
                         <div>
                           <h4 className={styles.title}>{name}</h4>
+                          {alt && alt !== name && <p className={styles.alt}>{alt}</p>}
                           {meta && <p className={styles.meta}>{meta}</p>}
                           {rec.title.description && <p className={styles.desc}>{rec.title.description}</p>}
+                          {reason && (
+                            <p className={styles.reason}>
+                              {reason} {weak && t.reasonWeak}
+                              <span className={styles.reasonSource}>{t.reasonSource}</span>
+                            </p>
+                          )}
                         </div>
                       </div>
 
@@ -290,6 +317,23 @@ export function RecommendationsScreen({
                   );
                 })}
               </ol>
+              {(hidden > 0 || isExpanded) && (
+                <button
+                  type="button"
+                  className={styles.more}
+                  onClick={() =>
+                    setExpanded((current) => {
+                      const next = new Set(current);
+                      if (next.has(track)) next.delete(track);
+                      else next.add(track);
+                      return next;
+                    })
+                  }
+                >
+                  {isExpanded ? t.showLess : t.showMore(formatNumber(hidden, lang))}
+                </button>
+              )}
+              </>
             )}
           </section>
         );

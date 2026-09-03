@@ -97,6 +97,30 @@ export type RecommendationTrack = 'safe' | 'discovery' | 'outside_usual';
 // Personal Fit, Public Quality, and Watchability stay three separate values, never
 // merged into one score, and confidence is a verbal band rather than a raw
 // percentage until calibrated (blueprint §4.4, §7.2, §9.3).
+// The 13 fingerprint dimensions of FilmFingerprintV1 (FINGERPRINT_SCHEMA.md §2).
+export type FingerprintDimension =
+  | 'pacing'
+  | 'rhythmVariance'
+  | 'ambiguity'
+  | 'psychologicalDepth'
+  | 'warmth'
+  | 'darkness'
+  | 'linearity'
+  | 'dialogueDensity'
+  | 'actionIntensity'
+  | 'plotComplexity'
+  | 'visualComplexity'
+  | 'soundscapeComplexity'
+  | 'colorSaturation';
+
+// Why a title ranks where it does (blueprint §9.4, ADR-20): only the
+// dimensions that actually raised its score, as keys and a direction; the
+// wording is composed here from fixed copy. `individual` in MVP (§5.3).
+export interface RecommendationReason {
+  features: { key: FingerprintDimension; direction: 'higher' | 'lower' }[];
+  evidenceSource: 'individual' | 'population_enriched';
+}
+
 export interface Recommendation {
   title: Title;
   personalFitScore: number;
@@ -108,6 +132,7 @@ export interface Recommendation {
   fingerprintCoverage: number;
   track: RecommendationTrack;
   modelVersion: string;
+  reason: RecommendationReason;
 }
 
 // The library's personal ranking (blueprint §5.3): watched titles ordered by

@@ -30,6 +30,43 @@ export const CONFIDENCE_BAND_COPY = {
   },
 } as const;
 
+// How each fingerprint dimension reads in a recommendation reason
+// (blueprint §9.4: abstract descriptions, no plot, no sensitive traits;
+// FINGERPRINT_SCHEMA.md §2 for the dimensions). `higher` is the phrase for a
+// title that has more of the dimension than the pool, `lower` for less.
+export const FEATURE_REASON_COPY = {
+  ar: {
+    pacing: { higher: 'إيقاع سريع', lower: 'إيقاع هادئ' },
+    rhythmVariance: { higher: 'إيقاع متقلّب', lower: 'إيقاع ثابت' },
+    ambiguity: { higher: 'غموض مقصود', lower: 'وضوح في السرد' },
+    psychologicalDepth: { higher: 'عمق نفسي', lower: 'خفّة نفسية' },
+    warmth: { higher: 'دفء', lower: 'برود مقصود' },
+    darkness: { higher: 'قتامة', lower: 'إشراق' },
+    linearity: { higher: 'سرد خطّي', lower: 'سرد غير خطّي' },
+    dialogueDensity: { higher: 'حوار كثيف', lower: 'حوار قليل' },
+    actionIntensity: { higher: 'حركة كثيفة', lower: 'حركة قليلة' },
+    plotComplexity: { higher: 'حبكة معقدة', lower: 'حبكة بسيطة' },
+    visualComplexity: { higher: 'بصريات غنية', lower: 'بصريات بسيطة' },
+    soundscapeComplexity: { higher: 'صوت غني', lower: 'صوت بسيط' },
+    colorSaturation: { higher: 'ألوان مشبعة', lower: 'ألوان باهتة' },
+  },
+  en: {
+    pacing: { higher: 'fast pacing', lower: 'calm pacing' },
+    rhythmVariance: { higher: 'shifting rhythm', lower: 'steady rhythm' },
+    ambiguity: { higher: 'deliberate ambiguity', lower: 'narrative clarity' },
+    psychologicalDepth: { higher: 'psychological depth', lower: 'psychological lightness' },
+    warmth: { higher: 'warmth', lower: 'deliberate coolness' },
+    darkness: { higher: 'darkness', lower: 'brightness' },
+    linearity: { higher: 'linear storytelling', lower: 'non-linear storytelling' },
+    dialogueDensity: { higher: 'dense dialogue', lower: 'sparse dialogue' },
+    actionIntensity: { higher: 'heavy action', lower: 'little action' },
+    plotComplexity: { higher: 'a complex plot', lower: 'a simple plot' },
+    visualComplexity: { higher: 'rich visuals', lower: 'plain visuals' },
+    soundscapeComplexity: { higher: 'a rich soundscape', lower: 'a plain soundscape' },
+    colorSaturation: { higher: 'saturated colour', lower: 'muted colour' },
+  },
+} as const;
+
 // The three recommendation tracks (blueprint §4.4, ADR-8): the name the user
 // sees and what each track is for, in the blueprint's own words.
 export const TRACK_COPY = {

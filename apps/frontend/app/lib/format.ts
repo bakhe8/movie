@@ -2,8 +2,8 @@
 // that shows a prediction -- recommendations, taste profile, work page,
 // library ranking -- formats through these helpers, so a raw score or a
 // percentage cannot reach the user by accident.
-import type { ConfidenceBand } from './api';
-import { CONFIDENCE_BAND_COPY } from './copy';
+import type { ConfidenceBand, RecommendationReason } from './api';
+import { CONFIDENCE_BAND_COPY, FEATURE_REASON_COPY } from './copy';
 
 type Lang = 'ar' | 'en';
 
@@ -29,6 +29,15 @@ export function formatPersonalFit(position: number, count: number): PersonalFitD
   const third = Math.max(1, Math.ceil(count / 3));
   const level: PersonalFitLevel = position <= third ? 'high' : position <= 2 * third ? 'medium' : 'low';
   return { level, position, count };
+}
+
+// The reason line (blueprint §9.4): the driving dimensions as fixed,
+// abstract phrases -- never plot, never a sensitive trait -- or null when
+// nothing lifted the title above the pool (an honest absence, not filler).
+export function formatReason(reason: RecommendationReason | undefined, lang: Lang): string | null {
+  if (!reason || reason.features.length === 0) return null;
+  const phrases = reason.features.map((feature) => FEATURE_REASON_COPY[lang][feature.key][feature.direction]);
+  return lang === 'ar' ? `ما يقرّبه من ذوقك: ${phrases.join('، ')}.` : `What brings it close to your taste: ${phrases.join(', ')}.`;
 }
 
 // One numeral system per locale (mockup review P10): Arabic-Indic digits in

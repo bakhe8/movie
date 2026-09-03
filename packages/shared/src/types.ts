@@ -167,6 +167,12 @@ export interface LibraryRankingItem {
   modelVersion: string;
 }
 
+/** Why a title ranks where it does (§9.4, ADR-20): only the dimensions that raised its score; wording is the client's. */
+export interface RecommendationReason {
+  features: { key: keyof Pick<FilmFingerprintV1, 'pacing' | 'rhythmVariance' | 'ambiguity' | 'psychologicalDepth' | 'warmth' | 'darkness' | 'linearity' | 'dialogueDensity' | 'actionIntensity' | 'plotComplexity' | 'visualComplexity' | 'soundscapeComplexity' | 'colorSaturation'>; direction: 'higher' | 'lower' }[];
+  evidenceSource: 'individual' | 'population_enriched';
+}
+
 export interface Recommendation {
   title: Title;
   personalFitScore: number;
@@ -176,4 +182,5 @@ export interface Recommendation {
   fingerprintCoverage: number;
   track: RecommendationTrack;
   modelVersion: string;
+  reason: RecommendationReason;
 }
