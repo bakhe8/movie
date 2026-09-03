@@ -1,6 +1,7 @@
 import { Controller, Get, Param, ParseUUIDPipe, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ListTitlesQueryDto } from './dto/list-titles-query.dto';
+import { StarterQueryDto } from './dto/starter-query.dto';
 import { TitlesService } from './titles.service';
 
 // M2: the catalog (including its now-stripped fingerprint/externalIds -- see
@@ -21,6 +22,13 @@ export class TitlesController {
   @Get('search')
   search(@Query() query: ListTitlesQueryDto) {
     return this.titlesService.findAll(query);
+  }
+
+  // Declared before ':titleId' so the literal path is not read as an id.
+  // The diverse starter list of blueprint §4.2 for a user with no marks yet.
+  @Get('starter')
+  starter(@Query() query: StarterQueryDto) {
+    return this.titlesService.starter(query.limit);
   }
 
   @Get(':titleId')

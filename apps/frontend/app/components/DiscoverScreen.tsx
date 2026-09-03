@@ -10,6 +10,8 @@ type Lang = 'ar' | 'en';
 // Three watched titles unlock the first triad (SPECIFICATION.md §5.1 step 3).
 const UNLOCK_COUNT = 3;
 const PAGE_SIZE = 20;
+// The starter list stays short on purpose (blueprint §4.2).
+const STARTER_SIZE = 12;
 
 const labels = {
   ar: {
@@ -27,6 +29,10 @@ const labels = {
     unlocked: 'الترتيب متاح. كل فيلم إضافي يحسّن جولاتك.',
     goRank: 'إلى الترتيب',
     starter: 'عناوين للبدء',
+    starterHint: 'مختارة لتنويع الأنواع والسنوات، لا بحسب ذوقك، فلا نعرفه بعد.',
+    browseAll: 'تصفّح الكتالوج كاملًا',
+    catalogue: (count: string) => `الكتالوج كاملًا: ${count}`,
+    backToStarter: 'العودة إلى عناوين البدء',
     results: (count: string) => `نتائج البحث: ${count}`,
     noResults: 'لا نتائج. جرّب اسمًا آخر أو الاسم بلغة أخرى.',
     more: 'عرض المزيد',
@@ -54,6 +60,10 @@ const labels = {
     unlocked: 'Ranking is unlocked. Every extra film improves your rounds.',
     goRank: 'Go to ranking',
     starter: 'Titles to start with',
+    starterHint: 'Picked to spread genres and years, not by your taste -- we do not know it yet.',
+    browseAll: 'Browse the whole catalogue',
+    catalogue: (count: string) => `Whole catalogue: ${count}`,
+    backToStarter: 'Back to the starter titles',
     results: (count: string) => `Search results: ${count}`,
     noResults: 'No results. Try another name, or the name in the other language.',
     more: 'Show more',
@@ -92,6 +102,9 @@ export function DiscoverScreen({
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [searching, setSearching] = useState(false);
+  // With an empty query: the diverse starter list (default) or the whole
+  // paginated catalogue, at the user's choice.
+  const [browseAll, setBrowseAll] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -115,15 +128,21 @@ export function DiscoverScreen({
     loadStates();
   }, [loadStates]);
 
-  // Debounced search; an empty query lists the catalogue as the starter set
-  // (blueprint §4.2 "اختيار سريع من عناوين معروفة"). Page 1 on every new query.
+  // Debounced search. An empty query shows the genre-diverse starter list
+  // from the server (blueprint §4.2 "اختيار سريع من عناوين معروفة ومتنوعة"),
+  // or the whole paginated catalogue when the user asks for it. Page 1 on
+  // every new query.
   useEffect(() => {
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSearching(true);
+    const trimmed = query.trim();
     const timer = window.setTimeout(() => {
-      api
-        .listTitles(query.trim(), 1, PAGE_SIZE)
+      const load =
+        trimmed || browseAll
+          ? api.listTitles(trimmed, 1, PAGE_SIZE).then((result) => ({ items: result.items, total: result.total }))
+          : api.getStarterTitles(STARTER_SIZE).then((items) => ({ items, total: items.length }));
+      load
         .then((result) => {
           if (cancelled) return;
           setResults(result.items);
@@ -141,7 +160,7 @@ export function DiscoverScreen({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [query, t.loadFailed]);
+  }, [query, browseAll, t.loadFailed]);
 
   useEffect(() => {
     if (!notice) return;
@@ -261,7 +280,10 @@ export function DiscoverScreen({
         />
       </div>
 
-      <h3 className={styles.sectionTitle}>{isSearch ? t.results(formatNumber(total, lang)) : t.starter}</h3>
+      <h3 className={styles.sectionTitle}>
+        {isSearch ? t.results(formatNumber(total, lang)) : browseAll ? t.catalogue(formatNumber(total, lang)) : t.starter}
+      </h3>
+      {!isSearch && !browseAll && <p className={styles.progressNote}>{t.starterHint}</p>}
 
       {results.length === 0 && !searching ? (
         <p className={styles.empty}>{t.noResults}</p>
@@ -329,6 +351,17 @@ export function DiscoverScreen({
       {results.length < total && (
         <button type="button" className={`${styles.ghost} ${styles.more}`} onClick={loadMore} disabled={searching}>
           {t.more}
+        </button>
+      )}
+
+      {!isSearch && (
+        <button
+          type="button"
+          className={`${styles.ghost} ${styles.more}`}
+          onClick={() => setBrowseAll((current) => !current)}
+          disabled={searching}
+        >
+          {browseAll ? t.backToStarter : t.browseAll}
         </button>
       )}
     </div>

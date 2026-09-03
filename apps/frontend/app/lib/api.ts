@@ -219,6 +219,10 @@ export const api = {
 
   getTitle: (titleId: string) => request<Title>(`/titles/${titleId}`),
 
+  // A genre-diverse, deterministic sample for a user with no marks yet
+  // (blueprint §4.2); no taste input is involved.
+  getStarterTitles: (limit = 12) => request<Title[]>(`/titles/starter?limit=${limit}`),
+
   // No `rating` here: the only explicit preference signal is a triad ranking (blueprint §2.4 #2).
   setTitleState: (profileId: string, titleId: string, data: { state: TitleState; watchedAt?: string; notes?: string }) =>
     request<UserTitleState>(`/profiles/${profileId}/titles/${titleId}/state`, {

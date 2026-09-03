@@ -3,6 +3,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
 import { Title } from '../../entities/title.entity';
 import { ListTitlesQueryDto } from './dto/list-titles-query.dto';
+import { ARABIC_FOLD_FROM, ARABIC_FOLD_TO, diversify, foldArabic } from './starter';
+
+// The starter list is drawn from at most this many catalogue rows (by
+// title): enough to be diverse, bounded so it never scans a large catalogue.
+const STARTER_POOL_SIZE = 300;
 
 // What every catalog read returns -- never the raw fingerprint or external
 // ids (M2, blueprint §5.3/§21.3, DATA_LICENSING.md): the fingerprint is a
@@ -50,11 +55,21 @@ export class TitlesService {
 
     if (query.query) {
       const searchTerm = `%${query.query}%`;
+      // Arabic folding on both sides (see ./starter foldArabic): the column
+      // is folded with translate() over the same character map, so «احلام»
+      // finds «أحلام» and «مدرسه» finds «مدرسة». Alternate titles
+      // (localized_titles, FTS) are still the M3 gap.
+      const foldedTerm = `%${foldArabic(query.query)}%`;
       queryBuilder.where(
         new Brackets((where) => {
           where
             .where('title.titleEn ILIKE :searchTerm', { searchTerm })
-            .orWhere('title.titleAr ILIKE :searchTerm', { searchTerm });
+            .orWhere('title.titleAr ILIKE :searchTerm', { searchTerm })
+            .orWhere('translate(title.titleAr, :foldFrom, :foldTo) ILIKE :foldedTerm', {
+              foldFrom: ARABIC_FOLD_FROM,
+              foldTo: ARABIC_FOLD_TO,
+              foldedTerm,
+            });
         }),
       );
     }
@@ -67,6 +82,19 @@ export class TitlesService {
       total,
       totalPages: Math.ceil(total / limit),
     };
+  }
+
+  // A genre-diverse, deterministic sample for a user who has marked nothing
+  // yet (blueprint §4.2, SPECIFICATION §5.1 step 3). No taste input: there
+  // is none at this point.
+  async starter(limit: number): Promise<PublicTitle[]> {
+    const pool = await this.titlesRepository
+      .createQueryBuilder('title')
+      .select([...PUBLIC_TITLE_COLUMNS])
+      .orderBy('title.titleEn', 'ASC')
+      .take(STARTER_POOL_SIZE)
+      .getMany();
+    return diversify(pool as PublicTitle[], limit);
   }
 
   async findOne(titleId: string): Promise<PublicTitle> {

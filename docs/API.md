@@ -27,8 +27,9 @@ Verified against `apps/backend/src/modules/**` on 2026-09-03. Every profile-scop
 | GET | `/api/profiles/:profileId` | JWT | — | Profile | |
 | PATCH | `/api/profiles/:profileId` | JWT | `{ name?, preferredLanguage?, market?, platforms? }` | Profile | the onboarding screen writes `market`/`platforms` here; `market` stays `null` until chosen |
 | DELETE | `/api/profiles/:profileId` | JWT | — | 204 | cascades events/models of that profile only |
-| GET | `/api/titles` | — | `?query&page&limit(≤100)` | `{ items, page, limit, total, totalPages }` | ILIKE on `titleEn`/`titleAr` only |
+| GET | `/api/titles` | — | `?query&page&limit(≤100)` | `{ items, page, limit, total, totalPages }` | ILIKE on `titleEn`/`titleAr`, plus Arabic folding on both sides (hamza forms of alef → ا, ة → ه, ى → ي, tashkeel/tatweel ignored) so «احلام» finds «أحلام»; alternate titles (`localized_titles`, FTS) still M3 |
 | GET | `/api/titles/search` | — | same as above | same | alias of `GET /api/titles` |
+| GET | `/api/titles/starter` | JWT | `?limit(≤30, default 12)` | Title[] | the diverse starter list of `BP §4.2`: a deterministic round-robin across primary genres (largest genre first, newest first within a genre) over the first 300 titles by name; no taste input |
 | GET | `/api/titles/:titleId` | — | — | Title (incl. `fingerprint`) | |
 | PATCH | `/api/profiles/:profileId/titles/:titleId/state` | JWT | `{ state: watched\|not_watched\|watchlist\|interested, watchedAt?, notes? }` | UserTitleState | never accepts a rating |
 | GET | `/api/profiles/:profileId/watched-titles` | JWT | — | UserTitleState[] (+title) | |
@@ -165,6 +166,7 @@ Ranking is sent as title ids (not indices), on both the unversioned route and th
 ---
 
 **Changelog**
+- 1.9 (2026-09-03): `GET /api/titles/starter` (diverse starter list, `BP §4.2`); catalogue search folds Arabic hamza/taa marbuta/alef maqsura on both sides.
 - 1.8 (2026-09-03): `Recommendation` gains `reason` -- the ≤ 2 fingerprint dimensions whose weighted deviation from the candidate pool lifted the score, with a direction, and `evidenceSource: 'individual'` (BP §9.4, ADR-20; wording is the client's).
 - 1.7 (2026-09-03): every `Triad` response (`current`, `rank`, `replace`) carries `items` — the three titles in `displayOrder`, public columns only — so the triad screen needs no per-title fetch (the target contract's inline items, brought forward).
 - 1.6 (2026-09-03): `Profile` gains `market` and `platforms` (onboarding, `BP §4.1`); accepted by `POST /profiles` and `PATCH /profiles/:profileId`.
