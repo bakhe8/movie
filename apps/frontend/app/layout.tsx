@@ -5,6 +5,7 @@ import "./globals.css";
 import "./styles/tokens.css";
 import { SessionProvider } from "./lib/session";
 import { ThemeProvider } from "./lib/theme";
+import { ServiceWorkerRegistration } from "./lib/ServiceWorkerRegistration";
 
 export const metadata: Metadata = {
   title: "Reel",
@@ -46,6 +47,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <ThemeProvider>
           <SessionProvider>{children}</SessionProvider>
         </ThemeProvider>
+        <ServiceWorkerRegistration />
       </body>
     </html>
   );
