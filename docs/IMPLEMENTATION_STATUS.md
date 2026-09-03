@@ -1,7 +1,7 @@
 # Implementation Status — code versus blueprint
 
-> **Snapshot 2026-09-03, after the "close the six cheap gaps" change, a security/code-quality audit, a NestJS 10→11 migration, a dev-tooling security bump, a `SCHEMA.md` doc-sync fix, and closing blueprint gaps 9 and 2** (base `30af3a9` on `main`).
-> Verified for this revision: backend vitest suite **48 tests / 6 files pass**; backend e2e suite **13 tests pass** over real HTTP against `postgres-test` with all six migrations applied; Python pytest **36 tests pass** (+2 gap 9, +8 gap 2); `tsc --noEmit` clean for `apps/backend`, `apps/frontend` and `packages/shared`; `eslint` clean for both `apps/frontend` and `apps/backend`; `ruff` clean for `services/workers`; `npm audit` clean — 0 vulnerabilities, production and dev. `train-profile` was run **manually against the real local dev database** for the first time in this codebase's history (both the ≥5-triad and <5-triad paths), which is how two previously-undiscovered, always-failing bugs in it were found and fixed (`uuid[]` parsing, a numpy-float leak into a psycopg2 parameter) — see the gap-2 table below. The manual browser pass (register → Discover → Rank → My list → Profile → language toggle → logout) was verified in an earlier snapshot and is carried forward; nothing in today's work touched the frontend UI or its dependencies.
+> **Snapshot 2026-09-03, after the "close the six cheap gaps" change, a security/code-quality audit, a NestJS 10→11 migration, a dev-tooling security bump, a `SCHEMA.md` doc-sync fix, and closing blueprint gaps 9, 2 and 3** (base `3f60884` on `main`).
+> Verified for this revision: backend vitest suite **56 tests / 6 files pass**; backend e2e suite **16 tests pass** over real HTTP against `postgres-test` with all seven migrations applied; Python pytest **39 tests pass** (+2 gap 9, +8 gap 2, +3 gap 3); `tsc --noEmit` clean for `apps/backend`, `apps/frontend` and `packages/shared`; `eslint` clean for both `apps/frontend` and `apps/backend`; `ruff` clean for `services/workers`; `npm audit` clean — 0 vulnerabilities, production and dev. `train-profile` was run **manually against the real local dev database** for the first time in this codebase's history (both the ≥5-triad and <5-triad paths, then again after gap 3's ranking-format change), which is how two previously-undiscovered, always-failing bugs in it were found and fixed (`uuid[]` parsing, a numpy-float leak into a psycopg2 parameter) — see the gap-2 table below. Gap 3 (title-id ranking, `Idempotency-Key`) was verified the same way as the manual browser pass below, freshly re-run today: register → Discover (mark 3 watched) → Rank (reorder, save) → confirmed via the network tab that the persisted triad carried real title-id `ranking`, `shownAt` < `answeredAt`, `modelVersion: null`, and the generated idempotency key; My list → Profile → language toggle → logout carried forward from an earlier snapshot, unaffected by today's changes.
 >
 > Two verdicts per row, because "the code exists and runs" and "it does what the blueprint requires" are different claims:
 >
@@ -47,14 +47,13 @@ Nothing left open from this line of audit.
 These run today and contradict or fall short of the blueprint; a green test suite makes them invisible.
 
 1. **Schema covers 7 of the target tables** — `recommendations`, `outcomes`, `watch_events`, `triad_replacements`, `consents`, `privacy_requests`, `source_records`, `content_features`, `localized_titles`, `model_versions`, `experiments`, `audit_log`, `shared_latent_space_versions` are missing (`§13.1`, `§11.1`; [SCHEMA.md](SCHEMA.md) §2.4 migration plan M1–M7).
-3. **Triad event lacks `shownAt`/`answeredAt`/`modelVersion` columns** (`§13.2`); `POST …/rank` has no idempotency key (`§14`), only a status guard; ranking is index-based (ADR-15 moves to title ids).
 4. **Recommendations are never persisted** — no reason, no display propensity, no `experimentId`/`requestId` (`§13.1`, `§14`, `§14.1`). Without the log the post-watch loop (`§4.5`) cannot close and `§16` has nothing to read.
-5. **Confidence band is a triad-count heuristic** — `§9.2`/`§9.3` require evidence diversity, held-out prediction success and fingerprint quality (ADR-21). The fingerprint-quality input now exists (one-band demotion); the held-out prediction input now exists too (gap 2 below); the rest does not.
+5. **Confidence band is a triad-count heuristic** — `§9.2`/`§9.3` require evidence diversity, held-out prediction success and fingerprint quality (ADR-21). The fingerprint-quality and held-out-prediction inputs now exist (gaps 6's one-band demotion, gap 2); the rest does not.
 6. **Fingerprints carry no provenance and cover part of `§6.1`** — the 15 seeded rows leave `confidence` empty; families characters/ending/people/cultural context are absent (V1 is frozen; V2 planned — [FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md)).
 7. **Onboarding collects no market, platforms, or consent** (`§4.1`, `§13.1`, `§2.4 #9`).
 8. **Not a PWA yet** — no web manifest or service worker (`§5.1`, ADR-5).
 
-(Numbering keeps gaps 1, 3–8 as originally assigned; gaps 2 and 9 are closed — see the tables below.)
+(Numbering keeps gaps 1, 4–8 as originally assigned; gaps 2, 3 and 9 are closed — see the tables below.)
 
 ## Closed on 2026-09-03 (gap 9 — enrichment worker)
 
@@ -72,6 +71,14 @@ Still open: `§15.4` acceptance tests, and the worker has still never run agains
 
 While verifying this end-to-end, found and fixed two independent, previously-undiscovered bugs that made `train-profile` fail on **every** real invocation, `git blame`-old: (1) psycopg2 has no default typecaster for a `uuid[]` column, so `triads."titleIds"` came back as raw Postgres array text and was silently iterated character-by-character everywhere the code expected a list — `psycopg2.extras.register_uuid()` now fixes the read, with every id re-cast to `str` right after so the rest of the module is unaffected; (2) `compute_nll()`'s result stayed a numpy `float64`, which psycopg2 cannot adapt as a query parameter — cast to a native `float`. Neither bug is unit-testable without a real database, which is exactly why `train_profile()` itself was never covered — only its pure `fingerprint_vector()` sub-function was.
 
+## Closed on 2026-09-03 (gap 3 — triad event completeness)
+
+| Gap | What changed | Proof |
+|---|---|---|
+| `triads` had no `shownAt`/`answeredAt`/`modelVersion` columns (`§13.2`); `POST …/rank` had no idempotency key (`§14`), only a status guard; ranking was index-based, not title-id-based (ADR-15's already-decided target) | Migration `AddTriadEventCompleteness` (ADR-32) adds the three columns plus `idempotencyKey`, and converts `ranking` from `integer[]` to `uuid[]` with a data backfill. `shownAt` set once at creation, `answeredAt` once at `rank()`; `modelVersion` stays `NULL` under `random-v1` (no model used — not fabricated). `Idempotency-Key` is an optional request header: a retry with the same key for the same triad replays the prior result instead of erroring; reusing one for a different triad is `409`. `TriadsService.rank()` now validates the submitted ranking is exactly the fetched triad's own three title ids. `packages/shared/src/types.ts`, `apps/frontend/app/lib/api.ts`, `RankScreen.tsx` (mints `crypto.randomUUID()` per submit) updated to match | 8 new backend unit tests (56 total); new `test/triad-rank.e2e-spec.ts` — title-id ranking accepted, a foreign title id rejected, a retried request with the same key returns the same result (16 e2e total); **manually verified in a real browser**: network tab showed the exact persisted row (real title UUIDs in `ranking`, `shownAt` < `answeredAt`, `modelVersion: null`, the generated `idempotencyKey`) |
+
+`training.py`'s `ORDER BY` now uses `COALESCE("answeredAt", "createdAt")` (was `createdAt` alone, ADR-31's interim stand-in) — real `answeredAt` for triads completed after this migration, the old proxy only for legacy rows with none recorded. Still open: `triads.holdout`/`correctsTriadId` (same M1 plan step, [SCHEMA.md](SCHEMA.md) §2.4) — no selection policy sets `holdout` yet regardless.
+
 ---
 
 ## Project setup
@@ -79,9 +86,9 @@ While verifying this end-to-end, found and fixed two independent, previously-und
 | Item | Built | Blueprint | Evidence / gap |
 |---|---|---|---|
 | Monorepo (Next.js, NestJS, Python, shared types) | ✅ | — | ADR-1 |
-| Database schema (PostgreSQL) | 🟡 | ❌ | 7 tables, 5 migrations (the 5th adds a constraint, not a table); target set and plan in [SCHEMA.md](SCHEMA.md) §2. pgvector image runs but `embeddings.vector` is `real[]` (`§12.1`) |
+| Database schema (PostgreSQL) | 🟡 | ❌ | 7 tables, 7 migrations (the 5th–7th add constraints/columns, not tables); target set and plan in [SCHEMA.md](SCHEMA.md) §2. pgvector image runs but `embeddings.vector` is `real[]` (`§12.1`) |
 | Docker Compose: Postgres + Redis + disposable `postgres-test` | ✅ | — | |
-| Environment template | ✅ | — | `FRONTEND_URL` and `OPENAI_FINGERPRINT_MODEL` not yet in `.env.example` |
+| Environment template | ✅ | — | `FRONTEND_URL` not yet in `.env.example`; `OPENAI_FINGERPRINT_MODEL`/`OPENAI_EXPLANATION_MODEL` added 2026-09-03 (gap 9) |
 | Documentation set | ✅ | — | reorganized 2026-09-03; index in [README.md](README.md) |
 | Plackett–Luce ranker (Python) | ✅ | ✅ | `§7.2`: listwise event, not three pairwise comparisons; deterministic init; refuses undescribed titles |
 | Enrichment worker (Python) | ✅ | 🟡 | structured output via the Responses API ✅ (gap 9 closed above); `§15.4` acceptance tests ❌; never run against the actual catalog, only unit-tested |
@@ -98,7 +105,7 @@ While verifying this end-to-end, found and fixed two independent, previously-und
 | Auth throttling (5 req/min) + global 60 req/min | ✅ | — | `§21.3` |
 | Refresh tokens | ❌ | — | ADR-26, before Alpha |
 | Roles (`users.role`) for the admin board | ❌ | ❌ | `§5.1` |
-| Unit tests | ✅ | — | `auth.service.spec.ts`, 7 tests |
+| Unit tests | ✅ | — | `auth.service.spec.ts`, 9 tests |
 | Frontend: login / register (`AuthScreen`) | ✅ | ❌ | `§4.1` onboarding (language, market, platforms, consent, import) not collected |
 | Frontend: session persistence, auto-redirect, logout | ✅ | — | `localStorage` via `lib/session.tsx` |
 | Password reset | ❌ | — | |
@@ -133,15 +140,15 @@ While verifying this end-to-end, found and fixed two independent, previously-und
 
 | Item | Built | Blueprint | Evidence / gap |
 |---|---|---|---|
-| `GET /profiles/:id/triads/current` (creates or returns active) | ✅ | 🟡 | `§14 /triads/next`: watched-only ✅, propensity + policy ✅; no `requestId`/`modelVersion`/`experimentId`; target is `POST /api/v1/triads/next` (ADR-15) |
-| `POST /triads/:id/rank` | ✅ | ❌ | `§14`: idempotency key, membership and time checks missing; `§13.2`: `answeredAt`, `modelVersion` not recorded (gap 3) |
+| `GET /profiles/:id/triads/current` (creates or returns active) | ✅ | 🟡 | `§14 /triads/next`: watched-only ✅, propensity + policy ✅, `shownAt`/`modelVersion`/`experimentId` columns exist (gap 3) though `modelVersion` is `NULL` under `random-v1`; no `requestId` (API envelope, target contract); target is `POST /api/v1/triads/next` (ADR-15) |
+| `POST /triads/:id/rank` | ✅ | 🟡 | `§14`: optional `Idempotency-Key` header ✅ (gap 3, ADR-32); membership check ✅ (ranking must be the triad's own title ids); no time/window check; `§13.2`: `answeredAt`, `modelVersion` recorded ✅ |
 | `GET /profiles/:id/triads` (completed) | ✅ | — | |
 | Random policy `random-v1` | ✅ | 🟡 | ρ = 1/C(pool,3) ✅, `policyVersion` ✅, independent `displayOrder` ✅ (`§4.3`, `§8.3`); `§8.3` unmet: session limit/fatigue, reserved hold-out, director/language guard |
 | Adaptive policy (`§8.1` functions, `§8.2` score, `§7.5` Fisher targeting) | ❌ | ❌ | [RANKING_ALGORITHM.md](RANKING_ALGORITHM.md) §9 |
-| Ranking validation (permutation of [0,1,2]) | ✅ | — | |
+| Ranking validation (title ids, ADR-15) | ✅ | ✅ | exactly 3 distinct ids matching the fetched triad's own `titleIds`; was index-based before gap 3 |
 | Replacement (`not_watched` / `not_remembered`) | ❌ | ❌ | `§4.3`, `§13.1`, `§14`; semantics fixed in ADR-17; `metadata.replacements` reserved, never written |
 | Training trigger from the backend | ❌ | ❌ | `§12.2`; ADR-25 |
-| Unit tests | ✅ | — | `triads.service.spec.ts`, 10 tests |
+| Unit tests | ✅ | — | `triads.service.spec.ts`, 20 tests |
 | Frontend: instruction copy fixed to `§4.3` («حسب إعجابك الشخصي، من الأكثر إلى الأقل») | ✅ | ✅ | `lib/copy.ts` |
 | Frontend: three cards, drag + ↑/↓ (keyboard path), position numbers, save, next round auto-loads | ✅ | 🟡 | RTL/keyboard ✅; no licensed poster on the card (`§4.3`); no critic scores ✅ |
 | Frontend: two replacement buttons + dialog | ❌ | ❌ | `§4.3` |
@@ -209,8 +216,8 @@ While verifying this end-to-end, found and fixed two independent, previously-und
 
 | Item | Built | Blueprint | Evidence / gap |
 |---|---|---|---|
-| Backend unit tests (6 files, 48 tests) | ✅ | — | re-run 2026-09-03 |
-| Backend e2e: auth guard + IDOR + rate limiting over real HTTP + `postgres-test` (13 tests) | ✅ | ✅ | `§21.3` object-level authorization; re-run 2026-09-03 with all five migrations; `test/throttling.e2e-spec.ts` added with the NestJS 11 migration (ADR-29); not functional coverage |
+| Backend unit tests (6 files, 56 tests) | ✅ | — | re-run 2026-09-03; +8 with the gap-3 triad rework |
+| Backend e2e: auth guard + IDOR + rate limiting + triad ranking over real HTTP + `postgres-test` (16 tests) | ✅ | ✅ | `§21.3` object-level authorization; re-run 2026-09-03 with all seven migrations; `test/throttling.e2e-spec.ts` (ADR-29) and `test/triad-rank.e2e-spec.ts` (gap 3, ADR-32) added today; still not full functional coverage of every route |
 | Functional API tests (titles, triads, recommendations) | ❌ | — | |
 | Frontend tests | ❌ | — | |
 | Python tests (36) | ✅ | — | re-run 2026-09-03; +2 with the gap-9 enrichment-worker fix, +8 with the gap-2 temporal hold-out |
@@ -237,7 +244,7 @@ While verifying this end-to-end, found and fixed two independent, previously-und
 |---|---|
 | New user reaches a first result unaided | ❌ (training is a manual CLI) |
 | "Haven't watched" never enters the taste loss | 🟡 (it never enters training, and `not_watched` is no longer excluded from candidates; the replacement control itself is not built) |
-| Every result reproducible from event log + model version | 🟡 (training is deterministic; recommendations are not persisted and triads lack `modelVersion`) |
+| Every result reproducible from event log + model version | 🟡 (training is deterministic; triads now carry `modelVersion` (`NULL` under `random-v1`, gap 3) but recommendations are still not persisted) |
 | Automated tests for triad, replacement, delete, export | ❌ |
 | Backup restore drill documented | ❌ |
 | No content/images shown without a known license status | 🟡 (no images shown; seeded text is `unknown`) |
@@ -248,6 +255,6 @@ While verifying this end-to-end, found and fixed two independent, previously-und
 
 ---
 
-**Next milestone (in order):** migration M1 with `shownAt`/`answeredAt`/`modelVersion`/idempotency on triads (gap 3) and the replacement endpoint + two UI buttons (ADR-17); then a training trigger through the FastAPI service (ADR-25) and the real confidence-band criteria now that held-out metrics exist (gap 5); then M5 + persisted recommendations and outcomes (gap 4) so the post-watch loop can close; then consent/onboarding (gap 7) and the admin board. Gaps 2 and 9 are done.
+**Next milestone (in order):** the replacement endpoint + two UI buttons (ADR-17) and `triads.holdout`/`correctsTriadId` (same M1 step, [SCHEMA.md](SCHEMA.md) §2.4); then a training trigger through the FastAPI service (ADR-25) and the real confidence-band criteria now that held-out metrics exist (gap 5); then M5 + persisted recommendations and outcomes (gap 4) so the post-watch loop can close; then consent/onboarding (gap 7) and the admin board. Gaps 2, 3 and 9 are done.
 
-**Last updated**: 2026-09-03 · **Status**: core loop (auth → mark watched → rank → train by CLI → recommend) runs locally; six blueprint gaps, five security/code-quality audit findings, the NestJS 10→11 migration (ADR-29), a dev-tooling security bump (ADR-30), and blueprint gap 9 (enrichment worker) closed today; `npm audit` clean end to end; eight blueprint-conformance pieces still fall short (list above).
+**Last updated**: 2026-09-03 · **Status**: core loop (auth → mark watched → rank → train by CLI → recommend) runs locally. Closed today: the original six cheap gaps, five security/code-quality audit findings, the NestJS 10→11 migration (ADR-29), a dev-tooling security bump (ADR-30), and blueprint gaps 9 (enrichment worker), 2 (temporal hold-out, ADR-31) and 3 (triad event completeness, ADR-32). `npm audit` clean end to end. Six blueprint-conformance gaps still fall short: 1 (schema), 4 (recommendations not persisted), 5 (confidence band), 6 (fingerprint provenance/V2), 7 (onboarding), 8 (PWA) — list above.

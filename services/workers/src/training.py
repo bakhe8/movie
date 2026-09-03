@@ -60,6 +60,16 @@ def fingerprint_vector(fingerprint: dict[str, Any]) -> np.ndarray | None:
     return np.array(values)
 
 
+def ranking_to_indices(triad_ids: Tuple[str, str, str], ranking_title_ids: List[Any]) -> List[int]:
+    """
+    Convert a triads.ranking row -- title ids in ranked order, best first
+    (ADR-15) -- into positions into `triad_ids`, the representation the
+    model math (ranker.py) actually works with. The DB/API boundary speaks
+    title ids; everything past this function still speaks indices.
+    """
+    return [triad_ids.index(str(title_id)) for title_id in ranking_title_ids]
+
+
 @dataclass
 class TrainingResult:
     weights: np.ndarray
@@ -140,15 +150,23 @@ def train_profile(profile_id: str) -> TrainingResult:
             SELECT "titleIds", ranking
             FROM triads
             WHERE "profileId" = %s AND status = 'completed' AND ranking IS NOT NULL
-            ORDER BY "createdAt" ASC
+            ORDER BY COALESCE("answeredAt", "createdAt") ASC
             ''',
             (profile_id,),
         )
-        # "createdAt" stands in for the not-yet-existing "answeredAt" column
-        # (IMPLEMENTATION_STATUS.md gap 3) -- with at most one active triad per
-        # profile at a time (ADR-28), creation order already is answer order.
+        # "ranking" is title ids in ranked order (ADR-15), but the model math
+        # below (ranker.py) works with positional indices into titleIds --
+        # convert once here, at the DB boundary, so ranker.py never has to
+        # know about the storage/API representation.
+        # COALESCE("answeredAt", "createdAt"): triads completed before the
+        # answeredAt column existed (gap 3) have no recorded answer time --
+        # createdAt is still a fair temporal proxy for those legacy rows only.
         triads = [
-            (tuple(str(title_id) for title_id in title_ids), ranking) for title_ids, ranking in cursor.fetchall()
+            (
+                tuple(str(title_id) for title_id in title_ids),
+                ranking_to_indices(tuple(str(title_id) for title_id in title_ids), ranking),
+            )
+            for title_ids, ranking in cursor.fetchall()
         ]
         if not triads:
             raise ValueError("No completed triads exist for this profile")

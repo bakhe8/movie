@@ -75,10 +75,13 @@ export function RankScreen({ lang, profileId }: { lang: 'ar' | 'en'; profileId: 
     if (!triad) return;
     setSaving(true);
     try {
-      // `order` is the user's preferred sequence (best first); `ranking`
-      // must be indices into triad.titleIds, per RankTriadDto.
-      const ranking = order.map((title) => triad.titleIds.indexOf(title.id));
-      await api.rankTriad(triad.id, ranking);
+      // `order` is the user's preferred sequence (best first); `ranking` is
+      // the title ids themselves, not indices into triad.titleIds (ADR-15).
+      // A fresh key per attempt (not per retry) makes a network retry or
+      // double-click safe -- the backend returns the same result instead of
+      // an "already submitted" error.
+      const ranking = order.map((title) => title.id);
+      await api.rankTriad(triad.id, ranking, crypto.randomUUID());
       await loadTriad();
     } finally {
       setSaving(false);

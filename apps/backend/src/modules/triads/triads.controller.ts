@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, Request, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { RankTriadDto } from './dto/rank-triad.dto';
 import { TriadsService } from './triads.service';
@@ -29,7 +29,8 @@ export class TriadsController {
     @Request() request: { user: { id: string } },
     @Param('triadId') triadId: string,
     @Body() rankTriadDto: RankTriadDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    return this.triadsService.rank(request.user.id, triadId, rankTriadDto);
+    return this.triadsService.rank(request.user.id, triadId, rankTriadDto, idempotencyKey);
   }
 }

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import type { Repository } from 'typeorm';
 import { Profile } from '../../entities/profile.entity';
 import { Title } from '../../entities/title.entity';
@@ -50,17 +50,28 @@ describe('TriadsService', () => {
   });
 
   describe('rank', () => {
-    const activeTriad = { id: 'triad-1', profileId: 'profile-1', status: 'active' as const };
+    // Ranking is title ids in ranked order, best first -- not indices into
+    // titleIds (ADR-15).
+    const titleA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const titleB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const titleC = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const validRanking = [titleC, titleA, titleB];
+    const activeTriad = {
+      id: 'triad-1',
+      profileId: 'profile-1',
+      status: 'active' as const,
+      titleIds: [titleA, titleB, titleC],
+    };
 
-    it('rejects a ranking that is not a permutation of [0,1,2] before touching the database', async () => {
+    it('rejects a malformed ranking before touching the database', async () => {
       await expect(
-        service.rank('user-1', 'triad-1', { ranking: [0, 0, 1] }),
+        service.rank('user-1', 'triad-1', { ranking: [titleA, titleA, titleB] }), // not distinct
       ).rejects.toBeInstanceOf(BadRequestException);
       await expect(
-        service.rank('user-1', 'triad-1', { ranking: [0, 1] }),
+        service.rank('user-1', 'triad-1', { ranking: [titleA, titleB] }), // not 3 items
       ).rejects.toBeInstanceOf(BadRequestException);
       await expect(
-        service.rank('user-1', 'triad-1', { ranking: [0, 1, 3] }),
+        service.rank('user-1', 'triad-1', { ranking: ['not-a-uuid', titleA, titleB] }),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(triadsRepository.findOne).not.toHaveBeenCalled();
     });
@@ -69,7 +80,7 @@ describe('TriadsService', () => {
       triadsRepository.findOne.mockResolvedValue(null);
 
       await expect(
-        service.rank('user-1', 'missing-triad', { ranking: [0, 1, 2] }),
+        service.rank('user-1', 'missing-triad', { ranking: validRanking }),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
@@ -78,7 +89,7 @@ describe('TriadsService', () => {
       profilesRepository.findOne.mockResolvedValue(null); // no profile row matches {id, userId}
 
       await expect(
-        service.rank('attacker-user', 'triad-1', { ranking: [0, 1, 2] }),
+        service.rank('attacker-user', 'triad-1', { ranking: validRanking }),
       ).rejects.toBeInstanceOf(NotFoundException);
       expect(profilesRepository.findOne).toHaveBeenCalledWith({
         where: { id: 'profile-1', userId: 'attacker-user' },
@@ -91,19 +102,100 @@ describe('TriadsService', () => {
       profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
 
       await expect(
-        service.rank('user-1', 'triad-1', { ranking: [0, 1, 2] }),
+        service.rank('user-1', 'triad-1', { ranking: validRanking }),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
-    it('accepts a valid ranking from the owning user and marks the triad completed', async () => {
+    it("rejects a well-formed ranking that isn't this triad's own three title ids", async () => {
+      triadsRepository.findOne.mockResolvedValue(activeTriad);
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      const foreignTitle = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+
+      await expect(
+        service.rank('user-1', 'triad-1', { ranking: [titleA, titleB, foreignTitle] }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(triadsRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('accepts a valid ranking from the owning user, marks the triad completed, and records answeredAt', async () => {
       triadsRepository.findOne.mockResolvedValue({ ...activeTriad });
       profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
 
-      const result = await service.rank('user-1', 'triad-1', { ranking: [2, 0, 1], sessionId: 's1' });
+      const result = await service.rank('user-1', 'triad-1', { ranking: validRanking, sessionId: 's1' });
 
       expect(result.status).toBe('completed');
-      expect(result.ranking).toEqual([2, 0, 1]);
+      expect(result.ranking).toEqual(validRanking);
+      expect(result.answeredAt).toBeInstanceOf(Date);
       expect(triadsRepository.save).toHaveBeenCalled();
+    });
+
+    describe('idempotency', () => {
+      const idempotencyKey = '99999999-9999-4999-8999-999999999999';
+
+      it('rejects a malformed Idempotency-Key', async () => {
+        await expect(
+          service.rank('user-1', 'triad-1', { ranking: validRanking }, 'not-a-uuid'),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(triadsRepository.findOne).not.toHaveBeenCalled();
+      });
+
+      it('returns the prior result instead of erroring on a retry with the same key for the same triad', async () => {
+        const alreadySubmitted = { ...activeTriad, status: 'completed' as const, idempotencyKey };
+        triadsRepository.findOne.mockResolvedValueOnce(alreadySubmitted); // found by idempotencyKey
+        profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+
+        const result = await service.rank('user-1', 'triad-1', { ranking: validRanking }, idempotencyKey);
+
+        expect(result).toBe(alreadySubmitted);
+        expect(triadsRepository.save).not.toHaveBeenCalled();
+      });
+
+      it('rejects reusing the same key for a different triad as a conflict, not a replay', async () => {
+        const otherTriad = { ...activeTriad, id: 'triad-other', idempotencyKey };
+        triadsRepository.findOne.mockResolvedValueOnce(otherTriad); // found by idempotencyKey, different id
+
+        await expect(
+          service.rank('user-1', 'triad-1', { ranking: validRanking }, idempotencyKey),
+        ).rejects.toBeInstanceOf(ConflictException);
+        expect(triadsRepository.save).not.toHaveBeenCalled();
+      });
+
+      it('persists the key on a fresh submission', async () => {
+        triadsRepository.findOne
+          .mockResolvedValueOnce(null) // no existing row for this key
+          .mockResolvedValueOnce({ ...activeTriad }); // the triad being ranked
+        profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+
+        const result = await service.rank('user-1', 'triad-1', { ranking: validRanking }, idempotencyKey);
+
+        expect(result.idempotencyKey).toBe(idempotencyKey);
+      });
+
+      it('returns the winning row instead of erroring when it loses a race on the same idempotency key', async () => {
+        triadsRepository.findOne
+          .mockResolvedValueOnce(null) // no existing row for this key, when first checked
+          .mockResolvedValueOnce({ ...activeTriad }) // the triad being ranked
+          .mockResolvedValueOnce({ ...activeTriad, status: 'completed', idempotencyKey }); // winner, re-fetched by key
+        profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+        triadsRepository.save.mockRejectedValue({ code: '23505' });
+
+        const result = await service.rank('user-1', 'triad-1', { ranking: validRanking }, idempotencyKey);
+
+        expect(result.status).toBe('completed');
+        expect(result.idempotencyKey).toBe(idempotencyKey);
+      });
+
+      it('does not swallow a save error unrelated to the unique constraint', async () => {
+        triadsRepository.findOne
+          .mockResolvedValueOnce(null)
+          .mockResolvedValueOnce({ ...activeTriad });
+        profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+        triadsRepository.save.mockRejectedValue(new Error('connection lost'));
+
+        await expect(
+          service.rank('user-1', 'triad-1', { ranking: validRanking }, idempotencyKey),
+        ).rejects.toThrow('connection lost');
+      });
     });
   });
 
@@ -135,6 +227,20 @@ describe('TriadsService', () => {
 
       await expect(service.getCurrent('user-1', 'profile-1')).rejects.toBeInstanceOf(BadRequestException);
       expect(titlesRepository.createQueryBuilder).not.toHaveBeenCalled();
+    });
+
+    it('records shownAt when a new triad is created', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      triadsRepository.findOne.mockResolvedValue(null); // no active triad
+      triadsRepository.find.mockResolvedValue([]); // no completed triads
+      statesRepository.find.mockResolvedValue([{ titleId: 't1' }, { titleId: 't2' }, { titleId: 't3' }]);
+      titlesRepository.createQueryBuilder.mockReturnValue(
+        titlesQueryBuilderMock([{ id: 't1' }, { id: 't2' }, { id: 't3' }] as Title[], 3),
+      );
+
+      const result = await service.getCurrent('user-1', 'profile-1');
+
+      expect(result.shownAt).toBeInstanceOf(Date);
     });
 
     it('returns the winning row instead of a duplicate when it loses a race to create the active triad', async () => {

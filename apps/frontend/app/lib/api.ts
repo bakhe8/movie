@@ -66,7 +66,12 @@ export interface Triad {
   profileId: string;
   titleIds: string[];
   displayOrder: string[] | null;
-  ranking: number[] | null;
+  // Title ids in ranked order, best-liked first -- not indices into
+  // titleIds (ADR-15).
+  ranking: string[] | null;
+  shownAt: string | null;
+  answeredAt: string | null;
+  modelVersion: string | null;
   status: TriadStatus;
   createdAt: string;
 }
@@ -157,8 +162,15 @@ export const api = {
 
   getCurrentTriad: (profileId: string) => request<Triad>(`/profiles/${profileId}/triads/current`),
 
-  rankTriad: (triadId: string, ranking: number[]) =>
-    request<Triad>(`/triads/${triadId}/rank`, { method: 'POST', body: JSON.stringify({ ranking }) }),
+  // `idempotencyKey` should be a fresh UUID per submit attempt (not per
+  // retry) so a network retry or double-click safely returns the same
+  // result instead of a "already submitted" error (ADR-15).
+  rankTriad: (triadId: string, ranking: string[], idempotencyKey: string) =>
+    request<Triad>(`/triads/${triadId}/rank`, {
+      method: 'POST',
+      body: JSON.stringify({ ranking }),
+      headers: { 'Idempotency-Key': idempotencyKey },
+    }),
 
   getRecommendations: (profileId: string, limit = 10) =>
     request<Recommendation[]>(`/profiles/${profileId}/recommendations?limit=${limit}`),

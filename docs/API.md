@@ -35,7 +35,7 @@ Verified against `apps/backend/src/modules/**` on 2026-09-03. Every profile-scop
 | GET | `/api/profiles/:profileId/watchlist` | JWT | — | UserTitleState[] (+title) | |
 | GET | `/api/profiles/:profileId/triads/current` | JWT | — | Triad | returns the active triad or creates one (`random-v1`); 400 if < 3 watched titles |
 | GET | `/api/profiles/:profileId/triads` | JWT | — | Triad[] | completed only |
-| POST | `/api/triads/:triadId/rank` | JWT | `{ ranking: permutation of [0,1,2] over titleIds, sessionId? }` | Triad | 400 if already completed; no idempotency key yet |
+| POST | `/api/triads/:triadId/rank` | JWT | `{ ranking: string[3] (titleIds, best first), sessionId? }`, header `Idempotency-Key?` (UUID) | Triad | 400 if already completed or `ranking` isn't exactly this triad's own title ids; a repeated `Idempotency-Key` for the same triad returns the original result instead of erroring; reusing one for a different triad is `409` |
 | GET | `/api/profiles/:profileId/recommendations` | JWT | `?limit(≤50, default 10)` | Recommendation[] | 409 until a model snapshot exists; excludes watched titles only (`not_watched` stays a candidate); unknown fingerprint dimensions imputed with the pool mean, never zero; results not persisted |
 
 Response shapes in use (from `apps/frontend/app/lib/api.ts`, which mirrors the entities):
@@ -44,7 +44,8 @@ Response shapes in use (from `apps/frontend/app/lib/api.ts`, which mirrors the e
 Profile { id, userId, name, preferredLanguage: 'ar'|'en', createdAt, updatedAt }
 Title { id, internalId, titleEn, titleAr, description|null, releaseYear|null, genres|null, externalIds?, fingerprint? }
 UserTitleState { id, profileId, titleId, state, watchedAt|null, importedRating|null, ratingSource:'import'|null, notes|null, updatedAt, title? }
-Triad { id, profileId, titleIds: string[3], displayOrder: string[3]|null, ranking: number[3]|null,
+Triad { id, profileId, titleIds: string[3], displayOrder: string[3]|null, ranking: string[3]|null /* titleIds, best first */,
+        shownAt|null, answeredAt|null, modelVersion|null /* null under random-v1, which uses no model */, idempotencyKey|null,
         policyVersion|null, selectionPropensity|null, experimentId|null, sessionId|null, metadata|null, status, createdAt }
 Recommendation { title, personalFitScore, publicQualityScore|null, watchabilityScore|null,
                  confidenceBand: 'initial'|'likely'|'strong'|'inconclusive',
@@ -125,7 +126,7 @@ Idempotency: state-changing calls that may be retried by the client (`rank`, `re
 }
 RecommendationItem {
   recommendationId, title: {...},
-  personalFit: number,                // ordinal score; never shown as a %
+  personalFit: number,                // ordinal score; never shown as a % (ADR-33)
   publicQuality: { value: number|null, votes: number|null, sources: string[] } | null,
   watchability: { available: boolean|null, providers: [{ name, market, audio[], subtitles[], checkedAt }] } | null,
   confidenceBand: 'initial'|'likely'|'strong'|'inconclusive',
@@ -144,7 +145,7 @@ RecommendationItem {
 }
 ```
 
-Ranking is sent as title ids (not indices) in the target contract so a replaced item can never be mis-indexed; the current index-based body is accepted only on the unversioned route.
+Ranking is sent as title ids (not indices), on both the unversioned route and the target contract, so a replaced item can never be mis-indexed (ADR-15; closed 2026-09-03, gap 3). The unversioned route's idempotency key is optional (`Idempotency-Key` header, opt-in) rather than required, unlike the target contract's `POST /api/v1/triads/:id/rank`.
 
 ### 2.4 Rules that apply to every endpoint
 
@@ -157,5 +158,7 @@ Ranking is sent as title ids (not indices) in the target contract so a replaced 
 ---
 
 **Changelog**
+- 1.3 (2026-09-03): `personalFit` display note cites ADR-33 (verbal confidence, no percentage on any prediction surface).
+- 1.2 (2026-09-03): gap 3 closed -- `POST /api/triads/:triadId/rank` takes title ids (not indices) and an optional `Idempotency-Key`; `Triad` gains `shownAt`, `answeredAt`, `modelVersion`, `idempotencyKey`.
 - 1.1 (2026-09-03): `fingerprintCoverage` added to the implemented recommendation shape; candidate filter documented (watched only).
 - 1.0 (2026-09-03): first API document; consolidates the previously scattered endpoint lists (ADR-11, QUICKSTART, PRIVACY, SPECIFICATION) into one implemented-vs-target contract.

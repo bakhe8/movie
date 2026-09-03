@@ -27,8 +27,34 @@ export class Triad {
   @Column('uuid', { array: true, nullable: true })
   displayOrder: string[] | null;
 
-  @Column('integer', { array: true, nullable: true })
-  ranking: number[];
+  // Title ids in ranked order, best-liked first -- not indices into
+  // titleIds (ADR-15). TriadsService validates this is exactly the
+  // triad's own three title ids before it is ever written.
+  @Column('uuid', { array: true, nullable: true })
+  ranking: string[] | null;
+
+  // Set once, when the triad is created (TriadsService.getCurrent()).
+  @Column({ type: 'timestamp', nullable: true })
+  shownAt: Date | null;
+
+  // Set once, when TriadsService.rank() records the submitted ranking.
+  // NULL for triads completed before this column existed (unknown, not
+  // backfilled with a fabricated timestamp).
+  @Column({ type: 'timestamp', nullable: true })
+  answeredAt: Date | null;
+
+  // Which trained model snapshot (if any) selected this triad. NULL for the
+  // random-v1 policy, which uses no model -- honest "no model", never a
+  // fabricated version string (blueprint §11.3).
+  @Column({ type: 'varchar', nullable: true })
+  modelVersion: string | null;
+
+  // Client-generated key so a retried POST /triads/:id/rank is safe
+  // (blueprint §14, ADR-15). Unique across every triad: a client mints a
+  // fresh key per logical submission attempt, never reusing one for a
+  // different triad.
+  @Column({ type: 'uuid', nullable: true, unique: true })
+  idempotencyKey: string | null;
 
   // Which triad-selection policy produced this triad (e.g. 'random-v1').
   // Bumped whenever the selection policy changes so past triads stay
@@ -54,7 +80,6 @@ export class Triad {
   metadata: {
     replacements?: Record<string, string>;
     reasonForSelection?: string;
-    modelVersion?: string;
   };
 
   @Column({ type: 'varchar', default: 'active' })

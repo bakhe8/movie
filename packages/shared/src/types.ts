@@ -117,7 +117,14 @@ export interface Triad {
   profileId: string;
   titleIds: string[];
   displayOrder: string[] | null;
-  ranking: number[] | null;
+  // Title ids in ranked order, best-liked first -- not indices into
+  // titleIds (ADR-15).
+  ranking: string[] | null;
+  shownAt: string | null;
+  answeredAt: string | null;
+  // Which trained model snapshot (if any) selected this triad; null under
+  // the random-v1 policy, which uses no model.
+  modelVersion: string | null;
   policyVersion: string | null;
   selectionPropensity: number | null;
   experimentId: string | null;

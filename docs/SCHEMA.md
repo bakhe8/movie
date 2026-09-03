@@ -2,7 +2,7 @@
 
 **Status**: Derived from blueprint `§13` (entities and event shapes), `§11` (rights registry), `§7.5`–`§7.6`, `§21`. Two layers, kept apart on purpose:
 
-- **§1 Current physical schema** — exactly what the six TypeORM migrations in `apps/backend/src/migrations/` create (verified 2026-09-03). This is the truth for anyone writing SQL today.
+- **§1 Current physical schema** — exactly what the seven TypeORM migrations in `apps/backend/src/migrations/` create (verified 2026-09-03). This is the truth for anyone writing SQL today.
 - **§2 Target schema** — the `BP §13.1` entity set expressed as tables, plus the migration plan from §1 to §2.
 
 Naming (ADR-16): tables `snake_case` plural; columns are TypeORM's default `camelCase` and therefore **quoted** in raw SQL (`"profileId"`); primary keys `uuid` via `uuid_generate_v4()`; timestamps `TIMESTAMP` (UTC by convention). One exception to plural naming exists today (`user_title_state`); it is renamed in step M1 below. Schema changes go through `npm run migration:generate` / `npm run db:migrate` only — `synchronize` is off in every environment.
@@ -11,7 +11,7 @@ Naming (ADR-16): tables `snake_case` plural; columns are TypeORM's default `came
 
 ## 1. Current physical schema (migrated)
 
-Migrations, in order: `1788410140231-InitialSchema`, `1788411790951-AddTriadEventFields`, `1788412500000-SplitImportedRatingFromInAppState`, `1788418200000-ArabicFirstProfileDefault`, `1788421102891-AddOneActiveTriadPerProfileConstraint`, `1788424108820-AddHeldOutTrainingMetrics`. Extension: `uuid-ossp`. The `ankane/pgvector` image is used but no column has the `vector` type yet.
+Migrations, in order: `1788410140231-InitialSchema`, `1788411790951-AddTriadEventFields`, `1788412500000-SplitImportedRatingFromInAppState`, `1788418200000-ArabicFirstProfileDefault`, `1788421102891-AddOneActiveTriadPerProfileConstraint`, `1788424108820-AddHeldOutTrainingMetrics`, `1788425067800-AddTriadEventCompleteness`. Extension: `uuid-ossp`. The `ankane/pgvector` image is used but no column has the `vector` type yet.
 
 ```sql
 users (
@@ -54,11 +54,15 @@ user_title_state (                                               -- exposure + l
 triads (                                                         -- one listwise event per row (BP §7.2, §13.2)
   id uuid PK, "profileId" uuid NOT NULL FK profiles ON DELETE CASCADE,
   "titleIds" uuid[] NOT NULL, "displayOrder" uuid[],             -- displayOrder shuffled independently of titleIds
-  ranking integer[],                                             -- indices into titleIds, best first; NULL while active
+  ranking uuid[],                                                -- titleIds, best first, not indices (ADR-15); NULL while active
+  "shownAt" timestamp,                                           -- set once, at creation
+  "answeredAt" timestamp,                                        -- set once, at POST .../rank; NULL for triads completed before this column existed (ADR-32)
+  "modelVersion" varchar,                                        -- which snapshot selected this triad; NULL under random-v1, which uses no model
+  "idempotencyKey" uuid UNIQUE,                                  -- optional; a repeated key for the same triad replays the prior result (BP §14)
   "policyVersion" varchar, "selectionPropensity" real, "experimentId" varchar,
-  "sessionId" varchar, metadata json,                            -- { replacements?, reasonForSelection?, modelVersion? } — replacements never written yet
+  "sessionId" varchar, metadata json,                            -- { replacements?, reasonForSelection? } — replacements never written yet
   status varchar NOT NULL DEFAULT 'active',                      -- 'active' | 'completed' | 'skipped'
-  "createdAt" timestamp,                                         -- doubles as shownAt today; no answeredAt column
+  "createdAt" timestamp,
   UNIQUE ("profileId") WHERE status = 'active'                   -- partial index; at most one active triad per profile (ADR-28)
 )
 
@@ -91,7 +95,7 @@ What is **not** in the database today (see §2 for the target): recommendations 
 | credits / people | `people`, `credits` | missing |
 | content_features | `content_features` (per-feature rows) + `titles.fingerprint` (published snapshot) | fingerprint JSON only, no provenance rows |
 | watch_events | `watch_events` | folded into `user_title_state.watchedAt` |
-| triad_events | `triads` | present, missing `answeredAt`, `modelVersion` column, idempotency key |
+| triad_events | `triads` | present; `shownAt`/`answeredAt`/`modelVersion`/`idempotencyKey` exist (ADR-32); missing `holdout`, `correctsTriadId` |
 | triad_replacements | `triad_replacements` | missing |
 | taste_profiles | `user_model_snapshots` (+ posterior, time layers, exceptions) | partial |
 | recommendations | `recommendations` | missing |
@@ -213,11 +217,9 @@ library_imports (
 )
 
 -- Triads -----------------------------------------------------------------------------
-ALTER TABLE triads ADD COLUMN "shownAt" timestamp,                              -- BP §13.2
-                   ADD COLUMN "answeredAt" timestamp,                           -- BP §13.2
-                   ADD COLUMN "modelVersion" varchar,                           -- BP §13.2 (out of metadata json)
-                   ADD COLUMN "idempotencyKey" uuid UNIQUE,                     -- BP §14
-                   ADD COLUMN "correctsTriadId" uuid FK triads(id),             -- append-only corrections (BP §13.2)
+-- shownAt/answeredAt/modelVersion/idempotencyKey already exist in §1
+-- (migration AddTriadEventCompleteness, ADR-32) -- not repeated in this ALTER.
+ALTER TABLE triads ADD COLUMN "correctsTriadId" uuid FK triads(id),             -- append-only corrections (BP §13.2)
                    ADD COLUMN "holdout" boolean NOT NULL DEFAULT false;         -- reserved for validation, never trained on (BP §8.3, §16.1)
 CREATE INDEX ON triads ("profileId", "createdAt");
 CREATE INDEX ON triads ("profileId", status);
@@ -297,7 +299,7 @@ Each step is one TypeORM migration; none require data backfill beyond defaults b
 
 | Step | Contents | Unblocks |
 |---|---|---|
-| M1 | rename `user_title_state` → `user_title_states`; `profiles.market/platforms/pausedAt`; `users.role`; `triads.shownAt/answeredAt/modelVersion/idempotencyKey/holdout/correctsTriadId` + indexes; `triad_replacements`; `user_title_states.triadEligible` | replacement endpoint, event completeness (`BP §13.2`, `§14`) |
+| M1 | rename `user_title_state` → `user_title_states`; `profiles.market/platforms/pausedAt`; `users.role`; `triads.holdout/correctsTriadId` + indexes (`shownAt`/`answeredAt`/`modelVersion`/`idempotencyKey` already exist, ADR-32); `triad_replacements`; `user_title_states.triadEligible` | replacement endpoint, event completeness (`BP §13.2`, `§14`) |
 | M2 | `consents`, `privacy_requests`, `audit_log` | onboarding consent, export/delete/reset |
 | M3 | `source_records`, `content_features`, `localized_titles`, `people`, `credits`, `title_editions` | rights registry, FTS search, provenance |
 | M4 | `model_versions`, `experiments`, `experiment_assignments`; `user_model_snapshots` additions (`posterior`, `recentWeights`, `exceptions`, `calibratedAgainst` — held-out metrics already exist, ADR-31) | reproducibility, calibration |
@@ -308,6 +310,7 @@ Each step is one TypeORM migration; none require data backfill beyond defaults b
 ---
 
 **Changelog**
+- 2.4 (2026-09-03): seventh migration `AddTriadEventCompleteness` (ADR-32, gap 3) applied -- `triads.shownAt`/`answeredAt`/`modelVersion`/`idempotencyKey` added, and `ranking` changed from `integer[]` (indices) to `uuid[]` (title ids, ADR-15) with a data backfill. §1, the entity map and the M1 target-plan ALTER updated to match.
 - 2.3 (2026-09-03): sixth migration `AddHeldOutTrainingMetrics` (ADR-31, gap 2) applied -- adds `heldOutTriadCount`/`heldOutNll`/`heldOutPairwiseAccuracy` to `user_model_snapshots`; §1 updated and the same three columns removed from the M4 target-plan ALTER (already done, not still pending).
 - 2.2 (2026-09-03): fifth migration `AddOneActiveTriadPerProfileConstraint` (ADR-28) applied -- a partial unique index, not a new table; §1's migration count and `triads` DDL updated to match, and the pre-existing "three migrations" text (already stale before this fix -- the list below it named four) corrected. Also noted that `user_model_snapshots.biasTerms` is always `{}` today, since `PlackettLuceRanker.fit()` never populates it (found in the same audit pass).
 - 2.1 (2026-09-03): fourth migration `ArabicFirstProfileDefault` applied; `profiles.preferredLanguage` now defaults to `'ar'` in §1, removed from the M1 plan.

@@ -1,5 +1,6 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { isUUID } from 'class-validator';
 import { Repository } from 'typeorm';
 import { Profile } from '../../entities/profile.entity';
 import { Title } from '../../entities/title.entity';
@@ -71,6 +72,7 @@ export class TriadsService {
           // random draw of 3 from the eligible pool.
           selectionPropensity: 1 / this.combinations(poolSize, 3),
           status: 'active',
+          shownAt: new Date(),
           metadata: { reasonForSelection: 'random-watched-unranked' },
         }),
       );
@@ -94,8 +96,27 @@ export class TriadsService {
     return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505';
   }
 
-  async rank(userId: string, triadId: string, rankTriadDto: RankTriadDto): Promise<Triad> {
-    this.assertValidRanking(rankTriadDto.ranking);
+  async rank(userId: string, triadId: string, rankTriadDto: RankTriadDto, idempotencyKey?: string): Promise<Triad> {
+    this.assertRankingShape(rankTriadDto.ranking);
+
+    if (idempotencyKey) {
+      if (!isUUID(idempotencyKey)) {
+        throw new BadRequestException('Idempotency-Key must be a UUID');
+      }
+      const replay = await this.triadsRepository.findOne({ where: { idempotencyKey } });
+      if (replay) {
+        // Same key, same triad: this is a retry of a request that already
+        // succeeded (network timeout, double-click) -- return that result
+        // instead of erroring on "already submitted" (blueprint §14, ADR-15).
+        // Same key, a *different* triad: the client reused a key it must
+        // not have -- a real conflict, not a replay.
+        if (replay.id !== triadId) {
+          throw new ConflictException('Idempotency-Key was already used for a different triad');
+        }
+        await this.assertProfileOwnership(userId, replay.profileId);
+        return replay;
+      }
+    }
 
     const triad = await this.triadsRepository.findOne({ where: { id: triadId } });
     if (!triad) {
@@ -107,10 +128,29 @@ export class TriadsService {
       throw new BadRequestException('This triad has already been submitted');
     }
 
+    this.assertRankingMatchesTriad(rankTriadDto.ranking, triad.titleIds);
+
     triad.ranking = rankTriadDto.ranking;
+    triad.answeredAt = new Date();
     triad.sessionId = rankTriadDto.sessionId ?? triad.sessionId;
+    triad.idempotencyKey = idempotencyKey ?? null;
     triad.status = 'completed';
-    return this.triadsRepository.save(triad);
+
+    try {
+      return await this.triadsRepository.save(triad);
+    } catch (error) {
+      if (!idempotencyKey || !this.isUniqueConstraintError(error)) {
+        throw error;
+      }
+      // Lost a race to a concurrent identical retry that saved first: the
+      // winner already persisted this key, so return its result instead of
+      // erroring or leaving this attempt's caller with a duplicate write.
+      const winner = await this.triadsRepository.findOne({ where: { idempotencyKey } });
+      if (!winner) {
+        throw error;
+      }
+      return winner;
+    }
   }
 
   async findCompleted(userId: string, profileId: string): Promise<Triad[]> {
@@ -143,9 +183,27 @@ export class TriadsService {
     return { titles, poolSize };
   }
 
-  private assertValidRanking(ranking: number[]): void {
-    if (ranking.length !== 3 || new Set(ranking).size !== 3 || !ranking.every((index) => index >= 0 && index <= 2)) {
-      throw new BadRequestException('Ranking must be a permutation of [0, 1, 2]');
+  // Shape only: no DB access, so this runs before the triad is even fetched.
+  private assertRankingShape(ranking: string[]): void {
+    if (
+      !Array.isArray(ranking) ||
+      ranking.length !== 3 ||
+      new Set(ranking).size !== 3 ||
+      !ranking.every((id) => isUUID(id))
+    ) {
+      throw new BadRequestException('Ranking must contain exactly 3 distinct title ids');
+    }
+  }
+
+  // Semantic: the submitted ranking must be exactly this triad's own three
+  // title ids (in some order), never a different set. Needs the fetched
+  // triad row, so it runs after assertRankingShape, not instead of it.
+  private assertRankingMatchesTriad(ranking: string[], titleIds: string[]): void {
+    const rankingSet = new Set(ranking);
+    const titleIdSet = new Set(titleIds);
+    const sameSet = rankingSet.size === titleIdSet.size && [...rankingSet].every((id) => titleIdSet.has(id));
+    if (!sameSet) {
+      throw new BadRequestException("Ranking must be exactly this triad's three title ids");
     }
   }
 

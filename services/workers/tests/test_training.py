@@ -1,7 +1,7 @@
 import numpy as np
 
 from src.ranker import PlackettLuceRanker
-from src.training import FINGERPRINT_DIMENSIONS, fingerprint_vector, train_and_evaluate
+from src.training import FINGERPRINT_DIMENSIONS, fingerprint_vector, ranking_to_indices, train_and_evaluate
 
 
 def make_triads(n: int):
@@ -61,6 +61,34 @@ class TestFingerprintVector:
         vector = fingerprint_vector(complete_fingerprint(themes=["loss"], confidence={}))
 
         assert len(vector) == len(FINGERPRINT_DIMENSIONS)
+
+
+class TestRankingToIndices:
+    # triads.ranking is title ids in ranked order (ADR-15); ranker.py's math
+    # still works with positions into triad_ids -- this is the DB-boundary
+    # conversion between the two.
+    def test_converts_title_ids_to_their_position_in_triad_ids(self):
+        triad_ids = ("A", "B", "C")
+
+        assert ranking_to_indices(triad_ids, ["C", "A", "B"]) == [2, 0, 1]
+
+    def test_identity_when_ranking_matches_triad_id_order(self):
+        triad_ids = ("A", "B", "C")
+
+        assert ranking_to_indices(triad_ids, ["A", "B", "C"]) == [0, 1, 2]
+
+    def test_stringifies_non_str_ids_before_looking_up_the_position(self):
+        # psycopg2's uuid[] typecaster (register_uuid()) returns uuid.UUID
+        # objects for the ranking column but plain str for triad_ids here
+        # (already cast at the call site in train_profile()) -- str() makes
+        # the lookup work regardless of which one arrives as which type.
+        class FakeUuid:
+            def __str__(self):
+                return "B"
+
+        triad_ids = ("A", "B", "C")
+
+        assert ranking_to_indices(triad_ids, ["C", FakeUuid(), "A"]) == [2, 1, 0]
 
 
 class TestTrainAndEvaluate:
