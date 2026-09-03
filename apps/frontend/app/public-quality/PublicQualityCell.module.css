@@ -1,0 +1,75 @@
+/* Public Quality cell: the same rhythm as WorkCard's cells (label in muted
+   12px, value in semibold text colour, sub-lines muted) so it sits beside
+   them unchanged; tokens only. */
+
+.cell {
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.label {
+  color: var(--muted);
+  font-size: var(--fs-12);
+  font-weight: var(--w-medium);
+  line-height: var(--lh-ui);
+}
+
+.body {
+  display: grid;
+  gap: var(--sp-2);
+  margin: 0;
+  font-size: var(--fs-14);
+  line-height: var(--lh-ui);
+}
+
+.source {
+  display: grid;
+  gap: var(--sp-1);
+}
+
+.line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-1) var(--sp-2);
+}
+
+.num {
+  color: var(--text);
+  font-size: var(--fs-20);
+  font-weight: var(--w-semibold);
+  line-height: 1;
+}
+
+.sub,
+.note {
+  color: var(--muted);
+  font-size: var(--fs-12);
+}
+
+/* The attribution line the source requires: small, muted, never hidden. */
+.attribution {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-12);
+  line-height: var(--lh-ui);
+  overflow-wrap: anywhere;
+}
+
+.hollow {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  padding: 2px var(--sp-2);
+  border: 1px dashed var(--line);
+  border-radius: var(--r-chip);
+  color: var(--muted);
+  font-size: var(--fs-13);
+  font-weight: var(--w-medium);
+  line-height: 1.6;
+}
+
+.badge {
+  justify-self: start;
+}
