@@ -152,6 +152,46 @@ class TestEnrichEntry:
         assert isinstance(result, dict) and result["pacing"] == 0.5
 
 
+class TestV2Extraction:
+    def test_needs_v2_only_where_a_v1_fingerprint_exists_and_no_current_block(self):
+        from src.enrich_catalog import needs_v2_extraction
+        from src.enrichment import V2_EXTRACTOR_VERSION
+
+        assert needs_v2_extraction(_entry()) is False  # no V1 fingerprint to attach to
+        v1 = {"extractorVersion": EXTRACTOR_VERSION, "pacing": 0.4}
+        assert needs_v2_extraction(_entry(fingerprint=v1)) is True
+        assert needs_v2_extraction(_entry(fingerprint={**v1, "v2": {"extractorVersion": V2_EXTRACTOR_VERSION}})) is False
+        assert needs_v2_extraction(_entry(fingerprint={**v1, "v2": {"extractorVersion": "older"}})) is True
+        assert needs_v2_extraction(_entry(fingerprint={**v1, "v2": {"extractorVersion": V2_EXTRACTOR_VERSION}}), force=True) is True
+
+    def test_v2_run_attaches_the_block_without_touching_v1(self, tmp_path, monkeypatch):
+        fixture = tmp_path / "catalog.demo.json"
+        v1 = {"extractorVersion": EXTRACTOR_VERSION, "pacing": 0.4, "confidence": {"pacing": 0.9}}
+        fixture.write_text(json.dumps([_entry(fingerprint=dict(v1)), _entry(internalId="DEMO0002")]), encoding="utf-8")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+        worker = MagicMock()
+        worker.generate_fingerprint_v2 = MagicMock(
+            return_value={"schemaVersion": "film-fingerprint-v2", "features": {"tone.irony": 0.8}, "extractorVersion": "enrichment-worker-v2-families-v1", "modelVersion": "m"}
+        )
+        monkeypatch.setattr("src.enrich_catalog.FilmEnrichmentWorker", lambda: worker)
+
+        assert main(["--fixture", str(fixture), "--v2", "--concurrency", "1"]) == 0
+
+        written = json.loads(fixture.read_text(encoding="utf-8"))
+        assert written[0]["fingerprint"]["pacing"] == 0.4 and written[0]["fingerprint"]["confidence"] == {"pacing": 0.9}
+        assert written[0]["fingerprint"]["v2"]["features"]["tone.irony"] == 0.8
+        assert written[1]["fingerprint"] is None  # no V1: skipped, never fabricated
+        call = worker.generate_fingerprint_v2.call_args
+        assert call.kwargs["title"] == "Cairo Station" and call.kwargs["plot_summary"] == "A newspaper seller..."
+        report = (tmp_path / "catalog.demo.enrichment-v2-report.md").read_text(encoding="utf-8")
+        assert "enrichment-worker-v2-families-v1 / m | 1" in report and "mode: v2" in report
+
+    def test_v2_and_placeholder_are_exclusive(self, tmp_path):
+        fixture = tmp_path / "catalog.demo.json"
+        fixture.write_text(json.dumps([_entry()]), encoding="utf-8")
+        assert main(["--fixture", str(fixture), "--v2", "--placeholder"]) == 2
+
+
 class TestMainPlaceholderRun:
     def test_fills_placeholders_writes_the_fixture_and_the_report(self, tmp_path):
         fixture = tmp_path / "catalog.demo.json"

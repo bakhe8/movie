@@ -162,6 +162,53 @@ class TestGenerateFingerprint:
             unconfigured_worker.generate_fingerprint("Arrival", "desc", "plot")
 
 
+class TestGenerateFingerprintV2:
+    def _output(self, themes):
+        from src.enrichment import FingerprintV2Confidence, FingerprintV2Features, FingerprintV2Output
+
+        values = {name: 0.6 for name in FingerprintV2Features.model_fields}
+        return FingerprintV2Output(
+            features=FingerprintV2Features(**values),
+            themes=themes,
+            confidence=FingerprintV2Confidence(**{name: 0.4 for name in values}),
+        )
+
+    def test_publishes_namespaced_keys_with_confidence_and_provenance(self, worker):
+        from src.enrichment import V2_EXTRACTOR_VERSION, V2_FEATURES
+
+        worker._client.messages.parse = MagicMock(return_value=_parsed_response(self._output(["identity", "memory"])))
+
+        block = worker.generate_fingerprint_v2("Arrival", "desc", "plot", additional_context="Year: 2016", source_ids=["sr-1"])
+
+        assert set(block["features"]) == set(V2_FEATURES) and len(V2_FEATURES) == 15
+        assert all(key.count(".") == 1 for key in block["features"])
+        assert block["features"]["tone.irony"] == 0.6 and block["confidence"]["tone.irony"] == 0.4
+        assert block["themes"] == ["identity", "memory"]
+        assert block["schemaVersion"] == "film-fingerprint-v2"
+        assert block["extractorVersion"] == V2_EXTRACTOR_VERSION
+        assert block["modelVersion"] == "claude-test-served" and block["generatedBy"] == "anthropic"
+        assert block["sourceIds"] == ["sr-1"] and block["licenseStatus"] == "unknown" and block["reviewStatus"] == "unreviewed"
+        call = worker._client.messages.parse.call_args
+        assert "Plot Summary: plot" in call.kwargs["messages"][0]["content"]
+        assert "compassionate" in call.kwargs["system"]
+
+    def test_drops_themes_outside_the_vocabulary_and_caps_at_three(self, worker):
+        worker._client.messages.parse = MagicMock(
+            return_value=_parsed_response(self._output(["love", "not-a-theme", "grief", "war", "faith"]))
+        )
+
+        block = worker.generate_fingerprint_v2("Arrival", "desc", "plot")
+
+        assert block["themes"] == ["love", "grief", "war"]
+
+    def test_raises_on_refusal(self, worker):
+        response = MagicMock(parsed_output=None, stop_reason="refusal", stop_details=MagicMock(explanation="nope", category="other"))
+        worker._client.messages.parse = MagicMock(return_value=response)
+
+        with pytest.raises(ValueError, match="nope"):
+            worker.generate_fingerprint_v2("Arrival", "desc", "plot")
+
+
 class TestGenerateRecommendationExplanation:
     def test_returns_the_model_generated_text(self, worker):
         worker._client.messages.create = MagicMock(return_value=_text_response("A slow, warm character study."))

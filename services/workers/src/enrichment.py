@@ -11,7 +11,7 @@ docs/DEMO_DATA_PLAN_2026-09-03.md §8 for the rules this pipeline must follow.
 
 import os
 from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import anthropic
 from pydantic import BaseModel, Field
@@ -128,6 +128,70 @@ class FingerprintOutput(BaseModel):
     confidence: FingerprintConfidence = Field(
         ..., description="How well the evidence supports each score, 0-1 per dimension; low where the plot text says little"
     )
+
+
+# ---------------------------------------------------------------------------
+# Version 2 families (FINGERPRINT_SCHEMA.md §3.1): fifteen namespaced features a
+# plot synopsis can support, plus a controlled theme vocabulary. Published as a
+# nested `v2` block inside the V1 fingerprint so V1 stays frozen.
+# ---------------------------------------------------------------------------
+
+V2_EXTRACTOR_VERSION = "enrichment-worker-v2-families-v1"
+V2_SCHEMA_VERSION = "film-fingerprint-v2"
+
+# Pydantic field name -> published namespaced key (dots are not valid identifiers).
+V2_FEATURE_KEYS: Dict[str, str] = {
+    "narrative_revelation": "narrative.revelation",
+    "narrative_perspective": "narrative.perspective",
+    "narrative_unreliability": "narrative.unreliability",
+    "tone_irony": "tone.irony",
+    "tone_unease": "tone.unease",
+    "tone_catharsis": "tone.catharsis",
+    "tone_compassion": "tone.compassion",
+    "characters_agency": "characters.agency",
+    "characters_moralAmbiguity": "characters.moralAmbiguity",
+    "characters_transformation": "characters.transformation",
+    "characters_relationshipCentrality": "characters.relationshipCentrality",
+    "ending_openness": "ending.openness",
+    "ending_twist": "ending.twist",
+    "ending_justice": "ending.justice",
+    "ending_optimism": "ending.optimism",
+}
+V2_FEATURES = tuple(V2_FEATURE_KEYS.values())
+
+THEME_VOCABULARY = (
+    "identity", "family", "memory", "power", "justice", "survival", "love", "grief", "faith", "class", "war",
+    "coming-of-age", "technology", "isolation", "freedom", "art", "crime", "migration", "friendship", "madness",
+    "nature", "duty", "revenge", "community",
+)
+
+
+class FingerprintV2Features(BaseModel):
+    narrative_revelation: float = Field(..., description="0 everything known early -> 1 built on withheld information revealed gradually")
+    narrative_perspective: float = Field(..., description="0 one viewpoint -> 1 many viewpoints")
+    narrative_unreliability: float = Field(..., description="0 reliable narration -> 1 contradictory or unreliable narration")
+    tone_irony: float = Field(..., description="0 earnest -> 1 ironic or satirical")
+    tone_unease: float = Field(..., description="0 comfort -> 1 sustained dread")
+    tone_catharsis: float = Field(..., description="0 emotion withheld -> 1 full emotional release")
+    tone_compassion: float = Field(..., description="0 cold or detached gaze on the characters -> 1 compassionate gaze")
+    characters_agency: float = Field(..., description="0 characters buffeted by events -> 1 characters driving events")
+    characters_moralAmbiguity: float = Field(..., description="0 clear-cut -> 1 morally ambiguous")
+    characters_transformation: float = Field(..., description="0 static -> 1 transformed by the end")
+    characters_relationshipCentrality: float = Field(..., description="0 an individual's story -> 1 relationships at the centre")
+    ending_openness: float = Field(..., description="0 closed ending -> 1 open ending")
+    ending_twist: float = Field(..., description="0 no reversal -> 1 major final reversal")
+    ending_justice: float = Field(..., description="0 dramatic justice absent -> 1 dramatic justice served")
+    ending_optimism: float = Field(..., description="0 bitter -> 1 hopeful")
+
+
+class FingerprintV2Confidence(FingerprintV2Features):
+    """Same fifteen fields, each the confidence 0-1 that the evidence supports the score."""
+
+
+class FingerprintV2Output(BaseModel):
+    features: FingerprintV2Features
+    themes: list[str] = Field(default_factory=list, description="Up to three tags from the given vocabulary, most central first")
+    confidence: FingerprintV2Confidence
 
 
 def _refusal_text(response) -> Optional[str]:
@@ -284,6 +348,77 @@ Provide scores for all dimensions. For dimensions you're less confident about, p
         parsed.reviewStatus = "unreviewed"
 
         return parsed
+
+    def generate_fingerprint_v2(
+        self,
+        title: str,
+        description: str,
+        plot_summary: str,
+        additional_context: Optional[str] = None,
+        source_ids: Optional[list[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Extract the V2 families (FINGERPRINT_SCHEMA.md §3.1) from the same
+        evidence as V1 and return the published `v2` block as a JSON-ready dict:
+        namespaced feature keys, themes restricted to the vocabulary, per-feature
+        confidence, provenance stamped here (never asked of the model).
+
+        Raises:
+            ValueError: on API failure, refusal, or a truncated/unparsed answer
+        """
+        model = self._resolve_model("ANTHROPIC_FINGERPRINT_MODEL")
+
+        context = f"Title: {title}\nDescription: {description}\nPlot Summary: {plot_summary}\n"
+        if additional_context:
+            context += f"Additional Context: {additional_context}\n"
+        vocabulary = ", ".join(THEME_VOCABULARY)
+        instructions = f"""You are an expert film analyst. Score narrative structure, tone, characters and ending on 0-1 scales strictly from the evidence given.
+Every scale is described in the schema. Distinguish carefully: irony (a satirical or detached stance) from mere darkness; sustained dread from sadness; a compassionate gaze on characters from a cold or contemptuous one, whatever the subject matter. Ending features describe how the story resolves and are used internally only.
+Themes: choose up to three from this vocabulary only, most central first: {vocabulary}.
+Give a confidence for every feature: high only where the plot text clearly supports the score, low where you are inferring."""
+        input_text = f"""Analyze this film and provide the version-2 fingerprint:
+
+{context}
+
+Score all fifteen features and give a confidence for each."""
+
+        try:
+            response = self._get_client().messages.parse(
+                model=model,
+                max_tokens=FINGERPRINT_MAX_TOKENS,
+                system=instructions,
+                messages=[{"role": "user", "content": input_text}],
+                output_format=FingerprintV2Output,
+            )
+        except anthropic.APIError as error:
+            raise ValueError(f"Anthropic V2 fingerprint request failed: {error}") from error
+
+        output = getattr(response, "parsed_output", None)
+        if not isinstance(output, FingerprintV2Output):
+            refusal = _refusal_text(response)
+            if refusal:
+                raise ValueError(f"The model refused to fingerprint this film (V2): {refusal}")
+            stop_reason = getattr(response, "stop_reason", None)
+            if stop_reason == "max_tokens":
+                raise ValueError("The V2 fingerprint response hit the token ceiling before a complete JSON object")
+            raise ValueError(f"The model did not return a parsed V2 fingerprint (stop_reason={stop_reason or 'unknown'})")
+
+        features = {V2_FEATURE_KEYS[name]: float(value) for name, value in output.features.model_dump().items()}
+        confidence = {V2_FEATURE_KEYS[name]: float(value) for name, value in output.confidence.model_dump().items()}
+        themes = [theme for theme in output.themes if theme in THEME_VOCABULARY][:3]
+        return {
+            "schemaVersion": V2_SCHEMA_VERSION,
+            "features": features,
+            "themes": themes,
+            "confidence": confidence,
+            "generatedBy": "anthropic",
+            "generatedAt": datetime.now(timezone.utc).isoformat(),
+            "modelVersion": _served_model(response, model),
+            "extractorVersion": V2_EXTRACTOR_VERSION,
+            "sourceIds": source_ids,
+            "licenseStatus": "unknown",
+            "reviewStatus": "unreviewed",
+        }
 
     def generate_recommendation_explanation(
         self,

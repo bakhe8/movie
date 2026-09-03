@@ -75,6 +75,46 @@ The model reads the 13 numeric keys in the `FINGERPRINT_DIMENSIONS` order; a sto
 
 ## 3. Version 2 — target shape (`BP §6.1`, `§13.3`)
 
+### 3.1 First V2 family pass — specified and extracted 2026-09-04
+
+Why now: the first non-synthetic ranker ([DEMO_DATA_PLAN_2026-09-03.md](DEMO_DATA_PLAN_2026-09-03.md) §7.1) disagreed with the V1 model exactly where V1 has no words — a cynical film scored like a contemplative one because both are "ambiguous and dark", and a warm humanist film sank because V1 knows only `warmth`. The families below are the ones a plot synopsis can support; Style (camera, editing) needs visual or descriptive evidence we do not have, People is a separate block fed by credits (ADR-65), and Cultural context is already structured (`originalLanguage`, country).
+
+Fifteen features, all 0–1, namespaced `family.feature`, extracted by `FilmEnrichmentWorker.generate_fingerprint_v2()` from the same evidence as V1 (lead + plot section), confidence per feature required by the output schema:
+
+| Key | 0 → 1 | `BP §6.1` family | What it is meant to separate |
+|---|---|---|---|
+| `narrative.revelation` | everything known early → built on withheld information revealed gradually | Narrative | mystery structure from mere ambiguity |
+| `narrative.perspective` | one viewpoint → many viewpoints | Narrative | Rashomon-style multiplicity |
+| `narrative.unreliability` | reliable narration → contradictory or unreliable | Narrative | the narrator as a device |
+| `tone.irony` | earnest → ironic or satirical | Tone & emotion | the cynical from the contemplative |
+| `tone.unease` | comfort → sustained dread | Tone & emotion | dread from mere darkness |
+| `tone.catharsis` | emotion withheld → full release | Tone & emotion | the emotional arc's amount of release |
+| `tone.compassion` | cold or detached gaze on the characters → compassionate gaze | Tone & emotion | humanism from misanthropy at equal darkness |
+| `characters.agency` | buffeted by events → driving events | Characters | |
+| `characters.moralAmbiguity` | clear-cut → ambiguous | Characters | |
+| `characters.transformation` | static → transformed | Characters | |
+| `characters.relationshipCentrality` | an individual's story → relationships at the centre | Characters | |
+| `ending.openness` | closed → open | Ending | internal use and spoiler-free explanations only |
+| `ending.twist` | none → major reversal | Ending | idem |
+| `ending.justice` | dramatic justice absent → served | Ending | idem |
+| `ending.optimism` | bitter → hopeful | Ending | idem |
+
+Plus `theme.tags`: up to three tags from a controlled vocabulary (`identity, family, memory, power, justice, survival, love, grief, faith, class, war, coming-of-age, technology, isolation, freedom, art, crime, migration, friendship, madness, nature, duty, revenge, community`) — categorical, never in the dense vector, never used to infer anything about a user (`BP §6.1` Theme note).
+
+Storage in this pass: the V2 block is published **inside** `titles.fingerprint` as a nested snapshot, so V1 stays frozen and every V1 reader is untouched:
+
+```ts
+fingerprint.v2 = {
+  schemaVersion: 'film-fingerprint-v2', features: { 'tone.irony': 0.8, … 15 keys }, themes: ['identity', 'memory'],
+  confidence: { 'tone.irony': 0.7, … }, generatedBy, generatedAt, modelVersion, extractorVersion: 'enrichment-worker-v2-families-v1',
+  sourceIds, licenseStatus: 'unknown', reviewStatus: 'unreviewed'
+}
+```
+
+The per-feature `content_features` rows (provenance, `supersededBy`) are the next step once the block is wired into the model; the snapshot is what the model reads, exactly as §3's rule says. Wiring — `FINGERPRINT_DIMENSIONS` in the trainer and `RecommendationsService` growing from 13 to 28 keys, snapshots carrying `fingerprintSchemaVersion` — is a model-service change and is proposed to its owner with the evidence from the offline evaluation (`services/workers/src/fingerprint_v2_eval.py`: the same Plackett–Luce fit on V1 vs V1+V2 vs V2-only features, same temporal hold-out as the trainer). The demo catalog is enriched with the block by `python -m src.enrich_catalog --v2`.
+
+### 3.2 Target shape
+
 - Namespaced keys `family.feature` (e.g. `narrative.ambiguity`, `ending.openness`), stored one row per `(title, featureKey, extractorVersion)` in `content_features` with `value`, optional `distribution` for multi-valued/conditional features, `uncertainty`, `sourceIds`, `licenseStatus`, `reviewStatus`, `validFrom`.
 - `titles.fingerprint` remains the published, immutable snapshot the model reads; publishing a new snapshot bumps `extractorVersion` and links the old rows via `supersededBy` (`BP §11.3`: no silent overwrite).
 - People and cultural-context features are separate feature blocks with their own shrinkage in the model (`BP §7.1`, `§10.2`), never part of the dense content vector.

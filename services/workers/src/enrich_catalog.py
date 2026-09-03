@@ -41,7 +41,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from dotenv import load_dotenv
 
-from .enrichment import EXTRACTOR_VERSION, FilmEnrichmentWorker
+from .enrichment import EXTRACTOR_VERSION, V2_EXTRACTOR_VERSION, FilmEnrichmentWorker
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_FIXTURE = REPO_ROOT / "apps" / "backend" / "src" / "scripts" / "fixtures" / "catalog.demo.json"
@@ -154,6 +154,33 @@ def needs_extraction(entry: Dict[str, Any], force: bool = False, extractor_versi
         return True
     version = fingerprint.get("extractorVersion")
     return version not in (extractor_version, f"{extractor_version}{PARTIAL_SUFFIX}")
+
+
+def needs_v2_extraction(entry: Dict[str, Any], force: bool = False, extractor_version: str = V2_EXTRACTOR_VERSION) -> bool:
+    """
+    The V2 block hangs off a V1 fingerprint (FINGERPRINT_SCHEMA.md §3.1); a
+    title without one is skipped, and one already carrying the current V2
+    extractor version is done unless forced.
+    """
+    fingerprint = entry.get("fingerprint")
+    if not isinstance(fingerprint, dict):
+        return False
+    if force:
+        return True
+    block = fingerprint.get("v2")
+    return not (isinstance(block, dict) and block.get("extractorVersion") == extractor_version)
+
+
+def enrich_entry_v2(worker: FilmEnrichmentWorker, entry: Dict[str, Any]) -> Dict[str, Any]:
+    """Run the V2 extraction on one entry and return the `v2` block."""
+    evidence = build_evidence(entry)
+    return worker.generate_fingerprint_v2(
+        title=evidence["title"],
+        description=evidence["description"],
+        plot_summary=evidence["plot_summary"],
+        additional_context=evidence["additional_context"],
+        source_ids=evidence["source_ids"],
+    )
 
 
 def placeholder_fingerprint(entry: Dict[str, Any], seed: int = 20260903) -> Dict[str, Any]:
@@ -274,10 +301,15 @@ def build_report(
     done = [entry for entry in entries if isinstance(entry.get("fingerprint"), dict)]
     versions: Dict[str, int] = {}
     models: Dict[str, int] = {}
+    v2_versions: Dict[str, int] = {}
     for entry in done:
         fingerprint = entry["fingerprint"]
         versions[str(fingerprint.get("extractorVersion"))] = versions.get(str(fingerprint.get("extractorVersion")), 0) + 1
         models[str(fingerprint.get("modelVersion"))] = models.get(str(fingerprint.get("modelVersion")), 0) + 1
+        block = fingerprint.get("v2")
+        if isinstance(block, dict):
+            key = f"{block.get('extractorVersion')} / {block.get('modelVersion')}"
+            v2_versions[key] = v2_versions.get(key, 0) + 1
     failures = [(internal_id, detail) for internal_id, (status, detail) in results.items() if status == "failed"]
     refusals = [(internal_id, detail) for internal_id, detail in failures if "refused" in detail.lower()]
     confidences = [
@@ -309,6 +341,10 @@ def build_report(
         "",
         f"Mean per-dimension confidence reported by the extractor: {mean_confidence:.2f}" if mean_confidence is not None else "No confidence values yet.",
         "",
+        "| V2 block (extractorVersion / modelVersion) | Titles |",
+        "|---|---|",
+        *([f"| {key} | {count} |" for key, count in sorted(v2_versions.items())] or ["| none | 0 |"]),
+        "",
         f"## Failures ({len(failures)})",
         "",
         "None." if not failures else "\n".join(["| Id | Detail |", "|---|---|", *[f"| {internal_id} | {detail.replace('|', '/')} |" for internal_id, detail in failures]]),
@@ -338,6 +374,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--force", action="store_true", help="re-extract even when the fingerprint is current")
     parser.add_argument("--concurrency", type=int, default=4)
     parser.add_argument("--placeholder", action="store_true", help="fill deterministic placeholders instead of calling the model")
+    parser.add_argument("--v2", action="store_true", help="extract the V2 families into fingerprint.v2 (V1 must already exist)")
     parser.add_argument("--partial-ids", default=",".join(DEFAULT_PARTIAL_IDS), help="comma-separated ids to leave partial ('' for none)")
     parser.add_argument("--write-db", action="store_true", help="also UPDATE titles.fingerprint for seeded rows (DATABASE_URL)")
     parser.add_argument("--dry-run", action="store_true", help="print the evidence that would be sent, change nothing")
@@ -353,11 +390,16 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     entries = load_fixture(args.fixture)
     selected = select_entries(entries, args.only, None)
-    needing = [entry for entry in selected if needs_extraction(entry, args.force)]
+    if args.v2 and args.placeholder:
+        print("--v2 has no placeholder mode: the families exist only as extractions", file=sys.stderr)
+        return 2
+    needing = [
+        entry for entry in selected if (needs_v2_extraction(entry, args.force) if args.v2 else needs_extraction(entry, args.force))
+    ]
     candidates = needing[: args.limit] if args.limit else needing
     candidate_ids = {entry["internalId"] for entry in candidates}
     partial_ids = {value.strip() for value in args.partial_ids.split(",") if value.strip()}
-    mode = "placeholder" if args.placeholder else "anthropic"
+    mode = "v2" if args.v2 else "placeholder" if args.placeholder else "anthropic"
     print(
         f"enrich: {len(entries)} entries in {args.fixture.name}; {len(needing)} need extraction, "
         f"{len(candidates)} in this run ({mode})"
@@ -386,7 +428,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         nonlocal completed_since_write
         with lock:
             if fingerprint is not None:
-                entry["fingerprint"] = make_partial(fingerprint) if entry["internalId"] in partial_ids else fingerprint
+                if args.v2:
+                    # The V2 block hangs off the existing V1 fingerprint; V1 keys are untouched.
+                    entry["fingerprint"]["v2"] = fingerprint
+                else:
+                    entry["fingerprint"] = make_partial(fingerprint) if entry["internalId"] in partial_ids else fingerprint
                 results[entry["internalId"]] = ("done", "")
                 print(f"  ✓ {entry['internalId']} {entry.get('titleEn')}")
             else:
@@ -405,9 +451,11 @@ def main(argv: Optional[List[str]] = None) -> int:
             print("  note: ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN not set; relying on an `ant auth login` profile if one exists")
         worker = FilmEnrichmentWorker()
 
+        extract = enrich_entry_v2 if args.v2 else enrich_entry
+
         def run(entry: Dict[str, Any]) -> None:
             try:
-                finish(entry, enrich_entry(worker, entry), None)
+                finish(entry, extract(worker, entry), None)
             except Exception as error:  # noqa: BLE001 -- one bad title must not kill the pool; it is reported
                 finish(entry, None, f"{type(error).__name__}: {error}")
 
@@ -417,7 +465,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     write_fixture(args.fixture, entries)
     elapsed = time.monotonic() - started
-    report_path = args.fixture.with_name(args.fixture.stem + ".enrichment-report.md")
+    report_path = args.fixture.with_name(args.fixture.stem + (".enrichment-v2-report.md" if args.v2 else ".enrichment-report.md"))
     report_path.write_text(build_report(args.fixture, entries, results, mode, elapsed), encoding="utf-8")
 
     if args.write_db:
