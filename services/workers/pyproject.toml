@@ -7,27 +7,36 @@ name = "movie-workers"
 version = "0.1.0"
 description = "Python workers for ranking engine and API enrichment"
 authors = ["Movie Team"]
+# This is a script directory (src/ imported via pytest's own pythonpath
+# config, or via `python -m src.training` picking up the cwd), not a
+# distributable package -- there is no packages= layout for Poetry's
+# build backend to find. Without this, `poetry install` fails outright
+# trying to install "movie-workers" itself (M7).
+package-mode = false
 
 [tool.poetry.dependencies]
+# ^1.26.0 (numpy) had no wheel for Python 3.14 -- poetry install could not
+# resolve on the platform QUICKSTART.md and this file both claim to support
+# (M7). These floors match what actually runs here today; sqlalchemy and
+# redis are gone -- neither is imported anywhere in src/ (M8's dead-package
+# finding covers this file too).
 python = "^3.11"
-numpy = "^1.26.0"
-scipy = "^1.11.0"
+numpy = "^2.1.0"
+scipy = "^1.13.0"
 pydantic = "^2.5.0"
 psycopg2-binary = "^2.9.9"
-sqlalchemy = "^2.0.0"
-redis = "^5.0.1"
 openai = "^1.6.0"
 python-dotenv = "^1.0.0"
 
-[tool.poetry.scripts]
-train-profile = "src.training:main"
-
 [tool.poetry.group.dev.dependencies]
-pytest = "^7.4.0"
-pytest-cov = "^4.1.0"
-black = "^23.12.0"
-isort = "^5.13.0"
-ruff = "^0.1.0"
+# ^7.4.0 (pytest) and ^0.1.0 (ruff) both excluded the versions actually
+# installed and passing here (9.x, 0.14.x) under Poetry's caret rules (M7).
+# black/isort/pytest-cov dropped: none installed, none invoked by any
+# script (`black`/`isort` are M7's other two dead dev deps; pytest-cov was
+# never named by the audit but is exactly the same shape of untruth --
+# declared, uninstalled, and no `--cov` flag anywhere).
+pytest = "^9.0.0"
+ruff = "^0.14.0"
 
 [tool.pytest.ini_options]
 # So `import src...` resolves regardless of how/where pytest is invoked from.

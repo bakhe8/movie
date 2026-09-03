@@ -179,7 +179,7 @@ Target: a FastAPI service in `services/workers` exposing
 | `GET /taste-profile/{profileId}` | tendencies, unknowns, exceptions with evidence | by `GET /api/v1/taste-profile` |
 | `POST /shared-space/retrain` | §11 batch job | scheduler / admin |
 
-Today the only entry point is the CLI `train-profile <profileId>` (Poetry script) which reads and writes Postgres directly; the backend never invokes Python. A queue (Redis/BullMQ) is added only when `BP §12.3` triggers fire.
+Today the only entry point is the CLI `python -m src.training <profileId>` (or `poetry run python -m src.training <profileId>`) which reads and writes Postgres directly; the backend never invokes Python. A queue is added only when `BP §12.3` triggers fire — not Redis/BullMQ specifically, since neither is a dependency of this codebase (M8).
 
 ## 16. Reference implementation notes
 

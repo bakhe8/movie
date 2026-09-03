@@ -94,7 +94,7 @@ npm run dev
 cd services/workers && python -m src.training <profile-uuid>
 ```
 
-(with Poetry: `poetry run train-profile <profile-uuid>`)
+(with Poetry: `poetry run python -m src.training <profile-uuid>`)
 
 5. **قائمتي / My list** now shows a recommendation list computed from the snapshot. Until a snapshot exists the API answers 409 and the UI shows "not ready yet".
 
