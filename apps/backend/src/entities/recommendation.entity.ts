@@ -2,10 +2,11 @@ import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, Primary
 import { Profile } from './profile.entity';
 import { Title } from './title.entity';
 
-// One row per recommendation actually shown (BP §13.1, §14, §14.1). Without
-// this, the post-watch loop (BP §4.5) has nothing to close and BP §16 has
-// nothing to read -- blueprint gap 4. Schema only for now: nothing writes a
-// row here yet, RecommendationsService still computes scores per-request.
+// One row per recommendation actually shown (BP §13.1, §14, §14.1). Written
+// since 2026-09-03 by RecommendationsService.findForProfile() (ADR-58) and
+// read back by WatchEventsService to close the post-watch loop (BP §4.5,
+// ADR-66): a watch event links to the most recent recommendation for the
+// same (profile, title), if any.
 export type RecommendationTrack = 'safe' | 'discovery' | 'outside_usual';
 
 @Entity('recommendations')

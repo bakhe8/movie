@@ -4,8 +4,9 @@ import { Recommendation } from './recommendation.entity';
 import { Title } from './title.entity';
 import { TitleEdition } from './title-edition.entity';
 
-// BP §6.2, §13.1. Schema only: watches are still folded into
-// user_title_states.watchedAt only -- nothing writes a row here yet.
+// BP §6.2, §13.1. Written since 2026-09-03 by WatchEventsService
+// (POST /profiles/:profileId/watch-events, ADR-66) alongside
+// user_title_states.watchedAt, not instead of it.
 export type WatchEventSource = 'in_app' | 'import' | 'manual';
 
 @Entity('watch_events')

@@ -10,5 +10,9 @@ import { UserTitleStateService } from './user-title-state.service';
   imports: [TypeOrmModule.forFeature([Profile, Title, UserTitleState])],
   controllers: [UserTitleStateController],
   providers: [UserTitleStateService],
+  // WatchEventsService reuses upsert() rather than duplicating its PATCH
+  // semantics (M1) for marking a title watched (BP §4.5's "returns to
+  // appropriate triads" step).
+  exports: [UserTitleStateService],
 })
 export class UserTitleStateModule {}
