@@ -89,14 +89,43 @@ class TestGenerateFingerprint:
 
 class TestGenerateRecommendationExplanation:
     def test_returns_the_model_generated_text(self, worker):
-        response = MagicMock(output_text="Because it's moody and slow.")
+        response = MagicMock(output_text="A slow, warm character study.")
         worker._client.responses.create = MagicMock(return_value=response)
 
-        text = worker.generate_recommendation_explanation(
-            {"pacing": 0.8}, "Arrival", {"pacing": 0.9, "warmth": 0.2}, ["Interstellar"]
+        text = worker.generate_recommendation_explanation("Arrival", {"pacing": 0.1, "warmth": 0.9})
+
+        assert text == "A slow, warm character study."
+
+    # M12: user_preferences/similar_titles were removed from the signature
+    # entirely, not merely left unused, so a caller cannot pass user data
+    # back in by mistake -- the old calling convention must now fail loudly.
+    def test_no_longer_accepts_the_old_user_data_arguments(self, worker):
+        with pytest.raises(TypeError):
+            worker.generate_recommendation_explanation(
+                {"pacing": 0.8}, "Arrival", {"pacing": 0.9, "warmth": 0.2}, ["Interstellar"]
+            )
+
+    def test_prompt_is_built_only_from_film_evidence(self, worker):
+        response = MagicMock(output_text="ok")
+        worker._client.responses.create = MagicMock(return_value=response)
+
+        worker.generate_recommendation_explanation(
+            "Arrival",
+            {"pacing": 0.1, "warmth": 0.9, "ambiguity": 0.05, "plotComplexity": 0.95, "darkness": 0.5},
+            themes=["identity", "isolation"],
         )
 
-        assert text == "Because it's moody and slow."
+        call = worker._client.responses.create.call_args
+        prompt = call.kwargs["input"]
+        assert "Arrival" in prompt
+        assert "pacing" in prompt and "warmth" in prompt and "ambiguity" in prompt and "plotComplexity" in prompt
+        assert "identity" in prompt and "isolation" in prompt
+        # darkness (0.5) is the neutral midpoint -- the least informative
+        # value about the film, and the 5th of 5 by distance from it -- so
+        # it's correctly the one dropped by the top-4 cutoff.
+        assert "darkness" not in prompt
+        instructions = call.kwargs["instructions"].lower()
+        assert "viewer" in instructions and "preference" in instructions
 
     def test_wraps_openai_api_errors_in_a_value_error(self, worker):
         worker._client.responses.create = MagicMock(
@@ -104,4 +133,4 @@ class TestGenerateRecommendationExplanation:
         )
 
         with pytest.raises(ValueError):
-            worker.generate_recommendation_explanation({}, "Arrival", {}, [])
+            worker.generate_recommendation_explanation("Arrival", {})

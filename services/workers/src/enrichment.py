@@ -195,51 +195,62 @@ Provide scores for all dimensions. For dimensions you're less confident about, p
 
     def generate_recommendation_explanation(
         self,
-        user_preferences: Dict[str, float],
-        recommended_title: str,
+        title: str,
         fingerprint: Dict[str, float],
-        similar_titles: list[str],
+        themes: Optional[list[str]] = None,
     ) -> str:
         """
-        Generate a natural language explanation for a recommendation.
+        Generate a spoiler-free, evidence-only description of a film's tone
+        and character from its own fingerprint.
+
+        M12: this used to also take the user's learned preference weights
+        and their previously-watched titles, and put both into the prompt --
+        exactly what ADR-23 and PRIVACY.md §6.1 forbid ("prompts contain
+        licensed evidence and schema only -- never user ids, rankings,
+        preferences or account data") and BP §15.2 rules out ("لا يستنتج
+        سمات حساسة عن المستخدم من سجل المشاهدة"). Those parameters are
+        removed entirely, not merely unused, so a future caller cannot pass
+        user data back in by mistake. What personalizes a recommendation
+        (which dimensions drove the score, and in which direction) already
+        exists as RecommendationsService's own RecommendationReason -- computed
+        and rendered entirely on the backend/client, never sent to OpenAI or
+        any other third party. This function only ever describes the film
+        itself, for any viewer, from evidence the caller supplies.
 
         Args:
-            user_preferences: User's learned preference weights
-            recommended_title: Title being recommended
-            fingerprint: Film's fingerprint
-            similar_titles: Similar films the user liked
+            title: Film title
+            fingerprint: Film's fingerprint (dimension -> 0-1 score)
+            themes: Primary themes identified for the film, if any
 
         Returns:
-            Natural language explanation
+            Natural language, spoiler-free description of the film's traits
 
         Raises:
-            ValueError: If the API call fails or returns no explanation text
+            ValueError: If the API call fails or returns no text
         """
         model = self._resolve_model("OPENAI_EXPLANATION_MODEL")
 
-        # Compute contribution of each dimension
         dimensions = {k: v for k, v in fingerprint.items() if isinstance(v, (int, float))}
-        contributions = {
-            dim: user_preferences.get(dim, 0) * dimensions.get(dim, 0)
-            for dim in dimensions
-        }
-
-        # Get top contributing dimensions
-        top_dims = sorted(contributions.items(), key=lambda x: abs(x[1]), reverse=True)[:3]
-        dim_text = ", ".join([f"{dim}" for dim, _ in top_dims[:2]])
-
-        similar_text = ""
-        if similar_titles:
-            similar_text = f" Your previous favorites like {', '.join(similar_titles[:2])} suggest you'd enjoy this."
+        # The film's own most distinctive traits -- farthest from the 0.5
+        # midpoint -- are the most informative evidence about what it is
+        # actually like, independent of any specific viewer.
+        notable = sorted(dimensions.items(), key=lambda item: abs(item[1] - 0.5), reverse=True)[:4]
+        evidence_lines = "\n".join(f"- {dim}: {value:.2f}" for dim, value in notable)
+        themes_line = f"\nThemes: {', '.join(themes)}" if themes else ""
 
         instructions = (
-            "You are a friendly film recommendation assistant. Explain why a film was "
-            "recommended in 1-2 sentences, focusing on the key dimensions and relating it "
-            "to the user's preferences."
+            "You are a film analyst. Using only the evidence given -- never "
+            "your own knowledge of this film -- write a spoiler-free, 1-2 "
+            "sentence description of its tone and character. Do not mention "
+            "any viewer, preference, or recommendation; describe only the "
+            "film itself."
         )
-        input_text = f"""Explain why "{recommended_title}" is recommended to someone who prefers films with high {dim_text}.{similar_text}
+        input_text = f"""Film: {title}
 
-Keep it concise and friendly."""
+Evidence (0-1 scale):
+{evidence_lines}{themes_line}
+
+Describe the film's tone and character from this evidence alone."""
 
         try:
             response = self._get_client().responses.create(
@@ -247,6 +258,8 @@ Keep it concise and friendly."""
                 instructions=instructions,
                 input=input_text,
                 max_output_tokens=150,
+                # Never retain film-evidence prompts/outputs on OpenAI's side
+                # (blueprint §15.2, ADR-6/23; no user data is sent here either way).
                 store=False,
             )
         except openai.OpenAIError as error:
