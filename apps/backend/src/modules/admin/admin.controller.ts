@@ -3,6 +3,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { AdminGuard } from '../auth/admin.guard';
 import type { SafeUser } from '../auth/auth.service';
 import { Actor, AdminCatalogService } from './admin-catalog.service';
+import { AdminMetricsService } from './admin-metrics.service';
 import { AdminModelsService } from './admin-models.service';
 import { AdminOpsService } from './admin-ops.service';
 import {
@@ -14,6 +15,7 @@ import {
   ListPrivacyRequestsQueryDto,
   ListTitlesQueryDto,
   ListUsersQueryDto,
+  MetricsQueryDto,
   ReviewContentFeatureDto,
   SampleContentFeaturesQueryDto,
   UpdateModelVersionDto,
@@ -39,6 +41,7 @@ export class AdminController {
     private readonly catalog: AdminCatalogService,
     private readonly models: AdminModelsService,
     private readonly ops: AdminOpsService,
+    private readonly metrics: AdminMetricsService,
   ) {}
 
   // ---- catalog and rights ------------------------------------------------
@@ -154,5 +157,14 @@ export class AdminController {
   @Get('audit-log')
   listAuditLog(@Query() query: ListAuditLogQueryDto) {
     return this.ops.listAuditLog(query);
+  }
+
+  // ---- metrics board (BP §18.1) -----------------------------------------
+
+  @Get('metrics')
+  metricsReport(@Query() query: MetricsQueryDto) {
+    const to = query.to ? new Date(query.to) : new Date();
+    const from = query.from ? new Date(query.from) : new Date(to.getTime() - query.days * 86_400_000);
+    return this.metrics.report({ from, to, excludeDomains: query.excludeDomains });
   }
 }

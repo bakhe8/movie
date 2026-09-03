@@ -15,13 +15,14 @@ import { User } from '../../entities/user.entity';
 import { UserModelSnapshot } from '../../entities/user-model-snapshot.entity';
 import { AuditModule } from '../audit/audit.module';
 import { AdminCatalogService } from './admin-catalog.service';
+import { AdminMetricsService } from './admin-metrics.service';
 import { AdminModelsService } from './admin-models.service';
 import { AdminOpsService } from './admin-ops.service';
 import { AdminController } from './admin.controller';
 
 // Internal board (BP §5.1): catalog and rights, fingerprint review,
-// models and experiments, accounts, privacy queue, audit log. Backend
-// half only (ALPHA_PLAN phase 4, item 4.1); the screens are 4.2.
+// models and experiments, accounts, privacy queue, audit log, and the
+// metrics board (4.3). Backend half only; the screens are 4.2.
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -42,6 +43,6 @@ import { AdminController } from './admin.controller';
     AuditModule,
   ],
   controllers: [AdminController],
-  providers: [AdminCatalogService, AdminModelsService, AdminOpsService],
+  providers: [AdminCatalogService, AdminModelsService, AdminOpsService, AdminMetricsService],
 })
 export class AdminModule {}

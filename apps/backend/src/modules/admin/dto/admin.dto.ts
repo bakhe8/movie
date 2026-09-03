@@ -1,8 +1,9 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsISO8601,
   IsIn,
   IsInt,
   IsNumber,
@@ -350,4 +351,39 @@ export class LatestTriadsQueryDto {
   @Min(1)
   @Max(200)
   limit: number = 50;
+}
+
+// The metrics window. `days` back from now is the common case; explicit
+// `from`/`to` (ISO-8601) override it. `excludeDomains` keeps demo and judge
+// accounts out of the numbers.
+export class MetricsQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(3660)
+  days: number = 30;
+
+  @IsOptional()
+  @IsISO8601()
+  from?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  to?: string;
+
+  @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string'
+      ? value
+          .split(',')
+          .map((d: string) => d.trim().toLowerCase())
+          .filter(Boolean)
+      : value,
+  )
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  @MaxLength(100, { each: true })
+  excludeDomains: string[] = [];
 }
