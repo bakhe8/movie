@@ -80,9 +80,16 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
           setProfile(resolved);
         }
       })
-      .catch(() => {
-        if (!cancelled) {
-          // Stored token no longer valid server-side; drop the session.
+      .catch((err) => {
+        if (cancelled) return;
+        // M4: only a rejected token (401) means the stored session is
+        // actually invalid. A network error, a 500, or a 429 is transient --
+        // treating those the same way logged the user out on a blip with no
+        // way back in except re-entering credentials. Leave auth/profile as
+        // they are so the effect can retry on the next render triggered by
+        // `auth` (e.g. a manual reload); a still-null `profile` is what the
+        // caller already renders as "setting up your profile" (page.tsx).
+        if (err instanceof ApiError && err.status === 401) {
           window.localStorage.removeItem(STORAGE_KEY);
           setAuthToken(null);
           setAuth(null);
