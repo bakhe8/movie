@@ -1,0 +1,137 @@
+/* Terms / Privacy reading page, on app/styles/tokens.css only: a measure of
+   about 65 characters, the display face for the title, no cards. */
+
+.page {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.top {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-height: 56px;
+  padding: var(--sp-2) max(var(--sp-4), calc((100vw - 720px) / 2));
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--text);
+  font-size: var(--fs-16);
+  font-weight: var(--w-bold);
+  text-decoration: none;
+}
+
+.mark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-button);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: var(--font-display);
+  font-size: var(--fs-14);
+  font-weight: var(--w-bold);
+}
+
+.topLinks {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-button);
+  color: var(--text);
+  font-size: var(--fs-13);
+  font-weight: var(--w-medium);
+  text-decoration: none;
+}
+
+.link:focus-visible,
+.brand:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.article {
+  width: min(100%, 720px);
+  margin-inline: auto;
+  padding: var(--sp-6) var(--sp-4) var(--sp-12);
+}
+
+.eyebrow {
+  margin: 0 0 var(--sp-2);
+  color: var(--muted);
+  font-size: var(--fs-13);
+  font-weight: var(--w-medium);
+}
+
+.article h1 {
+  margin: 0 0 var(--sp-4);
+  font-size: var(--fs-34);
+  text-wrap: balance;
+}
+
+/* The draft status: the same left-rule notice the app uses, no colour word. */
+.draft {
+  margin: 0 0 var(--sp-5);
+  padding: var(--sp-3) var(--sp-4);
+  border-inline-start: 3px solid var(--accent);
+  border-radius: var(--r-chip);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: var(--fs-14);
+  line-height: var(--lh-body);
+}
+
+.intro {
+  margin: 0 0 var(--sp-6);
+  max-width: 65ch;
+  font-size: var(--fs-20);
+  line-height: var(--lh-body);
+  text-wrap: pretty;
+}
+
+.section {
+  margin: 0 0 var(--sp-6);
+  max-width: 65ch;
+}
+
+.section h2 {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-20);
+}
+
+.section p,
+.section li {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-16);
+  line-height: var(--lh-body);
+}
+
+.section ul {
+  margin: 0;
+  padding-inline-start: var(--sp-5);
+}
+
+.foot {
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--line);
+}

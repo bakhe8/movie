@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import { api, CONSENT_VERSION } from '../lib/api';
 import { useSession } from '../lib/session';
@@ -19,6 +20,8 @@ const labels = {
     // terms_privacy: required to use the service (PRIVACY.md §3). Plain text
     // until /terms and /privacy pages exist (docs/CONSENT_COPY_2026-09-04.md §3).
     terms: 'أوافق على الشروط وإشعار الخصوصية.',
+    termsLink: 'الشروط',
+    privacyLink: 'إشعار الخصوصية',
     email: 'البريد الإلكتروني',
     password: 'كلمة المرور',
     passwordHint: 'من 8 إلى 64 حرفًا.',
@@ -38,6 +41,8 @@ const labels = {
     login: 'Log in',
     register: 'Create account',
     terms: 'I agree to the Terms and Privacy Notice.',
+    termsLink: 'Terms',
+    privacyLink: 'Privacy Notice',
     email: 'Email',
     password: 'Password',
     passwordHint: '8 to 64 characters.',
@@ -169,7 +174,16 @@ export function AuthScreen({
           {mode === 'register' && (
             <label className={styles.terms}>
               <input type="checkbox" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} required />
-              <span>{t.terms}</span>
+              <span>
+                {t.terms}{' '}
+                <Link href={`/terms?lang=${lang}`} target="_blank" rel="noopener" className={styles.docLink}>
+                  {t.termsLink}
+                </Link>
+                {' · '}
+                <Link href={`/privacy?lang=${lang}`} target="_blank" rel="noopener" className={styles.docLink}>
+                  {t.privacyLink}
+                </Link>
+              </span>
             </label>
           )}
           {error && (

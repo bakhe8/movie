@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError, type ConfidenceBand, type PreferredLanguage } from '../lib/api';
 import { formatConfidence, formatNumber } from '../lib/format';
@@ -43,6 +44,7 @@ const labels = {
     detailPending: 'الميول الثابتة والمناطق المجهولة والاستثناءات تظهر هنا عندما يُبنى ملف الذوق التفصيلي.',
     privacy: 'الخصوصية',
     privacyBody: 'ملفك خاص افتراضيًا: لا صفحة عامة، ولا مشاركة إلا بقرارك، ولا يُباع ملف ذوقك.',
+    privacyLink: 'اقرأ إشعار الخصوصية',
     resetTitle: 'مسح ملف الذوق والبدء من جديد',
     resetBody: 'يحذف كل جولات الترتيب والعلامات والنموذج لهذا الملف ويبدأ ملفًا فارغًا. حسابك يبقى. لا يمكن التراجع.',
     resetAction: 'مسح ملف الذوق',
@@ -85,6 +87,7 @@ const labels = {
     detailPending: 'Stable tendencies, unknown areas and exceptions will appear here once the detailed taste profile is built.',
     privacy: 'Privacy',
     privacyBody: 'Your profile is private by default: no public page, no sharing unless you choose it, and your taste profile is never sold.',
+    privacyLink: 'Read the Privacy Notice',
     resetTitle: 'Wipe the taste profile and start over',
     resetBody: 'Deletes every ranking round, mark and model of this profile and starts an empty one. Your account stays. This cannot be undone.',
     resetAction: 'Wipe taste profile',
@@ -358,6 +361,11 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
       <section className={styles.section} aria-label={t.privacy}>
         <h3>{t.privacy}</h3>
         <p>{t.privacyBody}</p>
+        <p>
+          <Link href={`/privacy?lang=${lang}`} className={styles.docLink}>
+            {t.privacyLink}
+          </Link>
+        </p>
 
         {/* Consent changes the onboarding copy promises (PRIVACY.md §3). */}
         <ConsentsPanel lang={lang} />

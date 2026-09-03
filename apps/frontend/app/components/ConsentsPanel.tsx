@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { api, CONSENT_VERSION, type Consent, type ConsentPurpose } from '../lib/api';
 import { formatDate } from '../lib/format';
@@ -51,6 +52,8 @@ const labels = {
     loadFailed: 'تعذّر تحميل الموافقات.',
     retry: 'إعادة المحاولة',
     loading: 'جارٍ التحميل…',
+    termsLink: 'الشروط',
+    privacyLink: 'إشعار الخصوصية',
   },
   en: {
     title: 'Your consents',
@@ -81,6 +84,8 @@ const labels = {
     loadFailed: 'Consents could not be loaded.',
     retry: 'Try again',
     loading: 'Loading…',
+    termsLink: 'Terms',
+    privacyLink: 'Privacy Notice',
   },
 };
 
@@ -213,6 +218,17 @@ export function ConsentsPanel({ lang }: { lang: Lang }) {
                   <span className={styles.state}>{latest[purpose]?.granted ? t.on : t.notRecorded}</span>
                 </p>
                 <p className={styles.when}>{when(latest[purpose])}</p>
+                {purpose === 'terms_privacy' && (
+                  <p className={styles.when}>
+                    <Link href={`/terms?lang=${lang}`} className={styles.docLink}>
+                      {t.termsLink}
+                    </Link>
+                    {' · '}
+                    <Link href={`/privacy?lang=${lang}`} className={styles.docLink}>
+                      {t.privacyLink}
+                    </Link>
+                  </p>
+                )}
               </li>
             ))}
           </ul>

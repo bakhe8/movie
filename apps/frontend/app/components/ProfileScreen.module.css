@@ -288,3 +288,10 @@
     font-size: var(--fs-34);
   }
 }
+
+.docLink {
+  color: var(--accent);
+  font-weight: var(--w-medium);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

@@ -141,3 +141,10 @@
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+.docLink {
+  color: var(--accent);
+  font-weight: var(--w-medium);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
