@@ -21,7 +21,8 @@
     "db:seed:demo": "npm run seed:demo -w apps/backend",
     "db:seed:demo:clean": "npm run seed:demo:clean -w apps/backend",
     "catalog:fetch": "npm run catalog:fetch -w apps/backend",
-    "catalog:cultural": "npm run catalog:cultural -w apps/backend"
+    "catalog:cultural": "npm run catalog:cultural -w apps/backend",
+    "catalog:evidence-ar": "npm run catalog:evidence-ar -w apps/backend"
   },
   "devDependencies": {
     "concurrently": "^9.0.1",

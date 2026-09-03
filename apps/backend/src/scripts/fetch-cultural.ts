@@ -11,12 +11,10 @@
  * Facts only, CC0, never a model inference; nothing here touches the
  * fingerprint or the taste vector.
  */
-import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import os from 'node:os';
+import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import { CACHE_DIR, cachedGet } from './wiki-http';
 import {
   CP,
   CULTURAL_EXTRACTOR_VERSION,
@@ -30,47 +28,8 @@ import {
   type WdEntity,
 } from './fetch-cultural.lib';
 
-const CACHE_DIR = process.env.CATALOG_CACHE_DIR ?? path.join(os.tmpdir(), 'movie-catalog-cache');
-const USER_AGENT = 'movie-taste-demo-catalog/0.1 (local development fixture builder; docs/DEMO_DATA_PLAN_2026-09-03.md)';
-const REQUEST_DELAY_MS = 250;
 const WIKIDATA_BATCH = 50;
 const DEFAULT_FIXTURE = path.resolve(__dirname, 'fixtures', 'catalog.demo.json');
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-// Same cache layout as fetch-catalog.ts (sha1 of the URL → {status, body}); the
-// helper is duplicated rather than imported because that script runs its main()
-// at import time.
-async function cachedGet(url: string): Promise<{ status: number; body: string }> {
-  await mkdir(CACHE_DIR, { recursive: true });
-  const cachePath = path.join(CACHE_DIR, `${createHash('sha1').update(url).digest('hex')}.json`);
-  if (existsSync(cachePath)) {
-    return JSON.parse(await readFile(cachePath, 'utf8')) as { status: number; body: string };
-  }
-  let lastError: unknown = null;
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    try {
-      await sleep(REQUEST_DELAY_MS);
-      const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' } });
-      const body = await response.text();
-      if (response.status === 429 || response.status >= 500) {
-        lastError = new Error(`HTTP ${response.status} for ${url}`);
-        const retryAfter = Number(response.headers.get('retry-after'));
-        await sleep(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 5000 * 3 ** attempt);
-        continue;
-      }
-      const result = { status: response.status, body };
-      if (response.status === 200 || response.status === 404) {
-        await writeFile(cachePath, JSON.stringify(result), 'utf8');
-      }
-      return result;
-    } catch (error) {
-      lastError = error;
-      await sleep(1000 * 3 ** attempt);
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error(`request failed: ${url}`);
-}
 
 async function fetchEntities(ids: string[], props: string): Promise<Record<string, WdEntity>> {
   const entities: Record<string, WdEntity> = {};

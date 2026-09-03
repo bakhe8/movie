@@ -496,6 +496,22 @@ Every block is written into the dev database as categorical `content_features` r
 
 What the block is for next: (1) the coverage tables are the first measurement of `BP §11.3`'s "per language / country / tier" quality gate on this catalog — the numbers above are the baseline any later catalog must not fall below; (2) the model-side use is the hierarchical side block of `BP §7.1`/`§10.2` (a heavily shrunk per-country/per-era effect that can never dominate the content vector), which is a model-service design, not a catalog one; (3) the review lists name exactly which titles need a human to add a place or era on Wikidata itself — the fix belongs upstream, in the open source of truth, not in a local override.
 
+### 7.5 Arabic plot as second evidence — 2026-09-04
+
+Cause (measured before touching anything): V1 confidence follows plot length — 0.45 under 400 characters, 0.55 at 400–2,000, 0.64 above 2,000; the Arabic slice's English plots have a median of 778 characters, the English slice's 2,936. Fix: `npm run catalog:evidence-ar` stores each title's Arabic Wikipedia plot section; `enrich_catalog --ar-evidence` re-extracts V1 for titles with an English plot under 2,000 characters, the Arabic section appended, version `enrichment-worker-v2+ar-evidence`, nested V2/V3 blocks kept, earlier provenance rows superseded by the seed.
+
+**Result — a null effect, and a stability finding.** 215 of 300 Arabic articles have a plot section; 52 titles qualified (46 Arabic-slice; the other short-plot Arabic titles already used the Arabic section as their only plot). Re-extracted with the Arabic section appended, and, as a control, 20 of them re-extracted a second time under identical evidence on a scratch copy:
+
+| | Titles | Mean V1 confidence before → after | Rose / fell | Mean value move | `linearity` move (flips ≥ 0.4) |
+|---|---|---|---|---|---|
+| Arabic evidence appended | 52 | 0.529 → 0.515 | 18 / 33 | 0.03 | 0.127 (8 of 52) |
+| Control: same evidence, second run | 20 | 0.500 → 0.487 | — | 0.025 | 0.103 (2 of 20) |
+| Arabic slice, all 105 | | 0.511 → 0.506 | | | |
+
+The appended Arabic sections are short themselves (median 533 characters against the English 714), and the change they produce is inside the extractor's own run-to-run noise: confidence moves 0.02 per title and values 0.025 whether the evidence changed or not. So the Arabic slice's confidence gap is not closed by a second short plot; it needs longer evidence (the Arabic articles themselves are thin for these films — an upstream fact, like the missing settings in §7.4). The re-extraction stays published as the current version (equal evidence or better, same model, provenance intact, 674 earlier rows superseded rather than overwritten — the first real supersession in `content_features`), and the runner keeps the rule for any title whose Arabic article grows.
+
+The finding that matters is `linearity`: it moves 0.10 per re-run under identical evidence and flips outright for a tenth of the titles (0.85 → 0.15 for The Blue Caftan, My Wife the Director General, The Perfect Candidate, The Nightingale's Prayer), while every other dimension moves 0.01–0.035. The scale's wording is ambiguous to the model — "linear" reads as chronological order to one run and as single-thread simplicity to another — which is exactly what §6's stability gate exists to catch. Until the scale is rewritten and re-extracted, `linearity` should not be cited as a displayed reason; this is the first data point for C-4 (drift between extractor runs). Call accounting for the run: 52 calls, 172,793 input and 19,556 output tokens, 3,323 / 376 per title, 4.7 s mean latency (report table, G7).
+
 ---
 
 ## 8. Provider decision — LLM enrichment through the Anthropic Messages API
@@ -532,3 +548,4 @@ Owner's decision, 2026-09-03, in answer to "what is the alternative to an OpenAI
 | 2026-09-04 | §7.3: third block (form families, 12 keys) specified in FINGERPRINT_SCHEMA §3.3, extracted for all 300 titles (0 failures), published to the dev database with provenance rows, evaluated offline against Claude's order; wiring requested as C10 |
 | 2026-09-04 | §7.4: cultural-context block from Wikidata (languages, countries, setting places and eras, CC0) on all 300 titles, stored as categorical provenance rows; coverage report per language / country / slice / tier is the first `BP §11.3` measurement |
 | 2026-09-04 | §7.3 re-measured after C10 (`6abf34d`, 40 keys served): judge NLL 0.823 / acc 85.7 %, API Spearman 0.896 (from 0.846); two observations passed to the model-service owner |
+| 2026-09-04 | §7.5: Arabic Wikipedia plot as second evidence for short English plots; V1 re-extracted under `+ar-evidence`, confidence measured before/after per slice, rows superseded |

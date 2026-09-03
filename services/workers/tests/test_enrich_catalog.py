@@ -239,6 +239,70 @@ class TestV3Extraction:
         assert main(["--fixture", str(fixture), "--v3", "--placeholder"]) == 2
 
 
+class TestArabicEvidence:
+    def _entry_ar(self, plot_len=500, **overrides):
+        entry = _entry(**overrides)
+        entry["evidence"] = {**entry["evidence"], "plotSummary": "x" * plot_len, "plotSummaryAr": "قصة الفيلم بالعربية", "plotSourceAr": "wikipedia:ar:باب الحديد (فيلم)"}
+        return entry
+
+    def test_appends_the_arabic_plot_only_when_the_english_plot_is_short(self):
+        from src.enrich_catalog import PLOT_SHORT_CHARS, build_evidence, uses_arabic_evidence
+
+        short = build_evidence(self._entry_ar(500))
+        assert uses_arabic_evidence(self._entry_ar(500)) is True
+        assert short["plot_summary"].startswith("x" * 500) and "قصة الفيلم بالعربية" in short["plot_summary"]
+        assert "[Plot section of the Arabic Wikipedia article]" in short["plot_summary"]
+        assert short["source_ids"][-1] == "wikipedia:ar:باب الحديد (فيلم)" and short["uses_arabic_evidence"] is True
+        assert "second evidence for the same film" in short["additional_context"]
+
+        long = build_evidence(self._entry_ar(PLOT_SHORT_CHARS))
+        assert "قصة" not in long["plot_summary"] and long["uses_arabic_evidence"] is False
+        assert "wikipedia:ar" not in " ".join(long["source_ids"])
+        # No Arabic plot in the fixture: nothing changes, nothing is invented.
+        assert build_evidence(_entry())["uses_arabic_evidence"] is False
+
+    def test_selection_and_version_stamp(self):
+        from src.enrich_catalog import AR_EVIDENCE_SUFFIX, needs_arabic_evidence_extraction, stamp_arabic_evidence
+
+        v1 = {"extractorVersion": EXTRACTOR_VERSION, "pacing": 0.4}
+        assert needs_arabic_evidence_extraction(self._entry_ar(500)) is False  # no fingerprint yet: the normal run makes it
+        assert needs_arabic_evidence_extraction(self._entry_ar(500, fingerprint=dict(v1))) is True
+        assert needs_arabic_evidence_extraction(self._entry_ar(500, fingerprint={**v1, "extractorVersion": EXTRACTOR_VERSION + AR_EVIDENCE_SUFFIX})) is False
+        assert needs_arabic_evidence_extraction(self._entry_ar(3000, fingerprint=dict(v1))) is False  # long English plot: no change of evidence
+        stamped = stamp_arabic_evidence({"extractorVersion": EXTRACTOR_VERSION})
+        assert stamped["extractorVersion"] == EXTRACTOR_VERSION + AR_EVIDENCE_SUFFIX
+        assert stamp_arabic_evidence(stamped)["extractorVersion"] == EXTRACTOR_VERSION + AR_EVIDENCE_SUFFIX  # idempotent
+
+    def test_re_extraction_replaces_v1_keeps_the_nested_blocks_and_stamps_the_version(self, tmp_path, monkeypatch):
+        fixture = tmp_path / "catalog.demo.json"
+        v1 = {"extractorVersion": EXTRACTOR_VERSION, "pacing": 0.4, "confidence": {"pacing": 0.3}, "v2": {"features": {"tone.irony": 0.8}}, "v3": {"features": {"style.scale": 0.2}}}
+        entries = [self._entry_ar(500, fingerprint=dict(v1)), self._entry_ar(2500, internalId="DEMO0002", fingerprint=dict(v1))]
+        fixture.write_text(json.dumps(entries), encoding="utf-8")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+        fake = FilmFingerprintV1(**{dimension: 0.5 for dimension in DIMENSIONS})
+        fake.pacing = 0.7
+        fake.extractorVersion = EXTRACTOR_VERSION
+        fake.generatedBy = "anthropic"
+        worker = MagicMock()
+        worker.generate_fingerprint = MagicMock(return_value=fake)
+        monkeypatch.setattr("src.enrich_catalog.FilmEnrichmentWorker", lambda: worker)
+
+        assert main(["--fixture", str(fixture), "--ar-evidence", "--concurrency", "1", "--partial-ids", ""]) == 0
+
+        written = json.loads(fixture.read_text(encoding="utf-8"))
+        first = written[0]["fingerprint"]
+        assert first["pacing"] == 0.7 and first["generatedBy"] == "anthropic"
+        assert first["extractorVersion"] == EXTRACTOR_VERSION + "+ar-evidence"
+        assert first["v2"] == {"features": {"tone.irony": 0.8}} and first["v3"] == {"features": {"style.scale": 0.2}}
+        assert written[1]["fingerprint"]["pacing"] == 0.4  # long English plot: untouched
+        assert worker.generate_fingerprint.call_count == 1
+        call = worker.generate_fingerprint.call_args
+        assert "قصة الفيلم بالعربية" in call.kwargs["plot_summary"] and "wikipedia:ar:باب الحديد (فيلم)" in call.kwargs["source_ids"]
+        report = (tmp_path / "catalog.demo.enrichment-ar-evidence-report.md").read_text(encoding="utf-8")
+        assert "mode: ar-evidence" in report and "+ar-evidence | 1" in report
+        assert main(["--fixture", str(fixture), "--ar-evidence", "--v2"]) == 2
+
+
 class TestMainPlaceholderRun:
     def test_fills_placeholders_writes_the_fixture_and_the_report(self, tmp_path):
         fixture = tmp_path / "catalog.demo.json"
