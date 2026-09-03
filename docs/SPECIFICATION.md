@@ -187,6 +187,7 @@ Do not "decide" these in code; instrument and test them.
 | Question | Alternatives | How it is settled |
 |---|---|---|
 | Ties / weak memory | partial order, neutral replacement, or forbid | answer noise vs time/dropout in a UX test |
+| Display order after a replacement | redraw `displayOrder` fully after every swap (clean position-bias log) vs keep the user's in-progress order and put the replacement in the replaced card's slot | lost in-progress order, completion time and undo rate vs the validity of the position-bias measurement; observed on 2026-09-03 when ADR-17 shipped — the redraw reshuffles the cards under a user who had already started ranking (`BP App. C`, v1.2) |
 | Seed triad count | 3, 5, or adaptive | profile quality, activation, D7, profile satisfaction |
 | Visible model update | after each triad vs batched | reward vs priming effect |
 | Confidence display | verbal only vs calibrated % later | understanding, calibration, better decisions |
@@ -198,5 +199,6 @@ Do not "decide" these in code; instrument and test them.
 ---
 
 **Changelog**
+- 2.2 (2026-09-03): §11 mirrors the new `BP App. C` question "display order after a replacement" (blueprint v1.2).
 - 2.1 (2026-09-03): §5.2–§5.4 display rules from the mockup review (ADR-33; ADR-4 consequence): no prediction on the triad screen; verbal confidence and non-percentage Personal Fit on every prediction surface; no expectation question after a watch.
 - 2.0 (2026-09-03): rewritten as a derived engineering spec; removed duplicated product narrative, stale "Phase 1/2/3" roadmap, invented thresholds, hard-coded model names, a fabricated OpenAI header, and the merged-score/rating-prompt remnants of the pre-blueprint draft.

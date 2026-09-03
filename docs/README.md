@@ -4,7 +4,7 @@ Everything needed to build the product without guessing: one normative product d
 
 **Governance (ADR-14)**
 
-- **Normative**: [movie_taste_platform_blueprint_ar.md](movie_taste_platform_blueprint_ar.md) (Arabic, v1.1). It alone defines the product. Every other file cites it as `BP §x.y` and is corrected — not annotated — when it disagrees.
+- **Normative**: [movie_taste_platform_blueprint_ar.md](movie_taste_platform_blueprint_ar.md) (Arabic, v1.2). It alone defines the product. Every other file cites it as `BP §x.y` and is corrected — not annotated — when it disagrees.
 - **Derived**: the English documents below. They turn blueprint sections into contracts (API, schema, model, fingerprint), controls (privacy, licensing), and decisions (ADRs). Anything they add beyond the blueprint (types, file layout, thresholds) is this repository's engineering choice and is recorded as an ADR.
 - **Narrative**: [product_journey_ar.md](product_journey_ar.md) (Arabic) — non-normative reading companion; its own "limits" section lists where it simplifies.
 - **Status**: [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) — what the code does today versus the blueprint, two verdicts per row, re-verified against the test suites.
@@ -75,3 +75,4 @@ Rules: never add an endpoint list, schema fragment or threshold to a second docu
 | 2026-09-02 | blueprint v1.0 and first English drafts (dated "2025-01-02" by mistake) |
 | 2026-09-03 | blueprint v1.1 (`§7.5`–`§7.6`); documentation audit: English set rewritten as derived contracts, four files renamed (`architecture.md`→`ARCHITECTURE.md`, `schema.md`→`SCHEMA.md`, `privacy.md`→`PRIVACY.md`, `PHASE1_CHECKLIST.md`→`IMPLEMENTATION_STATUS.md`), `API.md` and `FINGERPRINT_SCHEMA.md` added, ADR-14…26 added, journey document marked non-normative and reconciled, dangling links (`deployment.md`, `db/migrations/001_init_schema.sql`) removed |
 | 2026-09-03 | UI mockup review added ([UI_MOCKUP_REVIEW_2026-09-03.md](UI_MOCKUP_REVIEW_2026-09-03.md)); ADR-33 (prediction display formats) and an ADR-4 consequence (no post-watch expectation question); SPECIFICATION §5.2–§5.4 and the API `personalFit` note updated; IMPLEMENTATION_STATUS gains a *Frontend ↔ backend boundary* section |
+| 2026-09-03 | blueprint v1.2: App. C gains the "display order after a replacement" question, observed when the ADR-17 replacement controls shipped; mirrored in SPECIFICATION §11 and ADR-17 |

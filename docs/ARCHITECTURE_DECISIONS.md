@@ -126,7 +126,8 @@ Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 - `reason = not_watched` → `user_title_states.state` becomes `not_watched` (exposure unknown): the title stays a recommendation candidate and leaves the triad pool.
 - `reason = not_remembered` → the title stays `watched` (it is not recommendable) and `triadEligible` becomes `false`.
 - Neither reason enters any loss, prior or score. A triad exceeding `maxReplacementsPerTriad` (a policy parameter set before the Phase 0 test) is marked `skipped`. Replacement rate is a Phase 0/Alpha metric (`BP §17.1`, `§21.2`).
-**Revisit when.** The `BP App. C` tie/weak-memory experiment reports.
+**Consequences.** Implemented 2026-09-03 (migration `AddTriadReplacements`, `TriadsService.replace()`, the two buttons on the triad screen). Observed on the first browser pass: because `displayOrder` is redrawn, a replacement reshuffles all three cards under a user who had already started ranking — correct for the position-bias log, costly for the user. Recorded as a `BP App. C` question ("display order after a replacement", blueprint v1.2) rather than changed here.
+**Revisit when.** The `BP App. C` tie/weak-memory experiment reports, or its "display order after a replacement" question decides for keeping the in-progress order.
 
 ## ADR-18 — Phase naming
 
