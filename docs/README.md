@@ -31,6 +31,7 @@ Languages: product/vision in Arabic; engineering contracts in English; UI copy i
 | [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) | EN | status | built vs blueprint per feature; the 15 gaps hiding behind working code; Alpha gate readiness; next milestone |
 | [AUDIT_2026-09-03.md](AUDIT_2026-09-03.md) | EN | audit | independent audit of `3f60884`: verified results, ranked findings with reproductions, documentation drift by line, ordered fix plan |
 | [DEMO_DATA_PLAN_2026-09-03.md](DEMO_DATA_PLAN_2026-09-03.md) | EN | execution map | what fills the dev database so the product can be judged: 300-title catalog fixture, fingerprints, synthetic personas, browser judgment pass; §8 records the LLM-provider decision |
+| [ALPHA_PLAN_2026-09-04.md](ALPHA_PLAN_2026-09-04.md) | AR | execution map | the ordered path from the code at `1a62cb3` to the Alpha gate (`BP §17.2`, `§18.1`): nine phases with day estimates, the owner decisions that unblock them, the parallel non-code track, and what is deliberately left for Beta |
 | [UI_MOCKUP_REVIEW_2026-09-03.md](UI_MOCKUP_REVIEW_2026-09-03.md) | EN | review | review of the external «بصمة الذوق» mobile mockup against the blueprint: rendered and touch-tested, keep/drop list, the display-rule clarifications that became ADR-33 |
 | [QUICKSTART.md](QUICKSTART.md) | EN | how-to | local setup and the full loop (migrate, seed, run, train, test) |
 | [../README.md](../README.md) | EN | entry | repository overview and pointers |
@@ -80,3 +81,4 @@ Rules: never add an endpoint list, schema fragment or threshold to a second docu
 | 2026-09-03 | demo data plan added ([DEMO_DATA_PLAN_2026-09-03.md](DEMO_DATA_PLAN_2026-09-03.md)): 300-title catalog fixture (`18db8b9`), enrichment worker moved to the Anthropic Messages API (`47f3219`), `.env.example` model ids renamed `ANTHROPIC_*` |
 | 2026-09-03 | UI mockup review added ([UI_MOCKUP_REVIEW_2026-09-03.md](UI_MOCKUP_REVIEW_2026-09-03.md)); ADR-33 (prediction display formats) and an ADR-4 consequence (no post-watch expectation question); SPECIFICATION §5.2–§5.4 and the API `personalFit` note updated; IMPLEMENTATION_STATUS gains a *Frontend ↔ backend boundary* section |
 | 2026-09-03 | blueprint v1.2: App. C gains the "display order after a replacement" question, observed when the ADR-17 replacement controls shipped; mirrored in SPECIFICATION §11 and ADR-17 |
+| 2026-09-04 | Alpha plan added ([ALPHA_PLAN_2026-09-04.md](ALPHA_PLAN_2026-09-04.md)): ordered phases with estimates from `1a62cb3` to the Alpha gate |
