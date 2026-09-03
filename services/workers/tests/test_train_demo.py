@@ -30,7 +30,7 @@ def test_committed_personas_fixture_is_valid():
     slugs = [persona["slug"] for persona in fixture["personas"]]
     assert slugs == ["slow-burn", "spectacle", "warm-talky", "newcomer"]
     # Regenerated on all 28 keys (2026-09-04, after ADR-69): every theta spans the model.
-    assert all(len(persona["theta"]) == len(FINGERPRINT_DIMENSIONS) for persona in fixture["personas"])
+    assert all(len(persona["theta"]) == len(FINGERPRINT_V1_DIMENSIONS) + 15 for persona in fixture["personas"])  # V1 + the 15 V2 families
     assert fixture["temperature"] == 0.4
     assert fixture["emailDomain"] == "demo.local"
 
@@ -75,6 +75,7 @@ def test_recovery_uses_the_personas_hidden_theta_and_survives_one_failure(tmp_pa
     assert rows[0].v2_weight_share is None
     assert rows[0].genre_diversity == 7
     assert rows[0].language_diversity is None  # the attribute was absent on this result: unknown, not 0
+    assert rows[0].director_diversity is None  # same rule for the director count (ADR-71)
     assert rows[1].error and "No completed triads" in rows[1].error
     table = format_table(rows, fixture)
     assert "rich" in table and "FAILED" in table and "strong" in table
@@ -105,7 +106,7 @@ def test_hidden_theta_pads_v1_personas_with_zero_v2_weight_and_refuses_longer():
 
 def test_load_personas_accepts_v1_or_full_theta_only(tmp_path):
     n_v1, n_all = len(FINGERPRINT_V1_DIMENSIONS), len(FINGERPRINT_DIMENSIONS)
-    for length, ok in ((n_v1, True), (n_all, True), (n_v1 + 1, False)):
+    for length, ok in ((n_v1, True), (n_v1 + 15, True), (n_all, True), (n_v1 + 1, False)):
         path = tmp_path / f"p{length}.json"
         path.write_text(json.dumps({"personas": [{"slug": "x", "theta": [0.1] * length, "triads": 1, "expectedBand": "?"}]}), encoding="utf-8")
         if ok:
@@ -133,7 +134,9 @@ def test_recovery_under_the_28_dimension_model_splits_v1_from_spurious_v2(tmp_pa
     rows_full = train_demo_profiles([DemoProfile("rich", "rich@demo.local", "p1")], full, trainer=lambda _pid: _result(weights))
     assert rows_full[0].theta_covers_model is True
     assert rows_full[0].recovery == pytest.approx(1 / math.sqrt(2))
-    assert any("recovery" in problem and "V1" not in problem for problem in acceptance(rows_full, full))
+    assert any(problem.startswith("rich: recovery ") for problem in acceptance(rows_full, full))
+    assert rows_full[0].recovery_defined == pytest.approx(rows_full[0].recovery)
+    assert rows[0].recovery_defined == pytest.approx(rows[0].recovery_v1)  # 13-key theta: its prefix is V1
     table = format_table(rows, fixture)
     assert "rec-v1" in table and "v2-share" in table and "lambda" in table
     assert rows[0].chosen_regularization is None  # the fake result carries no such field: unknown, not 0

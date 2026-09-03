@@ -1,4 +1,4 @@
-.PHONY: help install dev build test docker-up docker-down db-migrate db-seed catalog-fetch catalog-enrich catalog-enrich-placeholder demo demo-clean lint clean
+.PHONY: help install dev build test docker-up docker-down db-migrate db-seed catalog-fetch catalog-cultural catalog-enrich catalog-enrich-placeholder demo demo-clean lint clean
 
 help:
 	@echo "🎬 Movie Recommendation System"
@@ -22,6 +22,7 @@ help:
 	@echo ""
 	@echo "Demo catalog (docs/DEMO_DATA_PLAN_2026-09-03.md):"
 	@echo "  make catalog-fetch              Rebuild the 300-title fixture from Wikidata/Wikipedia"
+	@echo "  make catalog-cultural           Add the cultural-context block (Wikidata facts, CC0) and the coverage report"
 	@echo "  make catalog-enrich             Fingerprint the fixture through the enrichment worker (Anthropic key)"
 	@echo "  make catalog-enrich-placeholder Fill labelled placeholder vectors, no credentials"
 	@echo "  make demo                       Seed the four demo personas into the dev DB and train them"
@@ -69,6 +70,9 @@ db-seed:
 # Rebuild the demo catalog fixture from the curated list (network; cached under CATALOG_CACHE_DIR).
 catalog-fetch:
 	npm run catalog:fetch
+
+catalog-cultural:
+	npm run catalog:cultural
 
 # Fingerprint the demo catalog through the enrichment worker (needs ANTHROPIC_API_KEY
 # and ANTHROPIC_FINGERPRINT_MODEL in .env); resumable, writes the fixture + a report.

@@ -459,6 +459,30 @@ The served path confirms the baseline: `train_profile` on the 75 rounds chose 0.
 
 Wiring is a model-service change (the served vector would grow from 28 to 40 keys); requested from its owner as C10 with this evidence and the same rules as ADR-69 (V3 read from `fingerprint.v3.features`, a title without the block excluded from training, penalty chosen by held-out NLL).
 
+### 7.4 The cultural-context block — Wikidata facts and coverage, 2026-09-04
+
+Owner's directive after §7.3: start the cultural block from Wikidata. Specified in [FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md) §3.4 as what `BP §6.1` says it is — a separate factual block, never a taste dimension and never about the viewer: original languages (P364), production countries (P495), setting places with their countries (P840 → P17), setting eras with dates (P2408 → P580/P582/P585 or a decade/century/year label), dialects explicitly unknown. Read by a new fetcher (`npm run catalog:cultural`) through the catalog's Wikidata cache, CC0, stored on the fixture entry and as categorical `content_features` rows (NULL value, codes as shares) by the seed. Nothing in the fingerprint, the trainer or the API reads it.
+
+**Result on the demo catalog (2026-09-04, `catalog-cultural-v1`, 532 referenced Wikidata entities resolved through the catalog cache):** all 300 titles carry the block; 225 have at least one setting place (P840) and 100 a setting era (P2408); 23 stories are set outside their production country (Casablanca, Timbuktu, Gladiator, Apocalypse Now, The Third Man, Omar, Wajib, Salt of This Sea…). Every original language resolved to a code except four titles whose Wikidata language item has no ISO code at all (Songhay, Mixtec, Taiwanese Hokkien, Standard Taiwanese Mandarin — kept as labels, listed as `unknown` in the language table); one production "country" is a label rather than a code (`Occupied Palestinian territory`, the item has no P297). A place carries every country whose P17 statement holds now — ended and deprecated statements are skipped, and a contested region lists each claimant rather than having one picked — so Nablus reads `PS` (the 1948–1967 state Wikidata also records is ended) and the region item "Palestine" reads both `PS` and `IL`. 25 titles have a place with no country at all: fictional places (Tatooine, Middle-earth, DuLoc), oceans and ships (North Atlantic Ocean, RMS Carpathia), continents (Africa) and historical entities (Allied-occupied Austria).
+
+Coverage per original language, the first measurement of `BP §11.3`'s gate on this catalog (setting place / era / V1 complete / mean V1 confidence):
+
+| Language | Titles | Setting place | Setting era | V1 complete | Mean V1 confidence |
+|---|---|---|---|---|---|
+| en | 122 | 93 % | 48 % | 98 % | 0.66 |
+| ar | 91 | **42 %** | **8 %** | 98 % | **0.51** |
+| fr | 13 | 69 % | 31 % | 100 % | 0.60 |
+| ja | 11 | 91 % | 64 % | 100 % | 0.68 |
+| de / es / ko / tr / fa / hi | 5–6 each | 83–100 % | 0–100 % | 80–100 % | 0.61–0.67 |
+
+And per production country: US 101 titles with a setting place for 93 %, **EG 41 with 17 %** and an era for 2 %, **SA 9 with 11 %**, FR 19 with 68 %, GB 15 with 93 %, JP 11 with 91 %, LB 7 with 71 %. By tier: popular 80 %, mid 75 %, niche 68 % have a place; niche titles are also the only tier with an incomplete V1 (94 %).
+
+The gap the gate is there to catch is real and it is upstream, not in the pipeline: Wikidata describes where and when an American or Japanese story is set nine times out of ten, an Egyptian one one time in six, a Saudi one one in nine; and the V1 extractor's own confidence on Arabic-language titles (0.51) runs a full step below English (0.66), because the Arabic titles' plot text on Wikipedia is shorter. The review lists name the 75 titles without a place and the 200 without an era; for the Arabic half the fix belongs on Wikidata itself. `dialects` is unknown for every title — Wikidata does not carry it — and stays so rather than being guessed from the country.
+
+Every block is written into the dev database as categorical `content_features` rows (NULL value, codes as shares) beside the fingerprint rows; the model, the trainer and the API read none of it yet.
+
+What the block is for next: (1) the coverage tables are the first measurement of `BP §11.3`'s "per language / country / tier" quality gate on this catalog — the numbers above are the baseline any later catalog must not fall below; (2) the model-side use is the hierarchical side block of `BP §7.1`/`§10.2` (a heavily shrunk per-country/per-era effect that can never dominate the content vector), which is a model-service design, not a catalog one; (3) the review lists name exactly which titles need a human to add a place or era on Wikidata itself — the fix belongs upstream, in the open source of truth, not in a local override.
+
 ---
 
 ## 8. Provider decision — LLM enrichment through the Anthropic Messages API
@@ -493,3 +517,4 @@ Owner's decision, 2026-09-03, in answer to "what is the alternative to an OpenAI
 | 2026-09-04 | Re-measurement after ADR-69 wired the 28 keys: served judge model NLL 0.824 / acc 85 % / API Spearman 0.825 (from 0.72); personas re-run under 28 keys, `slow-burn` held-out bar not met (0.67) with V1 recovery intact (0.85) — fixture narrower than the model, regeneration on 28 keys proposed; `train_demo` reports V1 recovery, V2 share and chosen penalty; `fingerprint_v2_eval` on the renamed constants |
 | 2026-09-04 | Personas regenerated on 28 keys (V2 half of θ per persona, τ 0.2 → 0.4 by re-calibration, generator reads `MODEL_DIMENSIONS`); WS4 bar met on the served model: `slow-burn` recovery 0.87, held-out accuracy 0.83 |
 | 2026-09-04 | §7.3: third block (form families, 12 keys) specified in FINGERPRINT_SCHEMA §3.3, extracted for all 300 titles (0 failures), published to the dev database with provenance rows, evaluated offline against Claude's order; wiring requested as C10 |
+| 2026-09-04 | §7.4: cultural-context block from Wikidata (languages, countries, setting places and eras, CC0) on all 300 titles, stored as categorical provenance rows; coverage report per language / country / slice / tier is the first `BP §11.3` measurement |

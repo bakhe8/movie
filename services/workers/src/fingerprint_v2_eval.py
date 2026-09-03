@@ -47,13 +47,15 @@ FEATURE_SETS: Dict[str, Tuple[str, ...]] = {
     # Since ADR-69 the trainer's FINGERPRINT_DIMENSIONS is the full 28 (V1 + V2);
     # the V1-only set is the trainer's own 13-key tuple, so "v1" here is exactly the
     # pre-ADR-69 model and "v1+v2" exactly the served one.
+    # Each set is built from the block constants, not from the trainer's list, so
+    # the rows keep their meaning whatever the trainer serves at the time; the
+    # last row is whatever it serves now (FINGERPRINT_DIMENSIONS), labelled by size.
     "v1": tuple(FINGERPRINT_V1_DIMENSIONS),
-    "v1+v2": tuple(FINGERPRINT_DIMENSIONS),
+    "v1+v2": tuple(FINGERPRINT_V1_DIMENSIONS) + tuple(V2_FEATURES),
     "v2": tuple(V2_FEATURES),
-    # The third block (form families, FINGERPRINT_SCHEMA.md §3.3): evaluated on
-    # top of the served 28 and alone, the same way V2 was before its wiring.
-    "v1+v2+v3": tuple(FINGERPRINT_DIMENSIONS) + tuple(V3_FEATURES),
+    "v1+v2+v3": tuple(FINGERPRINT_V1_DIMENSIONS) + tuple(V2_FEATURES) + tuple(V3_FEATURES),
     "v3": tuple(V3_FEATURES),
+    f"served({len(FINGERPRINT_DIMENSIONS)})": tuple(FINGERPRINT_DIMENSIONS),
 }
 
 

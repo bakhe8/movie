@@ -16,6 +16,7 @@
     "seed:demo": "npm run build && node dist/scripts/seed-demo.js",
     "seed:demo:clean": "npm run build && node dist/scripts/seed-demo.js --clean",
     "catalog:fetch": "tsx src/scripts/fetch-catalog.ts",
+    "catalog:cultural": "tsx src/scripts/fetch-cultural.ts",
     "admin:grant": "npm run build && node dist/scripts/grant-admin.js",
     "imdb:load": "npm run build && node dist/scripts/load-imdb-ratings.js",
     "start": "node dist/main.js",

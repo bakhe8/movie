@@ -12,6 +12,7 @@
  */
 import { FINGERPRINT_V2_DIMENSIONS } from '../entities/title-fingerprint.type';
 import type { FilmFingerprintV1 } from '../entities/title-fingerprint.type';
+import type { CulturalBlock } from './fetch-cultural.lib';
 import type { Title } from '../entities/title.entity';
 
 export const DIMENSIONS = [
@@ -80,6 +81,8 @@ export interface CatalogEntry {
   originalLanguage?: string | null;
   externalIds: { wikidata: string; imdb?: string; tmdb?: string };
   fingerprint: (Partial<FilmFingerprintV1> & Record<string, unknown>) | null;
+  /** The cultural-context block (fetch-cultural.ts): facts, separate from the fingerprint, never in the taste vector. */
+  cultural?: CulturalBlock | null;
 }
 
 // `originalLanguage` is typed here rather than picked from `Title` so this
@@ -357,7 +360,10 @@ export function catalogEntryToTitle(entry: CatalogEntry): TitleSeedRow {
 export interface FeatureRow {
   titleId: string;
   featureKey: string;
-  value: number;
+  /** NULL for a categorical feature, whose values live in `distribution` (SCHEMA.md: value NULL = unknown, never 0). */
+  value: number | null;
+  /** Multi-valued / categorical features: each value's share, summing to 1 (e.g. `{ EG: 0.5, FR: 0.5 }`). */
+  distribution: Record<string, number> | null;
   uncertainty: number | null;
   sourceIds: string[];
   extractorVersion: string;
@@ -373,6 +379,43 @@ function parseWhen(value: unknown, fallback: Date): Date {
 
 /** The nested blocks a published snapshot may carry, each with its own extractor version and provenance. */
 export const NESTED_BLOCKS = ['v2', 'v3'] as const;
+
+/** Equal shares over the distinct values; null when there is none (unknown is not a value). */
+export function shares(values: readonly string[]): Record<string, number> | null {
+  const distinct = [...new Set(values)];
+  return distinct.length === 0 ? null : Object.fromEntries(distinct.map((value) => [value, 1 / distinct.length]));
+}
+
+/**
+ * The cultural block as categorical provenance rows: `value` NULL and the
+ * codes in `distribution` — original language, production country, setting
+ * country, setting place (by Wikidata id; labels stay in the fixture) and
+ * setting era (by id). A title with no value for a key gets no row.
+ */
+export function culturalRowsFor(block: CulturalBlock, titleId: string, now: Date): FeatureRow[] {
+  const validFrom = parseWhen(block.generatedAt, now);
+  const keyed: [string, Record<string, number> | null][] = [
+    ['cultural.originalLanguage', shares(block.originalLanguages)],
+    ['cultural.productionCountry', shares(block.productionCountries)],
+    ['cultural.settingCountry', shares(block.settingCountries)],
+    ['cultural.settingPlace', shares(block.settingPlaces.map((place) => place.id))],
+    ['cultural.settingEra', shares(block.settingEras.map((era) => era.id))],
+  ];
+  return keyed
+    .filter((pair): pair is [string, Record<string, number>] => pair[1] !== null)
+    .map(([featureKey, distribution]) => ({
+      titleId,
+      featureKey,
+      value: null,
+      distribution,
+      uncertainty: null,
+      sourceIds: block.sourceIds,
+      extractorVersion: block.extractorVersion,
+      licenseStatus: block.licenseStatus,
+      reviewStatus: block.reviewStatus,
+      validFrom,
+    }));
+}
 
 /**
  * One row per known feature of a published snapshot: the 13 V1 keys that are
@@ -418,6 +461,7 @@ export function featureRowsFor(entry: CatalogEntry, titleId: string, now: Date):
         titleId,
         featureKey: key,
         value,
+        distribution: null,
         uncertainty: typeof confidence === 'number' && Number.isFinite(confidence) ? Math.round((1 - confidence) * 1000) / 1000 : null,
         sourceIds: Array.isArray(block.meta.sourceIds) ? block.meta.sourceIds.filter((id): id is string => typeof id === 'string') : [],
         extractorVersion,
@@ -426,6 +470,9 @@ export function featureRowsFor(entry: CatalogEntry, titleId: string, now: Date):
         validFrom: parseWhen(block.meta.generatedAt, now),
       });
     }
+  }
+  if (entry.cultural && typeof entry.cultural === 'object') {
+    rows.push(...culturalRowsFor(entry.cultural, titleId, now));
   }
   return rows;
 }

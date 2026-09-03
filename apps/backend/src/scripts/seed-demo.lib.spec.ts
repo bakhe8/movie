@@ -5,6 +5,7 @@ import {
   MODEL_DIMENSIONS,
   catalogEntryToTitle,
   combinations,
+  culturalRowsFor,
   featureRowsFor,
   fingerprintVector,
   isCompleteFingerprint,
@@ -12,6 +13,7 @@ import {
   mulberry32,
   rankByUtility,
   sampleTriad,
+  shares,
   sampleWatched,
   sessionTimestamps,
   spreadWatchedDates,
@@ -204,6 +206,45 @@ describe('time helpers', () => {
   });
 });
 
+describe('culturalRowsFor (categorical provenance)', () => {
+  const block = {
+    schemaVersion: 'film-cultural-v1' as const,
+    originalLanguages: ['ar'],
+    productionCountries: ['EG', 'FR'],
+    settingPlaces: [
+      { id: 'Q85', label: 'Cairo', countries: ['EG'] },
+      { id: 'Q7903', label: 'Nowhere', countries: [] },
+    ],
+    settingCountries: ['EG'],
+    settingEras: [],
+    dialects: null,
+    generatedBy: 'wikidata' as const,
+    generatedAt: '2026-09-04T20:00:00Z',
+    extractorVersion: 'catalog-cultural-v1' as const,
+    sourceIds: ['wikidata:Q765535'],
+    licenseStatus: 'commercial_allowed' as const,
+    reviewStatus: 'unreviewed' as const,
+  };
+
+  it('writes one NULL-valued row per known key with the codes as equal shares, and no row for an empty key', () => {
+    const rows = culturalRowsFor(block, 'title-uuid', NOW);
+    expect(rows.map((row) => row.featureKey)).toEqual(['cultural.originalLanguage', 'cultural.productionCountry', 'cultural.settingCountry', 'cultural.settingPlace']);
+    expect(rows.every((row) => row.value === null && row.uncertainty === null)).toBe(true);
+    expect(rows[1].distribution).toEqual({ EG: 0.5, FR: 0.5 });
+    expect(rows[3].distribution).toEqual({ Q85: 0.5, Q7903: 0.5 });
+    expect(rows[0]).toMatchObject({ titleId: 'title-uuid', extractorVersion: 'catalog-cultural-v1', licenseStatus: 'commercial_allowed', sourceIds: ['wikidata:Q765535'] });
+    expect(rows[0].validFrom.toISOString()).toBe('2026-09-04T20:00:00.000Z');
+    expect(shares([])).toBeNull();
+    expect(shares(['EG', 'EG'])).toEqual({ EG: 1 });
+  });
+
+  it('featureRowsFor appends the cultural rows after the fingerprint blocks', () => {
+    const rows = featureRowsFor({ ...entry(1, MODEL_DIMENSIONS.map(() => 0.5)), cultural: block }, 'title-uuid', NOW);
+    expect(rows.filter((row) => row.featureKey.startsWith('cultural.'))).toHaveLength(4);
+    expect(rows.filter((row) => !row.featureKey.startsWith('cultural.')).every((row) => row.value !== null)).toBe(true);
+  });
+});
+
 describe('featureRowsFor (content_features provenance)', () => {
   const v1 = Object.fromEntries(DIMENSIONS.map((dimension) => [dimension, 0.5]));
   const full = {
@@ -250,6 +291,7 @@ describe('featureRowsFor (content_features provenance)', () => {
     expect(pacing.validFrom.toISOString()).toBe('2026-09-03T18:00:00.000Z');
     const irony = rows.find((row: { featureKey: string }) => row.featureKey === 'tone.irony');
     expect(irony).toMatchObject({ value: 0.9, uncertainty: 0.4, extractorVersion: 'enrichment-worker-v2-families-v1', sourceIds: ['wikidata:Q1'] });
+    expect(rows.every((row) => row.distribution === null)).toBe(true); // numeric blocks carry a value, never a distribution
     const scale = rows.find((row) => row.featureKey === 'style.scale');
     expect(scale).toMatchObject({ value: 0.7, uncertainty: 0.5, extractorVersion: 'enrichment-worker-v3-form-v1' });
     expect(scale?.validFrom.toISOString()).toBe('2026-09-04T18:00:00.000Z');

@@ -104,7 +104,8 @@ describe('seed-demo (postgres-test)', () => {
     const demoTitles = await dataSource.getRepository(Title).find({ where: catalog.slice(0, 1).map((entry) => ({ internalId: entry.internalId })) });
     const firstTitleRows = await dataSource.getRepository(ContentFeature).find({ where: { titleId: demoTitles[0].id } });
     expect(firstTitleRows.length).toBe(featureRowsFor(catalog[0], demoTitles[0].id, now).length);
-    expect(firstTitleRows.every((row) => row.value !== null && row.supersededBy === null)).toBe(true);
+    expect(firstTitleRows.every((row) => (row.value !== null) !== (row.distribution !== null) && row.supersededBy === null)).toBe(true);
+    expect(firstTitleRows.some((row) => row.featureKey === 'cultural.originalLanguage' && row.distribution !== null)).toBe(true);
     // An older extractor version of one feature, planted before the second run, must end up superseded by the current row.
     const planted = await dataSource.getRepository(ContentFeature).save({
       titleId: demoTitles[0].id,

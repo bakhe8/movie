@@ -21,6 +21,8 @@ def test_feature_sets_have_the_expected_sizes():
     assert len(FEATURE_SETS["v1+v2"]) == 28
     assert len(FEATURE_SETS["v3"]) == 12
     assert len(FEATURE_SETS["v1+v2+v3"]) == 40
+    served = next(key for key in FEATURE_SETS if key.startswith("served("))
+    assert FEATURE_SETS[served] == tuple(FINGERPRINT_DIMENSIONS)
 
 
 def test_feature_vector_reads_v1_top_level_and_v2_nested_and_never_imputes():

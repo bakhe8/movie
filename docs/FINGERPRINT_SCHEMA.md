@@ -71,7 +71,7 @@ The model reads the 13 numeric keys in the `FINGERPRINT_DIMENSIONS` order; a sto
 | Theme | `themes[]` (free text) | controlled vocabulary; never used to infer user traits |
 | Ending | — | closed/open, twist, dramatic justice, bitterness/optimism (internal use + spoiler-free explanations only) |
 | People | — | director, writer, cast, cinematographer, composer as separate hierarchical, heavily shrunk effects — **not** in the dense vector |
-| Cultural context | — | original language, dialects, production country, story setting, era — separate block; UI language and nationality never enter taste |
+| Cultural context | — | original language, dialects, production country, story setting, era — separate block; UI language and nationality never enter taste. **Built from Wikidata in §3.4** (dialects stay unknown) |
 
 ## 3. Version 2 — target shape (`BP §6.1`, `§13.3`)
 
@@ -135,6 +135,42 @@ Why now: with V1+V2 served (ADR-69) the first non-synthetic ranker still disagre
 Not in this pass, on purpose: camera movement and editing (`Style`) need descriptive visual evidence the fixture's plot text does not carry; People and Cultural context are separate factual blocks (§3.2), not LLM extractions. No key encodes a political, religious or other sensitive position ([PRIVACY.md](PRIVACY.md) §1.6): `narrative.scope` is where the story is set in scale, and the prompt says so explicitly. Style features are scored from whatever the description says about form, so their confidence is expected to run low and the report prints it per feature; a low-confidence feature can be used for candidate generation but not cited as a reason (§5).
 
 Storage: `fingerprint.v3 = { schemaVersion: 'film-fingerprint-v3', features, confidence, generatedBy, generatedAt, modelVersion, extractorVersion: 'enrichment-worker-v3-form-v1', sourceIds, licenseStatus, reviewStatus }` — no `themes` (published once, in the V2 block). Extraction: `python -m src.enrich_catalog --v3` (same evidence, same runner, one block per run, report `catalog.demo.enrichment-v3-report.md`). Provenance: the demo seed writes one `content_features` row per V3 key with the block's version and sources, exactly as for V2 (`NESTED_BLOCKS` in `seed-demo.lib.ts`). Offline evidence: `fingerprint_v2_eval` now compares V1, V1+V2 (served), V2, V1+V2+V3 and V3 alone on the same triads and hold-out.
+
+### 3.4 Cultural-context block — facts from Wikidata, 2026-09-04
+
+`BP §6.1` "السياق الثقافي" and `§10.2`: original language, dialects, production country, story setting and era are a **separate factual block** — never part of the dense content vector, never an inference by a model, and never a statement about the viewer (UI language and nationality do not enter taste). Built by `apps/backend/src/scripts/fetch-cultural.ts` (`npm run catalog:cultural`, `make catalog-cultural`) from each title's Wikidata claims, through the same on-disk cache as the catalog fetch, and stored as `cultural` on the fixture entry:
+
+| Field | Wikidata | Value |
+|---|---|---|
+| `originalLanguages[]` | P364 → P218 / P220 | ISO 639-1 where one exists (every Arabic variety → `ar`, as the catalog does), else 639-3, else the English label |
+| `productionCountries[]` | P495 → P297 | ISO 3166-1 alpha-2, else the label |
+| `settingPlaces[]` | P840 (+ P17 of the place) | `{ id, label, countries[] }` — every country whose P17 statement holds now (ended and deprecated statements skipped; a contested region lists each claimant, none is picked), or the place's own code when it is a country; empty when Wikidata has none |
+| `settingCountries[]` | derived | distinct countries of the places, in place order |
+| `settingEras[]` | P2408 (+ P580 / P582 / P585) | `{ id, label, start, end }` — dated from the item's own claims, else from a decade / century / year label, else undated |
+| `dialects` | — | `null` for every title: Wikidata does not model a film's dialogue dialect. Unknown, never guessed (`BP §11.3`) |
+| provenance | — | `generatedBy: 'wikidata'`, `generatedAt`, `extractorVersion: 'catalog-cultural-v1'`, `sourceIds: ['wikidata:Q…']`, `licenseStatus: 'commercial_allowed'` (Wikidata statements are CC0, [DATA_LICENSING.md](DATA_LICENSING.md)), `reviewStatus: 'unreviewed'` |
+
+Storage: the block does not enter `titles.fingerprint`. The seed writes it as categorical `content_features` rows — `value` NULL, the codes in `distribution` as equal shares (`{ EG: 0.5, FR: 0.5 }`), one row per key that has a value (`cultural.originalLanguage`, `cultural.productionCountry`, `cultural.settingCountry`, `cultural.settingPlace` by Wikidata id, `cultural.settingEra` by id), with the block's version, sources and CC0 status (`culturalRowsFor` in `seed-demo.lib.ts`). `titles.originalLanguage` (ADR-64) keeps carrying the first language for the trainer's diversity count. In the model the block is the hierarchical, heavily shrunk side block of `BP §7.1` / `§10.2`, not a dense dimension — unwired, like People.
+
+Coverage is the block's second purpose (`BP §11.3`, `§16.1`): the fetch writes `catalog.demo.cultural-report.md` with, per original language, production country, slice and tier, how many titles have a setting place and era, a complete V1 vector, V2 and V3 blocks, and the mean V1 confidence — the "no large gap between languages" gate of §6 measured rather than assumed — plus review lists of what Wikidata lacks (no place, no era, undated era, place without a country) and the stories set outside their production country.
+
+Result on the demo catalog: **Result on the demo catalog (2026-09-04, `catalog-cultural-v1`, 532 referenced Wikidata entities resolved through the catalog cache):** all 300 titles carry the block; 225 have at least one setting place (P840) and 100 a setting era (P2408); 23 stories are set outside their production country (Casablanca, Timbuktu, Gladiator, Apocalypse Now, The Third Man, Omar, Wajib, Salt of This Sea…). Every original language resolved to a code except four titles whose Wikidata language item has no ISO code at all (Songhay, Mixtec, Taiwanese Hokkien, Standard Taiwanese Mandarin — kept as labels, listed as `unknown` in the language table); one production "country" is a label rather than a code (`Occupied Palestinian territory`, the item has no P297). A place carries every country whose P17 statement holds now — ended and deprecated statements are skipped, and a contested region lists each claimant rather than having one picked — so Nablus reads `PS` (the 1948–1967 state Wikidata also records is ended) and the region item "Palestine" reads both `PS` and `IL`. 25 titles have a place with no country at all: fictional places (Tatooine, Middle-earth, DuLoc), oceans and ships (North Atlantic Ocean, RMS Carpathia), continents (Africa) and historical entities (Allied-occupied Austria).
+
+Coverage per original language, the first measurement of `BP §11.3`'s gate on this catalog (setting place / era / V1 complete / mean V1 confidence):
+
+| Language | Titles | Setting place | Setting era | V1 complete | Mean V1 confidence |
+|---|---|---|---|---|---|
+| en | 122 | 93 % | 48 % | 98 % | 0.66 |
+| ar | 91 | **42 %** | **8 %** | 98 % | **0.51** |
+| fr | 13 | 69 % | 31 % | 100 % | 0.60 |
+| ja | 11 | 91 % | 64 % | 100 % | 0.68 |
+| de / es / ko / tr / fa / hi | 5–6 each | 83–100 % | 0–100 % | 80–100 % | 0.61–0.67 |
+
+And per production country: US 101 titles with a setting place for 93 %, **EG 41 with 17 %** and an era for 2 %, **SA 9 with 11 %**, FR 19 with 68 %, GB 15 with 93 %, JP 11 with 91 %, LB 7 with 71 %. By tier: popular 80 %, mid 75 %, niche 68 % have a place; niche titles are also the only tier with an incomplete V1 (94 %).
+
+The gap the gate is there to catch is real and it is upstream, not in the pipeline: Wikidata describes where and when an American or Japanese story is set nine times out of ten, an Egyptian one one time in six, a Saudi one one in nine; and the V1 extractor's own confidence on Arabic-language titles (0.51) runs a full step below English (0.66), because the Arabic titles' plot text on Wikipedia is shorter. The review lists name the 75 titles without a place and the 200 without an era; for the Arabic half the fix belongs on Wikidata itself. `dialects` is unknown for every title — Wikidata does not carry it — and stays so rather than being guessed from the country.
+
+Every block is written into the dev database as categorical `content_features` rows (NULL value, codes as shares) beside the fingerprint rows; the model, the trainer and the API read none of it yet.
 
 ### 3.2 Target shape
 
