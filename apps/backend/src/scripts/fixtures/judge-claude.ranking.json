@@ -1,0 +1,18 @@
+{
+  "$comment": "The first non-synthetic ranker (docs/DEMO_DATA_PLAN_2026-09-03.md §7.1): Claude's own preference order over the catalog films it can judge, most loved first, written by judgment on 2026-09-03 and NOT derived from any fingerprint. Account claude@judge.local (outside @demo.local, so `make demo` never removes it). The app chose every triad (random-v1) and this order answered 25 of them; the rounds themselves live in the dev database under that profile (title uuids are per-database, so they are not committed).",
+  "watched": [
+    "DEMO0265", "DEMO0259", "DEMO0299", "DEMO0234", "DEMO0288", "DEMO0294", "DEMO0269", "DEMO0260", "DEMO0282", "DEMO0177",
+    "DEMO0290", "DEMO0289", "DEMO0002", "DEMO0001", "DEMO0203", "DEMO0276", "DEMO0156", "DEMO0161", "DEMO0228", "DEMO0179",
+    "DEMO0277", "DEMO0190", "DEMO0178", "DEMO0220", "DEMO0154", "DEMO0185", "DEMO0186", "DEMO0166", "DEMO0172", "DEMO0079",
+    "DEMO0055", "DEMO0056", "DEMO0235", "DEMO0248", "DEMO0083", "DEMO0043", "DEMO0061", "DEMO0084", "DEMO0229", "DEMO0119",
+    "DEMO0131", "DEMO0170", "DEMO0175", "DEMO0155", "DEMO0106", "DEMO0107", "DEMO0176", "DEMO0053", "DEMO0046", "DEMO0242",
+    "DEMO0245", "DEMO0132", "DEMO0130", "DEMO0047", "DEMO0085", "DEMO0044", "DEMO0045", "DEMO0086", "DEMO0121", "DEMO0015",
+    "DEMO0014"
+  ],
+  "watchlist": ["DEMO0091", "DEMO0092", "DEMO0264", "DEMO0200", "DEMO0201", "DEMO0072"],
+  "notes": {
+    "DEMO0265": "أعيده كل بضع سنوات؛ ما لا يُقال فيه أهم مما يُقال.",
+    "DEMO0002": "أجمل فيلم عربي رأيته من جهة الصورة.",
+    "DEMO0234": "لا أحد على خطأ ولا أحد على صواب، وهذا هو الفيلم كله."
+  }
+}

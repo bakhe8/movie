@@ -287,6 +287,30 @@ Synthetic personas are sampled from the model's own likelihood over the catalog'
 3. Train the profile (`python -m src.training <profile-uuid>`), then read Home and the Library ranking and answer, in writing: does the top of the library ranking match what you would have put there? Does the Home list feel like you, or like your genres? Where does it fail, and is the failure explainable by a missing fingerprint family ([FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md) §2.1)?
 4. Those answers, not the persona recovery score, are the Phase 0 gate input (`§17.1`: "value appears after 3–5 triads").
 
+### 7.1 The first non-synthetic ranker: Claude, 2026-09-03
+
+At the owner's request the session ran §7's protocol itself, as a ranker from *outside* the generative model: an account `claude@judge.local` (kept out of the `@demo.local` domain so `make demo` never removes it; credentials on the session board), an onboarded profile, 61 catalog films the session can judge marked as watched with three notes and six watchlist entries, and **25 rounds answered by a preference order written by judgment** (`fixtures/judge-claude.ranking.json`; the rounds are in `judge-claude.rounds.json`). The app chose every triad (`random-v1`); nothing in the order was derived from a fingerprint. It is still not a human judgment — the owner's pass remains the gate input — but it is the first ranking the learner has seen that was not sampled from its own likelihood.
+
+| Measure | Value |
+|---|---|
+| Rounds | 25 completed, 5 held out |
+| Held-out pairwise accuracy / NLL | **0.67** / 1.99 (the synthetic personas: 0.75–1.00) |
+| Genre diversity of the evidence | 17 |
+| Spearman between Claude's own order and the model's library ranking (61 films) | **0.72** |
+| Model's top 10 | Persona, Taste of Cherry, The Seventh Seal, Stalker, 2001, Rashomon, Lost in Translation, Portrait of a Lady on Fire, Blade Runner, In the Mood for Love — eight of them in Claude's top 23; Claude's #1 sits at #10 |
+| Model's bottom 5 | The Truman Show, Toy Story, City of God, Terrorism and Kebab, Amélie — Claude's #43, #40, #51, #61, #50 |
+| Largest disagreements | Fight Club (Claude #59, model #24) · Paradise Now (#48 → #20) · Where Is the Friend's House? (#11 → #40) · Eternal Sunshine (#20 → #47) · Cairo Station (#14 → #36) · Fargo (#29 → #51) |
+| Home (all `strong`) | Andrei Rublev, Ida, A Ghost Story, Eraserhead, Aftersun, Roma, Burning, The Lighthouse, Wendy and Lucy, The Green Knight; every reason line reads "pacing lower, ambiguity higher" |
+
+The four answers, written by the ranker:
+
+1. **Does the top of the library ranking match what I would have put there?** Mostly. The model's top ten is drawn from my top quarter, and the bottom five are films I ranked low. A 0.72 rank correlation from 25 triads is real learning, not noise.
+2. **Does the Home list feel like me, or like my genres?** Like one slice of me. It found the axis I ranked most consistently — slow, ambiguous, dark — and recommends along it. It has not found that I also rank warm, plain, humanist films high (Where Is the Friend's House? #11, Children of Heaven #33, Totoro #39); those sit low in its ranking. A single linear taste vector cannot hold "loves slow ambiguity" and "loves warm simplicity" at once, so it keeps the stronger one.
+3. **Where does it fail, and is the failure a missing fingerprint family?** Yes, in every large disagreement. Fight Club and Paradise Now are pushed up because they score as ambiguous and dark — the dimensions that make me rank a film low there (self-satisfied cynicism, in the one; a thriller structure, in the other) are the `§6.1` families V1 lacks: tone beyond warmth/darkness (irony, unease, catharsis), characters (moral ambiguity, transformation) and ending. Where Is the Friend's House? and Eternal Sunshine are pushed down for the mirror reason: their warmth and emotional arc carry them, and V1 has only `warmth`.
+4. **Confidence.** The screens say **قوي / strong** for this profile although it predicts my held-out rounds at two-thirds. `§9.2`'s "predicted held-out comparisons" criterion is not binding enough in the current band rule (ADR-59/62/64 add posterior stability, genre and language diversity); a ranker with 0.67 held-out accuracy should not read as "a fairly stable pattern in your choices". Recorded for session A (board request C8).
+
+What this changes in the plan: nothing in WS1–WS5; it sharpens §6's "not built" list — the V2 fingerprint families are now the first thing a real ranker misses, and the confidence band needs a held-out floor. The owner's own pass (§7) stays the Phase 0 gate input.
+
 ---
 
 ## 8. Provider decision — LLM enrichment through the Anthropic Messages API
@@ -315,3 +339,4 @@ Owner's decision, 2026-09-03, in answer to "what is the alternative to an OpenAI
 | 2026-09-03 | WS3 and WS4 code delivered: `seed-demo.ts` + pure library + `personas.demo.json`, 17 unit tests and a double-run e2e on `postgres-test`; `train_demo.py` + 4 tests; `db:seed:demo` scripts and `make demo`. The load into the dev database is announced on the session board before it runs |
 | 2026-09-03 | Dev database loaded and the four personas trained; noise temperature calibrated 0.5 → 0.2 against the real fingerprints; WS4 acceptance met (`slow-burn` recovery 0.83, held-out accuracy 0.75). WS5 (browser judgment pass) is next |
 | 2026-09-03 | WS5 done on an isolated HEAD stack (3110/3111): every persona in its expected band, rankings and recommendations match the designed tastes, the partial-title demotion is visible; two frontend copy/select findings recorded for session B. QUICKSTART §6.1 documents `make demo` and the persona logins. Remaining: WS6's status row (session A's file) and the owner's real-account judgment (§7) |
+| 2026-09-03 | §7.1 added: the first non-synthetic ranker (Claude, 61 watched, 25 rounds by its own order): Spearman 0.72 with the model's ranking, held-out accuracy 0.67 yet band `strong`; the misses map onto the missing V2 fingerprint families; band calibration flagged to session A (C8) |
