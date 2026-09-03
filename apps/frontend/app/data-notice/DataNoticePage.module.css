@@ -1,0 +1,44 @@
+/* Sources table of the data notice: the page's own measure and tokens; the
+   table scrolls inside its wrapper on narrow screens so the page never does. */
+
+.tableWrap {
+  overflow-x: auto;
+  margin-top: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-button);
+}
+
+.sources {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  font-size: var(--fs-14);
+}
+
+.sources th,
+.sources td {
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--line);
+  text-align: start;
+  vertical-align: top;
+}
+
+.sources thead th {
+  background: var(--surface);
+  font-weight: var(--w-bold);
+}
+
+.sources tbody th {
+  font-weight: var(--w-bold);
+  white-space: nowrap;
+}
+
+.sources tbody tr:last-child th,
+.sources tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.attribution {
+  font-size: var(--fs-12);
+  color: var(--muted);
+}
