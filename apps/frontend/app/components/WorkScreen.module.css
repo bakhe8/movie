@@ -155,8 +155,11 @@
 
 /* --- Sections ------------------------------------------------------------- */
 
+/* One column that can shrink: an `auto` track would grow to a long English
+   sentence's max-content width and push the page past the viewport. */
 .section {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--sp-3);
   padding: var(--sp-4);
   background: var(--surface);
@@ -190,10 +193,11 @@
   white-space: nowrap;
 }
 
-/* Unknown or not yet published: hollow, never zero (decision Q16). */
+/* Unknown or not yet published: hollow, never zero (decision Q16). A block
+   that wraps: these are sentences, not chips. */
 .hollow {
-  display: inline-flex;
-  width: max-content;
+  display: block;
+  width: fit-content;
   max-width: 100%;
   padding: 2px var(--sp-2);
   border: 1px dashed var(--line);

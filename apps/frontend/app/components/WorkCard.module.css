@@ -113,6 +113,7 @@
 
 .cell dd {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--sp-1);
   margin: 0;
   font-size: var(--fs-14);

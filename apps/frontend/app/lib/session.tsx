@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { api, ApiError, setAuthToken, type Profile, type User } from './api';
+import { api, ApiError, setAuthToken, UNAUTHORIZED_EVENT, type Profile, type User } from './api';
 
 const STORAGE_KEY = 'reel.session.v1';
 
@@ -141,6 +141,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setAuth(null);
     setProfile(null);
   }, []);
+
+  // A token rejected mid-session (revoked, or the account re-created on a
+  // shared dev database) signs out the same way the first load does (M4).
+  useEffect(() => {
+    window.addEventListener(UNAUTHORIZED_EVENT, logout);
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, logout);
+  }, [logout]);
 
   const clearError = useCallback(() => setError(null), []);
 

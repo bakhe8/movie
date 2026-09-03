@@ -198,6 +198,9 @@ export class ApiError extends Error {
 
 let authToken: string | null = null;
 
+// Fired once per rejected token so the session provider can sign out.
+export const UNAUTHORIZED_EVENT = 'reel:unauthorized';
+
 export function setAuthToken(token: string | null) {
   authToken = token;
 }
@@ -214,6 +217,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     const message = Array.isArray(body.message) ? body.message.join(', ') : body.message || response.statusText;
+    // A rejected token on any call, not only the first profile load (M4):
+    // the session provider signs out so the door appears instead of every
+    // screen failing one by one. Only 401 -- never a transient 5xx/429.
+    if (response.status === 401 && authToken && typeof window !== 'undefined') {
+      window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+    }
     throw new ApiError(message, response.status, typeof body === 'object' && body !== null ? body : {});
   }
 
