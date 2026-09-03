@@ -30,6 +30,7 @@ Languages: product/vision in Arabic; engineering contracts in English; UI copy i
 | [DATA_LICENSING.md](DATA_LICENSING.md) | EN | controls | rights registry rule, source-by-source terms and allowed use, Phase 0 catalog steps, attribution, legal checklist, red flags |
 | [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) | EN | status | built vs blueprint per feature; the 15 gaps hiding behind working code; Alpha gate readiness; next milestone |
 | [AUDIT_2026-09-03.md](AUDIT_2026-09-03.md) | EN | audit | independent audit of `3f60884`: verified results, ranked findings with reproductions, documentation drift by line, ordered fix plan |
+| [DEMO_DATA_PLAN_2026-09-03.md](DEMO_DATA_PLAN_2026-09-03.md) | EN | execution map | what fills the dev database so the product can be judged: 300-title catalog fixture, fingerprints, synthetic personas, browser judgment pass; §8 records the LLM-provider decision |
 | [UI_MOCKUP_REVIEW_2026-09-03.md](UI_MOCKUP_REVIEW_2026-09-03.md) | EN | review | review of the external «بصمة الذوق» mobile mockup against the blueprint: rendered and touch-tested, keep/drop list, the display-rule clarifications that became ADR-33 |
 | [QUICKSTART.md](QUICKSTART.md) | EN | how-to | local setup and the full loop (migrate, seed, run, train, test) |
 | [../README.md](../README.md) | EN | entry | repository overview and pointers |
@@ -67,7 +68,7 @@ Rules: never add an endpoint list, schema fragment or threshold to a second docu
 ## Open housekeeping
 
 - No `LICENSE` file exists at the repository root although `apps/backend/package.json` declares MIT; choose a license before any public release.
-- `.env.example` lacks `FRONTEND_URL` and `OPENAI_FINGERPRINT_MODEL` (see [QUICKSTART.md](QUICKSTART.md) §2 and ADR-23).
+- `.env.example` lacks `FRONTEND_URL` (see [QUICKSTART.md](QUICKSTART.md) §2). It now carries `ANTHROPIC_FINGERPRINT_MODEL` / `ANTHROPIC_EXPLANATION_MODEL` in place of the `OPENAI_*` ids (ADR-23; provider decision in [DEMO_DATA_PLAN_2026-09-03.md](DEMO_DATA_PLAN_2026-09-03.md) §8).
 
 ## Version history
 
@@ -76,5 +77,6 @@ Rules: never add an endpoint list, schema fragment or threshold to a second docu
 | 2026-09-02 | blueprint v1.0 and first English drafts (dated "2025-01-02" by mistake) |
 | 2026-09-03 | blueprint v1.1 (`§7.5`–`§7.6`); documentation audit: English set rewritten as derived contracts, four files renamed (`architecture.md`→`ARCHITECTURE.md`, `schema.md`→`SCHEMA.md`, `privacy.md`→`PRIVACY.md`, `PHASE1_CHECKLIST.md`→`IMPLEMENTATION_STATUS.md`), `API.md` and `FINGERPRINT_SCHEMA.md` added, ADR-14…26 added, journey document marked non-normative and reconciled, dangling links (`deployment.md`, `db/migrations/001_init_schema.sql`) removed |
 | 2026-09-03 | independent code/infra/docs audit added ([AUDIT_2026-09-03.md](AUDIT_2026-09-03.md)); its §5 lists the lines in this set that must be corrected |
+| 2026-09-03 | demo data plan added ([DEMO_DATA_PLAN_2026-09-03.md](DEMO_DATA_PLAN_2026-09-03.md)): 300-title catalog fixture (`18db8b9`), enrichment worker moved to the Anthropic Messages API (`47f3219`), `.env.example` model ids renamed `ANTHROPIC_*` |
 | 2026-09-03 | UI mockup review added ([UI_MOCKUP_REVIEW_2026-09-03.md](UI_MOCKUP_REVIEW_2026-09-03.md)); ADR-33 (prediction display formats) and an ADR-4 consequence (no post-watch expectation question); SPECIFICATION §5.2–§5.4 and the API `personalFit` note updated; IMPLEMENTATION_STATUS gains a *Frontend ↔ backend boundary* section |
 | 2026-09-03 | blueprint v1.2: App. C gains the "display order after a replacement" question, observed when the ADR-17 replacement controls shipped; mirrored in SPECIFICATION §11 and ADR-17 |
