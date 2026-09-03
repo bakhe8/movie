@@ -1,39 +1,39 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { api, ApiError, type Recommendation, type UserTitleState } from '../lib/api';
+import { api, type UserTitleState } from '../lib/api';
 
+// The library (blueprint §5.3 "المكتبة"): what the user has watched and what
+// they saved to watch. Recommendations live on the home screen
+// (RecommendationsScreen), not here.
 const labels = {
   ar: {
-    watchedTitle: 'الأفلام المُشاهَدة',
-    empty: 'لم تُسجَّل أفلام مشاهَدة بعد.',
-    recsTitle: 'توصياتك',
-    recsPending: 'التوصيات غير متاحة بعد -- أكمل جولات ترتيب أكثر ودرّب النموذج.',
-    recsEmpty: 'لا توجد توصيات حاليًا -- سجّل مزيدًا من الأفلام أو أكمل جولات ترتيب أكثر.',
-    recsError: 'تعذّر تحميل التوصيات. حاول مجددًا لاحقًا.',
+    eyebrow: 'المكتبة',
+    title: 'قائمتي',
+    watchlist: 'للمشاهدة لاحقًا',
+    watchlistEmpty: 'لم تحفظ شيئًا بعد. من التوصيات اضغط «أضف إلى قائمتي».',
+    watched: 'الأفلام المُشاهَدة',
+    watchedEmpty: 'لم تُسجَّل أفلام مشاهَدة بعد.',
     loading: 'جارٍ التحميل…',
+    failed: 'تعذّر تحميل قائمتك.',
   },
   en: {
-    watchedTitle: 'Watched films',
-    empty: 'No watched films recorded yet.',
-    recsTitle: 'Your recommendations',
-    recsPending: 'Recommendations are not ready yet -- complete more ranking rounds and train the model.',
-    recsEmpty: 'No recommendations right now -- log more films or complete more ranking rounds.',
-    recsError: 'Recommendations could not be loaded. Please try again later.',
+    eyebrow: 'Library',
+    title: 'My list',
+    watchlist: 'To watch later',
+    watchlistEmpty: 'Nothing saved yet. Use “Add to my list” on a recommendation.',
+    watched: 'Watched films',
+    watchedEmpty: 'No watched films recorded yet.',
     loading: 'Loading…',
+    failed: 'Your list could not be loaded.',
   },
 };
 
-// Why recommendations are not shown. Stored as a status rather than the
-// backend's (English) error message so the effect below can stay scoped to
-// [profileId] while the rendered text still follows the current language.
-type RecsStatus = 'pending' | 'error' | null;
-
 export function ListScreen({ lang, profileId }: { lang: 'ar' | 'en'; profileId: string }) {
   const [watched, setWatched] = useState<UserTitleState[]>([]);
-  const [recommendations, setRecommendations] = useState<Recommendation[] | null>(null);
-  const [recsStatus, setRecsStatus] = useState<RecsStatus>(null);
+  const [watchlist, setWatchlist] = useState<UserTitleState[]>([]);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
   const t = labels[lang];
 
   useEffect(() => {
@@ -42,66 +42,65 @@ export function ListScreen({ lang, profileId }: { lang: 'ar' | 'en'; profileId: 
     // redundant with the initial useState(true) on first mount.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
-    Promise.all([
-      api.getWatchedTitles(profileId),
-      api
-        .getRecommendations(profileId)
-        .then((result) => {
-          if (cancelled) return;
-          setRecommendations(result);
-          setRecsStatus(null);
-        })
-        .catch((err) => {
-          if (cancelled) return;
-          setRecommendations(null);
-          // 409 is the backend's "no trained preference model yet" answer
-          // (RecommendationsService); anything else is a real failure.
-          setRecsStatus(err instanceof ApiError && err.status === 409 ? 'pending' : 'error');
-        }),
-    ]).then(([watchedTitles]) => {
-      if (!cancelled) setWatched(watchedTitles);
-    }).finally(() => {
-      if (!cancelled) setLoading(false);
-    });
+    Promise.all([api.getWatchedTitles(profileId), api.getWatchlist(profileId)])
+      .then(([watchedTitles, listed]) => {
+        if (cancelled) return;
+        setWatched(watchedTitles);
+        setWatchlist(listed);
+        setFailed(false);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
     return () => {
       cancelled = true;
     };
   }, [profileId]);
 
+  function nameOf(state: UserTitleState) {
+    return state.title ? (lang === 'ar' ? state.title.titleAr : state.title.titleEn) : state.titleId;
+  }
+
   if (loading) {
     return <p className="muted">{t.loading}</p>;
   }
 
-  const recsMessage =
-    recsStatus === 'error' ? t.recsError : recsStatus === 'pending' ? t.recsPending : t.recsEmpty;
+  if (failed) {
+    return <p className="notice">{t.failed}</p>;
+  }
 
   return (
     <>
-      <h2>{t.recsTitle}</h2>
-      {recommendations && recommendations.length > 0 ? (
+      <p className="eyebrow">{t.eyebrow}</p>
+      <h2>{t.title}</h2>
+
+      <h3>{t.watchlist}</h3>
+      {watchlist.length === 0 ? (
+        <p className="muted">{t.watchlistEmpty}</p>
+      ) : (
         <div className="results">
-          {recommendations.map((rec) => (
-            <article key={rec.title.id}>
+          {watchlist.map((state) => (
+            <article key={state.id}>
               <div>
-                <h3>{lang === 'ar' ? rec.title.titleAr : rec.title.titleEn}</h3>
-                <p>{rec.title.description}</p>
+                <h3>{nameOf(state)}</h3>
               </div>
             </article>
           ))}
         </div>
-      ) : (
-        <p className="muted">{recsMessage}</p>
       )}
 
-      <h2>{t.watchedTitle}</h2>
+      <h3>{t.watched}</h3>
       {watched.length === 0 ? (
-        <p className="muted">{t.empty}</p>
+        <p className="muted">{t.watchedEmpty}</p>
       ) : (
         <div className="results">
           {watched.map((state) => (
             <article key={state.id}>
               <div>
-                <h3>{state.title ? (lang === 'ar' ? state.title.titleAr : state.title.titleEn) : state.titleId}</h3>
+                <h3>{nameOf(state)}</h3>
               </div>
             </article>
           ))}

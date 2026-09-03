@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { api, ApiError, type ReplacementReason, type Title, type Triad } from '../lib/api';
 import { TRIAD_INSTRUCTION } from '../lib/copy';
+import { formatNumber } from '../lib/format';
 import styles from './RankScreen.module.css';
 
 type Lang = 'ar' | 'en';
@@ -364,7 +365,7 @@ export function RankScreen({ lang, profileId }: { lang: Lang; profileId: string 
               aria-label={t.position(index + 1)}
             >
               <span className={styles.badge} aria-hidden="true">
-                {index + 1}
+                {formatNumber(index + 1, lang)}
               </span>
               <div className={styles.body}>
                 <h3 className={styles.title}>{name}</h3>

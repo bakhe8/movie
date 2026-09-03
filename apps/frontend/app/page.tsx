@@ -6,6 +6,7 @@ import { DiscoverScreen } from './components/DiscoverScreen';
 import { ListScreen } from './components/ListScreen';
 import { ProfileScreen } from './components/ProfileScreen';
 import { RankScreen } from './components/RankScreen';
+import { RecommendationsScreen } from './components/RecommendationsScreen';
 import { useSession } from './lib/session';
 
 type View = 'home' | 'rank' | 'discover' | 'list' | 'profile';
@@ -15,17 +16,11 @@ const labels = {
   en: { home: 'Home', rank: 'Rank', discover: 'Discover', list: 'My list', profile: 'Profile' },
 };
 
-const homeCopy = {
-  ar: { eyebrow: 'REEL', welcome: 'أهلاً بك في Reel', empty: 'ابدأ من اكتشف لتسجيل ما شاهدته، ثم رتّب.', cta: 'ابدأ' },
-  en: { eyebrow: 'REEL', welcome: 'Welcome to Reel', empty: 'Start in Discover to log what you have watched, then rank.', cta: 'Start' },
-};
-
 export default function Home() {
   const { ready, user, profile } = useSession();
   const [lang, setLang] = useState<'ar' | 'en'>('ar');
   const [view, setView] = useState<View>('home');
   const t = labels[lang];
-  const home = homeCopy[lang];
 
   // Keep the document's language and direction in step with the UI language
   // so assistive tech, fonts and layout follow the toggle (blueprint §4.3 RTL).
@@ -57,15 +52,10 @@ export default function Home() {
         </button>
       </header>
       <section className="content">
+        {/* Home is "tonight's decision" (blueprint §5.3): the recommendation
+            tracks, or the honest "still learning" state before a model exists. */}
         {view === 'home' && (
-          <>
-            <p className="eyebrow">{home.eyebrow}</p>
-            <h2>{home.welcome}</h2>
-            <p className="muted">{home.empty}</p>
-            <button className="cta" onClick={() => setView('discover')}>
-              {home.cta}
-            </button>
-          </>
+          <RecommendationsScreen lang={lang} profileId={profile.id} onGoToRank={() => setView('rank')} />
         )}
         {view === 'rank' && <RankScreen lang={lang} profileId={profile.id} />}
         {view === 'discover' && <DiscoverScreen lang={lang} profileId={profile.id} />}

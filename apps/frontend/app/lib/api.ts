@@ -172,6 +172,8 @@ export const api = {
 
   getWatchedTitles: (profileId: string) => request<UserTitleState[]>(`/profiles/${profileId}/watched-titles`),
 
+  getWatchlist: (profileId: string) => request<UserTitleState[]>(`/profiles/${profileId}/watchlist`),
+
   getCurrentTriad: (profileId: string) => request<Triad>(`/profiles/${profileId}/triads/current`),
 
   // `idempotencyKey` should be a fresh UUID per submit attempt (not per
