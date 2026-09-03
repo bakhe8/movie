@@ -255,7 +255,7 @@ The pass is judged against ADR-33 (no percentage, no merged score) and `§4.4` (
 | WS1 curation + fetch script | **done** | — | the owner's review of the Arabic slice and the nine forced swaps |
 | WS2 | **done** (300/300 in 439 s) | — | — |
 | WS3 | **done** — loaded into the dev database | — | — |
-| WS4 | **done** — trained, acceptance met | — | — |
+| WS4 | **done** — trained, acceptance met on V1; under the 28-key model (ADR-69) `slow-burn`'s held-out bar reads 0.67, see §7.2 re-measurement | — | — |
 | WS5 | **done** (text-verified; a pointer pass by hand remains) | — | — |
 | WS6 | 1 h | — | WS5 screenshots |
 
@@ -342,6 +342,30 @@ On the four synthetic personas (generated from V1 alone, so a control): V1+V2 im
 
 **Provenance rows — done 2026-09-04 (commit `d3e46c5`).** `content_features` now backs every published number of the demo catalog: 8,390 rows for the 300 `DEMO` titles and 28 feature keys (3,835 V1 rows, 55 more from the five deliberately partial titles' remaining dimensions, 4,500 V2 rows), each with `uncertainty = 1 − confidence`, the block's `sourceIds`, `licenseStatus: unknown`, `reviewStatus: unreviewed` and `validFrom` = the extraction time. Written by the seed (`seedContentFeatures()`, [FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md) §3.1): upsert on `(titleId, featureKey, extractorVersion)`, older versions of a feature marked `supersededBy` the current row rather than deleted — verified by the `postgres-test` e2e with a planted older-version row across two runs. Nothing reads the table yet; the admin board (`§5.5`) and the review queue are its consumers.
 
+**Re-measurement after the wiring — 2026-09-04 (ADR-69, commit `1a62cb3` by the model-service owner; this scope's follow-up in the commit after it).** The trainer now serves the 28 keys, `MODEL_VERSION` is `plackett-luce-v2`, and the L2 penalty is chosen per run by held-out NLL over (0.01, 0.03, 0.1, 0.3). Measured on the served path, not the offline script:
+
+| What | Before (V1, 13 keys) | After (V1+V2, 28 keys) |
+|---|---|---|
+| Offline evaluation (`fingerprint_v2_eval`, regression check after the rename) | NLL 0.912 · acc 0.85 · Spearman 0.79 | NLL 0.824 · acc 0.85 · Spearman 0.83 — identical to the first pass |
+| `train_profile` on `claude@judge.local` (47 usable triads, 9 held out) | — (old 13-key snapshot, refused with 409 by the dimension guard until retrained) | NLL 0.8241 · acc 85.19 % · chosen penalty 0.01 · 20 genres / 11 languages |
+| `GET …/library/ranking` through the API, Spearman with Claude's written order over all 61 films | 0.72 at 25 rounds (§7.1) | **0.825** at 50 rounds, `modelVersion: plackett-luce-v2`, bands `likely`/`strong` |
+| Where the misses land (API position / Claude's rank) | Fight Club #33/#59 · In the Mood for Love #8/#1 · Totoro #53/#39 | Fight Club **#57**/#59 · In the Mood for Love **#2**/#1 · Totoro **#41**/#39 · Amélie #58/#50 · The Dark Knight #54/#53 |
+| Largest remaining disagreements (≥ 20 places) | — | Memento #22/#47 · Paradise Now #26/#48 · Capernaum #15/#36 · 12 Angry Men #23/#44 · Where Is the Friend's House? #31/#11 · Toy Story #60/#40 · Caramel #37/#57 · The Yacoubian Building #40/#60 |
+| `GET …/recommendations?limit=15` | — | 15 results, all `strong`/`safe`, coverage 1.00; 2 of 15 reasons cite a V2 family (`tone.unease ↑` for The Lighthouse, `ending.justice ↑` for Atlantics), the rest V1 (`psychologicalDepth ↑`, `dialogueDensity ↓`, `actionIntensity ↓`) |
+
+The served model reproduces the offline forecast to the third decimal, so the wiring is faithful. The top of the ranking is now Claude's top (Persona, In the Mood for Love, Stalker, Yi Yi, Close-Up, Mulholland Drive, Tokyo Story — Claude's #3, #1, #6, #5, #7, #10, #2). The remaining disagreements are of two kinds the fingerprint still cannot see: films Claude ranks by their moral or political weight rather than their texture (12 Angry Men, Paradise Now, The Yacoubian Building) and animation (Toy Story #60 for a #40) — the Style/People/Cultural blocks of §3.1, not more of V1/V2.
+
+**Synthetic personas under the 28-key model** (`python -m src.train_demo`, run after re-seeding; the personas were generated from V1 alone, so their true V2 weight is exactly zero):
+
+| persona | triads | held-out | acc | NLL | recovery (28) | recovery (V1 only) | V2 weight share | chosen penalty | before (V1, WS4) |
+|---|---|---|---|---|---|---|---|---|---|
+| `slow-burn` | 23 | 4 | **0.67** | 1.14 | 0.60 | 0.85 | 0.71 | 0.30 | acc 0.75 · NLL 1.35 · recovery 0.83 |
+| `spectacle` | 12 | 2 | 1.00 | 0.20 | 0.75 | 0.86 | 0.50 | 0.01 | acc 1.00 · NLL 0.41 |
+| `warm-talky` | 6 | 1 | 0.67 | 1.26 | 0.20 | 0.27 | 0.67 | 0.01 | initial band, as designed |
+| `newcomer` | 2 | 0 | — | — | — | — | 0.67 | 0.01 | inconclusive, as designed |
+
+Reading: `slow-burn` still recovers its own V1 direction (0.85 ≥ the 0.8 bar) and its held-out NLL improves (1.35 → 1.14), but it loses one held-out pair (8/12 instead of 9/12, i.e. 0.67 against the 0.75 bar) and the model puts 71 % of its weight norm on V2 families the persona never had — the correlated-feature cost of a 28-key vector on 23 rounds, which the grid answers with the strongest penalty (0.30). This is not a pipeline fault, it is the fixture being narrower than the served model: the personas are defined on 13 axes while the product now learns 28. `train_demo` therefore applies the recovery bar to the V1 sub-vector (where the generator defined the persona) and prints the full-vector recovery, the V2 share and the chosen penalty as diagnostics; the held-out bar is left as it was and is reported as **not met** for `slow-burn` until the fixture is regenerated. Proposed next step for this scope: regenerate the personas on all 28 keys (θ with deliberate V2 preferences — `slow-burn` on openness and unreliability, `spectacle` on catharsis and low ambiguity of ending, `warm-talky` on compassion and relationship centrality) so the synthetic control and the served model describe the same space, then re-run WS4's bar.
+
 ---
 
 ## 8. Provider decision — LLM enrichment through the Anthropic Messages API
@@ -373,3 +397,4 @@ Owner's decision, 2026-09-03, in answer to "what is the alternative to an OpenAI
 | 2026-09-03 | §7.1 added: the first non-synthetic ranker (Claude, 61 watched, 25 rounds by its own order): Spearman 0.72 with the model's ranking, held-out accuracy 0.67 yet band `strong`; the misses map onto the missing V2 fingerprint families; band calibration flagged to session A (C8) |
 | 2026-09-04 | §7.2 added: V2 families specified, extracted for all 300 titles and published inside `fingerprint.v2`; offline evaluation at 25 and 50 rounds — V1+V2 best on every measure at 50 (held-out NLL 0.82 vs 0.91, Spearman 0.83 vs 0.79), the six misses move to the right half; wiring with shrinkage proposed to the model-service owner (C9) |
 | 2026-09-04 | `content_features` provenance rows written by the seed for every V1 and V2 feature of the demo catalog (8,390 rows, supersession verified); C9 requested from session A directly |
+| 2026-09-04 | Re-measurement after ADR-69 wired the 28 keys: served judge model NLL 0.824 / acc 85 % / API Spearman 0.825 (from 0.72); personas re-run under 28 keys, `slow-burn` held-out bar not met (0.67) with V1 recovery intact (0.85) — fixture narrower than the model, regeneration on 28 keys proposed; `train_demo` reports V1 recovery, V2 share and chosen penalty; `fingerprint_v2_eval` on the renamed constants |

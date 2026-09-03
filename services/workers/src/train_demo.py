@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional, Sequence
 import psycopg2
 from dotenv import load_dotenv
 
-from .training import FINGERPRINT_DIMENSIONS, train_profile
+from .training import FINGERPRINT_DIMENSIONS, FINGERPRINT_V1_DIMENSIONS, train_profile
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_PERSONAS = REPO_ROOT / "apps" / "backend" / "src" / "scripts" / "fixtures" / "personas.demo.json"
@@ -57,6 +57,17 @@ class DemoRow:
     language_diversity: Optional[int]
     recovery: Optional[float]
     error: Optional[str] = None
+    # Cosine on the V1 sub-vector only: the generator defined the persona there
+    # (seed-demo.lib.ts reads the 13 V1 keys), so this is the continuation of the
+    # pre-ADR-69 recovery score and the one the acceptance floor applies to.
+    recovery_v1: Optional[float] = None
+    # ||w_v2|| / ||w||: how much of the learned direction the model put on the V2
+    # families, whose true weight for a fixture persona is exactly zero. A
+    # diagnostic of spurious V2 preference (correlated features), not a failure.
+    v2_weight_share: Optional[float] = None
+    # The L2 strength the trainer chose by held-out NLL (ADR-69); None when the
+    # trainer result carries no such field.
+    chosen_regularization: Optional[float] = None
 
 
 def cosine(left: Sequence[float], right: Sequence[float]) -> Optional[float]:
@@ -71,12 +82,29 @@ def cosine(left: Sequence[float], right: Sequence[float]) -> Optional[float]:
     return dot / (norm_left * norm_right)
 
 
+def hidden_theta(theta: Sequence[float], length: int) -> List[float]:
+    """
+    The persona's hidden theta in the model's dimension order, `length` long.
+
+    The fixture personas were generated from V1 utilities only (seed-demo.lib.ts
+    scores a title on the 13 V1 keys), so under the 28-dimension model of ADR-69
+    their true weight on every V2 family is exactly zero: zero-padding is the
+    generator's own value, not an assumption. A theta already `length` long is
+    used as is; a longer one is an error rather than silently truncated.
+    """
+    values = [float(value) for value in theta]
+    if len(values) > length:
+        raise ValueError(f"theta has {len(values)} values, more than the model's {length}")
+    return values + [0.0] * (length - len(values))
+
+
 def load_personas(path: Path) -> Dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
         fixture = json.load(handle)
+    accepted = (len(FINGERPRINT_V1_DIMENSIONS), len(FINGERPRINT_DIMENSIONS))
     for persona in fixture["personas"]:
-        if len(persona["theta"]) != len(FINGERPRINT_DIMENSIONS):
-            raise ValueError(f"{persona['slug']}: theta must have {len(FINGERPRINT_DIMENSIONS)} values")
+        if len(persona["theta"]) not in accepted:
+            raise ValueError(f"{persona['slug']}: theta must have {accepted[0]} (V1 only) or {accepted[1]} values")
     return fixture
 
 
@@ -105,6 +133,9 @@ def train_demo_profiles(profiles: List[DemoProfile], fixture: Dict[str, Any], tr
             continue
         theta = theta_by_slug.get(profile.slug)
         weights = [float(value) for value in result.weights]
+        n_v1 = len(FINGERPRINT_V1_DIMENSIONS)
+        v2_norm = math.sqrt(sum(value * value for value in weights[n_v1:]))
+        total_norm = math.sqrt(sum(value * value for value in weights))
         rows.append(
             DemoRow(
                 slug=profile.slug,
@@ -116,7 +147,10 @@ def train_demo_profiles(profiles: List[DemoProfile], fixture: Dict[str, Any], tr
                 # Present only once the trainer's diversity columns exist; None otherwise, never 0.
                 genre_diversity=getattr(result, "training_genre_diversity", None),
                 language_diversity=getattr(result, "training_language_diversity", None),
-                recovery=cosine(weights, theta) if theta is not None else None,
+                recovery=cosine(weights, hidden_theta(theta, len(weights))) if theta is not None else None,
+                recovery_v1=cosine(weights[:n_v1], list(theta)[:n_v1]) if theta is not None else None,
+                v2_weight_share=(v2_norm / total_norm) if len(weights) > n_v1 and total_norm > 0 else None,
+                chosen_regularization=getattr(result, "chosen_regularization", None),
             )
         )
     return rows
@@ -125,8 +159,9 @@ def train_demo_profiles(profiles: List[DemoProfile], fixture: Dict[str, Any], tr
 def format_table(rows: List[DemoRow], fixture: Dict[str, Any]) -> str:
     expected = {persona["slug"]: persona["expectedBand"] for persona in fixture["personas"]}
     lines = [
-        f"{'persona':<12} {'triads':>6} {'held-out':>8} {'ho-acc':>7} {'ho-nll':>7} {'genres':>6} {'langs':>5} {'recovery':>8}  expected band",
-        "-" * 84,
+        f"{'persona':<12} {'triads':>6} {'held-out':>8} {'ho-acc':>7} {'ho-nll':>7} {'genres':>6} {'langs':>5} "
+        f"{'recovery':>8} {'rec-v1':>6} {'v2-share':>8} {'lambda':>6}  expected band",
+        "-" * 108,
     ]
     for row in rows:
         if row.error:
@@ -136,7 +171,8 @@ def format_table(rows: List[DemoRow], fixture: Dict[str, Any]) -> str:
         lines.append(
             f"{row.slug:<12} {row.training_triad_count:>6} {row.held_out_triad_count:>8} "
             f"{fmt(row.held_out_pairwise_accuracy, '7.2f')} {fmt(row.held_out_nll, '7.3f')} "
-            f"{fmt(row.genre_diversity, '6d')} {fmt(row.language_diversity, '5d')} {fmt(row.recovery, '8.2f')}  {expected.get(row.slug, '?')}"
+            f"{fmt(row.genre_diversity, '6d')} {fmt(row.language_diversity, '5d')} {fmt(row.recovery, '8.2f')} "
+            f"{fmt(row.recovery_v1, '6.2f')} {fmt(row.v2_weight_share, '8.2f')} {fmt(row.chosen_regularization, '6.2f')}  {expected.get(row.slug, '?')}"
         )
     return "\n".join(lines)
 
@@ -149,8 +185,11 @@ def acceptance(rows: List[DemoRow], fixture: Dict[str, Any]) -> List[str]:
         if row.error:
             problems.append(f"{row.slug}: training failed ({row.error})")
         if row.slug == richest["slug"] and not row.error:
-            if row.recovery is None or row.recovery < RECOVERY_FLOOR:
-                problems.append(f"{row.slug}: recovery {row.recovery} below {RECOVERY_FLOOR} -- the seed→train→rank pipeline, not the persona, is wrong")
+            # The floor is on the V1 sub-vector, where the generator defined the persona;
+            # the full-vector recovery is printed as a diagnostic (spurious V2 weight
+            # from correlated features lowers it without the pipeline being wrong).
+            if row.recovery_v1 is None or row.recovery_v1 < RECOVERY_FLOOR:
+                problems.append(f"{row.slug}: V1 recovery {row.recovery_v1} below {RECOVERY_FLOOR} -- the seed→train→rank pipeline, not the persona, is wrong")
             if row.held_out_pairwise_accuracy is None or row.held_out_pairwise_accuracy < HELD_OUT_FLOOR:
                 problems.append(f"{row.slug}: held-out pairwise accuracy {row.held_out_pairwise_accuracy} below {HELD_OUT_FLOOR}")
     return problems

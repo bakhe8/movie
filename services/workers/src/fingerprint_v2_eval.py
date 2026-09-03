@@ -38,14 +38,17 @@ from dotenv import load_dotenv
 
 from .enrichment import V2_FEATURES
 from .ranker import PlackettLuceRanker, compute_nll, compute_pairwise_accuracy
-from .training import FINGERPRINT_DIMENSIONS, TriadEvent, ranking_to_indices
+from .training import FINGERPRINT_DIMENSIONS, FINGERPRINT_V1_DIMENSIONS, TriadEvent, ranking_to_indices
 
 psycopg2.extras.register_uuid()
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 FEATURE_SETS: Dict[str, Tuple[str, ...]] = {
-    "v1": tuple(FINGERPRINT_DIMENSIONS),
-    "v1+v2": tuple(FINGERPRINT_DIMENSIONS) + tuple(V2_FEATURES),
+    # Since ADR-69 the trainer's FINGERPRINT_DIMENSIONS is the full 28 (V1 + V2);
+    # the V1-only set is the trainer's own 13-key tuple, so "v1" here is exactly the
+    # pre-ADR-69 model and "v1+v2" exactly the served one.
+    "v1": tuple(FINGERPRINT_V1_DIMENSIONS),
+    "v1+v2": tuple(FINGERPRINT_DIMENSIONS),
     "v2": tuple(V2_FEATURES),
 }
 
