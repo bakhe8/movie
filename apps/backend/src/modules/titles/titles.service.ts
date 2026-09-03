@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
 import { Title } from '../../entities/title.entity';
+import { AttributionService, TextSource } from '../public-quality/attribution.service';
 import { PublicQuality, PublicQualityService } from '../public-quality/public-quality.service';
 import { ListTitlesQueryDto } from './dto/list-titles-query.dto';
 import { ARABIC_FOLD_FROM, ARABIC_FOLD_TO, diversify, foldArabic } from './starter';
@@ -19,8 +20,10 @@ export type PublicTitle = Omit<Title, 'fingerprint' | 'externalIds'>;
 
 // The work page (`GET /titles/:id`, BP §5.3): Public Quality travels as its
 // own value with its source and attribution, never merged into anything;
-// null when no displayable source exists (BP §11.3), never 0.
-export type WorkPageTitle = PublicTitle & { publicQuality: PublicQuality | null };
+// null when no displayable source exists (BP §11.3), never 0. The
+// description's credit comes from the rights registry the same way
+// (`descriptionSource`, the shape of `posterSource` plus the page link).
+export type WorkPageTitle = PublicTitle & { publicQuality: PublicQuality | null; descriptionSource: TextSource | null };
 
 const PUBLIC_TITLE_COLUMNS = [
   'title.id',
@@ -48,6 +51,7 @@ export class TitlesService {
     @InjectRepository(Title)
     private readonly titlesRepository: Repository<Title>,
     private readonly publicQualityService: PublicQualityService,
+    private readonly attributionService: AttributionService,
   ) {}
 
   async findAll(query: ListTitlesQueryDto): Promise<PaginatedTitles> {
@@ -122,7 +126,10 @@ export class TitlesService {
     if (!title) {
       throw new NotFoundException('Title not found');
     }
-    const publicQuality = await this.publicQualityService.forTitle(titleId);
-    return { ...title, publicQuality };
+    const [publicQuality, descriptionSource] = await Promise.all([
+      this.publicQualityService.forTitle(titleId),
+      title.description ? this.attributionService.descriptionSource(titleId) : Promise.resolve(null),
+    ]);
+    return { ...title, publicQuality, descriptionSource };
   }
 }

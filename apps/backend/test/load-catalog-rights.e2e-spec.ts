@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import { getConnectionOptions } from '../src/config/database.config';
 import { SourceRecord } from '../src/entities/source-record.entity';
 import { Title } from '../src/entities/title.entity';
+import { AttributionService } from '../src/modules/public-quality/attribution.service';
 import { EXTRACTOR_VERSION, loadCatalogRights, rowsFor, wikipediaUrl, type CatalogRightsEntry } from '../src/scripts/load-catalog-rights';
 
 // ALPHA_PLAN 5.1: rights rows for the catalog's own fields. Against
@@ -92,6 +93,14 @@ describe('load-catalog-rights (postgres-test)', () => {
     expect(rows.every((r) => r.licenseStatus === 'commercial_allowed' && r.reviewStatus === 'unreviewed' && r.retrievedAt !== null)).toBe(true);
     const lead = rows.find((r) => r.fieldName === 'description')!;
     expect(lead).toMatchObject({ source: 'wikipedia:en', value: 'https://en.wikipedia.org/wiki/Cairo_Station', attributionRequired: true });
+
+    // Read side: the work page's description credit comes from this row.
+    const attribution = new AttributionService(sourceRecordsRepository);
+    expect(await attribution.descriptionSource(title.id)).toEqual({
+      name: 'Wikipedia',
+      attribution: 'Text from Wikipedia, licensed CC BY-SA 4.0',
+      url: 'https://en.wikipedia.org/wiki/Cairo_Station',
+    });
 
     const again = await loadCatalogRights(dataSource, entries);
     expect(again).toMatchObject({ rowsCreated: 0, rowsAlreadyLoaded: 8 });

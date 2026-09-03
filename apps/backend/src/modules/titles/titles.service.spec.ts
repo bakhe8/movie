@@ -3,6 +3,7 @@ import { NotFoundException } from '@nestjs/common';
 import type { Repository } from 'typeorm';
 import { Title } from '../../entities/title.entity';
 import { ListTitlesQueryDto } from './dto/list-titles-query.dto';
+import { AttributionService } from '../public-quality/attribution.service';
 import { PublicQualityService } from '../public-quality/public-quality.service';
 import { TitlesService } from './titles.service';
 
@@ -26,12 +27,18 @@ function listQuery(overrides: Partial<ListTitlesQueryDto> = {}): ListTitlesQuery
 describe('TitlesService', () => {
   let titlesRepository: { findOne: ReturnType<typeof vi.fn>; createQueryBuilder: ReturnType<typeof vi.fn> };
   let publicQualityService: { forTitle: ReturnType<typeof vi.fn> };
+  let attributionService: { descriptionSource: ReturnType<typeof vi.fn> };
   let service: TitlesService;
 
   beforeEach(() => {
     titlesRepository = { findOne: vi.fn(), createQueryBuilder: vi.fn() };
     publicQualityService = { forTitle: vi.fn().mockResolvedValue(null) };
-    service = new TitlesService(titlesRepository as unknown as Repository<Title>, publicQualityService as unknown as PublicQualityService);
+    attributionService = { descriptionSource: vi.fn().mockResolvedValue(null) };
+    service = new TitlesService(
+      titlesRepository as unknown as Repository<Title>,
+      publicQualityService as unknown as PublicQualityService,
+      attributionService as unknown as AttributionService,
+    );
   });
 
   describe('findAll', () => {
@@ -90,6 +97,19 @@ describe('TitlesService', () => {
 
       publicQualityService.forTitle.mockResolvedValueOnce(null);
       expect((await service.findOne('t-1')).publicQuality).toBeNull();
+    });
+
+    it('attaches the description credit from the rights registry, and asks for none when there is no description', async () => {
+      const credit = { name: 'Wikipedia', attribution: 'Text from Wikipedia, licensed CC BY-SA 4.0', url: 'https://en.wikipedia.org/wiki/Arrival_(film)' };
+      titlesRepository.findOne.mockResolvedValue({ id: 't-1', titleEn: 'Arrival', description: 'A linguist...' });
+      attributionService.descriptionSource.mockResolvedValueOnce(credit);
+      expect((await service.findOne('t-1')).descriptionSource).toEqual(credit);
+      expect(attributionService.descriptionSource).toHaveBeenCalledWith('t-1');
+
+      attributionService.descriptionSource.mockClear();
+      titlesRepository.findOne.mockResolvedValue({ id: 't-2', titleEn: 'Bare', description: null });
+      expect((await service.findOne('t-2')).descriptionSource).toBeNull();
+      expect(attributionService.descriptionSource).not.toHaveBeenCalled();
     });
 
     it('throws 404 for an unknown title', async () => {

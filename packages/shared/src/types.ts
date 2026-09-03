@@ -97,6 +97,15 @@ export interface Title {
   fingerprint?: FilmFingerprintV1 | null;
   /** Work page only (`GET /titles/:id`): Public Quality per source with its attribution (§10.3); null = no displayable source, never 0. */
   publicQuality?: PublicQuality | null;
+  /** Work page only: the description's source from the rights registry — name, required attribution line, page link (CC BY-SA). */
+  descriptionSource?: TextSource | null;
+}
+
+/** A text field's credit (§11.1, DATA_LICENSING §5): the shape of `posterSource` plus the link the license asks for. */
+export interface TextSource {
+  name: string;
+  attribution: string | null;
+  url: string | null;
 }
 
 /** One source's reception value (§10.3, API.md §2.3). `attribution` is the line the source requires, rendered next to the value. */

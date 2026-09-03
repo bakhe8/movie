@@ -21,6 +21,15 @@ export interface PublicQuality {
   sources: PublicQualitySourceView[];
 }
 
+// A text field's credit as `GET /api/titles/:id` returns it in
+// `descriptionSource` (shared `TextSource`): the shape of `posterSource`
+// plus the page link CC BY-SA asks for.
+export interface TextSource {
+  name: string;
+  attribution: string | null;
+  url: string | null;
+}
+
 // Display names for source keys; the key itself is the API's, the label is
 // the client's. Unknown keys fall back to the key.
 export const SOURCE_LABEL: Record<string, string> = { imdb: 'IMDb' };
