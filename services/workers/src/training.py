@@ -12,7 +12,7 @@ import psycopg2
 import psycopg2.extras
 from dotenv import load_dotenv
 
-from .enrichment import V2_FEATURES
+from .enrichment import V2_FEATURES, V3_FEATURES
 from .ranker import PlackettLuceRanker, compute_nll, compute_pairwise_accuracy
 
 # Without this, psycopg2 has no typecaster for uuid[] (unlike scalar uuid,
@@ -40,22 +40,26 @@ FINGERPRINT_V1_DIMENSIONS = (
     "soundscapeComplexity",
     "colorSaturation",
 )
-# V2_FEATURES (imported from enrichment.py, the single source of truth for
-# the 15 namespaced "family.feature" keys, FINGERPRINT_SCHEMA.md §3.1) reads
-# only, never modified here -- V1 first, then V2 in enrichment.py's own
-# order, matching how they were proposed (DEMO_DATA_PLAN_2026-09-03.md §7.2).
-FINGERPRINT_DIMENSIONS = FINGERPRINT_V1_DIMENSIONS + V2_FEATURES
-MODEL_VERSION = "plackett-luce-v2"
+# V2_FEATURES/V3_FEATURES (imported from enrichment.py, the single source of
+# truth for the namespaced "family.feature" keys, FINGERPRINT_SCHEMA.md
+# §3.1/§3.3) read only, never modified here -- V1 first, then V2, then V3, in
+# enrichment.py's own order, matching how they were proposed and extracted
+# (DEMO_DATA_PLAN_2026-09-03.md §7.2, §7.3).
+FINGERPRINT_DIMENSIONS = FINGERPRINT_V1_DIMENSIONS + V2_FEATURES + V3_FEATURES
+MODEL_VERSION = "plackett-luce-v3"
 
 # Held-out-chosen L2 strength for theta^T*phi (blueprint §7.1's protection
 # for that term: "regularization ... before showing a tendency"). A single
 # scalar picked per training run, not a fixed constant and not a separate,
-# untested V2-block penalty -- BP §7.1 names general regularization for this
-# term, not a V1-vs-V2 split, and a real 50-round evaluation against a
-# genuine human-derived ranking (not a synthetic persona) already validated
-# this exact adaptive approach: 0.1 held up at 25 rounds, 0.01 was better at
-# 50 (DEMO_DATA_PLAN_2026-09-03.md §7.2) -- precisely the situation an
-# adaptive, held-out-chosen value is for, rather than guessing one number.
+# untested per-block penalty -- BP §7.1 names general regularization for this
+# term, not a per-family split. Real evaluations against a genuine
+# human-derived ranking (not a synthetic persona) validated this exact
+# adaptive approach twice: 0.1 held up at 25 rounds / 0.01 at 50 for V1+V2
+# (DEMO_DATA_PLAN_2026-09-03.md §7.2); for V1+V2+V3 at 75 rounds (71 valid,
+# 14 held out) 0.03 was the held-out-chosen value and beat V1+V2 alone at
+# every candidate in the grid (§7.3) -- precisely the situation an adaptive,
+# held-out-chosen value is for, rather than guessing one number or adding a
+# separate, unvalidated per-block hyperparameter.
 REGULARIZATION_GRID = (0.01, 0.03, 0.1, 0.3)
 
 
@@ -63,25 +67,35 @@ def fingerprint_vector(fingerprint: dict[str, Any]) -> np.ndarray | None:
     """
     Order a stored fingerprint into the model's dimension order.
 
-    V1 keys are read at the top level; V2 keys are namespaced "family.feature"
-    and live nested under fingerprint["v2"]["features"] instead
-    (FINGERPRINT_SCHEMA.md §3.1) -- the two sub-shapes are read into one flat
-    28-dimension vector here so nothing past this function needs to know a
-    fingerprint has two different internal shapes.
+    V1 keys are read at the top level; V2 and V3 keys are namespaced
+    "family.feature" and live nested under fingerprint["v2"]["features"] and
+    fingerprint["v3"]["features"] respectively (FINGERPRINT_SCHEMA.md
+    §3.1/§3.3) -- the three sub-shapes are read into one flat 40-dimension
+    vector here so nothing past this function needs to know a fingerprint has
+    three different internal shapes. V2 and V3 family names never collide
+    (checked against V3_FEATURES specifically, not just "contains a dot"),
+    so a namespaced key is read from V3's block only when it is actually one
+    of V3's own keys, V2's block otherwise.
 
     Returns None when any dimension is missing, None, or not a finite number:
     absence means unknown, never zero (blueprint §6, §11.3; ADR-19), and a
     triad with an incompletely described title is excluded from training rather
-    than fitted against fabricated values. A title enriched with V1 only (no
-    "v2" block yet -- true of the original 15 seed titles) is therefore
-    incomplete under the 28-dimension vector, the same way a title missing
-    even one V1 dimension always was.
+    than fitted against fabricated values. A title enriched with V1 (+V2) only
+    (no "v3" block yet -- true of the original 15 seed titles, which neither
+    enrichment pass has touched) is therefore incomplete under the
+    40-dimension vector, the same way a title missing even one V1 dimension
+    always was.
     """
-    v2 = fingerprint.get("v2") or {}
-    v2_features = v2.get("features") or {}
+    v2_features = (fingerprint.get("v2") or {}).get("features") or {}
+    v3_features = (fingerprint.get("v3") or {}).get("features") or {}
     values = []
     for dimension in FINGERPRINT_DIMENSIONS:
-        value = v2_features.get(dimension) if "." in dimension else fingerprint.get(dimension)
+        if "." not in dimension:
+            value = fingerprint.get(dimension)
+        elif dimension in V3_FEATURES:
+            value = v3_features.get(dimension)
+        else:
+            value = v2_features.get(dimension)
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not np.isfinite(value):
             return None
         values.append(float(value))

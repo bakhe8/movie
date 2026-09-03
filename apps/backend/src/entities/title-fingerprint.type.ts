@@ -55,6 +55,12 @@ export interface FilmFingerprintV1 {
   // valid and unaffected for scoring (unknown dimensions are imputed, same
   // as any missing V1 one) -- only training requires the complete 28-vector.
   v2?: FilmFingerprintV2;
+
+  // Third block, the form families (FINGERPRINT_SCHEMA.md §3.3, ADR-75):
+  // 12 more namespaced dimensions, same nesting convention as v2 -- optional,
+  // same imputation-for-scoring / complete-vector-for-training split, now
+  // against the 40-dimension vector.
+  v3?: FilmFingerprintV3;
 }
 
 export const FINGERPRINT_V2_DIMENSIONS = [
@@ -81,6 +87,36 @@ export interface FilmFingerprintV2 {
   features: Record<FilmFingerprintV2Dimension, number>;
   themes: string[];
   confidence: Partial<Record<FilmFingerprintV2Dimension, number>>;
+
+  generatedBy?: string;
+  generatedAt?: Date;
+  modelVersion?: string;
+  extractorVersion?: string;
+  sourceIds?: string[];
+  licenseStatus?: 'commercial_allowed' | 'non_commercial_only' | 'unknown';
+  reviewStatus?: 'unreviewed' | 'sampled' | 'human_reviewed';
+}
+
+export const FINGERPRINT_V3_DIMENSIONS = [
+  'rhythm.setupLength',
+  'rhythm.turningPointDensity',
+  'rhythm.deliberateness',
+  'information.expositionDirectness',
+  'information.subtext',
+  'information.knowledgeComplexity',
+  'style.stylization',
+  'style.experimentation',
+  'style.scale',
+  'tone.playfulness',
+  'tone.sentimentality',
+  'narrative.scope',
+] as const;
+export type FilmFingerprintV3Dimension = (typeof FINGERPRINT_V3_DIMENSIONS)[number];
+
+export interface FilmFingerprintV3 {
+  schemaVersion: 'film-fingerprint-v3';
+  features: Record<FilmFingerprintV3Dimension, number>;
+  confidence: Partial<Record<FilmFingerprintV3Dimension, number>>;
 
   generatedBy?: string;
   generatedAt?: Date;

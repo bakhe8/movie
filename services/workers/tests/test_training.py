@@ -1,6 +1,6 @@
 import numpy as np
 
-from src.enrichment import V2_FEATURES
+from src.enrichment import V2_FEATURES, V3_FEATURES
 from src.ranker import PlackettLuceRanker, compute_nll
 from src.training import (
     FINGERPRINT_DIMENSIONS,
@@ -32,14 +32,16 @@ def make_triads(n: int):
 
 
 def complete_fingerprint(**overrides):
-    # V1 keys are flat at the top level; V2 keys are namespaced "family.feature"
-    # and live nested under fingerprint["v2"]["features"] instead
-    # (FINGERPRINT_SCHEMA.md §3.1) -- mirrors the real published shape, not a
-    # flat 28-key dict, so fingerprint_vector()'s two read paths are both
-    # actually exercised.
+    # V1 keys are flat at the top level; V2 and V3 keys are namespaced
+    # "family.feature" and live nested under fingerprint["v2"]["features"]
+    # and fingerprint["v3"]["features"] respectively (FINGERPRINT_SCHEMA.md
+    # §3.1/§3.3) -- mirrors the real published shape, not a flat 40-key dict,
+    # so fingerprint_vector()'s three read paths are all actually exercised.
     v1_count = len(FINGERPRINT_V1_DIMENSIONS)
+    v2_count = len(V2_FEATURES)
     fingerprint = {dim: index / 10 for index, dim in enumerate(FINGERPRINT_V1_DIMENSIONS)}
     fingerprint["v2"] = {"features": {dim: (v1_count + index) / 10 for index, dim in enumerate(V2_FEATURES)}}
+    fingerprint["v3"] = {"features": {dim: (v1_count + v2_count + index) / 10 for index, dim in enumerate(V3_FEATURES)}}
     fingerprint.update(overrides)
     return fingerprint
 
@@ -80,10 +82,10 @@ class TestFingerprintVector:
 
         assert len(vector) == len(FINGERPRINT_DIMENSIONS)
 
-    # A title enriched with V1 only (no "v2" block at all -- true of the
-    # original 15 seed titles today) is incomplete under the 28-dimension
-    # vector, the same "unknown, not zero" treatment a missing V1 dimension
-    # always got.
+    # A title enriched with V1 only (no "v2"/"v3" block at all -- true of
+    # the original 15 seed titles today) is incomplete under the
+    # 40-dimension vector, the same "unknown, not zero" treatment a missing
+    # V1 dimension always got.
     def test_missing_v2_block_entirely_makes_the_fingerprint_unknown(self):
         fingerprint = complete_fingerprint()
         del fingerprint["v2"]
@@ -103,6 +105,34 @@ class TestFingerprintVector:
         vector = fingerprint_vector(fingerprint)
 
         assert vector[FINGERPRINT_DIMENSIONS.index("tone.irony")] == 0.42
+
+    # Same three cases, the V3 block -- a title enriched with V1+V2 only (no
+    # "v3" block, true of every title neither enrichment pass has touched
+    # yet) is incomplete the same way.
+    def test_missing_v3_block_entirely_makes_the_fingerprint_unknown(self):
+        fingerprint = complete_fingerprint()
+        del fingerprint["v3"]
+
+        assert fingerprint_vector(fingerprint) is None
+
+    def test_missing_one_v3_dimension_makes_the_fingerprint_unknown(self):
+        fingerprint = complete_fingerprint()
+        del fingerprint["v3"]["features"]["narrative.scope"]
+
+        assert fingerprint_vector(fingerprint) is None
+
+    def test_reads_v3_dimensions_from_the_nested_features_block_not_v2s(self):
+        fingerprint = complete_fingerprint()
+        fingerprint["v3"]["features"]["narrative.scope"] = 0.42
+        # tone.playfulness (V3) and tone.irony (V2) share a family name but
+        # are different keys entirely -- confirms V3 lookup isn't accidentally
+        # reading v2Features just because both are namespaced "tone.*".
+        fingerprint["v3"]["features"]["tone.playfulness"] = 0.77
+
+        vector = fingerprint_vector(fingerprint)
+
+        assert vector[FINGERPRINT_DIMENSIONS.index("narrative.scope")] == 0.42
+        assert vector[FINGERPRINT_DIMENSIONS.index("tone.playfulness")] == 0.77
 
 
 class TestRankingToIndices:

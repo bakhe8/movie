@@ -43,16 +43,36 @@ const FINGERPRINT_V2_DIMENSIONS = [
   'ending.justice',
   'ending.optimism',
 ] as const;
-const FINGERPRINT_DIMENSIONS = [...FINGERPRINT_V1_DIMENSIONS, ...FINGERPRINT_V2_DIMENSIONS] as const;
+// ADR-75: matches title-fingerprint.type.ts's FINGERPRINT_V3_DIMENSIONS.
+const FINGERPRINT_V3_DIMENSIONS = [
+  'rhythm.setupLength',
+  'rhythm.turningPointDensity',
+  'rhythm.deliberateness',
+  'information.expositionDirectness',
+  'information.subtext',
+  'information.knowledgeComplexity',
+  'style.stylization',
+  'style.experimentation',
+  'style.scale',
+  'tone.playfulness',
+  'tone.sentimentality',
+  'narrative.scope',
+] as const;
+const FINGERPRINT_DIMENSIONS = [...FINGERPRINT_V1_DIMENSIONS, ...FINGERPRINT_V2_DIMENSIONS, ...FINGERPRINT_V3_DIMENSIONS] as const;
 
-// V1 keys flat at the top level, V2 keys nested under fingerprint.v2.features
-// -- the real published shape (FINGERPRINT_SCHEMA.md §3.1).
+// V1 keys flat at the top level, V2/V3 keys nested under fingerprint.v2.features
+// and fingerprint.v3.features -- the real published shape (FINGERPRINT_SCHEMA.md
+// §3.1/§3.3).
 function fullFingerprint(overrides: Record<string, number> = {}) {
   const base = FINGERPRINT_V1_DIMENSIONS.reduce<Record<string, number>>((acc, dim) => {
     acc[dim] = overrides[dim] ?? 0.5;
     return acc;
   }, {});
-  const features = FINGERPRINT_V2_DIMENSIONS.reduce<Record<string, number>>((acc, dim) => {
+  const v2Features = FINGERPRINT_V2_DIMENSIONS.reduce<Record<string, number>>((acc, dim) => {
+    acc[dim] = overrides[dim] ?? 0.5;
+    return acc;
+  }, {});
+  const v3Features = FINGERPRINT_V3_DIMENSIONS.reduce<Record<string, number>>((acc, dim) => {
     acc[dim] = overrides[dim] ?? 0.5;
     return acc;
   }, {});
@@ -61,7 +81,8 @@ function fullFingerprint(overrides: Record<string, number> = {}) {
     ...base,
     themes: [],
     confidence: {},
-    v2: { schemaVersion: 'film-fingerprint-v2' as const, features, themes: [], confidence: {} },
+    v2: { schemaVersion: 'film-fingerprint-v2' as const, features: v2Features, themes: [], confidence: {} },
+    v3: { schemaVersion: 'film-fingerprint-v3' as const, features: v3Features, confidence: {} },
   };
 }
 

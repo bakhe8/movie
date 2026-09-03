@@ -42,28 +42,52 @@ const FINGERPRINT_V2_DIMENSIONS = [
   'ending.justice',
   'ending.optimism',
 ];
-const FINGERPRINT_DIMENSIONS = [...FINGERPRINT_V1_DIMENSIONS, ...FINGERPRINT_V2_DIMENSIONS];
+// ADR-75: 12 more namespaced dimensions, matching title-fingerprint.type.ts's
+// FINGERPRINT_V3_DIMENSIONS exactly.
+const FINGERPRINT_V3_DIMENSIONS = [
+  'rhythm.setupLength',
+  'rhythm.turningPointDensity',
+  'rhythm.deliberateness',
+  'information.expositionDirectness',
+  'information.subtext',
+  'information.knowledgeComplexity',
+  'style.stylization',
+  'style.experimentation',
+  'style.scale',
+  'tone.playfulness',
+  'tone.sentimentality',
+  'narrative.scope',
+];
+const FINGERPRINT_DIMENSIONS = [...FINGERPRINT_V1_DIMENSIONS, ...FINGERPRINT_V2_DIMENSIONS, ...FINGERPRINT_V3_DIMENSIONS];
 
-// V1 keys flat at the top level, V2 keys nested under fingerprint.v2.features
-// -- the real published shape (FINGERPRINT_SCHEMA.md §3.1), not a flat
-// 28-key object, so fingerprintVector()'s two read paths are both actually
-// exercised by every existing test that builds a "complete" fingerprint.
+// V1 keys flat at the top level, V2/V3 keys nested under fingerprint.v2.features
+// and fingerprint.v3.features -- the real published shape (FINGERPRINT_SCHEMA.md
+// §3.1/§3.3), not a flat 40-key object, so fingerprintVector()'s three read
+// paths are all actually exercised by every existing test that builds a
+// "complete" fingerprint.
 function zeroFingerprint(overrides: Record<string, number> = {}) {
   const fingerprint: Record<string, unknown> = {};
   for (const dim of FINGERPRINT_V1_DIMENSIONS) {
     fingerprint[dim] = overrides[dim] ?? 0;
   }
-  const features: Record<string, number> = {};
+  const v2Features: Record<string, number> = {};
   for (const dim of FINGERPRINT_V2_DIMENSIONS) {
-    features[dim] = overrides[dim] ?? 0;
+    v2Features[dim] = overrides[dim] ?? 0;
   }
-  fingerprint.v2 = { features };
+  fingerprint.v2 = { features: v2Features };
+  const v3Features: Record<string, number> = {};
+  for (const dim of FINGERPRINT_V3_DIMENSIONS) {
+    v3Features[dim] = overrides[dim] ?? 0;
+  }
+  fingerprint.v3 = { features: v3Features };
   return fingerprint;
 }
 
 function withoutDimension(fingerprint: Record<string, unknown>, dimension: string) {
   const copy = JSON.parse(JSON.stringify(fingerprint)) as Record<string, unknown>;
-  if (dimension.includes('.')) {
+  if (FINGERPRINT_V3_DIMENSIONS.includes(dimension)) {
+    delete (copy.v3 as { features: Record<string, unknown> }).features[dimension];
+  } else if (dimension.includes('.')) {
     delete (copy.v2 as { features: Record<string, unknown> }).features[dimension];
   } else {
     delete copy[dimension];
@@ -685,7 +709,7 @@ describe('RecommendationsService', () => {
     // middle -- had it been zero-filled it would have come last with score 0.
     expect(result.map((item) => item.title.id)).toEqual(['warm', 'warmth-unknown', 'cold']);
     expect(result[1].personalFitScore).toBeCloseTo(0.5);
-    expect(result[1].fingerprintCoverage).toBeCloseTo(27 / 28);
+    expect(result[1].fingerprintCoverage).toBeCloseTo(39 / 40);
   });
 
   it('demotes the confidence band one step for a title with unknown dimensions', async () => {
@@ -783,6 +807,50 @@ describe('RecommendationsService', () => {
       const result = await service.findForProfile('user-1', 'profile-1', 10);
 
       expect(result[0].reason.features).toEqual([{ key: 'ending.optimism', direction: 'higher' }]);
+    });
+  });
+
+  describe('V3 fingerprint families (ADR-75)', () => {
+    it('scores a title on a V3 dimension the same way it scores a V1 one', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue({
+        weights: FINGERPRINT_DIMENSIONS.map((dim) => (dim === 'tone.playfulness' ? 1 : 0)),
+        biasTerms: {},
+        modelVersion: 'test-v3',
+        trainingTriadCount: 25,
+      });
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [
+        { id: 'playful', fingerprint: zeroFingerprint({ 'tone.playfulness': 0.9 }) },
+        { id: 'serious', fingerprint: zeroFingerprint({ 'tone.playfulness': 0.1 }) },
+      ] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+      expect(result.map((item) => item.title.id)).toEqual(['playful', 'serious']);
+    });
+
+    it('imputes a whole missing v3 block with the pool mean rather than excluding the title (ADR-19)', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot());
+      statesRepository.find.mockResolvedValue([]);
+      const withoutV3 = zeroFingerprint({ warmth: 0.6 }) as Record<string, unknown>;
+      delete withoutV3.v3;
+      const titles = [
+        { id: 'v1v2-only', fingerprint: withoutV3 },
+        { id: 'v1v2v3', fingerprint: zeroFingerprint({ warmth: 0.6 }) },
+      ] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+      // A title with no "v3" block at all (true of every title neither
+      // enrichment pass has touched yet) is still scored -- not dropped.
+      expect(result.map((item) => item.title.id).sort()).toEqual(['v1v2-only', 'v1v2v3']);
+      const withoutV3Result = result.find((item) => item.title.id === 'v1v2-only');
+      const v1v2Length = FINGERPRINT_V1_DIMENSIONS.length + FINGERPRINT_V2_DIMENSIONS.length;
+      expect(withoutV3Result?.fingerprintCoverage).toBeCloseTo(v1v2Length / FINGERPRINT_DIMENSIONS.length);
     });
   });
 });

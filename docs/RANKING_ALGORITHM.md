@@ -1,7 +1,7 @@
 # Model Service Specification — Ranking, Selection, Confidence, Attribution
 
-**Status**: Derived from blueprint `§7` (utility model, Plackett–Luce, time layers, exceptions, shared latent space, silent vs disclosed use), `§8` (triad selection policy), `§9` (confidence and explanation), `§10.3` (public quality vs personal fit), `§14.1` (candidate generation and reranking), `§16` (evaluation). Decisions: ADR-3, ADR-8, ADR-13, ADR-19–ADR-22, ADR-25, ADR-59, ADR-62, ADR-64, ADR-69, ADR-71.
-**Version**: 2.0 — 2026-09-04 (rewrite of the 2025-dated implementation guide; the base Plackett–Luce math is unchanged, everything around it now matches the blueprint; ADR-71 closes `§9.2`'s diversity criterion on all three named axes).
+**Status**: Derived from blueprint `§7` (utility model, Plackett–Luce, time layers, exceptions, shared latent space, silent vs disclosed use), `§8` (triad selection policy), `§9` (confidence and explanation), `§10.3` (public quality vs personal fit), `§14.1` (candidate generation and reranking), `§16` (evaluation). Decisions: ADR-3, ADR-8, ADR-13, ADR-19–ADR-22, ADR-25, ADR-59, ADR-62, ADR-64, ADR-69, ADR-71, ADR-75.
+**Version**: 2.0 — 2026-09-04 (rewrite of the 2025-dated implementation guide; the base Plackett–Luce math is unchanged, everything around it now matches the blueprint; ADR-71 closes `§9.2`'s diversity criterion on all three named axes; ADR-75 wires the third fingerprint block, 28 to 40 dimensions).
 
 This is the contract for `services/workers` (the Python model service). What exists today is in §16.
 
@@ -66,7 +66,7 @@ Timestamps (`shownAt`, `answeredAt`) are mandatory on every event now, even thou
 
 ## 5. Unknown features (`BP §11.3`, ADR-19)
 
-Missing feature = unknown. Training excludes triads with incomplete vectors; scoring imputes the candidate-pool mean and applies a fingerprint-quality penalty to the confidence input (one band down, plus a `fingerprintCoverage` field on every item); reasons never cite an unknown feature. Implemented 2026-09-03 in the trainer, the ranker (which refuses undescribed titles) and the scorer; zero-filling is gone. Since 2026-09-04 (ADR-69), the vector is 28 dimensions (13 V1 + 15 V2 families, `FINGERPRINT_SCHEMA.md` §3.1) and "complete" means all 28 known — a title enriched with V1 only (no `v2` block, true of the original 15 seed titles) is a valid scoring candidate (imputed like any missing dimension) but excludes any triad it appears in from training until it gets one.
+Missing feature = unknown. Training excludes triads with incomplete vectors; scoring imputes the candidate-pool mean and applies a fingerprint-quality penalty to the confidence input (one band down, plus a `fingerprintCoverage` field on every item); reasons never cite an unknown feature. Implemented 2026-09-03 in the trainer, the ranker (which refuses undescribed titles) and the scorer; zero-filling is gone. Since 2026-09-04 (ADR-69, ADR-75), the vector is 40 dimensions (13 V1 + 15 V2 + 12 V3 families, `FINGERPRINT_SCHEMA.md` §3.1/§3.3) and "complete" means all 40 known — a title enriched with V1(+V2) only (no `v3` block, true of the original 15 seed titles neither enrichment pass has touched) is a valid scoring candidate (imputed like any missing dimension) but excludes any triad it appears in from training until it gets the missing block(s).
 
 ## 6. Training protocol (`BP §16.1`, ADR-22)
 
