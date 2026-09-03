@@ -39,7 +39,7 @@ Relative rankings do not establish an absolute "liked" anchor: a user may rank t
 $$\hat\theta_u = \arg\min_\theta \; -\sum_{t \in \mathcal{T}_u^{train}} \ell_t(\theta) + \lambda\|\theta\|_2^2 + \lambda_\delta \sum_m \delta_{u,m}^2$$
 
 - Solver: BFGS (`scipy.optimize.minimize`) with the log-sum-exp trick; gradient of one event is $(\phi_A - \mathbb{E}_{S_{ABC}}[\phi]) + (\phi_B - \mathbb{E}_{S_{BC}}[\phi])$.
-- Initialization: $\theta_0 = 0$ (deterministic; reproducibility is an Alpha DoD item, `BP §18.1`). The current code initializes with `np.random.randn(d) * 0.01` without a seed — listed gap.
+- Initialization: $\theta_0 = 0$ (deterministic; the objective is convex, so nothing is lost, and reproducibility is an Alpha DoD item, `BP §18.1`). Implemented in `ranker.py`; a test asserts two fits on the same events give identical weights.
 - $b(m)$ is fixed during the fit (not optimized), supplied by the population layer.
 - Hyperparameters ($\lambda$, $\lambda_\delta$, `gtol`, `maxiter`) are part of `model_versions.thresholds` and tuned on held-out NLL, never hard-coded in docs.
 
@@ -66,7 +66,7 @@ Timestamps (`shownAt`, `answeredAt`) are mandatory on every event now, even thou
 
 ## 5. Unknown features (`BP §11.3`, ADR-19)
 
-Missing feature = unknown. Training excludes triads with incomplete vectors; scoring imputes the population mean and applies a fingerprint-quality penalty to the confidence input; reasons never cite an unknown feature. Zero-filling (as in today's code) is a bug.
+Missing feature = unknown. Training excludes triads with incomplete vectors; scoring imputes the candidate-pool mean and applies a fingerprint-quality penalty to the confidence input (one band down, plus a `fingerprintCoverage` field on every item); reasons never cite an unknown feature. Implemented 2026-09-03 in the trainer, the ranker (which refuses undescribed titles) and the scorer; zero-filling is gone.
 
 ## 6. Training protocol (`BP §16.1`, ADR-22)
 
@@ -199,7 +199,7 @@ Tests every model version must pass: recovers known weights from synthetic listw
 
 ## 17. Current implementation (2026-09-03)
 
-`services/workers/src/ranker.py` implements the listwise PL fit with `population_priors` (unused, all zero), per-title `bias_terms`, BFGS, and in-sample `compute_pairwise_accuracy`; `training.py` is the CLI trainer (all completed triads, no hold-out, missing → 0); 21 unit tests pass. No selection policy beyond `random-v1` (in the NestJS backend), no confidence criteria, no shared space, no attribution gate, no FastAPI service. Details: [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md).
+`services/workers/src/ranker.py` implements the listwise PL fit with deterministic zero initialization, `population_priors` (unused, all zero), per-title `bias_terms`, BFGS, and in-sample `compute_pairwise_accuracy`; it refuses undescribed titles instead of zero-filling. `training.py` is the CLI trainer (all completed triads whose three titles have complete fingerprints; no hold-out yet); 26 unit tests pass. No selection policy beyond `random-v1` (in the NestJS backend), no confidence criteria, no shared space, no attribution gate, no FastAPI service. Details: [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md).
 
 ## References
 

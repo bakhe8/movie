@@ -16,7 +16,7 @@ export class ProfilesService {
     const profile = this.profilesRepository.create({
       userId,
       name: createProfileDto.name,
-      preferredLanguage: createProfileDto.preferredLanguage ?? 'en',
+      preferredLanguage: createProfileDto.preferredLanguage ?? 'ar',
     });
 
     try {

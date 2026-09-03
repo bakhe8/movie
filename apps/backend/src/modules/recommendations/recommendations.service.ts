@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Profile } from '../../entities/profile.entity';
 import { Title } from '../../entities/title.entity';
 import { UserModelSnapshot } from '../../entities/user-model-snapshot.entity';
@@ -25,24 +25,41 @@ const FINGERPRINT_DIMENSIONS = [
 export type ConfidenceBand = 'initial' | 'likely' | 'strong' | 'inconclusive';
 export type RecommendationTrack = 'safe' | 'discovery' | 'outside_usual';
 
+// One step down per band. A title with unknown fingerprint dimensions cannot be
+// recommended with the same confidence as a fully described one (blueprint §9.1
+// "fingerprint confidence", §9.2 last criterion; ADR-19).
+const BAND_DEMOTION: Record<ConfidenceBand, ConfidenceBand> = {
+  strong: 'likely',
+  likely: 'initial',
+  initial: 'inconclusive',
+  inconclusive: 'inconclusive',
+};
+
 // Personal Fit, Public Quality, and Watchability are always three separate values,
 // never merged into one number, and confidence is a verbal band rather than a raw
 // percentage until it has been calibrated against confirmed post-watch outcomes
-// (blueprint §4.4, §7.2, §9.3; docs/schema.md's `recommendations` table).
+// (blueprint §4.4, §7.2, §9.3; docs/SCHEMA.md `recommendations`).
 export interface RecommendationResult {
   title: Title;
   personalFitScore: number;
   // Neither has a data source yet (no critic/audience-prior ingestion, no
-  // availability/JustWatch integration) -- explicitly null, never a fabricated
-  // number, per the "missing is NULL/unknown, never false or 0" rule (blueprint §11.3).
+  // availability integration) -- explicitly null, never a fabricated number, per
+  // the "missing is NULL/unknown, never false or 0" rule (blueprint §11.3).
   publicQualityScore: number | null;
   watchabilityScore: number | null;
   confidenceBand: ConfidenceBand;
+  // Fraction (0-1) of fingerprint dimensions actually known for this title.
+  // Unknown dimensions are imputed with the candidate-pool mean, never zero, and
+  // cost one confidence band (blueprint §11.3; ADR-19).
+  fingerprintCoverage: number;
   // Every result is 'safe' today -- there is no discovery/outside-usual selection
   // policy implemented yet (blueprint §4.4, §8). Not fabricated, just not built.
   track: RecommendationTrack;
   modelVersion: string;
 }
+
+// null = unknown, never coerced to 0 (blueprint §6, §11.3).
+type FingerprintVector = (number | null)[];
 
 @Injectable()
 export class RecommendationsService {
@@ -74,39 +91,74 @@ export class RecommendationsService {
       throw new ConflictException('The latest preference model has an incompatible fingerprint dimension');
     }
 
-    const excludedStates = await this.statesRepository.find({
-      where: { profileId, state: In(['watched', 'not_watched']) },
+    // Only titles the profile has actually watched leave the candidate pool. A
+    // `not_watched` mark means unknown exposure, not a negative signal, so those
+    // titles are exactly the recommendation candidates (blueprint §2.4 principle #3).
+    const watchedStates = await this.statesRepository.find({
+      where: { profileId, state: 'watched' },
       select: { titleId: true },
     });
-    const excludedTitleIds = excludedStates.map((state) => state.titleId);
+    const excludedTitleIds = watchedStates.map((state) => state.titleId);
     const queryBuilder = this.titlesRepository.createQueryBuilder('title').where('title.fingerprint IS NOT NULL');
     if (excludedTitleIds.length > 0) {
       queryBuilder.andWhere('title.id NOT IN (:...excludedTitleIds)', { excludedTitleIds });
     }
     const titles = await queryBuilder.getMany();
 
-    const confidenceBand = this.confidenceBand(snapshot);
+    const candidates = titles
+      .map((title) => ({ title, vector: this.fingerprintVector(title.fingerprint) }))
+      // A fingerprint object with no numeric dimension at all is no fingerprint.
+      .filter((candidate) => candidate.vector.some((value) => value !== null));
+    const poolMeans = this.poolMeans(candidates.map((candidate) => candidate.vector));
+    const baseBand = this.confidenceBand(snapshot);
 
-    return titles
-      .map((title) => ({
-        title,
-        personalFitScore: this.personalFitScore(title, snapshot),
-        publicQualityScore: null,
-        watchabilityScore: null,
-        confidenceBand,
-        track: 'safe' as const,
-        modelVersion: snapshot.modelVersion,
-      }))
+    return candidates
+      .map(({ title, vector }) => {
+        const knownCount = vector.filter((value) => value !== null).length;
+        const fingerprintCoverage = knownCount / FINGERPRINT_DIMENSIONS.length;
+        return {
+          title,
+          personalFitScore: this.personalFitScore(title, vector, poolMeans, snapshot),
+          publicQualityScore: null,
+          watchabilityScore: null,
+          confidenceBand: fingerprintCoverage < 1 ? BAND_DEMOTION[baseBand] : baseBand,
+          fingerprintCoverage,
+          track: 'safe' as const,
+          modelVersion: snapshot.modelVersion,
+        };
+      })
       .sort((left, right) => right.personalFitScore - left.personalFitScore)
       .slice(0, limit);
   }
 
-  private personalFitScore(title: Title, snapshot: UserModelSnapshot): number {
-    const fingerprint = title.fingerprint;
-    const weightedScore = FINGERPRINT_DIMENSIONS.reduce(
-      (total, dimension, index) => total + (Number(fingerprint?.[dimension]) || 0) * snapshot.weights[index],
-      0,
-    );
+  private fingerprintVector(fingerprint: Title['fingerprint']): FingerprintVector {
+    return FINGERPRINT_DIMENSIONS.map((dimension) => {
+      const value = fingerprint?.[dimension];
+      return typeof value === 'number' && Number.isFinite(value) ? value : null;
+    });
+  }
+
+  // Population mean per dimension over the candidates that know it; null when no
+  // candidate knows the dimension.
+  private poolMeans(vectors: FingerprintVector[]): (number | null)[] {
+    return FINGERPRINT_DIMENSIONS.map((_, index) => {
+      const known = vectors.map((vector) => vector[index]).filter((value): value is number => value !== null);
+      return known.length > 0 ? known.reduce((sum, value) => sum + value, 0) / known.length : null;
+    });
+  }
+
+  private personalFitScore(
+    title: Title,
+    vector: FingerprintVector,
+    poolMeans: (number | null)[],
+    snapshot: UserModelSnapshot,
+  ): number {
+    const weightedScore = vector.reduce<number>((total, value, index) => {
+      const effective = value ?? poolMeans[index];
+      // A dimension unknown for every candidate contributes nothing for every
+      // candidate: neutral for the ordering, and never a fabricated value.
+      return effective === null ? total : total + effective * snapshot.weights[index];
+    }, 0);
     return weightedScore + (snapshot.biasTerms?.[title.id] ?? 0);
   }
 
@@ -114,9 +166,9 @@ export class RecommendationsService {
   // criterion: "عدد أدلة فعال كافٍ"). This is NOT the calibrated confidence system
   // blueprint §9.3/§16.2 describes (which also requires context diversity and
   // successful prediction of held-out comparisons, validated via Brier score/ECE)
-  // -- that calibration work hasn't been done yet. Until it has, this thresholding
-  // is deliberately conservative and must never be presented to the user as a
-  // precise probability; it only decides which verbal band copy to show.
+  // -- that calibration work hasn't been done yet (ADR-21). Until it has, this
+  // thresholding is deliberately conservative and must never be presented to the
+  // user as a precise probability; it only decides which verbal band copy to show.
   private confidenceBand(snapshot: UserModelSnapshot): ConfidenceBand {
     if (snapshot.trainingTriadCount < 3) {
       return 'inconclusive';

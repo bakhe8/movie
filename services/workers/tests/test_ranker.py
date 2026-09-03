@@ -34,6 +34,18 @@ class TestPlackettLuceRankerFit:
         assert ranker.weights is not None
         assert ranker.weights[0] > 0
 
+    def test_fit_is_deterministic_for_the_same_events(self):
+        # Every result must be reproducible from the event log and model version
+        # (blueprint §18.1; ADR-22): no random initialization.
+        triads, fingerprints = make_triad_dataset()
+        first = PlackettLuceRanker(fingerprint_dim=1, regularization=0.001)
+        second = PlackettLuceRanker(fingerprint_dim=1, regularization=0.001)
+
+        first.fit(triads, fingerprints)
+        second.fit(triads, fingerprints)
+
+        np.testing.assert_array_equal(first.weights, second.weights)
+
     def test_predict_ranking_orders_by_descending_learned_score(self):
         triads, fingerprints = make_triad_dataset()
         ranker = PlackettLuceRanker(fingerprint_dim=1, regularization=0.001)
@@ -73,13 +85,22 @@ class TestPlackettLuceRankerPredictScore:
 
         assert ranker.predict_score("unlisted", np.array([1.0])) == 2.0
 
-    def test_missing_fingerprint_falls_back_to_zero_vector_not_a_crash(self):
+    def test_missing_fingerprint_raises_instead_of_silently_scoring_it_as_zero(self):
+        # Unknown is not zero (blueprint §11.3, ADR-19): callers must exclude
+        # undescribed titles, so a lookup miss is a bug, not a neutral score.
         ranker = PlackettLuceRanker(fingerprint_dim=1)
         ranker.weights = np.array([1.0])
 
-        order = ranker.predict_ranking(["unknown-title"], {})
+        with pytest.raises(KeyError):
+            ranker.predict_ranking(["unknown-title"], {})
 
-        assert order == [0]
+    def test_fit_refuses_a_triad_with_an_undescribed_title(self):
+        triads, fingerprints = make_triad_dataset()
+        del fingerprints["B"]
+        ranker = PlackettLuceRanker(fingerprint_dim=1)
+
+        with pytest.raises(KeyError):
+            ranker.fit(triads, fingerprints)
 
 
 class TestPlackettLuceRankerPopulationPriorInFit:

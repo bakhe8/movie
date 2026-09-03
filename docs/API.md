@@ -36,7 +36,7 @@ Verified against `apps/backend/src/modules/**` on 2026-09-03. Every profile-scop
 | GET | `/api/profiles/:profileId/triads/current` | JWT | — | Triad | returns the active triad or creates one (`random-v1`); 400 if < 3 watched titles |
 | GET | `/api/profiles/:profileId/triads` | JWT | — | Triad[] | completed only |
 | POST | `/api/triads/:triadId/rank` | JWT | `{ ranking: permutation of [0,1,2] over titleIds, sessionId? }` | Triad | 400 if already completed; no idempotency key yet |
-| GET | `/api/profiles/:profileId/recommendations` | JWT | `?limit(≤50, default 10)` | Recommendation[] | 409 until a model snapshot exists; results not persisted |
+| GET | `/api/profiles/:profileId/recommendations` | JWT | `?limit(≤50, default 10)` | Recommendation[] | 409 until a model snapshot exists; excludes watched titles only (`not_watched` stays a candidate); unknown fingerprint dimensions imputed with the pool mean, never zero; results not persisted |
 
 Response shapes in use (from `apps/frontend/app/lib/api.ts`, which mirrors the entities):
 
@@ -47,7 +47,9 @@ UserTitleState { id, profileId, titleId, state, watchedAt|null, importedRating|n
 Triad { id, profileId, titleIds: string[3], displayOrder: string[3]|null, ranking: number[3]|null,
         policyVersion|null, selectionPropensity|null, experimentId|null, sessionId|null, metadata|null, status, createdAt }
 Recommendation { title, personalFitScore, publicQualityScore|null, watchabilityScore|null,
-                 confidenceBand: 'initial'|'likely'|'strong'|'inconclusive', track: 'safe'|'discovery'|'outside_usual', modelVersion }
+                 confidenceBand: 'initial'|'likely'|'strong'|'inconclusive',
+                 fingerprintCoverage: number /* 0–1 share of known dimensions; < 1 costs one band (ADR-19) */,
+                 track: 'safe'|'discovery'|'outside_usual', modelVersion }
 ```
 
 Known gaps versus `BP §14` are tracked row-by-row in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md); the target below is the fix.
@@ -155,4 +157,5 @@ Ranking is sent as title ids (not indices) in the target contract so a replaced 
 ---
 
 **Changelog**
+- 1.1 (2026-09-03): `fingerprintCoverage` added to the implemented recommendation shape; candidate filter documented (watched only).
 - 1.0 (2026-09-03): first API document; consolidates the previously scattered endpoint lists (ADR-11, QUICKSTART, PRIVACY, SPECIFICATION) into one implemented-vs-target contract.

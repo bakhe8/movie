@@ -30,8 +30,22 @@ FINGERPRINT_DIMENSIONS = (
 MODEL_VERSION = "plackett-luce-v1"
 
 
-def fingerprint_vector(fingerprint: dict[str, Any]) -> np.ndarray:
-    return np.array([float(fingerprint.get(dimension, 0) or 0) for dimension in FINGERPRINT_DIMENSIONS])
+def fingerprint_vector(fingerprint: dict[str, Any]) -> np.ndarray | None:
+    """
+    Order a stored fingerprint into the model's dimension order.
+
+    Returns None when any dimension is missing, None, or not a finite number:
+    absence means unknown, never zero (blueprint §6, §11.3; ADR-19), and a
+    triad with an incompletely described title is excluded from training rather
+    than fitted against fabricated values.
+    """
+    values = []
+    for dimension in FINGERPRINT_DIMENSIONS:
+        value = fingerprint.get(dimension)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not np.isfinite(value):
+            return None
+        values.append(float(value))
+    return np.array(values)
 
 
 def train_profile(profile_id: str) -> int:
@@ -55,18 +69,21 @@ def train_profile(profile_id: str) -> int:
 
         title_ids = sorted({title_id for triad_ids, _ in triads for title_id in triad_ids})
         cursor.execute('SELECT id, fingerprint FROM titles WHERE id = ANY(%s)', (title_ids,))
-        fingerprints = {
+        vectors = {
             title_id: fingerprint_vector(json.loads(fingerprint) if isinstance(fingerprint, str) else fingerprint)
             for title_id, fingerprint in cursor.fetchall()
             if fingerprint is not None
         }
+        # Only fully described titles enter training; a partial fingerprint is unknown,
+        # not zero (ADR-19), so the whole triad is left out rather than distorted.
+        fingerprints = {title_id: vector for title_id, vector in vectors.items() if vector is not None}
         complete_triads = [
             (triad_ids, ranking)
             for triad_ids, ranking in triads
             if all(title_id in fingerprints for title_id in triad_ids)
         ]
         if not complete_triads:
-            raise ValueError("Completed triads need fingerprints before model training")
+            raise ValueError("Completed triads need complete fingerprints on all three titles before model training")
 
         ranker = PlackettLuceRanker(len(FINGERPRINT_DIMENSIONS))
         # No population_priors source exists yet (no shared/cross-user popularity or

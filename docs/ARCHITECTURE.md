@@ -88,7 +88,7 @@ GET /api/v1/recommendations
          → rights + availability filter → model service POST /score
          → attribution gate → persist recommendations rows (separate scores, reason, propensity, requestId)
          → 200 { tracks: { safe, discovery, outside_usual } }
-  built: single 'safe' list computed from the latest snapshot; not persisted; excludes not_watched (bug); 409 without a snapshot
+  built: single 'safe' list computed from the latest snapshot (watched titles excluded; unknown dimensions imputed, never zero); not persisted; 409 without a snapshot
 ```
 
 ### 3.4 Training
@@ -143,10 +143,11 @@ Target additions: `modules/replacements` (or inside `triads`), `modules/watch-ev
 ### 4.2 Frontend (`apps/frontend/app`) — as built
 
 ```
-layout.tsx          SessionProvider; <html lang="en"> (should follow the UI language)
+layout.tsx          SessionProvider; <html lang="ar" dir="rtl"> (Arabic-first), kept in sync with the UI language by page.tsx
 page.tsx            single client page switching between views: home | rank | discover | list | profile
 components/         AuthScreen, DiscoverScreen, RankScreen, ListScreen, ProfileScreen
 lib/api.ts          typed fetch client (mirrors backend shapes); lib/session.tsx localStorage session, auto-creates one profile
+lib/copy.ts         fixed product copy: the triad instruction (blueprint §4.3), identical in both languages
 globals.css         Tailwind 4 + custom CSS; Cairo font for RTL
 ```
 
@@ -165,7 +166,7 @@ Target: `api.py` (FastAPI: train, triads/select, score, taste-profile, shared-sp
 
 ### 4.4 Shared package (`packages/shared`)
 
-`FilmFingerprintV1` plus legacy `TriadResponse`, `UserPreferenceModel`, `Recommendation` (has a merged `score` and numeric `confidence` — stale, contradicts `BP §4.4`), `UserProfile` (has `preferredGenres` — stale). Not imported by the apps; the backend keeps a local copy of the fingerprint type. Target: align or remove the stale types; publish via a project-reference build when a second consumer appears.
+`FilmFingerprintV1` (reference copy) plus API-aligned `Profile`, `Title`, `UserTitleState`, `Triad`, `Recommendation` (four separate values, no merged score) and their enums. Compiles standalone; not yet imported by the apps — the backend keeps a local copy of the fingerprint type and the frontend its own client types. Target: publish via a project-reference build when a second consumer appears (ADR-1).
 
 ## 5. Security model (`BP §21.3`)
 

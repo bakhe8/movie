@@ -2,7 +2,7 @@
 Plackett-Luce ranking model for learning user preferences from triadic comparisons.
 
 This module implements a simple Plackett-Luce model that learns preference weights
-from complete rankings of three items (triads).
+from complete rankings of three items (triads). See docs/RANKING_ALGORITHM.md.
 """
 
 import numpy as np
@@ -11,10 +11,27 @@ from scipy.optimize import minimize
 from typing import Dict, List, Tuple, Optional
 
 
+def _require_fingerprint(fingerprints: Dict[str, np.ndarray], title_id: str) -> np.ndarray:
+    """
+    Look up a title's fingerprint or fail loudly.
+
+    A missing fingerprint is *unknown*, never a zero vector: zero-filling would
+    silently score the title as "average on every dimension" and let it into
+    training and ranking as if it were described (blueprint §6, §11.3; ADR-19).
+    Callers must filter to complete fingerprints before calling the model.
+    """
+    try:
+        return fingerprints[title_id]
+    except KeyError as error:
+        raise KeyError(
+            f"No fingerprint for title {title_id!r}; unknown is not zero -- exclude the title before ranking"
+        ) from error
+
+
 class PlackettLuceRanker:
     """
     Plackett-Luce model for learning user taste weights from triadic rankings.
-    
+
     The model assumes that given a set of items with associated features (fingerprints),
     a user's preference score for an item is: U_ui = b_i + w_u^T * x_i + delta_ui
 
@@ -62,7 +79,8 @@ class PlackettLuceRanker:
         Args:
             triads: List of (title_id_1, title_id_2, title_id_3, ranking) tuples
                    where ranking is [0, 1, 2] indicating the preference order
-            fingerprints: Dictionary mapping title_id to fingerprint vector
+            fingerprints: Dictionary mapping title_id to fingerprint vector. Every
+                title in `triads` must be present (see _require_fingerprint).
             population_priors: Optional mapping of title_id to b_i, the shrunk
                 population-level prior (see class docstring). Titles missing from
                 this mapping are treated as b_i = 0. Stored on the instance so
@@ -71,9 +89,11 @@ class PlackettLuceRanker:
         """
         self.population_priors = dict(population_priors) if population_priors else {}
 
-        # Initialize weights if needed
+        # Deterministic initialization: the objective is convex (listwise PL
+        # log-likelihood + L2), so starting from zero loses nothing, and the same
+        # events must reproduce the same weights (blueprint §18.1; ADR-22).
         if self.weights is None:
-            self.weights = np.random.randn(self.fingerprint_dim) * 0.01
+            self.weights = np.zeros(self.fingerprint_dim)
 
         # Extract features for all triads
         X_list = []
@@ -82,7 +102,7 @@ class PlackettLuceRanker:
 
         for triad_ids, ranking in triads:
             # Create feature matrix for this triad
-            X_triad = np.array([fingerprints.get(tid, np.zeros(self.fingerprint_dim)) for tid in triad_ids])
+            X_triad = np.array([_require_fingerprint(fingerprints, tid) for tid in triad_ids])
             X_list.append(X_triad)
 
             # Ranking: which index is 1st, 2nd, 3rd
@@ -150,19 +170,19 @@ class PlackettLuceRanker:
         if title_id in self.bias_terms:
             score += self.bias_terms[title_id]
         return score
-    
+
     def predict_ranking(self, title_ids: List[str], fingerprints: Dict[str, np.ndarray]) -> List[int]:
         """
         Predict ranking of titles by preference score.
-        
+
         Args:
             title_ids: List of title IDs
-            fingerprints: Mapping of title_id to fingerprint
-            
+            fingerprints: Mapping of title_id to fingerprint; every id must be present
+
         Returns:
             Indices sorted by predicted preference (descending)
         """
-        scores = [self.predict_score(tid, fingerprints.get(tid, np.zeros(self.fingerprint_dim))) for tid in title_ids]
+        scores = [self.predict_score(tid, _require_fingerprint(fingerprints, tid)) for tid in title_ids]
         return np.argsort(scores)[::-1].tolist()
 
 
@@ -173,35 +193,36 @@ def compute_pairwise_accuracy(
 ) -> float:
     """
     Evaluate model accuracy on pairwise comparisons.
-    
+
     Extracts all pairwise comparisons from triadic rankings and measures
-    the fraction correctly predicted.
-    
+    the fraction correctly predicted. This is an evaluation metric only; the
+    triad itself is stored and fitted as one listwise event (blueprint §7.2).
+
     Args:
         triads: List of triadic rankings
-        fingerprints: Mapping of title_id to fingerprint
+        fingerprints: Mapping of title_id to fingerprint; every id must be present
         ranker: Fitted PlackettLuceRanker model
-        
+
     Returns:
         Pairwise accuracy (0-1)
     """
     correct = 0
     total = 0
-    
+
     for triad_ids, ranking in triads:
         # Extract all pairwise comparisons
         for i in range(3):
             for j in range(i + 1, 3):
                 idx_i, idx_j = ranking[i], ranking[j]
                 tid_i, tid_j = triad_ids[idx_i], triad_ids[idx_j]
-                
+
                 # Predict scores
-                score_i = ranker.predict_score(tid_i, fingerprints.get(tid_i, np.zeros(ranker.fingerprint_dim)))
-                score_j = ranker.predict_score(tid_j, fingerprints.get(tid_j, np.zeros(ranker.fingerprint_dim)))
-                
+                score_i = ranker.predict_score(tid_i, _require_fingerprint(fingerprints, tid_i))
+                score_j = ranker.predict_score(tid_j, _require_fingerprint(fingerprints, tid_j))
+
                 # Check if predicted correctly (i should beat j)
                 if score_i > score_j:
                     correct += 1
                 total += 1
-    
+
     return correct / total if total > 0 else 0.0

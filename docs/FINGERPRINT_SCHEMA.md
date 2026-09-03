@@ -86,7 +86,7 @@ The model reads the 13 numeric keys in the `FINGERPRINT_DIMENSIONS` order; a sto
 - A feature with `value = NULL` or `confidence` below the publish threshold is **unknown**.
 - Training: a triad whose three titles do not all have a complete V1 vector is excluded from the loss (never zero-filled).
 - Scoring candidates: unknown features are imputed with the population feature mean, and the title's `confidenceBand` input carries a fingerprint-quality penalty (`BP §9.1` "fingerprint confidence", `§9.2` last criterion). The candidate can be recommended but its reason must not cite an unknown feature.
-- Current code coerces missing values to 0 in both `training.py` and `RecommendationsService.personalFitScore`; this is a listed gap.
+- Implemented 2026-09-03: `training.py` returns no vector for an incomplete fingerprint and the trainer drops the whole triad; `PlackettLuceRanker` raises on an undescribed title instead of scoring it as zero; `RecommendationsService` imputes unknown dimensions with the candidate-pool mean, reports `fingerprintCoverage` per item, and demotes the confidence band one step when any dimension is unknown. A dimension unknown for every candidate contributes nothing to any candidate (neutral for ordering).
 
 ## 5. Extraction pipeline (`BP §11.2`, `§15.3`)
 

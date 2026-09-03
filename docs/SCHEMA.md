@@ -11,7 +11,7 @@ Naming (ADR-16): tables `snake_case` plural; columns are TypeORM's default `came
 
 ## 1. Current physical schema (migrated)
 
-Migrations, in order: `1788410140231-InitialSchema`, `1788411790951-AddTriadEventFields`, `1788412500000-SplitImportedRatingFromInAppState`. Extension: `uuid-ossp`. The `ankane/pgvector` image is used but no column has the `vector` type yet.
+Migrations, in order: `1788410140231-InitialSchema`, `1788411790951-AddTriadEventFields`, `1788412500000-SplitImportedRatingFromInAppState`, `1788418200000-ArabicFirstProfileDefault`. Extension: `uuid-ossp`. The `ankane/pgvector` image is used but no column has the `vector` type yet.
 
 ```sql
 users (
@@ -22,7 +22,7 @@ users (
 
 profiles (                      -- the pseudonymous taste id (BP §13.1, §21.1)
   id uuid PK, "userId" uuid NOT NULL FK users(id) ON DELETE CASCADE,
-  name varchar(255) NOT NULL, "preferredLanguage" varchar(5) NOT NULL DEFAULT 'en',
+  name varchar(255) NOT NULL, "preferredLanguage" varchar(5) NOT NULL DEFAULT 'ar',   -- Arabic-first (BP §2)
   "createdAt" timestamp, "updatedAt" timestamp,
   UNIQUE ("userId", name)
 )
@@ -110,7 +110,6 @@ ALTER TABLE users    ADD COLUMN role varchar NOT NULL DEFAULT 'user';           
 ALTER TABLE profiles ADD COLUMN market varchar(2),                              -- ISO 3166-1; display/availability only (BP §4.1)
                      ADD COLUMN platforms text[] NOT NULL DEFAULT '{}',         -- user-declared providers (BP §4.1, App. C)
                      ADD COLUMN "pausedAt" timestamp;                           -- 'pause_all' restriction (PRIVACY.md §4)
-ALTER TABLE profiles ALTER COLUMN "preferredLanguage" SET DEFAULT 'ar';         -- Arabic-first (BP §2)
 
 consents (                                                                      -- BP §13.1
   id uuid PK, "userId" uuid NOT NULL FK users ON DELETE CASCADE,
@@ -296,7 +295,7 @@ Each step is one TypeORM migration; none require data backfill beyond defaults b
 
 | Step | Contents | Unblocks |
 |---|---|---|
-| M1 | rename `user_title_state` → `user_title_states`; `profiles.market/platforms`; `preferredLanguage` default `'ar'`; `users.role`; `triads.shownAt/answeredAt/modelVersion/idempotencyKey/holdout/correctsTriadId` + indexes; `triad_replacements`; `user_title_states.triadEligible` | replacement endpoint, event completeness (`BP §13.2`, `§14`) |
+| M1 | rename `user_title_state` → `user_title_states`; `profiles.market/platforms/pausedAt`; `users.role`; `triads.shownAt/answeredAt/modelVersion/idempotencyKey/holdout/correctsTriadId` + indexes; `triad_replacements`; `user_title_states.triadEligible` | replacement endpoint, event completeness (`BP §13.2`, `§14`) |
 | M2 | `consents`, `privacy_requests`, `audit_log` | onboarding consent, export/delete/reset |
 | M3 | `source_records`, `content_features`, `localized_titles`, `people`, `credits`, `title_editions` | rights registry, FTS search, provenance |
 | M4 | `model_versions`, `experiments`, `experiment_assignments`; `user_model_snapshots` additions | reproducibility, held-out metrics |
@@ -307,4 +306,5 @@ Each step is one TypeORM migration; none require data backfill beyond defaults b
 ---
 
 **Changelog**
+- 2.1 (2026-09-03): fourth migration `ArabicFirstProfileDefault` applied; `profiles.preferredLanguage` now defaults to `'ar'` in §1, removed from the M1 plan.
 - 2.0 (2026-09-03): rewritten. The previous version described an aspirational snake_case DDL that did not match the migrated schema, named a `db/migrations/001_init_schema.sql` that does not exist, and mixed `not_remembered` into the title-state enum; it is replaced by the current-vs-target split above.

@@ -83,6 +83,9 @@ export interface Recommendation {
   publicQualityScore: number | null;
   watchabilityScore: number | null;
   confidenceBand: ConfidenceBand;
+  // Fraction (0-1) of fingerprint dimensions known for this title; unknown ones
+  // are imputed, never zero, and cost one confidence band (ADR-19).
+  fingerprintCoverage: number;
   track: RecommendationTrack;
   modelVersion: string;
 }

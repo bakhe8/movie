@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError, type Title, type Triad } from '../lib/api';
+import { TRIAD_INSTRUCTION } from '../lib/copy';
 
 const labels = {
   ar: {
-    title: 'رتّب الأفلام بحسب تفضيلك',
-    hint: 'اسحب البطاقات أو استخدم الأسهم. البطاقة الأولى هي المفضلة.',
+    eyebrow: 'ثلاثية',
+    title: TRIAD_INSTRUCTION.ar,
+    hint: 'اسحب البطاقات أو استخدم الأسهم. البطاقة الأولى هي الأكثر إعجابًا.',
     save: 'حفظ الترتيب',
     saving: 'جارٍ الحفظ…',
     loading: 'جارٍ التحضير…',
@@ -14,8 +16,9 @@ const labels = {
     nextRound: 'جولة جديدة جاهزة!',
   },
   en: {
-    title: 'Order films by preference',
-    hint: 'Drag the cards or use the arrows. The first card is your favorite.',
+    eyebrow: 'Triad',
+    title: TRIAD_INSTRUCTION.en,
+    hint: 'Drag the cards or use the arrows. The first card is the one you liked most.',
     save: 'Save ranking',
     saving: 'Saving…',
     loading: 'Preparing…',
@@ -92,7 +95,7 @@ export function RankScreen({ lang, profileId }: { lang: 'ar' | 'en'; profileId: 
 
   return (
     <>
-      <p className="eyebrow">{labels[lang].title}</p>
+      <p className="eyebrow">{t.eyebrow}</p>
       <h2>{t.title}</h2>
       <p className="muted">{t.hint}</p>
       <div className="rank-list">

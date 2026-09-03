@@ -30,6 +30,12 @@ function zeroFingerprint(overrides: Record<string, number> = {}) {
   }, {});
 }
 
+function withoutDimension(fingerprint: Record<string, number>, dimension: string) {
+  const copy = { ...fingerprint };
+  delete copy[dimension];
+  return copy;
+}
+
 function repoMock() {
   return {
     findOne: vi.fn(),
@@ -44,6 +50,15 @@ function queryBuilderMock(titles: Title[]) {
     getMany: vi.fn().mockResolvedValue(titles),
   };
   return builder;
+}
+
+function warmthOnlySnapshot(trainingTriadCount = 25) {
+  return {
+    weights: FINGERPRINT_DIMENSIONS.map((dim) => (dim === 'warmth' ? 1 : 0)),
+    biasTerms: {},
+    modelVersion: 'test-v1',
+    trainingTriadCount,
+  };
 }
 
 describe('RecommendationsService', () => {
@@ -90,14 +105,7 @@ describe('RecommendationsService', () => {
 
   it('scores, ranks descending, and truncates to the requested limit', async () => {
     profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
-
-    const weights = FINGERPRINT_DIMENSIONS.map((dim) => (dim === 'warmth' ? 1 : 0));
-    snapshotsRepository.findOne.mockResolvedValue({
-      weights,
-      biasTerms: {},
-      modelVersion: 'test-v1',
-      trainingTriadCount: 25,
-    });
+    snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot());
     statesRepository.find.mockResolvedValue([]);
 
     const titles = [
@@ -119,6 +127,7 @@ describe('RecommendationsService', () => {
     expect(result[0].watchabilityScore).toBeNull();
     // A verbal band, not a raw percentage, until calibrated (blueprint §7.2/§9.3).
     expect(result[0].confidenceBand).toBe('strong');
+    expect(result[0].fingerprintCoverage).toBe(1);
     expect(result[0].track).toBe('safe');
     expect(result[0].modelVersion).toBe('test-v1');
   });
@@ -145,14 +154,9 @@ describe('RecommendationsService', () => {
     expect(result[0].confidenceBand).toBe(expectedBand);
   });
 
-  it('excludes titles the profile has already watched or marked not-watched', async () => {
+  it('excludes only titles the profile has watched; a not_watched mark keeps the title a candidate (blueprint §2.4 #3)', async () => {
     profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
-    snapshotsRepository.findOne.mockResolvedValue({
-      weights: FINGERPRINT_DIMENSIONS.map(() => 0),
-      biasTerms: {},
-      modelVersion: 'test-v1',
-      trainingTriadCount: 10,
-    });
+    snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot(10));
     statesRepository.find.mockResolvedValue([{ titleId: 'already-watched' }]);
 
     const builder = queryBuilderMock([]);
@@ -160,8 +164,66 @@ describe('RecommendationsService', () => {
 
     await service.findForProfile('user-1', 'profile-1', 10);
 
+    expect(statesRepository.find).toHaveBeenCalledWith({
+      where: { profileId: 'profile-1', state: 'watched' },
+      select: { titleId: true },
+    });
     expect(builder.andWhere).toHaveBeenCalledWith('title.id NOT IN (:...excludedTitleIds)', {
       excludedTitleIds: ['already-watched'],
     });
+  });
+
+  it('imputes an unknown dimension with the candidate-pool mean instead of zero (ADR-19)', async () => {
+    profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+    snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot());
+    statesRepository.find.mockResolvedValue([]);
+
+    const titles = [
+      { id: 'cold', fingerprint: zeroFingerprint({ warmth: 0.2 }) },
+      { id: 'warm', fingerprint: zeroFingerprint({ warmth: 0.8 }) },
+      { id: 'warmth-unknown', fingerprint: withoutDimension(zeroFingerprint(), 'warmth') },
+    ] as unknown as Title[];
+    titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+    const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+    // Pool mean of the known warmth values is 0.5, so the unknown title lands in the
+    // middle -- had it been zero-filled it would have come last with score 0.
+    expect(result.map((item) => item.title.id)).toEqual(['warm', 'warmth-unknown', 'cold']);
+    expect(result[1].personalFitScore).toBeCloseTo(0.5);
+    expect(result[1].fingerprintCoverage).toBeCloseTo(12 / 13);
+  });
+
+  it('demotes the confidence band one step for a title with unknown dimensions', async () => {
+    profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+    snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot(25));
+    statesRepository.find.mockResolvedValue([]);
+
+    const titles = [
+      { id: 'complete', fingerprint: zeroFingerprint({ warmth: 0.9 }) },
+      { id: 'partial', fingerprint: withoutDimension(zeroFingerprint({ warmth: 0.8 }), 'pacing') },
+    ] as unknown as Title[];
+    titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+    const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+    expect(result.find((item) => item.title.id === 'complete')?.confidenceBand).toBe('strong');
+    expect(result.find((item) => item.title.id === 'partial')?.confidenceBand).toBe('likely');
+  });
+
+  it('drops a title whose fingerprint has no numeric dimension at all', async () => {
+    profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+    snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot());
+    statesRepository.find.mockResolvedValue([]);
+
+    const titles = [
+      { id: 'described', fingerprint: zeroFingerprint({ warmth: 0.4 }) },
+      { id: 'themes-only', fingerprint: { schemaVersion: 'film-fingerprint-v1', themes: ['loss'] } },
+    ] as unknown as Title[];
+    titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+    const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+    expect(result.map((item) => item.title.id)).toEqual(['described']);
   });
 });

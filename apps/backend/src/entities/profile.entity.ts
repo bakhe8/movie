@@ -26,7 +26,9 @@ export class Profile {
   @Column({ length: 255 })
   name: string;
 
-  @Column({ type: 'varchar', length: 5, default: 'en' })
+  // Arabic-first product (blueprint §2, §5.1). Interface/market only -- never a
+  // taste prior (blueprint §4.1, §10.2).
+  @Column({ type: 'varchar', length: 5, default: 'ar' })
   preferredLanguage: PreferredLanguage;
 
   @CreateDateColumn()

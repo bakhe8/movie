@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AuthScreen } from './components/AuthScreen';
 import { DiscoverScreen } from './components/DiscoverScreen';
 import { ListScreen } from './components/ListScreen';
@@ -26,6 +26,13 @@ export default function Home() {
   const [view, setView] = useState<View>('home');
   const t = labels[lang];
   const home = homeCopy[lang];
+
+  // Keep the document's language and direction in step with the UI language
+  // so assistive tech, fonts and layout follow the toggle (blueprint §4.3 RTL).
+  useEffect(() => {
+    document.documentElement.lang = lang;
+    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+  }, [lang]);
 
   if (!ready) {
     return null;

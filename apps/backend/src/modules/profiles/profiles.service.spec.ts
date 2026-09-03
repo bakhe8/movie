@@ -65,13 +65,13 @@ describe('ProfilesService', () => {
       ).rejects.toBeInstanceOf(ConflictException);
     });
 
-    it('defaults preferredLanguage to en when not provided', async () => {
+    it('defaults preferredLanguage to ar when not provided (Arabic-first, blueprint §2)', async () => {
       await service.create('user-1', { name: 'Main' });
 
       expect(profilesRepository.create).toHaveBeenCalledWith({
         userId: 'user-1',
         name: 'Main',
-        preferredLanguage: 'en',
+        preferredLanguage: 'ar',
       });
     });
   });
