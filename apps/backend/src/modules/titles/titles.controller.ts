@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
 import { ListTitlesQueryDto } from './dto/list-titles-query.dto';
 import { TitlesService } from './titles.service';
 
@@ -17,7 +17,7 @@ export class TitlesController {
   }
 
   @Get(':titleId')
-  findOne(@Param('titleId') titleId: string) {
+  findOne(@Param('titleId', ParseUUIDPipe) titleId: string) {
     return this.titlesService.findOne(titleId);
   }
 }

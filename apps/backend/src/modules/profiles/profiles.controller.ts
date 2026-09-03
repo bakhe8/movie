@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Request,
@@ -31,14 +32,17 @@ export class ProfilesController {
   }
 
   @Get(':profileId')
-  findOne(@Request() request: { user: { id: string } }, @Param('profileId') profileId: string) {
+  findOne(
+    @Request() request: { user: { id: string } },
+    @Param('profileId', ParseUUIDPipe) profileId: string,
+  ) {
     return this.profilesService.findOne(request.user.id, profileId);
   }
 
   @Patch(':profileId')
   update(
     @Request() request: { user: { id: string } },
-    @Param('profileId') profileId: string,
+    @Param('profileId', ParseUUIDPipe) profileId: string,
     @Body() updateProfileDto: UpdateProfileDto,
   ) {
     return this.profilesService.update(request.user.id, profileId, updateProfileDto);
@@ -46,7 +50,10 @@ export class ProfilesController {
 
   @Delete(':profileId')
   @HttpCode(204)
-  async remove(@Request() request: { user: { id: string } }, @Param('profileId') profileId: string) {
+  async remove(
+    @Request() request: { user: { id: string } },
+    @Param('profileId', ParseUUIDPipe) profileId: string,
+  ) {
     await this.profilesService.remove(request.user.id, profileId);
   }
 }

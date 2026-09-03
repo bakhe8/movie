@@ -174,4 +174,40 @@ describe('Cross-user access (IDOR) and auth guards', () => {
         .expect(404);
     });
   });
+
+  // H4 (an independent audit's finding): none of these routes validated that
+  // a path param was even a UUID before handing it to TypeORM/Postgres, so a
+  // malformed id (or any id-shaped route colliding with a real one) fell
+  // through to a Postgres cast error and came back as an unhandled 500 --
+  // cheap noise for error monitoring, and the wrong contract (400 expected).
+  // triads.controller.ts's `:triadId`/`:profileId` params are a known
+  // remaining gap here -- left out because another session was actively
+  // editing that file concurrently with this fix (see IMPLEMENTATION_STATUS.md).
+  describe('malformed ids (H4)', () => {
+    it('rejects a malformed profileId with 400, not 500', async () => {
+      await request(app.getHttpServer())
+        .get('/profiles/not-a-uuid')
+        .set('Authorization', `Bearer ${userA.token}`)
+        .expect(400);
+    });
+
+    it('rejects a malformed titleId on the public title-lookup route with 400, not 500', async () => {
+      await request(app.getHttpServer()).get('/titles/not-a-uuid').expect(400);
+    });
+
+    it('rejects a malformed titleId when writing watch state with 400, not 500', async () => {
+      await request(app.getHttpServer())
+        .patch(`/profiles/${profileAId}/titles/not-a-uuid/state`)
+        .set('Authorization', `Bearer ${userA.token}`)
+        .send({ state: 'watched' })
+        .expect(400);
+    });
+
+    it('rejects a malformed profileId on the recommendations route with 400, not 500', async () => {
+      await request(app.getHttpServer())
+        .get('/profiles/not-a-uuid/recommendations')
+        .set('Authorization', `Bearer ${userA.token}`)
+        .expect(400);
+    });
+  });
 });

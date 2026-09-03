@@ -1,7 +1,7 @@
 # Architecture Decision Records
 
 **Status**: Living log. Every decision cites the blueprint section it serves (`BP §x.y`) or states that it is this repository's own engineering choice within the blueprint's constraints. A decision that contradicts the blueprint is a bug in this file. Product-level open questions that must be settled by experiment are **not** decided here — they are listed in `BP App. C` and [SPECIFICATION.md §11](SPECIFICATION.md).
-**Version**: 2.8 — 2026-09-03 (ADR-1…13 rewritten for consistency; ADR-14…26 added to close the gaps found in the documentation audit; ADR-27…28 added from a code-quality/security audit; ADR-29 added for the NestJS 10→11 migration; ADR-30 added for the `@typescript-eslint`/`vitest` dev-tooling bump; ADR-31 added for the training temporal hold-out, gap 2; ADR-32 added for triad event completeness, gap 3; ADR-33 added for prediction display formatting; ADR-34 added for the H1 triad-reuse fix; ADR-35 added for the H2 deactivated-account fix; ADR-36 added for the H3 lazy-OpenAI-client fix).
+**Version**: 2.9 — 2026-09-03 (ADR-1…13 rewritten for consistency; ADR-14…26 added to close the gaps found in the documentation audit; ADR-27…28 added from a code-quality/security audit; ADR-29 added for the NestJS 10→11 migration; ADR-30 added for the `@typescript-eslint`/`vitest` dev-tooling bump; ADR-31 added for the training temporal hold-out, gap 2; ADR-32 added for triad event completeness, gap 3; ADR-33 added for prediction display formatting; ADR-34 added for the H1 triad-reuse fix; ADR-35 added for the H2 deactivated-account fix; ADR-36 added for the H3 lazy-OpenAI-client fix; ADR-37 added for the H4 `ParseUUIDPipe` fix).
 
 Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 
@@ -250,6 +250,13 @@ Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 **Consequences.** `import src`, `import src.training`, and `import src.enrichment` all succeed with no `OPENAI_API_KEY` set; so does constructing a `FilmEnrichmentWorker()`. The key is still required — unchanged — to actually call `generate_fingerprint()` / `generate_recommendation_explanation()`. No behavior change for the enrichment worker's real callers, which always have the key set before running it.
 **Revisit when.** Never, barring a redesign of how workers share OpenAI clients across multiple worker instances (not needed today — one process runs one worker at a time).
 
+## ADR-37 — `ParseUUIDPipe` on every UUID path param (H4)
+
+**Context.** No controller validated that a UUID-shaped path param (`profileId`, `titleId`) was actually a UUID before handing it to TypeORM. Postgres rejected the cast with a raw SQL error, which Nest's default exception filter turned into an unhandled `500 {"statusCode":500,"message":"Internal server error"}` — the wrong contract (should be `400`) and a cheap noise generator for error monitoring. Found by an independent audit ([AUDIT_2026-09-03.md](AUDIT_2026-09-03.md) §2 H4), reproduced independently before fixing (`GET /api/titles/not-a-uuid` and `GET /api/profiles/not-a-uuid` both returned `500`).
+**Decision.** `@Param('id', ParseUUIDPipe)` on every UUID path param in `ProfilesController`, `UserTitleStateController`, `TitlesController` and `RecommendationsController` — a malformed id now fails validation before it ever reaches a service or the database, and Nest's `ParseUUIDPipe` throws `BadRequestException` (`400`) by default. Per-param, not a global pipe: explicit at each call site, and safe against a future route that legitimately takes a non-UUID param. `TriadsController`'s `:triadId`/`:profileId` params are a **known, deliberate gap** — left out because another session was concurrently editing that exact file (`triads.controller.ts`) while this fix was made; closing it is a direct follow-up once that file's in-flight change lands.
+**Consequences.** `GET /titles/not-a-uuid`, `GET /profiles/not-a-uuid`, `PATCH /profiles/:id/titles/not-a-uuid/state` and `GET /profiles/not-a-uuid/recommendations` now return `400` instead of `500`. No behavior change for well-formed ids (valid-but-nonexistent or valid-but-wrong-owner ids still resolve through the service layer to `404`, unchanged — verified against the existing IDOR e2e suite). `TriadsController` still 500s on a malformed `:triadId`/`:profileId` until the follow-up lands.
+**Revisit when.** `TriadsController`'s pending concurrent edit (triad replacement) lands — apply the same `ParseUUIDPipe` treatment there and remove this ADR's caveat.
+
 ---
 
 ## Summary
@@ -292,6 +299,7 @@ Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 | 34 | `random-v1` excludes only the previous triad, not full history (H1) | `BP §8.1`, `§8.2` | adaptive policy computes a real `Repeat` penalty |
 | 35 | `validateUser()` checks `active` (H2) | `BP §21.3` | refresh-token work (ADR-26) |
 | 36 | `services/workers` OpenAI client built lazily, not at import time (H3) | engineering choice | multi-worker client sharing, if ever needed |
+| 37 | `ParseUUIDPipe` on every UUID path param (H4) | `BP §21.3` (input handling) | `TriadsController` still pending |
 
 ## How to add a decision
 
