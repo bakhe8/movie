@@ -1,0 +1,158 @@
+# API Contract
+
+**Status**: Derived from blueprint `§14` (endpoint list), `§12.2` (attribution gate), `§13.2` (event shape). Two layers are documented separately and must not be confused:
+
+- **§1 Implemented today** — exact routes that exist in `apps/backend` as of 2026-09-03. Unversioned, under the global prefix `/api`.
+- **§2 Target contract** — the `BP §14` surface under `/api/v1`, with the fields every response must carry. This is what new work implements; §1 routes migrate into it.
+
+Versioning decision (ADR-15): the global prefix stays `/api`; the blueprint's `/v1/...` paths become `/api/v1/...`. The move happens in one step once the first `§2` endpoint lands, because the only client is the in-repo frontend.
+
+Conventions: JSON; `camelCase` fields; UUID ids; timestamps ISO-8601 UTC; errors use NestJS's `{ statusCode, message, error }` shape; auth is `Authorization: Bearer <JWT>`.
+
+---
+
+## 1. Implemented today (`/api`, unversioned)
+
+Verified against `apps/backend/src/modules/**` on 2026-09-03. Every profile-scoped route checks that the profile belongs to the caller and returns `404` otherwise (proven by `apps/backend/test/idor.e2e-spec.ts`).
+
+| Method | Path | Auth | Body / query | Response | Notes |
+|---|---|---|---|---|---|
+| GET | `/api` | — | — | `{ message }` | |
+| GET | `/api/health` | — | — | `{ status: 'ok' }` | |
+| POST | `/api/auth/register` | — | `{ email, password(8–64), firstName, lastName }` | `{ access_token, user }` | 5 req/min per IP |
+| POST | `/api/auth/login` | — | `{ email, password }` | `{ access_token, user }` | 5 req/min per IP |
+| GET | `/api/auth/profile` | JWT | — | account fields | account, not taste profile |
+| POST | `/api/profiles` | JWT | `{ name, preferredLanguage? }` | Profile | unique `(userId, name)` → 409 |
+| GET | `/api/profiles` | JWT | — | Profile[] | caller's profiles only |
+| GET | `/api/profiles/:profileId` | JWT | — | Profile | |
+| PATCH | `/api/profiles/:profileId` | JWT | `{ name?, preferredLanguage? }` | Profile | |
+| DELETE | `/api/profiles/:profileId` | JWT | — | 204 | cascades events/models of that profile only |
+| GET | `/api/titles` | — | `?query&page&limit(≤100)` | `{ items, page, limit, total, totalPages }` | ILIKE on `titleEn`/`titleAr` only |
+| GET | `/api/titles/search` | — | same as above | same | alias of `GET /api/titles` |
+| GET | `/api/titles/:titleId` | — | — | Title (incl. `fingerprint`) | |
+| PATCH | `/api/profiles/:profileId/titles/:titleId/state` | JWT | `{ state: watched\|not_watched\|watchlist\|interested, watchedAt?, notes? }` | UserTitleState | never accepts a rating |
+| GET | `/api/profiles/:profileId/watched-titles` | JWT | — | UserTitleState[] (+title) | |
+| GET | `/api/profiles/:profileId/watchlist` | JWT | — | UserTitleState[] (+title) | |
+| GET | `/api/profiles/:profileId/triads/current` | JWT | — | Triad | returns the active triad or creates one (`random-v1`); 400 if < 3 watched titles |
+| GET | `/api/profiles/:profileId/triads` | JWT | — | Triad[] | completed only |
+| POST | `/api/triads/:triadId/rank` | JWT | `{ ranking: permutation of [0,1,2] over titleIds, sessionId? }` | Triad | 400 if already completed; no idempotency key yet |
+| GET | `/api/profiles/:profileId/recommendations` | JWT | `?limit(≤50, default 10)` | Recommendation[] | 409 until a model snapshot exists; results not persisted |
+
+Response shapes in use (from `apps/frontend/app/lib/api.ts`, which mirrors the entities):
+
+```ts
+Profile { id, userId, name, preferredLanguage: 'ar'|'en', createdAt, updatedAt }
+Title { id, internalId, titleEn, titleAr, description|null, releaseYear|null, genres|null, externalIds?, fingerprint? }
+UserTitleState { id, profileId, titleId, state, watchedAt|null, importedRating|null, ratingSource:'import'|null, notes|null, updatedAt, title? }
+Triad { id, profileId, titleIds: string[3], displayOrder: string[3]|null, ranking: number[3]|null,
+        policyVersion|null, selectionPropensity|null, experimentId|null, sessionId|null, metadata|null, status, createdAt }
+Recommendation { title, personalFitScore, publicQualityScore|null, watchabilityScore|null,
+                 confidenceBand: 'initial'|'likely'|'strong'|'inconclusive', track: 'safe'|'discovery'|'outside_usual', modelVersion }
+```
+
+Known gaps versus `BP §14` are tracked row-by-row in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md); the target below is the fix.
+
+---
+
+## 2. Target contract (`/api/v1`)
+
+### 2.1 Common envelope (`BP §14`)
+
+Every response that depends on a model or policy carries:
+
+```ts
+{
+  requestId: string,        // server-generated, logged with the event
+  modelVersion: string|null,
+  policyVersion: string|null,
+  experimentId: string|null,
+  ...payload
+}
+```
+
+Every displayed reason (recommendation reason, taste-profile item) carries `evidenceSource: 'individual' | 'population_enriched'` decided by the attribution gate (`BP §7.6`, `§12.2`). In MVP the gate only ever returns `individual`.
+
+Idempotency: state-changing calls that may be retried by the client (`rank`, `replace`, `watch-events`, `imports`) accept `Idempotency-Key` (UUID). A repeated key returns the original result with `200` and does not create a second event.
+
+### 2.2 Endpoints
+
+| Method | Path | Purpose | Acceptance rules (`BP §14`) | Replaces |
+|---|---|---|---|---|
+| POST | `/api/v1/auth/register` | create account + first consents | body adds `consents: [{ purpose, version }]`, `uiLanguage`, `market`, `platforms[]` (`BP §4.1`) | `/api/auth/register` |
+| POST | `/api/v1/auth/login` | login | unchanged | `/api/auth/login` |
+| GET/POST/PATCH/DELETE | `/api/v1/profiles[...]` | taste profiles | unchanged; profile gains `market`, `platforms` (display/availability only) | `/api/profiles` |
+| GET | `/api/v1/titles?q=&page=&limit=` | search incl. alternate titles | Postgres FTS over `localized_titles` (`BP §5.1`, `§12.1`); results carry `licenseStatus` for poster display | `/api/titles` |
+| GET | `/api/v1/titles/:titleId` | work page | fingerprint summary (reviewed features only), Public Quality and Watchability separate (`BP §5.3`) | `/api/titles/:titleId` |
+| POST | `/api/v1/triads/next` | return a valid triad for this profile | only confirmed-watched items; returns `selectionPropensity`, `policyVersion`, `displayOrder`, `shownAt`; creates the triad event; `409` with `{ reason: 'need_more_watched', needed }` if the pool is too small | `GET …/triads/current` |
+| POST | `/api/v1/triads/:id/rank` | save one complete ranking | checks membership, `answeredAt` window, not already answered; requires `Idempotency-Key`; stores `answeredAt`, `modelVersion` | `/api/triads/:id/rank` |
+| POST | `/api/v1/triads/:id/replace` | replace one item | body `{ titleId, reason: 'not_watched' \| 'not_remembered' }`; writes `triad_replacements`; updates exposure per ADR-17; no preference signal; returns the updated triad with the new item and a fresh `displayOrder` | new |
+| POST | `/api/v1/watch-events` | record a watch (and edition) | body `{ profileId, titleId, watchedAt?, source: 'in_app'\|'import'\|'manual', audioLanguage?, subtitleLanguage?, provider? }`; does not imply liking; if the title was recommended, links an `outcomes` row | `PATCH …/state` (state stays for watchlist/interested) |
+| GET | `/api/v1/taste-profile?profileId=` | tendencies, confidence, unknown areas, exceptions | no uncalibrated percentages; each item has brief evidence, `confidenceBand`, `evidenceSource`, `modelVersion` | new |
+| GET | `/api/v1/recommendations?profileId=&track=&limit=` | three tracks | each item: `personalFit`, `publicQuality`, `watchability`, `confidenceBand`, `reason { text, features[], evidenceSource }`, `availability[]`, `selectionPropensity`, `recommendationId`; the call persists a `recommendations` row per item | `GET …/recommendations` |
+| POST | `/api/v1/recommendations/:id/outcome` | implicit outcome | body `{ type: 'saved'\|'clicked'\|'dismissed_not_relevant'\|'opened_provider' }`; no thumbs/stars | new |
+| POST | `/api/v1/library/imports` | start a user-file import | multipart CSV; type/size check; explicit consent flag; async status at `GET /api/v1/library/imports/:id`; raw file deleted per retention (`BP §21.3`) | new |
+| POST | `/api/v1/privacy/export` | portable copy | async; `GET /api/v1/privacy/export/:id` for status; identity re-verification | new |
+| POST | `/api/v1/privacy/delete` | delete account, events, derivatives | announced safety period; execution log; backup handling per [PRIVACY.md](PRIVACY.md) | new |
+| POST | `/api/v1/privacy/reset` | reset taste only | deletes triads, replacements, snapshots, recommendations for the profile; keeps account | new |
+| GET/PUT | `/api/v1/consents` | list / update purpose consents and restrictions | one row per purpose per version (`BP §13.1`); restrictions: `no_pooled` = revoke `personalization_pooled`, `pause_all` = set `profiles.pausedAt` ([PRIVACY.md](PRIVACY.md) §4) | new |
+| GET | `/api/v1/admin/**` | internal board | role `admin` required; endpoints: `titles/missing-fingerprints`, `titles/:id/provenance`, `models`, `experiments`, `triads/latest`, `profiles/:id/score-test` (`BP §5.1`) | new |
+
+### 2.3 Shapes
+
+```ts
+// POST /api/v1/triads/next → 201
+{
+  requestId, modelVersion, policyVersion, experimentId,
+  triad: {
+    id, profileId,
+    items: [{ titleId, title: { id, titleAr, titleEn, releaseYear, posterUrl|null } }] /* length 3, in displayOrder */,
+    displayOrder: string[3], shownAt, selectionPropensity, status: 'active'
+  }
+}
+
+// POST /api/v1/triads/:id/rank
+// request: { ranking: string[3] /* titleIds, best first */, sessionId? }   header Idempotency-Key
+// response 200: { requestId, triad: { ...as above, ranking, answeredAt, status: 'completed' } }
+
+// GET /api/v1/recommendations → 200
+{
+  requestId, modelVersion, policyVersion, experimentId,
+  tracks: {
+    safe: RecommendationItem[], discovery: RecommendationItem[], outside_usual: RecommendationItem[]
+  }
+}
+RecommendationItem {
+  recommendationId, title: {...},
+  personalFit: number,                // ordinal score; never shown as a %
+  publicQuality: { value: number|null, votes: number|null, sources: string[] } | null,
+  watchability: { available: boolean|null, providers: [{ name, market, audio[], subtitles[], checkedAt }] } | null,
+  confidenceBand: 'initial'|'likely'|'strong'|'inconclusive',
+  reason: { text: string, features: [{ key, direction: 'higher'|'lower' }], evidenceSource: 'individual'|'population_enriched' },
+  selectionPropensity: number
+}
+
+// GET /api/v1/taste-profile → 200
+{
+  requestId, modelVersion,
+  core: [{ key, direction, confidenceBand, evidence: string, evidenceSource }],
+  conditional: [...same shape...],
+  unknown: [{ key, whyUnknown }],
+  exceptions: [{ titleId, tagged: boolean }],
+  drift: { detected: boolean, since: string|null }
+}
+```
+
+Ranking is sent as title ids (not indices) in the target contract so a replaced item can never be mis-indexed; the current index-based body is accepted only on the unversioned route.
+
+### 2.4 Rules that apply to every endpoint
+
+- No endpoint ever accepts or returns a merged single "match score" (`BP §4.4`).
+- No endpoint accepts a star/1–10 rating or thumbs (`BP §2.4 #2`). `importedRating` is written only by the import pipeline.
+- `not_watched`/`not_remembered` never change `personalFit` inputs (`BP §2.4 #3`).
+- The LLM is never called inside a request that returns recommendations or triads (`BP §15.2`).
+- Profile-scoped routes are owner-only; admin routes are role-gated; all staff access is audit-logged (`BP §21.3`).
+
+---
+
+**Changelog**
+- 1.0 (2026-09-03): first API document; consolidates the previously scattered endpoint lists (ADR-11, QUICKSTART, PRIVACY, SPECIFICATION) into one implemented-vs-target contract.

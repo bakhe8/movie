@@ -1,670 +1,210 @@
-# Architectural Decisions & Rationale
+# Architecture Decision Records
 
-A reference guide explaining the key technical decisions and their tradeoffs.
+**Status**: Living log. Every decision cites the blueprint section it serves (`BP §x.y`) or states that it is this repository's own engineering choice within the blueprint's constraints. A decision that contradicts the blueprint is a bug in this file. Product-level open questions that must be settled by experiment are **not** decided here — they are listed in `BP App. C` and [SPECIFICATION.md §11](SPECIFICATION.md).
+**Version**: 2.0 — 2026-09-03 (ADR-1…13 rewritten for consistency; ADR-14…26 added to close the gaps found in the documentation audit).
 
----
-
-## Overview
-
-> See [movie_taste_platform_blueprint_ar.md](movie_taste_platform_blueprint_ar.md) for the product foundation these decisions must stay consistent with. A few entries below have been annotated where the blueprint adds a constraint this doc didn't originally carry.
-
-This document answers "Why did we choose X over Y?" for all major architectural decisions. Each decision includes:
-- **Context**: Problem we're solving
-- **Options Considered**: Alternatives evaluated
-- **Decision**: What we chose
-- **Rationale**: Why it's optimal
-- **Tradeoffs**: What we gave up
-- **Migration Path**: How to change later if needed
+Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 
 ---
 
-## 1. Monorepo vs. Separate Repositories
+## ADR-1 — Monorepo with npm workspaces
 
-### Context
-Need to organize Next.js frontend, NestJS backend, Python workers, and shared types.
+**Context.** Next.js frontend, NestJS backend, Python model service and shared types.
+**Decision.** One repository: `apps/frontend`, `apps/backend`, `services/workers`, `packages/shared`; npm workspaces; Poetry for Python.
+**Rationale.** One place for contracts and docs; refactors land everywhere; matches `BP §12` "start simple".
+**Consequences.** Frontend and backend release together; the backend keeps a hand-synced copy of the fingerprint type because there is no project-reference build yet (see [FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md) §2).
+**Revisit when.** `BP §12.3` team/deploy-boundary signals appear.
 
-### Options Considered
+## ADR-2 — PostgreSQL as the single store: relational + FTS + pgvector
 
-| Option | Pros | Cons |
-|--------|------|------|
-| **Monorepo** (chosen) | Shared types, single deploy, easy refactoring | Harder CI/CD, single version number |
-| **Separate repos** | Clear boundaries, independent deployments | Type duplication, version hell, merge conflicts |
-| **Microservices from start** | Full independence | Operational complexity, network latency |
+**Context.** Need transactional event storage, alternate-title search and vector candidate retrieval (`BP §12.1`).
+**Decision.** One PostgreSQL; full-text search over `localized_titles`; `pgvector` columns for embeddings; no separate search or vector service.
+**Rationale.** One backup/compliance surface; joins between events, titles and models; adequate for the MVP catalog size.
+**Consequences.** The `ankane/pgvector` image is already used, but embeddings are stored as `real[]` and no FTS index exists — migration M3/M7 in [SCHEMA.md](SCHEMA.md).
+**Revisit when.** Search or similarity exceeds measured Postgres capacity (`BP §12.3`).
 
-### Decision
-**Monorepo with npm workspaces** (`apps/`, `packages/`, `services/`)
+## ADR-3 — Plackett–Luce linear utility as the core ranker
 
-### Rationale
-1. **Shared TypeScript types** (`packages/shared/`) = single source of truth
-2. **Frontend & backend deployed together** = simpler DevOps initially
-3. **Python workers in same repo** = easier to test, build, and deploy
-4. **Shared development environment** = faster onboarding
-5. **Refactoring = apply everywhere** = less technical debt
+**Context.** Learn interpretable taste from few listwise rankings (`BP §7.1`–`§7.2`).
+**Decision.** Utility $s(u,m)=b(m)+\theta_u^\top\phi_m+p_u^\top q_m+\delta_{u,m}$; listwise PL likelihood; MLE/MAP with regularization; $b(m)$ in the code path from day one; $p^\top q$ from internal data only when enough exists; $\delta$ strongly shrunk.
+**Rationale.** Interpretable weights → honest explanations; sample-efficient; fast; a well-studied model with fair baselines (`BP §16.3`).
+**Consequences.** Non-linear interactions are not captured in MVP; person and cultural effects are separate shrunk blocks, not dense features.
+**Revisit when.** A candidate model beats it on the `BP §16.5` gate.
 
-### Tradeoffs Given Up
-- ❌ Can't deploy frontend without backend
-- ❌ Database migrations tied to API releases
-- ❌ Large monorepo (but small for MVP)
+## ADR-4 — The triad ranking is the only explicit preference question
 
-### Migration Path
-If monorepo becomes bottleneck later:
-```
-Phase 3+: Extract to polyrepo
-├── movie-frontend (Next.js only)
-├── movie-backend (NestJS only)
-├── movie-workers (Python only)
-└── movie-types (shared, published to npm)
-```
+**Context.** `BP §2.4 #2`, `§4.3`.
+**Decision.** No star, 1–10, thumbs or like/dislike input anywhere, permanently. "Haven't watched" and "don't remember" are neutral replacement controls. Imported ratings are auxiliary, low-confidence, never solicited.
+**Rationale.** Rankings avoid scale ambiguity; a single fixed question keeps the meaning of the answer stable; the blueprint makes this non-negotiable.
+**Consequences.** The claim "a triad teaches more per minute than a pair or a single rating" is `BP` Gate 1 — an **experiment**, not an assumption; a triad is never treated as three independent pairwise observations (`BP §7.2`).
+**Revisit when.** Never for the question itself; only UX mechanics (ties, partial order) via `BP App. C`.
 
----
+## ADR-5 — PWA first; native apps only on evidence
 
-## 2. PostgreSQL + pgvector vs. Separate Vector Database
+**Context.** `BP §5.1`–`§5.2`.
+**Decision.** Next.js PWA (installable, offline shell) for web and mobile. Native iOS/Android are built only if the PWA measurably fails a performance or push-notification need.
+**Consequences.** The current frontend is a plain Next.js app without manifest or service worker — PWA work is a listed gap.
+**Revisit when.** PWA telemetry proves the need.
 
-### Context
-Need to store film fingerprints and enable semantic similarity search for recommendations.
+## ADR-6 — LLM enrichment through OpenAI Responses API with Structured Outputs
 
-### Options Considered
+**Context.** `BP §15`.
+**Decision.** Background-only use: fingerprint extraction and post-hoc explanation rephrasing via the Responses API with JSON-Schema structured outputs; `store=false`; model id from configuration (`OPENAI_FINGERPRINT_MODEL`, `OPENAI_EXPLANATION_MODEL`); batch endpoints where available for bulk seeding; versioned re-extraction only on schema/model change.
+**Rationale.** Structured output prevents invented dimensions; multilingual; one-time cost per title-version.
+**Consequences.** No model name or price appears in docs (they change); the worker's Chat Completions call and its hard-coded default model are gaps. Costs are tracked per film and per 1,000 explanations against a phase budget (`BP §15.4`), not estimated here.
+**Revisit when.** Cost or vendor risk justifies a distilled local extractor.
 
-| Option | Pros | Cons |
-|--------|------|------|
-| **PostgreSQL + pgvector** (chosen) | Single DB, simple backups, no new infra | Slower than specialized vector DB |
-| **Pinecone** | Fast semantic search, fully managed | Expensive ($0.04/1K vectors), vendor lock-in |
-| **Weaviate** | Open source, good UX | Another service to operate and scale |
-| **Elasticsearch** | Hybrid search, popular | Complex setup, overkill for MVP |
-| **Local embeddings** (e.g., Faiss) | Offline, super fast | Synchronization headaches, not scalable |
+## ADR-7 — Individual profiles with a pseudonymous taste id
 
-### Decision
-**PostgreSQL with pgvector extension** (pgvector installed automatically)
+**Context.** `BP §2.4 #10`, `§13.1`, `§21.1`.
+**Decision.** One person = one profile; `profiles.id` is the pseudonymous taste id; every event/model table references `profileId`, never `userId`. Group matching later merges rankings, never profiles.
+**Consequences.** Exports and model jobs never touch account identity.
 
-### Rationale
-1. **Single database** = easier backup/restore/compliance
-2. **No new operational complexity** = one connection string, one credentials set
-3. **Good enough performance** for MVP (500K vectors < 1M)
-4. **Supports migration** = can export vectors to Pinecone later if needed
-5. **Free** = no ongoing vendor costs
-6. **SQL integration** = easy to join with titles table
+## ADR-8 — Three deterministic tracks with a declared exploration share
 
-### Tradeoffs Given Up
-- ❌ Slower similarity search than specialized DBs (~100ms vs 10ms per query)
-- ❌ Limited to ~1M vectors before scaling issues
+**Context.** `BP §4.4`, `§8.3`, `§14.1`.
+**Decision.** Recommendations are split into `safe` / `discovery` / `outside_usual`; each track is deterministically ordered; exploration is a small, declared, logged share; every shown item logs `selectionPropensity`.
+**Rationale.** Measurable, explainable, prevents the filter bubble without a full bandit.
+**Revisit when.** Off-policy evaluation shows a bandit policy beats it on the `BP §16.5` gate.
 
-### Migration Path
-```
-Phase 2+: If similarity search becomes bottleneck
-├── Keep PostgreSQL as primary
-├── Add Pinecone for real-time search
-├── Sync embeddings via background job
-└── Fall back to PG if Pinecone fails
-```
+## ADR-9 — Centralized training with explicit purpose consents
 
----
+**Context.** `BP §21.1`, `§7.5`.
+**Decision.** Models are trained server-side on pseudonymous events under purpose-specific consents. Pooled cross-profile training for the shared latent space is a **separate consent purpose** with an opt-out that does not remove individual personalization ([PRIVACY.md](PRIVACY.md)).
+**Consequences.** Export, delete, reset and audit are product features, not afterthoughts.
+**Revisit when.** Privacy requirements justify differential privacy or federated approaches.
 
-## 3. Plackett-Luce Statistical Model vs. Neural Networks
+## ADR-10 — Recommendations computed per request from precomputed model state, then persisted
 
-### Context
-Learn user taste preferences from triadic rankings. Need simple, interpretable, efficient model.
+**Context.** `BP §12.2`, `§13.1`, `§14.1`.
+**Decision.** No LLM or training on the request path. Scores come from the latest snapshot via the model service; every served list is persisted (`recommendations` rows) so outcomes can close the loop. A Redis cache is added only if latency measurements require it.
+**Consequences.** Redis is currently idle by design. Today's on-the-fly, unpersisted list is a gap.
 
-### Options Considered
+## ADR-11 — REST + OpenAPI, single contract document
 
-| Option | Pros | Cons |
-|--------|------|------|
-| **Plackett-Luce** (chosen) | Interpretable weights, proven, fast | Assumes linear preferences |
-| **Neural Network** | Flexible, learns complex patterns | Black box, needs more data (100+ triads) |
-| **Collaborative Filtering** | Leverages other users | Requires many users, cold-start problem |
-| **Content-based + heuristics** | Simple rules, explainable | Limited personalization, manual tuning |
+**Context.** `BP §12.1`, `§14`.
+**Decision.** REST/JSON with an OpenAPI description generated from the NestJS controllers; the human-readable contract is [API.md](API.md) and nothing else lists endpoints.
+**Rationale.** Simple, cacheable, easy to log and audit.
 
-### Decision
-**Plackett-Luce MLE** (linear model trained on triadic rankings)
+## ADR-12 — TypeORM with migrations only
 
-> Blueprint amendment (§7.1): the full utility model is $s(u,m) = b(m) + \theta_u^\top\phi_m + p_u^\top q_m + \delta_{u,m}$ — a shrunk population prior $b(m)$ and a collaborative term $p_u^\top q_m$ sit alongside the personal weight term. $b(m)$ should be in the model from the start for cold-start smoothing, and must never be surfaced to the user merged with personal fit.
->
-> **Correction to "the collaborative term stays deferred" above**: that's still true for $p_u^\top q_m$ specifically — collaborative filtering built from *this product's own* accumulated user interactions correctly waits for sufficient internal data (matches this decision's "Phase 2+" framing below). But blueprint §7.5 adds a second, earlier-arriving collaborative mechanism: a shared latent space seeded from *external* proxy data before real users exist, used silently from Alpha (blueprint §17.2) for candidate generation and triad selection — not deferred to Phase 2+. See Decision 13 below; don't read this entry as saying no cross-user signal exists until Phase 2.
+**Decision.** `synchronize: false` in every environment; schema changes through generated migrations run by `npm run db:migrate`; the CLI data source is `apps/backend/src/data-source.ts`.
+**Consequences.** [SCHEMA.md](SCHEMA.md) §1 must always equal the migration chain.
 
-### Rationale
-1. **Proven in literature** = well-studied, understood failure modes
-2. **Interpretable** = can show users exactly why they got recommendation (weight vector)
-3. **Sample efficient** = works with 15-20 triads (vs 100+ for neural nets)
-4. **Fast training** = BFGS converges in < 1 second
-5. **Lightweight** = trivial to serve (matrix multiply)
-6. **Explainable** = "You like films with high ambiguity and psychological depth" = weights
+## ADR-13 — Shared latent space with per-profile calibration
 
-### Tradeoffs Given Up
-- ❌ Cannot capture nonlinear preferences (e.g., "I like action XOR drama, but not both")
-- ❌ Assumes weights are global (not context/mood dependent)
+**Context.** Estimating tens of correlated weights per profile from a handful of triads is an identifiability problem (`BP §7.5`).
+**Decision.** Build one population factor space (~15–30 factors) from all profiles' triads and fingerprints, retrained on a schedule inside the model service; calibrate each profile onto it (MIRT/CAT-style); seed it before launch **only** from data licensed for commercial use — otherwise from Alpha-cohort data; gate any disclosed cross-user claim behind `BP §7.6` and the cohort gate in `BP §17.3`.
+**Consequences.** MovieLens/Tag Genome are blocked without written GroupLens permission ([DATA_LICENSING.md](DATA_LICENSING.md)); pooled training needs its own consent purpose; feedback-loop controls apply to the retraining data (`BP §21.2`).
 
-### Migration Path
-```
-Phase 2+: Enhance with neural layer
-├── Keep Plackett-Luce as baseline
-├── Add neural network on top of weights
-├── Learn context embeddings (mood, time, etc.)
-└── Fallback to PL if NN fails or underfits
-```
+## ADR-14 — Names, languages and document governance
 
----
+**Context.** The repository used four product names and two phase-numbering systems, and English docs drifted from the Arabic blueprint.
+**Decision.**
+- Normative document: [movie_taste_platform_blueprint_ar.md](movie_taste_platform_blueprint_ar.md). [product_journey_ar.md](product_journey_ar.md) is a non-normative narrative companion. Every English document is derived and cites `BP §`.
+- Working names: UI brand **Reel**; repo/package `movie`; Arabic formal title as in the blueprint. Branding is a later decision; nothing in code depends on the name.
+- Product/vision writing is Arabic; engineering contracts are English; UI copy exists in both.
+- Dates use the real calendar (the blueprint is dated 2026-09-02); every document carries a changelog.
+- Document set and reading order are fixed in [README.md](README.md); no new doc without an entry there.
+**Consequences.** Pre-blueprint English drafts were rewritten or deleted rather than annotated.
 
-## 4. Triadic Ranking vs. Dyadic or Absolute Ratings
+## ADR-15 — API versioning and envelope
 
-### Context
-How do users provide preference signals? Options: rank 2 films, rank 3 films, rate 1-10, etc.
+**Decision.** Global prefix `/api`; the `BP §14` contract lives under `/api/v1`; current unversioned routes migrate in one step when the first v1 endpoint ships (the only client is in-repo). Responses carry `requestId`, `modelVersion`, `policyVersion`, `experimentId`; displayed reasons carry `evidenceSource`; retried mutations use `Idempotency-Key`; rankings are submitted as title ids, not indices.
+**Rationale.** `BP §14` requires the envelope and idempotency; ids survive replacements.
 
-### Options Considered
+## ADR-16 — Naming conventions
 
-| Option | Pros | Cons |
-|--------|------|------|
-| **Triadic ranking** (chosen) | Rich data, no rating ambiguity, fun | Requires 3 films, slower per feedback |
-| **Dyadic (A vs B)** | Fast, simple | Less information per comparison |
-| **1-10 rating** | Familiar to users | Ambiguous (is 7 "good" or "average"?), doesn't reflect relative taste |
-| **Star rating (1-5)** | Simple | Same ambiguity issues |
-| **Implicit ranking** (clicks, watches) | Passive, non-intrusive | Sparse data, confounded by availability |
+**Decision.** SQL tables `snake_case` plural (`user_title_state` is renamed to `user_title_states` in migration M1); SQL columns TypeORM-default `camelCase`, always quoted in raw SQL; JSON/TypeScript `camelCase`; Python `snake_case` internally with camelCase at the DB/JSON boundary; V2 feature keys `family.feature`; enum values `snake_case` strings (`not_watched`, `outside_usual`).
+**Rationale.** Matches what the migrations already created; avoids a disruptive rename of every column.
 
-### Decision
-**Complete triadic ranking** (A > B > C on demand)
+## ADR-17 — Replacement semantics ("haven't watched" / "don't remember")
 
-> Blueprint amendment (§2.4 principle #2, §4.3): triad ranking is the *only* explicit preference question the product ever asks — no 1-10 rating, no post-watch star prompt, no separate survey. "Haven't watched" and "don't remember" are both neutral replacement triggers, never a preference signal, and are tracked as two distinct states (different UI copy, same neutral handling).
+**Context.** `BP §4.3`, `§13.1`, `§14`; the two controls must be neutral and distinct.
+**Decision.**
+- `POST /triads/:id/replace { titleId, reason }` writes a `triad_replacements` row and swaps only that item; the triad gets a fresh `displayOrder`.
+- `reason = not_watched` → `user_title_states.state` becomes `not_watched` (exposure unknown): the title stays a recommendation candidate and leaves the triad pool.
+- `reason = not_remembered` → the title stays `watched` (it is not recommendable) and `triadEligible` becomes `false`.
+- Neither reason enters any loss, prior or score. A triad exceeding `maxReplacementsPerTriad` (a policy parameter set before the Phase 0 test) is marked `skipped`. Replacement rate is a Phase 0/Alpha metric (`BP §17.1`, `§21.2`).
+**Revisit when.** The `BP App. C` tie/weak-memory experiment reports.
 
-### Rationale
-1. **Rich preference signal** = one triad = 3 pairwise comparisons
-2. **Unambiguous** = "A is better than B" is clear (not interpretation of rating number)
-3. **Matches Plackett-Luce** = model naturally trained on complete rankings
-4. **Feels like game** = users engage more than rating
-5. **No rating scale calibration** = each user's scale is relative, not absolute
-6. **Fewer triads needed** = 15 triads = 45 pairwise comparisons vs 60 dyadic comparisons
+## ADR-18 — Phase naming
 
-### Tradeoffs Given Up
-- ❌ Slower (user needs to rank 3 films vs typing one number)
-- ❌ More cognitive load (comparing 3 vs rating one)
+**Decision.** Use the blueprint's names only: Phase 0, Alpha, Closed Beta, Public Arabic Beta, Economics test, Controlled expansion. "Phase 1/2/3" and "Phase 1b" are retired; the old checklist is now [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md).
 
-### Mitigation
-- Show progress ("3 of 15 triads done")
-- Make UI fast and responsive
-- Only ask triadic rankings after users understand preference model
+## ADR-19 — Fingerprint V1 frozen; V2 by families; unknown ≠ zero
 
-### Migration Path
-```
-Phase 2+: Hybrid feedback
-├── Keep triadic ranking as the ONLY explicit preference question — permanently,
-│   not just an MVP simplification (blueprint §2.4 principle #2, non-negotiable)
-├── Add implicit signals (clicks, watch time) — engagement only, low confidence
-└── An imported rating (from a user-provided list) may already exist as an
-    auxiliary low-confidence signal (blueprint §4.2) — but never solicited
-    in-app, and never a 1-10 prompt after a watch
-```
+**Decision.** V1 = the 13 implemented numeric features + themes + confidence + provenance, frozen. V2 adds the missing `BP §6.1` families as namespaced per-feature rows with provenance. Missing values are unknown: excluded from training, mean-imputed with a confidence penalty for scoring, never cited in a reason. Model snapshots are pinned to a `fingerprintSchemaVersion`.
+**Consequences.** Zero-filling in the current trainer and scorer is a bug to fix, not a convention.
+
+## ADR-20 — Internal blend vs displayed separation
+
+**Context.** `BP §10.3` allows an internal rerank blend of Public Quality and Personal Fit; `BP §4.4` forbids showing a merged number.
+**Decision.** The rerank score $\lambda_u\cdot PQ+(1-\lambda_u)\cdot PF+\text{ContextFit}+\text{Exploration}$ decides what is shown; the API and UI expose only the four separate values plus a reason that names the dominant component ("widely praised; we don't know your taste yet" vs "fits your taste specifically"). $\lambda_u$ decays with reliable evidence.
+
+## ADR-21 — Confidence band: interim heuristic, target criteria
+
+**Decision.** The triad-count banding in `RecommendationsService` is an explicitly temporary heuristic. Before Alpha reporting, bands must come from the `BP §9.2` criteria (posterior stability, effective evidence, diversity, held-out prediction, fingerprint quality). A numeric probability is shown only after Brier/ECE calibration against confirmed post-watch outcomes.
+
+## ADR-22 — Training and evaluation protocol
+
+**Decision.** Per profile: temporal split with whole triads on one side; policy-reserved `holdout` triads never train; deterministic initialization; features frozen at the cutoff; held-out NLL/top-1/pairwise/Kendall τ stored on the snapshot; served weights refit on all non-reserved triads. Trigger: every 3 completed triads, on demand, or nightly. Any model version ships only through the `BP §16.5` gate against the baselines in `BP §16.3`.
+
+## ADR-23 — OpenAI usage rules
+
+**Decision.** Responses API only; `store=false`; zero-data-retention when the organization is eligible; model ids from configuration; prompts contain licensed evidence and schema only — never user ids, rankings, preferences or account data; retries with validation; every published output versioned. Documented in [PRIVACY.md](PRIVACY.md) §6 and [FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md) §5.
+
+## ADR-24 — Hosting undecided; requirements fixed
+
+**Decision.** No cloud vendor is chosen. Required before Alpha regardless of vendor: CI with tests and migrations, staging, managed Postgres with PITR and encryption at rest, backups with a restore drill, TLS, secrets management, feature flags, model rollback, OpenTelemetry + Sentry + first-party analytics, cost monitoring, KSA/regional data residency preference ([PRIVACY.md](PRIVACY.md) §8).
+**Rationale.** `BP §12.1`, `§18.1` set requirements, not vendors; earlier AWS/Vercel diagrams were speculation.
+
+## ADR-25 — Backend ↔ model service interface
+
+**Context.** `BP §12.1` names "Python + FastAPI/worker"; today the trainer is a CLI the backend never calls.
+**Decision.** The Python service exposes HTTP (FastAPI): `POST /train` (async from the backend), `POST /triads/select` and `POST /score` (synchronous on the request path), `GET /taste-profile/{profileId}`, `POST /shared-space/retrain`. A Redis/BullMQ queue is introduced only when `BP §12.3` triggers fire (long imports/enrichment or training contention).
+**Rationale.** Lets the backend invoke Python without queue infrastructure; keeps the monolith simple.
+
+## ADR-26 — Authentication and authorization
+
+**Decision.** JWT bearer tokens (as built) with refresh tokens added before Alpha; bcrypt passwords; per-endpoint throttling on auth; owner-only profile routes verified by the e2e IDOR suite on every change; `users.role` (`user`/`admin`) gates the internal board; staff actions are audit-logged; optional MFA later (`BP §21.3`).
 
 ---
 
-## 5. PWA vs. Native Mobile App
-
-### Context
-Need to serve users on mobile and desktop. React Native (Expo) or Next.js PWA?
-
-### Options Considered
-
-| Option | Pros | Cons |
-|--------|------|------|
-| **PWA (Next.js)** (chosen first) | Single codebase, instant updates, no app store | Less native feel, offline limited |
-| **Native iOS + Android** | Best UX, access to all OS features | Maintain 2-3 codebases, app store delays |
-| **React Native (Expo)** | Share code, 2 platforms | Still requires platform-specific testing |
-| **Flutter** | Excellent performance, fast compile | Not JavaScript, fragmented from backend |
-
-### Decision
-**PWA (Next.js) first.** Native (React Native/Expo) is not a scheduled next phase — it is built only if the PWA proves a real need for performance or push notifications that the PWA cannot meet (blueprint §5.2: "تطبيقات iOS/Android أصلية: تُبنى فقط إذا أثبتت PWA حاجة أداء أو إشعارات"). The "Phase 2" rationale and migration steps below describe what that native build would look like *if* that gate is crossed, not a committed roadmap item.
-
-### Rationale (Phase 1)
-1. **Fastest time to MVP** = single codebase
-2. **No app store delay** = push updates immediately
-3. **Works on desktop + mobile** = covers all users
-4. **Instant testing** = share link to users, no installation
-5. **Easier A/B testing** = change UI without coordination
-
-### Rationale (Phase 2) — only if the gate below is crossed
-1. **Share types with backend** = TypeScript throughout
-2. **Share business logic** = recommendation algorithm unchanged
-3. **Native performance** = only relevant if PWA measurably feels slow (the actual trigger, per blueprint §5.2)
-4. **App store presence** = credibility + discoverability
-5. **Offline support** = critical for some markets
-
-### Tradeoffs Given Up (Phase 1)
-- ❌ Less native feel (no haptic feedback, different animations)
-- ❌ Limited offline support
-- ❌ Not in app stores
-
-### Migration Path
-```
-Only if the PWA proves insufficient — measured performance or push-notification
-need it cannot meet (blueprint §5.2), not a default "after MVP" step:
-├── Create apps/mobile (React Native + Expo)
-├── Share packages/shared (TypeScript types)
-├── Reuse services/workers (Python, no change)
-├── Keep apps/frontend as web fallback
-└── Deploy both simultaneously (same API)
-```
-
----
-
-## 6. OpenAI API for Fingerprinting vs. Custom Model
-
-### Context
-Need to generate film fingerprints (30+ semantic dimensions). Train custom model or use LLM?
-
-### Options Considered
-
-| Option | Pros | Cons |
-|--------|------|------|
-| **OpenAI API** (chosen) | High quality, handles ambiguity, multilingual | Cost per film, vendor lock-in |
-| **Custom ML model** | Full control, one-time cost | Requires labeled data (1000s of films), maintenance |
-| **Heuristic rules** | Free, deterministic | Shallow analysis, manual work |
-| **Hybrid** (rules + LLM) | Best of both | More complex, harder to debug |
-
-### Decision
-**OpenAI Responses API with structured JSON output**
-
-### Rationale
-1. **Quality** = GPT-4o understands nuance (ambiguity, psychological depth, etc.)
-2. **Structured output** = JSON schema enforcement (no hallucinated dimensions)
-3. **Multilingual** = Arabic + English from same prompt
-4. **One-time cost** = fingerprint once per film, reuse forever
-5. **Batch API discount** = 50% cheaper for initial seeding
-6. **Minimal maintenance** = OpenAI handles updates
-
-### Cost Analysis
-```
-Initial seeding (Phase 1b):
-- 500 films × $0.01 per film (batch) = $5
-- Batch API runs 1x, discounted 50%
-
-Incremental (Phase 2+):
-- New films: 10/week × $0.01 = $0.10/week = $5/year
-- Explanations: Optional, ~$0.05 per explanation
-
-Annual cost (small): ~$200-500 (negligible vs operations)
-```
-
-### Tradeoffs Given Up
-- ❌ Dependent on OpenAI API availability
-- ❌ Costs scale with catalog size
-- ❌ Cannot guarantee fingerprint stability (model updates)
-
-### Mitigation
-- Store model version with each fingerprint
-- Re-fingerprint on schema version change (batch job)
-- Fall back to heuristics if API fails (graceful degradation)
-
-### Migration Path
-```
-Phase 3+: If costs become concern
-├── Keep OpenAI fingerprints as ground truth
-├── Train distillation model (smaller, local LLM)
-├── Use local model for new films
-├── Periodically re-verify with OpenAI
-```
-
----
-
-## 7. Individual Profiles vs. Family Accounts
-
-### Context
-Should families share a single account or each get individual profiles?
-
-### Options Considered
-
-| Option | Pros | Cons |
-|--------|------|------|
-| **Individual profiles** (chosen) | Clean preferences, clear data, shareable link | More accounts, less convenient |
-| **Family account** | One login, shared watchlist | Preference mixing, privacy concerns |
-| **Hybrid** | Flexibility | Complex logic, bugs |
-
-### Decision
-**Individual profiles only** (one person = one profile)
-
-> Blueprint amendment (§13.1, §21.1): a profile's id must function as a pseudonymous "taste id" kept separate from account identity — model/event tables (triads, recommendations, snapshots) should reference `profile_id`, not reach back to `user_id`/email, so exports and model training don't need to touch account identity.
-
-### Rationale
-1. **Data quality** = no mixing of dad's + mom's preferences
-2. **Recommender quality** = pure signal per person
-3. **Privacy** = kids' watches separate from parents'
-4. **Compliance** = PDPL: clear data attribution per person
-5. **Simpler UI** = no switching logic
-6. **Fair evaluation** = MVP hypothesis tests pure model
-
-### Tradeoffs Given Up
-- ❌ Inconvenient for families sharing device
-- ❌ More accounts to manage
-- ❌ Less apparent data per account (GDPR-like concerns resolved)
-
-### Workaround
-- Show "Create another profile on this device?"
-- Allow quick switching
-- Share login link with family members
-
-### Migration Path
-```
-Phase 3+: If requested
-├── Keep individual profiles as primary
-├── Add family "groups" (optional, opt-in)
-├── Groups are aggregation layer only (no shared model)
-└── Each person still has individual preferences
-```
-
----
-
-## 8. Deterministic Ranking vs. Serendipity (Exploration vs. Exploitation)
-
-### Context
-Should recommendations be purely personalized or include surprise/discovery?
-
-### Options Considered
-
-| Option | Pros | Cons |
-|--------|------|------|
-| **Deterministic (score-based)** (chosen) | Predictable, measurable, simple | Can get stuck in loops |
-| **Stochastic (sample from distribution)** | Exploration, serendipity | Harder to evaluate, user frustration |
-| **Bandit algorithm** (Thompson sampling) | Principled exploration | Complex, needs more data |
-| **Diversity constraint** | Variety in recommendations | Heuristic, may remove favorites |
-
-### Decision
-**Deterministic scoring within each of three tracks, from MVP** (revised — see blueprint amendment below)
-
-> Blueprint amendment (§4.4, §5.1): the blueprint puts three recommendation tracks — safe / discovery / outside-usual — in MVP scope, not Phase 2. This isn't full bandit-style stochastic ranking; each track is still deterministically score-ranked internally, but "discovery" and "outside-usual" exist specifically to prevent the filter-bubble risk this decision's original Phase-1 plan accepted as a known tradeoff. Treat the "Phase 2" step below (mix-it-up button, 10% randomness A/B) as optional polish on top of the three tracks, not as the thing that first introduces exploration.
-
-### Rationale (MVP)
-1. **Measurable** = can evaluate if each track's picks are better than baselines
-2. **Simple to explain** = each track has a clear framing (safe / discovery / outside-usual, blueprint §4.4), each internally ranked by our model
-3. **Fast implementation** = deterministic scoring per track, no bandit complexity
-4. **Aligns with hypothesis** = "Can we find users' true preferences?", while the discovery/outside-usual tracks guard against the filter-bubble risk from day one
-
-### Tradeoffs Given Up
-- Full stochastic/bandit exploration (still deferred — the three tracks mitigate but don't replace it)
-- May recommend similar films repeatedly within the "safe" track
-
-### Migration Path
-```
-MVP: Three tracks (safe / discovery / outside-usual), each deterministically ranked (blueprint §4.4)
-Phase 2 (after confirming model works):
-├── Add "Mix it up" button (random from top 50) as optional polish
-├── Track: did user watch surprise recommendations?
-├── A/B test: current three-track approach vs. added randomness
-└── Phase 3: Implement bandit algorithm if beneficial
-```
-
----
-
-## 9. Centralized Model vs. Federated (User-Level Training)
-
-### Context
-Should user preference models be trained on our servers or on users' devices?
-
-### Options Considered
-
-| Option | Pros | Cons |
-|--------|------|------|
-| **Centralized** (chosen) | Simple, controlled, consistent | Privacy concerns, user data stored |
-| **Federated learning** | User data never leaves device | Complex, slower inference, debugging hard |
-| **Hybrid** | Privacy + benefits | Most complex, most bugs |
-
-### Decision
-**Centralized training** with privacy controls
-
-### Rationale
-1. **PDPL compliant** = users consent to centralized processing; we provide export/delete
-2. **Simpler** = single source of truth for model quality
-3. **Debugging** = easy to track why recommendation failed
-4. **Monitoring** = can detect model degradation
-5. **Cost** = training once on server vs. on 1000 devices
-
-### Privacy Safeguards
-```
-1. Explicit consent: "Use my rankings to improve recommendations"
-2. Data minimization: Only store rankings + weights (no email/IP)
-3. Right to delete: DELETE /api/users/{id} → wipe all data
-4. Audit logs: Track who accessed what and when
-5. Encryption: In transit (TLS) + at rest (RDS encryption)
-6. No sharing: Never share or sell user data (policy + tech)
-```
-
-> **Amendment**: "Centralized" here originally meant one profile's rankings training only that profile's own model. Blueprint §7.5 adds a second centralized process — a shared latent space batch-trained on *pooled* pseudonymous triads across profiles (used to calibrate individual $w_u$, not just to train it in isolation). That's a distinct processing purpose from #1 above ("use my rankings to improve *my* recommendations" doesn't, on its face, disclose "and pool them into a model that also shapes other people's triads/candidates"). See [privacy.md](privacy.md)'s consent-model update — this needs its own disclosure, not a silent extension of safeguard #1.
-
-### Tradeoffs Given Up
-- ❌ User data on our servers (mitigated by consent + privacy controls)
-- ❌ Privacy risk if breach (mitigated by encryption + minimal data)
-
-### Migration Path
-```
-Phase 3+ (if privacy becomes priority):
-├── Implement differential privacy (add noise to weights)
-├── Store only encrypted fingerprints, not rankings
-├── Compute gradients, not full model on server
-└── Later: Full federated learning if required
-```
-
----
-
-## 10. Real-Time Recommendations vs. Batch
-
-### Context
-When should recommendations be computed? On-demand or scheduled?
-
-### Options Considered
-
-| Option | Pros | Cons |
-|--------|------|------|
-| **Real-time (on-demand)** (chosen) | Fresh, responsive, simple | Higher compute cost, cache misses |
-| **Batch (scheduled)** | Cheaper, predictable load | Stale recommendations, complex scheduling |
-| **Hybrid** | Balance | Most complex |
-
-### Decision
-**Real-time with Redis caching**
-
-### Rationale
-1. **Fresh after ranking** = user ranks, immediately sees updated recommendations
-2. **Simple** = no background jobs to manage
-3. **Responsive** = < 100ms response (cache hit)
-4. **Scales to 10K users** = cache + computation fast enough
-5. **Better UX** = instant feedback loop
-
-### Caching Strategy
-```
-GET /recommendations/{profileId}
-└─ Check Redis cache
-   ├─ Hit: Return cached (< 10ms)
-   ├─ Miss: Compute model + score films (< 1s)
-   │   └─ Store in Redis (TTL: 1 hour)
-   └─ Return
-
-Invalidation: After each RANK triad request
-```
-
-### Tradeoffs Given Up
-- ❌ Per-request compute cost
-- ❌ Need Redis (extra dependency)
-
-### Mitigation
-- Cache aggressively (TTL: 1 hour)
-- Lazy computation (compute only if requested)
-- Fallback to old cache if compute fails
-
-### Migration Path
-```
-Phase 2+ (if compute becomes bottleneck):
-├── Keep caching strategy
-├── Add pre-computation (scheduled daily)
-├── Store precomputed recs in database
-├── Real-time = update cache only if changed significantly
-└── Batch = refresh stale caches at 2 AM
-```
-
----
-
-## 11. REST API vs. GraphQL
-
-### Context
-How should frontend communicate with backend?
-
-### Options Considered
-
-| Option | Pros | Cons |
-|--------|------|------|
-| **REST** (chosen) | Simple, well-understood, fast | Over-fetching/under-fetching |
-| **GraphQL** | Precise data fetching, exploration | Complexity, caching harder, N+1 queries |
-| **RPC** | Direct function calls | Tight coupling |
-
-### Decision
-**REST with careful endpoint design**
-
-### Rationale
-1. **Simplicity** = fewer libraries, easier debugging
-2. **Performance** = no GraphQL parsing overhead
-3. **Caching** = standard HTTP caching (ETag, Last-Modified)
-4. **Monitoring** = easy to log and track endpoints
-5. **Team familiar** = NestJS has good REST support
-
-### Endpoint Design
-```
-GET    /profiles/{id}              → User profile
-POST   /profiles                   → Create profile
-GET    /profiles/{id}/triads/next  → Next triad to rank
-POST   /triads/{id}/rank           → Submit ranking
-GET    /recommendations/{id}        → Top recommendations
-POST   /recommendations/{id}/feedback → Log feedback
-```
-
-### Tradeoffs Given Up
-- ❌ Frontend requests might over-fetch data
-- ❌ No single query language for flexibility
-
-### Mitigation
-- Design endpoints carefully based on UI needs
-- Use query parameters for filtering: `?limit=10&sort=score`
-
-### Migration Path
-```
-Phase 3+ (if data fetching becomes complex):
-├── Keep REST as primary
-├── Add GraphQL alongside (optional)
-├── Use GraphQL only for complex queries
-└── Gradually migrate if needed
-```
-
----
-
-## 12. SQL vs. NoSQL
-
-### Context
-Should user data be stored in relational (PostgreSQL) or document (MongoDB) database?
-
-### Options Considered
-
-| Option | Pros | Cons |
-|--------|------|------|
-| **PostgreSQL (SQL)** (chosen) | ACID, joins, complex queries, pgvector | Rigid schema |
-| **MongoDB** | Flexible schema, scalable | No ACID (until recently), no pgvector, more complex |
-| **Firebase** | Fully managed, real-time | Vendor lock-in, privacy concerns, costs |
-
-### Decision
-**PostgreSQL with TypeORM**
-
-### Rationale
-1. **ACID guarantees** = data consistency critical for rankings
-2. **Joins** = easy to correlate users, profiles, triads, titles
-3. **pgvector** = semantic search on same DB
-4. **Schema migrations** = control and audit
-5. **Compliance** = PDPL easier with SQL audit trail
-6. **Backup/restore** = simpler with PostgreSQL
-7. **Team experience** = most teams know SQL
-
-### Tradeoffs Given Up
-- ❌ Schema changes require migrations
-- ❌ Requires more planning upfront
-
-### Mitigation
-- Use TypeORM for easy schema management
-- Test migrations before production
-- Keep schema versioning in Git
-
-### Migration Path
-```
-Phase 3+ (if sharding needed):
-├── Keep PostgreSQL as primary
-├── Add read replicas for analytics
-├── Shard by user_id if > 10M users
-└── Consider citus (PostgreSQL extension) for distributed queries
-```
-
----
-
-## 13. Per-User-Only Fitting vs. Shared Latent Space Calibration
-
-### Context
-Section 3's Plackett-Luce model, as originally scoped, fits $w_u \in \mathbb{R}^{30-50}$ independently per profile from a handful of triads. That's a real identifiability problem (see [RANKING_ALGORITHM.md](RANKING_ALGORITHM.md)'s "Data Requirements"): a few triads can't reliably resolve 30-50 correlated dimensions. Blueprint §7.5 (added alongside this decision) resolves it architecturally, not by asking users for more triads.
-
-### Options Considered
-
-| Option | Pros | Cons |
-|--------|------|------|
-| **Per-user fitting only** (original) | Simple, no shared infra, fully isolated per profile | Needs 15-20+ triads before $w_u$ stabilizes; can't discover cross-genre axes from one person's data alone |
-| **Shared latent space + per-user calibration** (chosen, blueprint §7.5) | Fewer triads needed for a stable position; enables cross-genre insight the individual data alone can't support | Needs batch-retraining infra, a bootstrap data source, and new privacy/licensing surface area |
-| **Full collaborative filtering from day one** | Simplest single mechanism | Blueprint §7.1 already rejected this — no cold-start data to train it on |
-
-### Decision
-**Shared latent space, externally-seeded, with per-user MIRT/CAT-style calibration** (blueprint §7.5), gated by a strict silent-computation/disclosed-attribution split (blueprint §7.6) so users are never told about a cross-user pattern before it's validated on their own held-out data.
-
-### Rationale
-1. Directly fixes the identifiability problem this decision's own §3 entry left open
-2. External seeding avoids waiting on internal data the product doesn't have yet at launch
-3. The §7.6 attribution gate keeps this from degrading the trust promise Decision 9's privacy safeguards depend on
-4. Reuses existing infra: a scheduled batch job in the Python model service (no new service per §12.3's "when do we split services" criteria), and the existing `triads.selection_propensity` column for the feedback-loop controls this reuses (blueprint §21.2)
-
-### Tradeoffs Given Up
-- ❌ Not yet implementable as designed: the proposed external seed source is confirmed blocked, not merely unreviewed — GroupLens' license requires prior written permission for any commercial/revenue-bearing use of MovieLens/Tag Genome (verified against the dataset READMEs; see [DATA_LICENSING.md](DATA_LICENSING.md)), and this design's "silent" use still counts as that commercial use
-- ❌ New privacy surface: pooling pseudonymous triads across profiles is a distinct processing purpose needing its own consent disclosure (see [privacy.md](privacy.md))
-- ❌ A cohort-level acceptance gate (blueprint §16.5 via §17.3) must pass before *any* user sees a disclosed cross-user insight — slower to reach the "enrichment" phase than a naive design would promise
-
-### Migration Path
-```
-Pre-Alpha: Request written permission from GroupLens for the external bootstrap
-           (MovieLens/Tag Genome) — required by their license, confirmed, not optional
-           diligence. Proceed with the external seed ONLY once granted; otherwise
-           seed from nothing and let the space start empty
-Alpha (blueprint §17.2): Shared space in silent use only; internal pᵤᵀqₘ (Decision 3) still deferred
-Beta closed (blueprint §17.3): Cohort-level acceptance gate evaluated; only then can
-           any individual user's own §7.6 phase-3 gate unlock a disclosed claim
-Fallback if the legal review never clears external data: seed from Alpha-cohort
-           internal triads only — slower cold start, no licensing risk, same architecture
-```
-
----
-
-## Summary Table
-
-| Decision | Chosen | Rationale | Revisit If |
-|----------|--------|-----------|-----------|
-| Monorepo | npm workspaces | Shared types | Scaling devops |
-| Database | PostgreSQL + pgvector | Single DB, vector search | Need 10M+ vectors |
-| Ranking | Plackett-Luce | Interpretable, proven | Need neural nets |
-| Feedback | Triadic ranking | Rich data, unambiguous | Never — the only explicit preference question, permanently (blueprint §2.4 #2); only UX mechanics like tie-handling are open to testing (Appendix C) |
-| Frontend | PWA (Next.js) | Fast iteration | PWA proves insufficient performance or push-notification need (blueprint §5.2) |
-| Fingerprints | OpenAI API | Quality, structured output | Costs too high |
-| Profiles | Individual only | Clean data, privacy | User demand for family |
-| Recommendations | Real-time + cache | Fresh, responsive | Compute bottleneck |
-| API | REST | Simple, fast | Very complex queries |
-| Per-user model | Shared latent space + calibration | Fixes identifiability, enables cross-genre insight | MovieLens legal review blocks external seed (Decision 13) |
-
----
-
-## Decision-Making Framework
-
-When evaluating future architectural choices:
-
-1. **MVP First**: What's simplest to ship in 4 weeks?
-2. **Hypothesis**: Does it test the core idea (Plackett-Luce works)?
-3. **Measurement**: Can we evaluate if it's better/worse?
-4. **Migration**: Can we change it later if needed?
-5. **Compliance**: Does it satisfy PDPL/privacy requirements?
-6. **Cost**: Is it sustainable?
-
-**Apply this framework to any new decision.**
-
----
-
-**Last Updated**: 2025-01-02  
-**Next Review**: After Phase 1 completion
+## Summary
+
+| # | Decision | Serves | Revisit trigger |
+|---|---|---|---|
+| 1 | Monorepo | `BP §12` | team/deploy boundaries |
+| 2 | Postgres + FTS + pgvector | `BP §12.1` | measured capacity |
+| 3 | Plackett–Luce utility | `BP §7` | `§16.5` gate |
+| 4 | Triad is the only explicit question | `BP §2.4 #2` | never (mechanics via App. C) |
+| 5 | PWA first | `BP §5.2` | PWA telemetry |
+| 6 | Responses API + structured outputs | `BP §15` | cost/vendor risk |
+| 7 | Pseudonymous individual profiles | `BP §13.1`, `§21.1` | — |
+| 8 | Three tracks + declared exploration | `BP §4.4`, `§8.3` | off-policy results |
+| 9 | Centralized training, purpose consents | `BP §21.1` | privacy needs |
+| 10 | Per-request scoring, persisted | `BP §12.2`, `§13.1` | latency |
+| 11 | REST + OpenAPI, one API doc | `BP §14` | — |
+| 12 | Migrations only | — | — |
+| 13 | Shared latent space + calibration | `BP §7.5`–`§7.6` | licensing, cohort gate |
+| 14 | Names & doc governance | audit | — |
+| 15 | `/api/v1` + envelope + idempotency | `BP §14` | — |
+| 16 | Naming conventions | — | — |
+| 17 | Replacement semantics | `BP §4.3` | App. C experiment |
+| 18 | Blueprint phase names | `BP §17` | — |
+| 19 | Fingerprint V1/V2, unknown ≠ zero | `BP §6`, `§11.3` | — |
+| 20 | Internal blend vs displayed values | `BP §4.4`, `§10.3` | — |
+| 21 | Confidence band criteria | `BP §9` | calibration results |
+| 22 | Training/eval protocol | `BP §16` | — |
+| 23 | OpenAI rules | `BP §15.3`, `§21` | vendor policy changes |
+| 24 | Hosting undecided, requirements fixed | `BP §12.1`, `§18.1` | Alpha prep |
+| 25 | FastAPI model service, queue later | `BP §12.1`, `§12.3` | `§12.3` signals |
+| 26 | Auth & roles | `BP §21.3` | — |
+
+## How to add a decision
+
+1. Check it does not contradict a `BP §2.4` principle or an open `BP App. C` question.
+2. Write Context · Decision · Rationale · Consequences · Revisit when; cite the `BP §`.
+3. Update the affected contract doc ([API.md](API.md), [SCHEMA.md](SCHEMA.md), [RANKING_ALGORITHM.md](RANKING_ALGORITHM.md), [FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md)) in the same change.
+4. Add the row to the summary table and a line to [README.md](README.md) if a new document was created.

@@ -1,202 +1,164 @@
-# Quick Start Guide
+# Quickstart — local development
 
-Get the movie recommendation system up and running in 5 minutes.
+Runs the current vertical slice on your machine: register → mark films watched → rank triads → train a model → see a recommendation list. Verified on Windows 11 (Git Bash), Node 22, Python 3.14, Docker Desktop, on 2026-09-03.
 
 ## Prerequisites
 
-- **Node.js 22+** - [Download](https://nodejs.org/)
-- **Docker Desktop** - [Download](https://docker.com/products/docker-desktop)
-- **Python 3.11+** - [Download](https://python.org/)
-- **OpenAI API Key** - [Get one](https://platform.openai.com/api-keys)
+| Tool | Version | Notes |
+|---|---|---|
+| Node.js + npm | 22.x / 10.x | `node --version` |
+| Docker Desktop | current | Postgres (pgvector image) + Redis |
+| Python | 3.11+ | model service; `pip` or Poetry |
+| Git | any | |
 
-## Step 1: Clone & Setup (2 min)
+An OpenAI key is **not** needed for the core loop; fingerprints are seeded. It is only needed to run the enrichment worker.
+
+## 1. Install
 
 ```bash
-cd /path/to/movie
+git clone <repo-url> movie && cd movie
 npm install
 ```
 
-## Step 2: Configure Environment (1 min)
+Python (pick one):
+
+```bash
+# Poetry
+cd services/workers && poetry install && cd ../..
+```
+
+```bash
+# plain pip
+python -m pip install numpy scipy pydantic psycopg2-binary sqlalchemy redis openai python-dotenv pytest
+```
+
+## 2. Environment
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` and add your OpenAI key:
-```
-OPENAI_API_KEY=sk_your_key_here
-```
+`.env` is read by the backend, the seed script, the TypeORM CLI and the Python trainer. Keys:
 
-## Step 3: Start Infrastructure (1 min)
+| Variable | Default in `.env.example` | Used by |
+|---|---|---|
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `movieapp` / dev password / `moviedb` | docker compose, backend (password is **required**) |
+| `DB_HOST` / `DB_PORT` | `127.0.0.1` / `5433` | backend — port 5433 on the host maps to the container's 5432 |
+| `DATABASE_URL` | same values as above | Python trainer |
+| `REDIS_URL` | `redis://localhost:6379` | reserved (unused today) |
+| `API_PORT` | `3101` | backend |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:3101/api` | frontend (also in `apps/frontend/.env.local`) |
+| `FRONTEND_URL` | not set → `http://localhost:3000` | backend CORS origin |
+| `JWT_SECRET` | placeholder — **required** | backend |
+| `OPENAI_API_KEY` | placeholder | enrichment worker only |
+
+## 3. Infrastructure
 
 ```bash
 npm run docker:up
 ```
 
-Verify containers are running:
+Starts `movie-postgres` (host port 5433), `movie-redis` (6379) and `movie-postgres-test` (5544, disposable, for e2e tests). Check with `docker ps`.
+
+## 4. Database
+
 ```bash
-docker ps
+npm run db:migrate
 ```
 
-You should see:
-- `movie-postgres` (PostgreSQL + pgvector)
-- `movie-redis` (Redis)
+```bash
+npm run db:seed
+```
 
-## Step 4: Start Development Servers (1 min)
+Migrations create the 7 tables in [SCHEMA.md](SCHEMA.md) §1; the seed inserts 15 development titles with placeholder fingerprints (idempotent upsert).
+
+## 5. Run
 
 ```bash
 npm run dev
 ```
 
-Open your browser:
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:3101
-- **Health Check**: http://localhost:3101/api/health
+- Frontend: http://localhost:3000
+- Backend: http://localhost:3101/api (health: http://localhost:3101/api/health)
 
-## Common Commands
+`npm run dev` for the backend builds with `tsc` then runs `dist/main.js` (no watch mode); restart it after backend changes. The frontend uses Next.js dev with hot reload.
+
+## 6. Walk the loop
+
+1. Open the frontend, create an account. A profile named «ملف الذوق الرئيسي» is created automatically.
+2. **اكتشف / Discover**: search and mark at least 3 films as watched (more gives more triads).
+3. **رتّب / Rank**: reorder the three cards (drag or ↑/↓) and save; the next triad loads.
+4. Train the model for your profile (profile id from `GET /api/profiles` with your token, or from the database):
 
 ```bash
-# View logs
-docker-compose -f docker/docker-compose.yml logs -f
+cd services/workers && python -m src.training <profile-uuid>
+```
 
-# Stop everything
+(with Poetry: `poetry run train-profile <profile-uuid>`)
+
+5. **قائمتي / My list** now shows a recommendation list computed from the snapshot. Until a snapshot exists the API answers 409 and the UI shows "not ready yet".
+
+## 7. Tests and checks
+
+```bash
+npm run test -w apps/backend
+```
+
+```bash
+cd apps/backend && npm run test:e2e
+```
+
+```bash
+cd services/workers && python -m pytest -q
+```
+
+```bash
+cd apps/backend && npx tsc --noEmit
+```
+
+```bash
+cd apps/frontend && npx tsc --noEmit
+```
+
+The e2e suite starts `postgres-test`, runs migrations against it and proves cross-user access is blocked; it never touches the dev database.
+
+## 8. Useful commands
+
+```bash
 npm run docker:down
-
-# Rebuild containers
-npm run docker:down && npm run docker:up
-
-# Run tests
-npm run test
-
-# Format code
-make format
 ```
 
-## File Structure Quick Reference
-
-```
-movie/
-├── apps/frontend/          ← React PWA (Next.js)
-├── apps/backend/           ← REST API (NestJS)
-├── services/workers/       ← Python ranker & fingerprinting
-├── packages/shared/        ← Shared TypeScript types
-├── docker/                 ← Docker Compose setup
-├── docs/                   ← Architecture, schema, privacy
-└── README.md               ← Full documentation
-```
-
-## Next: Implementation Roadmap
-
-### Backend API Endpoints (Priority)
-
-Illustrative early build order, not the final contract — the canonical, versioned API surface is defined in blueprint §14 (`/v1/...` paths, plus a required `/triads/{id}/replace` endpoint for the neutral "haven't watched / don't remember" states):
-```
-POST   /auth/register
-POST   /auth/login
-GET    /profiles/{id}
-POST   /profiles
-POST   /v1/triads/next
-POST   /v1/triads/{id}/rank
-POST   /v1/triads/{id}/replace
-GET    /v1/recommendations
-GET    /titles
-POST   /titles/{id}
-```
-
-### Frontend Pages (Priority)
-```
-/login
-/register
-/profile
-/rank          ← Main triadic ranking interface
-/recommendations
-/search
-/admin/dashboard
-```
-
-### Data Seed
-- Create 300-500 films initially
-- Generate fingerprints using OpenAI (async)
-- Store in PostgreSQL with embeddings
-
-## Troubleshooting
-
-### "Cannot connect to database"
 ```bash
-# Check if containers are running
-docker ps | grep postgres
-
-# Check logs
-docker logs movie-postgres
-
-# Restart
-npm run docker:down
-npm run docker:up
+docker compose -f docker/docker-compose.yml logs -f
 ```
 
-### "Port already in use"
 ```bash
-# Find process using port 3000/3101/5433/6379
-lsof -i :3000
-lsof -i :3101
-
-# Kill it
-kill -9 <PID>
+cd apps/backend && npm run migration:generate -- src/migrations/<Name>
 ```
 
-### "OpenAI API Error"
-```bash
-# Check your API key
-echo $OPENAI_API_KEY
+`make` targets mirror the npm scripts (`make help`) but `make` is not required on Windows.
 
-# Verify it's set in .env
-cat .env | grep OPENAI
-```
+## 9. Troubleshooting
 
-### Node modules issues
-```bash
-rm -rf node_modules package-lock.json
-npm install
-```
+| Symptom | Cause | Fix |
+|---|---|---|
+| `POSTGRES_PASSWORD environment variable is required` | `.env` missing or not copied | step 2 |
+| `JWT_SECRET environment variable is required` | same | set any non-empty value locally |
+| backend connects but tables are missing | migrations not run | `npm run db:migrate` |
+| `relation "triads" does not exist` in the trainer | trainer points at another DB | `DATABASE_URL` must use port 5433 |
+| port in use (3000/3101/5433/6379/5544) | another process/container | `netstat -ano \| findstr :3101` on Windows, `lsof -i :3101` on macOS/Linux; stop it or change the port |
+| Rank tab says "mark at least three films" | fewer than 3 watched titles for the profile | Discover → mark more |
+| My list shows "not ready yet" | no model snapshot | run the trainer (step 6.4) |
+| e2e fails to connect on 5544 | `postgres-test` not healthy yet | `docker ps`, retry |
+| CRLF warnings from git | Windows autocrlf | harmless |
 
-## Architecture Quick Facts
+## 10. Where to go next
 
-- **Frontend**: Next.js 14 + React 18 + Tailwind
-- **Backend**: NestJS + TypeORM + PostgreSQL
-- **Ranking Model**: Plackett-Luce (statistical learning)
-- **Film Analysis**: OpenAI API (fingerprinting)
-- **Embedding Search**: pgvector (PostgreSQL extension)
-- **Tasks Queue**: Redis + BullMQ (future)
+- What this slice is missing versus the product: [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)
+- Contracts to implement against: [API.md](API.md), [SCHEMA.md](SCHEMA.md), [RANKING_ALGORITHM.md](RANKING_ALGORITHM.md), [FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md)
+- The product itself: [movie_taste_platform_blueprint_ar.md](movie_taste_platform_blueprint_ar.md)
 
-## Key Concepts
+---
 
-### Triadic Ranking
-User sees 3 films and ranks them 1st, 2nd, 3rd. This trains the preference model.
-
-### Film Fingerprint
-Multiple semantic dimensions across families such as narrative, pacing, tone/emotion, characters, dialogue, style, theme, ending, people, and cultural context (blueprint §6.1) — the blueprint does not fix a total dimension count. Extracted in the background (never live), with source, confidence, extractor version, and review status per attribute (blueprint §11.3).
-
-### Preference Model
-Machine learns user's taste weights using Plackett-Luce MLE from triad rankings.
-
-### Recommendation Score
-Three separate values, never merged (blueprint §4.4): `personal_fit`, an independent `public_quality`, and a `watchability` value, plus a confidence *band* (not a raw %). `personal_fit ≈ weights · fingerprint + bias` is only an early-MVP approximation of the full utility s(u,m) = b(m) + θᵀφ + pᵀq + δ in blueprint §7.1 — the collaborative (pᵀq) and per-user-exception (δ) terms join later, once enough data exists, per §7.1.
-
-## Support
-
-- **Issues**: Open a GitHub issue
-- **Questions**: Check [docs/](./docs/)
-- **Architecture**: See [docs/architecture.md](./docs/architecture.md)
-- **Database**: See [docs/schema.md](./docs/schema.md)
-- **Privacy**: See [docs/privacy.md](./docs/privacy.md)
-
-## What's Next?
-
-1. Implement backend auth endpoints
-2. Build frontend UI for ranking
-3. Create film fingerprinting worker
-4. Seed initial film catalog
-5. Run the Alpha (80-150 users, blueprint §17.2) — 15-20 people is the earlier clickable-prototype cohort, not this stage
-6. Measure model accuracy vs. baselines
-
-Happy coding! 🎬
+**Changelog**
+- 2.0 (2026-09-03): added the missing migrate/seed/train steps (the previous guide went from `docker:up` straight to `npm run dev`, which cannot work with `synchronize: false`), corrected framework versions, removed the OpenAI-key prerequisite and the ad-hoc endpoint list, added Windows notes.
