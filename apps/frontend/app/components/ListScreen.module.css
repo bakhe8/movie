@@ -1,276 +1,308 @@
-/* Library screen (blueprint §5.3 "المكتبة", SPECIFICATION.md §5.4): watchlist,
-   the model's personal ranking of the watched set, and the watch timeline. */
+/* Library screen (blueprint §5.3, SPEC §5.4) on app/styles/tokens.css only:
+   the watchlist, the personal ranking (rendered by components/WorkCard in its
+   `ranking` kind) and the watch timeline with its diary. No literal colours;
+   both themes come from the tokens. Mobile first; logical properties. */
 
 .screen {
   display: grid;
-  gap: 16px;
+  gap: var(--sp-6);
+  width: min(100%, 720px);
+  margin-inline: auto;
+}
+
+/* --- Header --------------------------------------------------------------- */
+
+.header {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--accent);
+  font-size: var(--fs-13);
+  font-weight: var(--w-semibold);
 }
 
 .header h2 {
-  font-size: clamp(26px, 5vw, 40px);
-  line-height: 1.15;
-  margin: 6px 0;
+  margin: 0;
+  font-size: var(--fs-26);
+  text-wrap: balance;
 }
 
 .hint {
   margin: 0;
   color: var(--muted);
-  line-height: 1.5;
+  font-size: var(--fs-14);
 }
+
+/* --- Status --------------------------------------------------------------- */
+
+.status {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border-inline-start: 3px solid var(--accent);
+  border-radius: var(--r-chip);
+  background: var(--surface);
+  font-size: var(--fs-14);
+}
+
+.error {
+  border-inline-start-color: var(--muted);
+}
+
+/* --- Filter --------------------------------------------------------------- */
 
 .filter {
   display: grid;
-  gap: 6px;
+  gap: var(--sp-1);
 }
 
 .filter label {
   color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: var(--fs-13);
+  font-weight: var(--w-medium);
 }
 
 .filter input {
-  min-height: 48px;
-  width: 100%;
-  padding: 12px 14px;
-  border: 1px solid #dfe4e8;
-  border-radius: 14px;
-  background: #fff;
+  min-height: 44px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-button);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-16);
 }
 
-.filter input:focus {
+.filter input:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline-offset: 2px;
 }
+
+/* --- Sections ------------------------------------------------------------- */
 
 .section {
   display: grid;
-  gap: 10px;
+  gap: var(--sp-3);
 }
 
 .sectionHeader {
   display: grid;
-  gap: 2px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #e4e8ea;
+  gap: var(--sp-1);
 }
 
 .sectionHeader h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
   margin: 0;
-  font-size: 19px;
+  font-size: var(--fs-20);
 }
 
 .sectionHeader p {
   margin: 0;
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--fs-13);
 }
 
+/* Count chip beside a section title. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-chip);
+  background: var(--well);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--fs-12);
+  font-weight: var(--w-medium);
+  line-height: 1.7;
+}
+
+.empty {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px dashed var(--line);
+  border-radius: var(--r-card);
+  color: var(--muted);
+  font-size: var(--fs-14);
+}
+
+/* Lists sit in the darker well (decision Q5). */
 .list {
   display: grid;
-  gap: 10px;
+  gap: var(--sp-3);
   margin: 0;
-  padding: 0;
+  padding: var(--sp-3);
+  list-style: none;
+  background: var(--well);
+  border-radius: var(--r-card);
+}
+
+/* Wrapper for a WorkCard item; the card styles itself. */
+.item {
   list-style: none;
 }
 
+/* --- Plain title cards (watchlist, timeline) ------------------------------ */
+
 .card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: center;
-  padding: 12px 14px;
-  border: 1px solid #e1e6e9;
-  border-radius: 16px;
-  background: var(--card);
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
 }
 
-.ranked {
-  grid-template-columns: 38px minmax(0, 1fr);
-}
-
-.badge {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  background: #fff0eb;
-  color: var(--accent);
-  font-size: 16px;
-  font-weight: 900;
+.cardEditing {
+  border-color: var(--accent);
 }
 
 .title {
   margin: 0;
-  font-size: 17px;
-  line-height: 1.25;
+  font-family: var(--font-ui);
+  font-size: var(--fs-16);
+  font-weight: var(--w-semibold);
+  line-height: var(--lh-ui);
+  overflow-wrap: anywhere;
 }
 
 .alt {
-  margin: 2px 0 0;
+  margin: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--fs-13);
+  font-weight: var(--w-medium);
+  line-height: var(--lh-ui);
 }
 
 .meta {
-  margin: 4px 0 0;
+  margin: 0;
   color: var(--muted);
-  font-size: 13px;
-}
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  justify-content: flex-end;
-}
-
-.ghost {
-  min-height: 40px;
-  padding: 8px 14px;
-  border: 1px solid #dfe4e8;
-  border-radius: 999px;
-  background: #fff;
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.ghost:hover {
-  border-color: var(--accent);
-}
-
-.ghost:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.chip {
-  display: inline-block;
-  margin-inline-start: 6px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: #eaf3f5;
-  color: var(--ink);
-  font-size: 12px;
-  font-weight: 800;
-  vertical-align: middle;
+  font-size: var(--fs-13);
+  line-height: var(--lh-ui);
 }
 
 .note {
   margin: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--fs-13);
+  line-height: var(--lh-body);
 }
 
-/* The user's own diary note, shown as written. */
+/* The user's own diary text: theirs, so full text colour. */
 .noteText {
-  margin: 6px 0 0;
-  padding: 8px 10px;
-  border-inline-start: 3px solid #e4e8ea;
-  color: var(--ink);
-  font-size: 14px;
-  line-height: 1.5;
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-inline-start: 2px solid var(--line);
+  font-size: var(--fs-14);
+  line-height: var(--lh-body);
   white-space: pre-wrap;
 }
 
-.cardEditing {
-  grid-template-columns: minmax(0, 1fr);
-  border-color: var(--accent);
+/* --- Actions -------------------------------------------------------------- */
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
 }
+
+.ghost {
+  min-height: 40px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-button);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-14);
+  font-weight: var(--w-medium);
+  line-height: var(--lh-ui);
+}
+
+.ghost:disabled {
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.ghost:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.retry {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-button);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-16);
+  font-weight: var(--w-semibold);
+}
+
+/* --- Diary form ----------------------------------------------------------- */
 
 .diary {
   display: grid;
-  gap: 10px;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  background: var(--well);
+  border-radius: var(--r-chip);
 }
 
 .field {
   display: grid;
-  gap: 6px;
+  gap: var(--sp-1);
 }
 
 .field label {
   color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: var(--fs-13);
+  font-weight: var(--w-medium);
 }
 
 .field input,
 .field textarea {
-  width: 100%;
-  min-height: 44px;
-  padding: 10px 12px;
-  border: 1px solid #dfe4e8;
-  border-radius: 12px;
-  background: #fff;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-chip);
+  background: var(--surface);
+  color: var(--text);
   font: inherit;
+  font-size: var(--fs-16);
+  line-height: var(--lh-body);
 }
 
-.field textarea {
-  resize: vertical;
+.field input {
+  min-height: 44px;
 }
 
-.field input:focus,
-.field textarea:focus {
+.field input:focus-visible,
+.field textarea:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline-offset: 2px;
 }
 
-.empty {
-  margin: 0;
-  color: var(--muted);
-  font-size: 14px;
-}
-
-.status {
-  margin: 0;
-  padding: 10px 14px;
-  border-radius: 12px;
-  background: #eaf3f5;
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.error {
-  background: #fff0eb;
-  color: var(--accent);
-}
+/* --- Loading -------------------------------------------------------------- */
 
 .skeleton {
-  height: 90px;
-  border-radius: 16px;
-  background: linear-gradient(90deg, #eef1f3, #f7f9fa, #eef1f3);
-  background-size: 200% 100%;
-  animation: shimmer 1.2s infinite;
+  height: 88px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface);
 }
 
-@keyframes shimmer {
-  from {
-    background-position: 200% 0;
+@media (min-width: 900px) {
+  .screen {
+    gap: var(--sp-8);
   }
 
-  to {
-    background-position: -200% 0;
-  }
-}
-
-@media (max-width: 720px) {
-  .card {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .ranked {
-    grid-template-columns: 38px minmax(0, 1fr);
-  }
-
-  .actions {
-    justify-content: flex-start;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .skeleton {
-    animation: none;
+  .header h2 {
+    font-size: var(--fs-34);
   }
 }

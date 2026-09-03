@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError, type LibraryRankingItem, type Title, type UserTitleState } from '../lib/api';
-import { formatConfidence, formatDate, formatNumber, formatReason } from '../lib/format';
+import { formatDate, formatNumber } from '../lib/format';
 import styles from './ListScreen.module.css';
+import { WorkCard } from './WorkCard';
 
 type Lang = 'ar' | 'en';
 
@@ -224,7 +225,7 @@ export function ListScreen({ lang, profileId }: { lang: Lang; profileId: string 
 
   const header = (
     <div className={styles.header}>
-      <p className="eyebrow">{t.eyebrow}</p>
+      <p className={styles.eyebrow}>{t.eyebrow}</p>
       <h2>{t.title}</h2>
       <p className={styles.hint}>{t.hint}</p>
     </div>
@@ -248,7 +249,7 @@ export function ListScreen({ lang, profileId }: { lang: Lang; profileId: string 
         <p className={`${styles.status} ${styles.error}`} role="alert">
           {t.loadFailed}
         </p>
-        <button type="button" className="cta full" onClick={load}>
+        <button type="button" className={styles.retry} onClick={load}>
           {t.retry}
         </button>
       </div>
@@ -299,7 +300,7 @@ export function ListScreen({ lang, profileId }: { lang: Lang; profileId: string 
         ) : (
           <ul className={styles.list}>
             {visibleWatchlist.map((state) => {
-              const meta = [state.title?.releaseYear, state.title?.genres?.join(' · ')].filter(Boolean).join(' · ');
+              const meta = state.title?.releaseYear ? String(state.title.releaseYear) : '';
               const busy = busyId === state.titleId;
               return (
                 <li key={state.id} className={styles.card}>
@@ -343,27 +344,14 @@ export function ListScreen({ lang, profileId }: { lang: Lang; profileId: string 
           ) : (
             <>
               <ol className={styles.list}>
-                {visibleRanking.map((item) => {
-                  const confidence = formatConfidence(item.confidenceBand, lang);
-                  return (
-                    <li key={item.title.id} className={`${styles.card} ${styles.ranked}`} aria-label={formatNumber(item.position, lang)}>
-                      {/* The position inside the whole ranking, kept even under a filter. */}
-                      <span className={styles.badge} aria-hidden="true">
-                        {formatNumber(item.position, lang)}
-                      </span>
-                      <div>
-                        <h4 className={styles.title}>
-                          {nameOf(item.title, item.title.id)}
-                          <span className={styles.chip}>{confidence.label}</span>
-                        </h4>
-                        {altOf(item.title) && <p className={styles.alt}>{altOf(item.title)}</p>}
-                        {/* Why the model places it here -- the driving traits only (§9.4). */}
-                        {formatReason(item.reason, lang) && <p className={styles.note}>{formatReason(item.reason, lang)}</p>}
-                        {item.fingerprintCoverage < 1 && <p className={styles.note}>{t.partialFingerprint}</p>}
-                      </div>
-                    </li>
-                  );
-                })}
+                {visibleRanking.map((item) => (
+                  <li key={item.title.id} className={styles.item}>
+                    {/* The work card in its ranking kind (SPEC §5.4, ADR-33): the
+                        position inside the whole watched set -- kept even under a
+                        filter -- plus confidence and the driving traits. */}
+                    <WorkCard lang={lang} kind="ranking" item={item} position={item.position} count={ranking.items.length} />
+                  </li>
+                ))}
               </ol>
               {!filtering && <p className={styles.note}>{t.model(ranking.items[0].modelVersion)}</p>}
             </>

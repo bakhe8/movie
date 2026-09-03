@@ -1,17 +1,25 @@
 'use client';
 
-import type { Recommendation } from '../lib/api';
+import type { LibraryRankingItem, Recommendation } from '../lib/api';
 import { formatConfidence, formatNumber, formatPersonalFit, formatReason, type PersonalFitLevel } from '../lib/format';
 import styles from './WorkCard.module.css';
 
 type Lang = 'ar' | 'en';
 
 /**
- * The work card: one film with its four separate values -- Personal Fit,
- * Public Quality, Watchability, Confidence -- each in its own visual language,
- * never merged, never a percentage (blueprint §2.4 #7, §4.4, ADR-33;
+ * The work card: one film with its separate values, each in its own visual
+ * language, never merged, never a percentage (blueprint §2.4 #7, §4.4, ADR-33;
  * docs/WORK_CARD_DESIGN_2026-09-03.md). Presentation only: every model value
  * reaches the screen through lib/format.ts.
+ *
+ * Two kinds share the card:
+ * - `recommendation` (home): Personal Fit, Public Quality, Watchability,
+ *   Confidence, the reason, and the list/watched actions.
+ * - `ranking` (library): the film's position among the watched set as the
+ *   relative form, plus Confidence and the reason. No quality/availability
+ *   cells -- the library is about what the user has already watched, and no
+ *   actions (SPEC §5.4; ADR-33: positions only, never framed as a
+ *   recommendation).
  *
  * Transitional data (paper §4, owner decision 2): the API still sends one
  * number for quality and one for availability. Until the frontend type
@@ -48,6 +56,10 @@ const labels = {
     added: 'في قائمتك',
     markWatched: 'شاهدته',
     position: (n: number) => `الموضع ${n}`,
+    // Library ranking (SPEC §5.4, ADR-33): a position among the watched set,
+    // never framed as a recommendation and never a score.
+    rankingCell: 'ترتيبك الشخصي',
+    rankingPosition: (position: string, count: string) => `${position} من ${count} بين ما شاهدت`,
   },
   en: {
     fit: 'Personal fit',
@@ -69,52 +81,74 @@ const labels = {
     added: 'On your list',
     markWatched: 'Watched it',
     position: (n: number) => `Position ${n}`,
+    rankingCell: 'Your personal ranking',
+    rankingPosition: (position: string, count: string) => `${position} of ${count} among what you watched`,
   },
 };
 
 const SEGMENTS: Record<PersonalFitLevel, number> = { high: 3, medium: 2, low: 1 };
 
-export function WorkCard({
-  lang,
-  position,
-  count,
-  recommendation,
-  listed,
-  busy,
-  onAddToList,
-  onMarkWatched,
-}: {
+type Shared = {
   lang: Lang;
-  // 1-based position inside the item's own track, and the track's size.
+  // 1-based position inside the item's own set (track or watched set), and that set's size.
   position: number;
   count: number;
+};
+
+type RecommendationProps = Shared & {
+  kind?: 'recommendation';
   recommendation: Recommendation;
   listed: boolean;
   busy: boolean;
   onAddToList: () => void;
   onMarkWatched: () => void;
-}) {
+};
+
+type RankingProps = Shared & {
+  kind: 'ranking';
+  item: LibraryRankingItem;
+};
+
+export function WorkCard(props: RecommendationProps | RankingProps) {
+  const { lang, position, count } = props;
   const t = labels[lang];
-  const rec = recommendation as Recommendation & Contract;
-  const name = lang === 'ar' ? rec.title.titleAr : rec.title.titleEn;
-  const alt = lang === 'ar' ? rec.title.titleEn : rec.title.titleAr;
+  const isRanking = props.kind === 'ranking';
+
+  const rec = isRanking ? null : (props.recommendation as Recommendation & Contract);
+  const title = isRanking ? props.item.title : (rec as Recommendation).title;
+  const confidenceBand = isRanking ? props.item.confidenceBand : (rec as Recommendation).confidenceBand;
+  const fingerprintCoverage = isRanking ? props.item.fingerprintCoverage : (rec as Recommendation).fingerprintCoverage;
+  const reasonSource = isRanking ? props.item.reason : (rec as Recommendation).reason;
+
+  const name = lang === 'ar' ? title.titleAr : title.titleEn;
+  const alt = lang === 'ar' ? title.titleEn : title.titleAr;
   const showAlt = Boolean(alt && alt !== name);
-  const poster = rec.title.posterUrl ?? null;
+  const poster = (title as Contract['title']).posterUrl ?? null;
 
   // Relative forms only (ADR-33 §3): level + position, never the score.
   const fit = formatPersonalFit(position, count);
-  const confidence = formatConfidence(rec.confidenceBand, lang);
-  const weak = rec.confidenceBand === 'inconclusive' || rec.confidenceBand === 'initial';
-  const reason = formatReason(rec.reason, lang);
+  const confidence = formatConfidence(confidenceBand, lang);
+  const weak = confidenceBand === 'inconclusive' || confidenceBand === 'initial';
+  const reason = formatReason(reasonSource, lang);
   const filled = SEGMENTS[fit.level];
 
   // Public quality: contract object when present, else the transitional number.
-  const quality = rec.publicQuality ?? (rec.publicQualityScore === null ? null : { value: rec.publicQualityScore, votes: null, sources: [] });
+  const quality = rec
+    ? (rec.publicQuality ?? (rec.publicQualityScore === null ? null : { value: rec.publicQualityScore, votes: null, sources: [] }))
+    : null;
   // Availability: contract object when present, else the transitional number
   // (> 0 read as available; 0 as not; null as unknown).
-  const watch =
-    rec.watchability ??
-    (rec.watchabilityScore === null ? null : { available: rec.watchabilityScore > 0, providers: [] });
+  const watch = rec
+    ? (rec.watchability ?? (rec.watchabilityScore === null ? null : { available: rec.watchabilityScore > 0, providers: [] }))
+    : null;
+
+  const meter = (
+    <div className={`${styles.meter} ${styles[confidenceBand]}`} aria-hidden="true">
+      {[1, 2, 3].map((segment) => (
+        <i key={segment} className={segment <= filled ? styles.on : undefined} />
+      ))}
+    </div>
+  );
 
   return (
     <article className={styles.card} aria-label={name}>
@@ -127,11 +161,11 @@ export function WorkCard({
         {poster && <img className={styles.poster} src={poster} alt="" loading="lazy" />}
         <div className={styles.titles}>
           <h4 className={styles.title}>{name}</h4>
-          {(showAlt || rec.title.releaseYear) && (
+          {(showAlt || title.releaseYear) && (
             <p className={styles.alt}>
               {showAlt && <bdi>{alt}</bdi>}
-              {showAlt && rec.title.releaseYear ? ' · ' : ''}
-              {rec.title.releaseYear ? String(rec.title.releaseYear) : ''}
+              {showAlt && title.releaseYear ? ' · ' : ''}
+              {title.releaseYear ? String(title.releaseYear) : ''}
             </p>
           )}
         </div>
@@ -144,81 +178,94 @@ export function WorkCard({
         </p>
       )}
 
-      {/* Four separate values in four labelled cells; no cell repeats another
-          and nothing is merged (blueprint §4.4, ADR-20, ADR-33). Unknown is
-          hollow, never 0. */}
-      <dl className={styles.cells}>
-        <div className={styles.cell}>
-          <dt>{t.fit}</dt>
-          <dd>
-            {/* Unlabelled meter (ADR-33 §3); the band only limits the fill. */}
-            <div className={`${styles.meter} ${styles[rec.confidenceBand]}`} aria-hidden="true">
-              {[1, 2, 3].map((segment) => (
-                <i key={segment} className={segment <= filled ? styles.on : undefined} />
-              ))}
-            </div>
-            <span className={styles.word}>{t.fitLevel[fit.level]}</span>
-            <span className={styles.pos}>{t.fitPosition(formatNumber(fit.position, lang), formatNumber(fit.count, lang))}</span>
-          </dd>
-        </div>
+      {/* Separate values in labelled cells; no cell repeats another and nothing
+          is merged (blueprint §4.4, ADR-20, ADR-33). Unknown is hollow, never 0. */}
+      <dl className={isRanking ? `${styles.cells} ${styles.cellsTwo}` : styles.cells}>
+        {isRanking ? (
+          <div className={styles.cell}>
+            <dt>{t.rankingCell}</dt>
+            <dd>
+              {/* The position is the value; the meter only restates its tertile. */}
+              {meter}
+              <span className={styles.word}>{t.fitLevel[fit.level]}</span>
+              <span className={styles.pos}>{t.rankingPosition(formatNumber(position, lang), formatNumber(count, lang))}</span>
+            </dd>
+          </div>
+        ) : (
+          <div className={styles.cell}>
+            <dt>{t.fit}</dt>
+            <dd>
+              {/* Unlabelled meter (ADR-33 §3); the band only limits the fill. */}
+              {meter}
+              <span className={styles.word}>{t.fitLevel[fit.level]}</span>
+              <span className={styles.pos}>{t.fitPosition(formatNumber(fit.position, lang), formatNumber(fit.count, lang))}</span>
+            </dd>
+          </div>
+        )}
 
-        <div className={styles.cell}>
-          <dt>{t.quality}</dt>
-          <dd>
-            {quality && quality.value !== null ? (
-              <>
-                <span className={styles.num}>{formatNumber(quality.value, lang)}</span>
-                <span className={styles.numSub}>
-                  {[quality.votes !== null ? t.votes(formatNumber(quality.votes, lang)) : null, ...quality.sources]
-                    .filter(Boolean)
-                    .join(' · ') || t.sourceUnknown}
-                </span>
-              </>
-            ) : (
-              <span className={`${styles.chip} ${styles.hollow}`}>{t.qualityUnknown}</span>
-            )}
-          </dd>
-        </div>
-
-        <div className={styles.cell}>
-          <dt>{t.availability}</dt>
-          <dd>
-            {watch && watch.providers.length > 0 ? (
-              <div className={styles.chips}>
-                {watch.providers.map((provider) => (
-                  <span key={`${provider.name}-${provider.market}`} className={styles.chip}>
-                    {provider.name} · {provider.market}
+        {!isRanking && (
+          <div className={styles.cell}>
+            <dt>{t.quality}</dt>
+            <dd>
+              {quality && quality.value !== null ? (
+                <>
+                  <span className={styles.num}>{formatNumber(quality.value, lang)}</span>
+                  <span className={styles.numSub}>
+                    {[quality.votes !== null ? t.votes(formatNumber(quality.votes, lang)) : null, ...quality.sources]
+                      .filter(Boolean)
+                      .join(' · ') || t.sourceUnknown}
                   </span>
-                ))}
-              </div>
-            ) : watch && watch.available === true ? (
-              <span className={styles.chip}>{t.available}</span>
-            ) : watch && watch.available === false ? (
-              <span className={`${styles.chip} ${styles.hollow}`}>{t.unavailable}</span>
-            ) : (
-              <span className={`${styles.chip} ${styles.hollow}`}>{t.availabilityUnknown}</span>
-            )}
-          </dd>
-        </div>
+                </>
+              ) : (
+                <span className={`${styles.chip} ${styles.hollow}`}>{t.qualityUnknown}</span>
+              )}
+            </dd>
+          </div>
+        )}
+
+        {!isRanking && (
+          <div className={styles.cell}>
+            <dt>{t.availability}</dt>
+            <dd>
+              {watch && watch.providers.length > 0 ? (
+                <div className={styles.chips}>
+                  {watch.providers.map((provider) => (
+                    <span key={`${provider.name}-${provider.market}`} className={styles.chip}>
+                      {provider.name} · {provider.market}
+                    </span>
+                  ))}
+                </div>
+              ) : watch && watch.available === true ? (
+                <span className={styles.chip}>{t.available}</span>
+              ) : watch && watch.available === false ? (
+                <span className={`${styles.chip} ${styles.hollow}`}>{t.unavailable}</span>
+              ) : (
+                <span className={`${styles.chip} ${styles.hollow}`}>{t.availabilityUnknown}</span>
+              )}
+            </dd>
+          </div>
+        )}
 
         <div className={styles.cell}>
           <dt>{t.confidence}</dt>
           <dd>
             <span className={styles.band}>{confidence.label}</span>
             <span className={styles.copy}>{confidence.copy}</span>
-            {rec.fingerprintCoverage < 1 && <span className={styles.copy}>{t.partialFingerprint}</span>}
+            {fingerprintCoverage < 1 && <span className={styles.copy}>{t.partialFingerprint}</span>}
           </dd>
         </div>
       </dl>
 
-      <div className={styles.actions}>
-        <button type="button" className={styles.ghost} onClick={onAddToList} disabled={busy || listed}>
-          {listed ? t.added : t.addToList}
-        </button>
-        <button type="button" className={styles.ghost} onClick={onMarkWatched} disabled={busy}>
-          {t.markWatched}
-        </button>
-      </div>
+      {!isRanking && (
+        <div className={styles.actions}>
+          <button type="button" className={styles.ghost} onClick={props.onAddToList} disabled={props.busy || props.listed}>
+            {props.listed ? t.added : t.addToList}
+          </button>
+          <button type="button" className={styles.ghost} onClick={props.onMarkWatched} disabled={props.busy}>
+            {t.markWatched}
+          </button>
+        </div>
+      )}
     </article>
   );
 }

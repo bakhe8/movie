@@ -83,9 +83,12 @@
 }
 
 .reasonSource {
+  display: inline-block;
   margin-inline-start: var(--sp-2);
   color: var(--muted);
   font-size: var(--fs-13);
+  /* One phrase; it wraps as a unit, never mid-phrase. */
+  white-space: nowrap;
 }
 
 /* --- The four cells ------------------------------------------------------- */
@@ -254,4 +257,9 @@
   .poster {
     width: 64px;
   }
+}
+
+/* Library ranking variant: two cells side by side (position + confidence). */
+.cellsTwo {
+  grid-template-columns: 1fr 1fr;
 }
