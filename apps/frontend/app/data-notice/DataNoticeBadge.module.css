@@ -4,7 +4,9 @@
   display: inline-flex;
   align-items: center;
   gap: var(--sp-1);
-  min-height: 28px;
+  /* A link: the identity's 44px touch target (--tap), drawn by height so the
+     inline look stays (B6, 2026-09-04). */
+  min-height: var(--tap);
   padding: 0 var(--sp-2);
   border: 1px solid var(--line);
   border-radius: var(--r-button);
