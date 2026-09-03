@@ -1,7 +1,7 @@
 # Architecture Decision Records
 
 **Status**: Living log. Every decision cites the blueprint section it serves (`BP §x.y`) or states that it is this repository's own engineering choice within the blueprint's constraints. A decision that contradicts the blueprint is a bug in this file. Product-level open questions that must be settled by experiment are **not** decided here — they are listed in `BP App. C` and [SPECIFICATION.md §11](SPECIFICATION.md).
-**Version**: 2.2 — 2026-09-03 (ADR-1…13 rewritten for consistency; ADR-14…26 added to close the gaps found in the documentation audit; ADR-27…28 added from a code-quality/security audit; ADR-29 added for the NestJS 10→11 migration).
+**Version**: 2.3 — 2026-09-03 (ADR-1…13 rewritten for consistency; ADR-14…26 added to close the gaps found in the documentation audit; ADR-27…28 added from a code-quality/security audit; ADR-29 added for the NestJS 10→11 migration; ADR-30 added for the `@typescript-eslint`/`vitest` dev-tooling bump).
 
 Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 
@@ -193,6 +193,14 @@ Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 **Consequences.** `apps/backend/package.json` now declares `engines.node >= 20.19.0` (the strictest floor in the tree, from `@nestjs/typeorm@12.0.1`). A dedicated e2e test, `test/throttling.e2e-spec.ts`, proves the 6th `/auth/login` attempt within a minute still returns `429` under the new `@nestjs/throttler`/Nest-11 combination — verifying the exact compatibility question this decision turned on, not just that the app boots. `npm audit --omit=dev`: 3 moderate → 0.
 **Revisit when.** `@nestjs/throttler` publishes a release whose `peerDependencies` include `@nestjs/common@^12.0.0`, or another dependency forces a 12.x requirement anyway.
 
+## ADR-30 — Dev-tooling security bump: `@typescript-eslint` and `vitest`, minimal patched line
+
+**Context.** Two backend devDependency chains carried `npm audit` findings unrelated to NestJS: `@typescript-eslint/eslint-plugin`/`parser@^6.19.0` pulled a `minimatch` ReDoS chain (high, reachable only by a developer linting their own machine — no attacker-controlled input); `vitest@^1.1.0` (resolved `1.6.1`) was vulnerable to CVE-2026-47429 (critical, GHSA-5xrq-8626-4rwp: arbitrary file read/RCE via the Vitest UI server, but only when `vitest --ui`/browser mode is run or `api.host` is exposed to the network — this repo's `test`/`test:cov`/`test:e2e` scripts only ever call plain `vitest run`, which starts no server, so it was never reachable as configured, though a developer running `--ui` manually to debug on Windows — this project's own dev platform — would trip it).
+**Decision.** `@typescript-eslint/eslint-plugin`/`parser` bumped to `^8.69.0` (peer-compatible with the existing `eslint@8.57.1` and `typescript@5.9.3` — confirmed no ESLint flat-config migration is required). `vitest` bumped to `^3.2.7`, not `npm audit`'s suggested `4.1.11`: the advisory's earliest patched line is `3.2.6`, and jumping only to 3.x avoids an unforced second major bump (Vite 6→7/8, `@types/node` floor, Node engine floor) for no additional security benefit.
+**Rationale.** Same reasoning as ADR-29 (bcryptjs, ADR-27) — take the smallest version step that actually closes the advisory, verified against this repository's specific dependency/config surface rather than assumed from the tool's own suggested "safe" target.
+**Consequences.** `vitest.config.ts`/`vitest.e2e.config.ts` needed no changes (both only use the small, version-stable `defineConfig`/`plugins`/`test.include` surface). Full backend suite (unit + e2e) and lint re-verified green under the new versions. `npm audit`, full (including dev): 10 → 0.
+**Revisit when.** A future `test:cov`/`--ui` workflow is actually adopted — worth re-confirming the vitest version in use still isn't in CVE-2026-47429's affected range before turning on any network-exposed vitest server.
+
 ---
 
 ## Summary
@@ -228,6 +236,7 @@ Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 | 27 | `bcryptjs` over `bcrypt` | audit | throughput bottleneck |
 | 28 | One active triad per profile (DB constraint) | `BP §4.3` | second in-progress status |
 | 29 | NestJS 11, not 12 | audit | `@nestjs/throttler` v12 support |
+| 30 | `@typescript-eslint`/`vitest` minimal patched bump | audit | `--ui`/`--cov` workflow adopted |
 
 ## How to add a decision
 
