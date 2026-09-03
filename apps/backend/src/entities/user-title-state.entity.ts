@@ -4,7 +4,7 @@ import { Title } from './title.entity';
 
 export type TitleState = 'watched' | 'not_watched' | 'watchlist' | 'interested';
 
-@Entity('user_title_state')
+@Entity('user_title_states')
 @Unique(['profileId', 'titleId'])
 export class UserTitleState {
   @PrimaryGeneratedColumn('uuid')

@@ -42,6 +42,13 @@ export class Profile {
   @Column('text', { array: true, default: '{}' })
   platforms: string[];
 
+  // NULL = not paused. Set when the user invokes the 'pause_all' privacy
+  // restriction (PRIVACY.md §4), cleared on resume. No route reads or
+  // writes this yet -- the restriction itself isn't built (M1, SCHEMA.md
+  // §2.4).
+  @Column({ type: 'timestamp', nullable: true })
+  pausedAt: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

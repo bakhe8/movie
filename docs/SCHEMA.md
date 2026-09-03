@@ -2,21 +2,22 @@
 
 **Status**: Derived from blueprint `§13` (entities and event shapes), `§11` (rights registry), `§7.5`–`§7.6`, `§21`. Two layers, kept apart on purpose:
 
-- **§1 Current physical schema** — exactly what the nine TypeORM migrations in `apps/backend/src/migrations/` create (verified 2026-09-03). This is the truth for anyone writing SQL today.
+- **§1 Current physical schema** — exactly what the ten TypeORM migrations in `apps/backend/src/migrations/` create (verified 2026-09-03). This is the truth for anyone writing SQL today.
 - **§2 Target schema** — the `BP §13.1` entity set expressed as tables, plus the migration plan from §1 to §2.
 
-Naming (ADR-16): tables `snake_case` plural; columns are TypeORM's default `camelCase` and therefore **quoted** in raw SQL (`"profileId"`); primary keys `uuid` via `uuid_generate_v4()`; timestamps `TIMESTAMP` (UTC by convention). One exception to plural naming exists today (`user_title_state`); it is renamed in step M1 below. Schema changes go through `npm run migration:generate` / `npm run db:migrate` only — `synchronize` is off in every environment.
+Naming (ADR-16): tables `snake_case` plural; columns are TypeORM's default `camelCase` and therefore **quoted** in raw SQL (`"profileId"`); primary keys `uuid` via `uuid_generate_v4()`; timestamps `TIMESTAMP` (UTC by convention). The one plural-naming exception (`user_title_state`) was renamed to `user_title_states` in M1. Schema changes go through `npm run migration:generate` / `npm run db:migrate` only — `synchronize` is off in every environment.
 
 ---
 
 ## 1. Current physical schema (migrated)
 
-Migrations, in order: `1788410140231-InitialSchema`, `1788411790951-AddTriadEventFields`, `1788412500000-SplitImportedRatingFromInAppState`, `1788418200000-ArabicFirstProfileDefault`, `1788421102891-AddOneActiveTriadPerProfileConstraint`, `1788424108820-AddHeldOutTrainingMetrics`, `1788425067800-AddTriadEventCompleteness`, `1788428400000-AddTriadReplacements`, `1788432000000-AddProfileMarketAndPlatforms`. Extension: `uuid-ossp`. The `ankane/pgvector` image is used but no column has the `vector` type yet.
+Migrations, in order: `1788410140231-InitialSchema`, `1788411790951-AddTriadEventFields`, `1788412500000-SplitImportedRatingFromInAppState`, `1788418200000-ArabicFirstProfileDefault`, `1788421102891-AddOneActiveTriadPerProfileConstraint`, `1788424108820-AddHeldOutTrainingMetrics`, `1788425067800-AddTriadEventCompleteness`, `1788428400000-AddTriadReplacements`, `1788432000000-AddProfileMarketAndPlatforms`, `1788435000000-CompleteM1Plan`. Extension: `uuid-ossp`. The `ankane/pgvector` image is used but no column has the `vector` type yet.
 
 ```sql
 users (
   id uuid PK, email varchar UNIQUE NOT NULL, password varchar NOT NULL,   -- bcrypt hash
   "firstName" varchar, "lastName" varchar, active boolean NOT NULL DEFAULT true,
+  role varchar NOT NULL DEFAULT 'user',                          -- 'user' | 'admin' (BP §5.1); no route reads this yet -- the admin board isn't built
   "createdAt" timestamp NOT NULL DEFAULT now(), "updatedAt" timestamp NOT NULL DEFAULT now()
 )
 
@@ -25,6 +26,7 @@ profiles (                      -- the pseudonymous taste id (BP §13.1, §21.1)
   name varchar(255) NOT NULL, "preferredLanguage" varchar(5) NOT NULL DEFAULT 'ar',   -- Arabic-first (BP §2)
   market varchar(2),                                             -- ISO 3166-1 alpha-2; NULL until chosen at onboarding (BP §4.1); display/availability only
   platforms text[] NOT NULL DEFAULT '{}',                        -- platform identifiers the user can watch on (BP §4.1); display/availability only
+  "pausedAt" timestamp,                                          -- 'pause_all' restriction (PRIVACY.md §4); NULL = not paused; no route reads/writes this yet
   "createdAt" timestamp, "updatedAt" timestamp,
   UNIQUE ("userId", name)
 )
@@ -44,7 +46,7 @@ embeddings (
   "modelVersion" varchar NOT NULL, "embeddingType" varchar NOT NULL, metadata json, "createdAt" timestamp
 )
 
-user_title_state (                                               -- exposure + list state, one row per (profile, title)
+user_title_states (                                              -- exposure + list state, one row per (profile, title); renamed from user_title_state (M1, ADR-16 plural naming)
   id uuid PK, "profileId" uuid NOT NULL FK profiles ON DELETE CASCADE, "titleId" uuid NOT NULL FK titles ON DELETE CASCADE,
   state varchar NOT NULL,                                        -- 'watched' | 'not_watched' | 'watchlist' | 'interested'
   "watchedAt" timestamp,
@@ -65,8 +67,11 @@ triads (                                                         -- one listwise
   "policyVersion" varchar, "selectionPropensity" real, "experimentId" varchar,
   "sessionId" varchar, metadata json,                            -- { replacements?, reasonForSelection? } — the replacements key is superseded by triad_replacements below and never written
   status varchar NOT NULL DEFAULT 'active',                      -- 'active' | 'completed' | 'skipped' (skipped: abandoned by a replacement with nothing left to swap in)
+  "correctsTriadId" uuid FK triads(id),                          -- append-only correction (BP §13.2); NULL for every triad today -- no correction flow built yet
+  holdout boolean NOT NULL DEFAULT false,                        -- reserved validation split (BP §8.3, §16.1); always false -- random-v1 has no holdout concept, training.py's temporal split (ADR-31) covers evaluation instead
   "createdAt" timestamp,
-  UNIQUE ("profileId") WHERE status = 'active'                   -- partial index; at most one active triad per profile (ADR-28)
+  UNIQUE ("profileId") WHERE status = 'active',                  -- partial index; at most one active triad per profile (ADR-28)
+  INDEX ("profileId", "createdAt"), INDEX ("profileId", status)  -- M1
 )
 
 triad_replacements (                                             -- one append-only row per neutral replacement (BP §4.3, §13.1, ADR-17)
@@ -90,7 +95,7 @@ user_model_snapshots (                                           -- one row per 
 
 Indexes: primary keys and the unique constraints above, the partial unique index on `triads` noted above, and `IDX_triad_replacements_triadId`. Views: none.
 
-What is **not** in the database today (see §2 for the target): recommendations log, outcomes, watch events, consents/privacy requests, rights registry (`source_records`), per-feature content features, localized titles, model versions/experiments, shared latent space versions, audit log, admin roles.
+What is **not** in the database today (see §2 for the target): recommendations log, outcomes, watch events, consents/privacy requests, rights registry (`source_records`), per-feature content features, localized titles, model versions/experiments, shared latent space versions, audit log. (`users.role` exists since M1 but no admin board reads it yet.)
 
 ---
 
@@ -100,13 +105,13 @@ What is **not** in the database today (see §2 for the target): recommendations 
 
 | Blueprint entity (`§13.1`) | Target table(s) | Status today |
 |---|---|---|
-| users / identities | `users`, `profiles` (+ `role`; `market`/`platforms` present since `AddProfileMarketAndPlatforms`) | partial |
+| users / identities | `users` (+ `role`, since M1), `profiles` (+ `market`/`platforms` since `AddProfileMarketAndPlatforms`, `pausedAt` since M1) | partial — no admin board or `pause_all` flow reads these columns yet |
 | content_items / editions | `titles`, `title_editions` | `titles` only |
 | localized_titles | `localized_titles` | missing (search is ILIKE on two columns) |
 | credits / people | `people`, `credits` | missing |
 | content_features | `content_features` (per-feature rows) + `titles.fingerprint` (published snapshot) | fingerprint JSON only, no provenance rows |
 | watch_events | `watch_events` | folded into `user_title_state.watchedAt` |
-| triad_events | `triads` | present; `shownAt`/`answeredAt`/`modelVersion`/`idempotencyKey` exist (ADR-32); missing `holdout`, `correctsTriadId` |
+| triad_events | `triads` | present; `shownAt`/`answeredAt`/`modelVersion`/`idempotencyKey` exist (ADR-32), `holdout`/`correctsTriadId` since M1 — both always their default today, no policy sets `holdout` and no correction flow exists |
 | triad_replacements | `triad_replacements` | present (ADR-17, migration `AddTriadReplacements`) |
 | taste_profiles | `user_model_snapshots` (+ posterior, time layers, exceptions) | partial |
 | recommendations | `recommendations` | missing |
@@ -304,7 +309,7 @@ Each step is one TypeORM migration; none require data backfill beyond defaults b
 
 | Step | Contents | Unblocks |
 |---|---|---|
-| M1 | rename `user_title_state` → `user_title_states`; `profiles.pausedAt` (`market`/`platforms` already exist, migration `AddProfileMarketAndPlatforms`); `users.role`; `triads.holdout/correctsTriadId` + indexes (`shownAt`/`answeredAt`/`modelVersion`/`idempotencyKey` already exist, ADR-32; `triad_replacements` and `triadEligible` already exist, ADR-17) | event completeness (`BP §13.2`, `§14`); the replacement endpoint shipped ahead of the rest of M1 |
+| M1 ✅ | rename `user_title_state` → `user_title_states`; `profiles.pausedAt`; `users.role`; `triads.holdout`/`correctsTriadId` + two indexes — all applied by `CompleteM1Plan` (`market`/`platforms` were already done by `AddProfileMarketAndPlatforms`; `shownAt`/`answeredAt`/`modelVersion`/`idempotencyKey` by `AddTriadEventCompleteness`, ADR-32; `triad_replacements`/`triadEligible` by `AddTriadReplacements`, ADR-17) | event completeness (`BP §13.2`, `§14`) — closed. No application logic reads `role`/`pausedAt`/`holdout`/`correctsTriadId` yet; that's the admin board, `pause_all`, and a future correction flow respectively, none built |
 | M2 | `consents`, `privacy_requests`, `audit_log` | onboarding consent, export/delete/reset |
 | M3 | `source_records`, `content_features`, `localized_titles`, `people`, `credits`, `title_editions` | rights registry, FTS search, provenance |
 | M4 | `model_versions`, `experiments`, `experiment_assignments`; `user_model_snapshots` additions (`posterior`, `recentWeights`, `exceptions`, `calibratedAgainst` — held-out metrics already exist, ADR-31) | reproducibility, calibration |
@@ -315,6 +320,7 @@ Each step is one TypeORM migration; none require data backfill beyond defaults b
 ---
 
 **Changelog**
+- 2.7 (2026-09-03): tenth migration `CompleteM1Plan` applied -- closes the M1 step in full: `user_title_state` renamed to `user_title_states` (ADR-16 plural naming), `users.role` (`BP §5.1`), `profiles.pausedAt` (PRIVACY.md §4), `triads.holdout`/`correctsTriadId` (`BP §8.3`/`§13.2`) with two new indexes on `("profileId", "createdAt")` and `("profileId", status)`. §1 DDL, the entity map, and the M1 plan row updated to match; verified with a real `up()`/`down()`/`up()` round trip against `postgres-test` and the full e2e suite (41/41) passing after.
 - 2.6 (2026-09-03): ninth migration `AddProfileMarketAndPlatforms` (onboarding, `BP §4.1`) applied -- `profiles.market` (nullable ISO 3166-1 alpha-2) and `profiles.platforms` (text[] default '{}'); §1, the entity map, the target ALTER and the M1 plan updated to match.
 - 2.5 (2026-09-03): eighth migration `AddTriadReplacements` (ADR-17) applied -- new `triad_replacements` table (append-only, indexed on `triadId`) and `user_title_state.triadEligible`; §1, the entity map and the M1 plan updated to match.
 - 2.4 (2026-09-03): seventh migration `AddTriadEventCompleteness` (ADR-32, gap 3) applied -- `triads.shownAt`/`answeredAt`/`modelVersion`/`idempotencyKey` added, and `ranking` changed from `integer[]` (indices) to `uuid[]` (title ids, ADR-15) with a data backfill. §1, the entity map and the M1 target-plan ALTER updated to match.

@@ -20,6 +20,11 @@ export class User {
   @Column({ default: true })
   active: boolean;
 
+  // Gates the internal admin board (blueprint §5.1); no route reads this
+  // yet -- the board itself doesn't exist (M1, SCHEMA.md §2.4).
+  @Column({ type: 'varchar', default: 'user' })
+  role: 'user' | 'admin';
+
   @CreateDateColumn()
   createdAt: Date;
 

@@ -6,6 +6,8 @@ import { Profile } from './profile.entity';
 // constraint two concurrent requests can both pass that check and both
 // insert a row (migration AddOneActiveTriadPerProfileConstraint).
 @Index('IDX_triads_one_active_per_profile', ['profileId'], { unique: true, where: "status = 'active'" })
+@Index('IDX_triads_profileId_createdAt', ['profileId', 'createdAt'])
+@Index('IDX_triads_profileId_status', ['profileId', 'status'])
 @Entity('triads')
 export class Triad {
   @PrimaryGeneratedColumn('uuid')
@@ -84,6 +86,20 @@ export class Triad {
 
   @Column({ type: 'varchar', default: 'active' })
   status: 'active' | 'completed' | 'skipped';
+
+  // Append-only correction (blueprint §13.2): points at the triad this one
+  // corrects, instead of ever updating that triad's own row. NULL for every
+  // triad today -- no correction flow is built yet (M1, SCHEMA.md §2.4).
+  @Column({ type: 'uuid', nullable: true })
+  correctsTriadId: string | null;
+
+  // Reserved for a held-out validation split decided by the selection
+  // policy at creation time (blueprint §8.3, §16.1) -- never trained on.
+  // Always false today: random-v1 has no holdout concept of its own: it's
+  // training.py's temporal split (ADR-31) that reserves data for
+  // evaluation, not this per-triad flag.
+  @Column({ type: 'boolean', default: false })
+  holdout: boolean;
 
   @CreateDateColumn()
   createdAt: Date;

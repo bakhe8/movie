@@ -46,7 +46,7 @@ Nothing left open from this line of audit.
 
 These run today and contradict or fall short of the blueprint; a green test suite makes them invisible.
 
-1. **Schema covers 8 of the target tables** — `recommendations`, `outcomes`, `watch_events`, `consents`, `privacy_requests`, `source_records`, `content_features`, `localized_titles`, `model_versions`, `experiments`, `audit_log`, `shared_latent_space_versions` are missing (`§13.1`, `§11.1`; [SCHEMA.md](SCHEMA.md) §2.4 migration plan M1–M7).
+1. **Schema covers 8 of the target tables** — `recommendations`, `outcomes`, `watch_events`, `consents`, `privacy_requests`, `source_records`, `content_features`, `localized_titles`, `model_versions`, `experiments`, `audit_log`, `shared_latent_space_versions` are still missing (`§13.1`, `§11.1`; [SCHEMA.md](SCHEMA.md) §2.4 migration plan M1–M7). Step 1/7 of that plan (M1) is closed today — see the table below; none of the twelve missing tables are added by it, only column-level completions to tables that already existed.
 4. **Recommendations are never persisted** — no reason, no display propensity, no `experimentId`/`requestId` (`§13.1`, `§14`, `§14.1`). Without the log the post-watch loop (`§4.5`) cannot close and `§16` has nothing to read.
 5. **Confidence band is a triad-count heuristic** — `§9.2`/`§9.3` require evidence diversity, held-out prediction success and fingerprint quality (ADR-21). The fingerprint-quality and held-out-prediction inputs now exist (gaps 6's one-band demotion, gap 2); the rest does not.
 6. **Fingerprints carry no provenance and cover part of `§6.1`** — the 15 seeded rows leave `confidence` empty; families characters/ending/people/cultural context are absent (V1 is frozen; V2 planned — [FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md)).
@@ -54,6 +54,18 @@ These run today and contradict or fall short of the blueprint; a green test suit
 8. **Not a PWA yet** — no web manifest or service worker (`§5.1`, ADR-5).
 
 (Numbering keeps gaps 1, 4–8 as originally assigned; gaps 2, 3 and 9 are closed — see the tables below.)
+
+## Closed on 2026-09-03 (M1 migration plan step, 1 of 7 toward gap 1)
+
+Not itself the close of gap 1 (schema) — a single step of the already-designed seven-step plan in [SCHEMA.md](SCHEMA.md) §2.4. Picked up because gap 7 (onboarding consent) needs M2's `consents` table next, and M2 (like every later step) assumes M1's plural-naming fix is already in place.
+
+| Gap | What changed | Proof |
+|---|---|---|
+| M1 had been landing piecemeal all day as other features needed pieces of it (the replacement endpoint needed `triad_replacements`, ADR-17; onboarding needed `market`/`platforms`), leaving four items open: `user_title_state` → `user_title_states` (ADR-16 plural naming); `users.role` (`§5.1` admin board); `profiles.pausedAt` (PRIVACY.md §4 `pause_all`); `triads.holdout`/`correctsTriadId` + two indexes (`§8.3`, `§13.2`) | One migration, `CompleteM1Plan`, applies exactly what SCHEMA.md §2.2's target DDL already specified — no new design. `SafeUser` picked up `role` automatically via `Omit<User, 'password'>`; `AuthService.validateUser()`'s explicit object literal updated to include it (ADR-51) | Verified with a real `up()` → `down()` → `up()` round trip against `postgres-test` (every `ALTER`/rename both directions), then the full e2e suite (41/41) on the final state; `tsc`, the full unit suite (98 tests) and `eslint` all clean |
+
+None of these four columns are read by anything yet — the admin board, the `pause_all` flow, and a triad-correction flow are all still unbuilt. That's expected: schema arrives before the feature that uses it, the same way `market`/`platforms` sat unused between their own migration and the onboarding screen. Next: M2 (`consents`, `privacy_requests`, `audit_log`) — directly what gap 7 needs.
+
+---
 
 ## Closed on 2026-09-03 (gap 9 — enrichment worker)
 
@@ -225,6 +237,19 @@ Still open: the `consents` rows of `§4.1`/PRIVACY §3 (gap 7 — no table, M2),
 
 ---
 
+## Closed on 2026-09-03 (the app shell — header, navigation, language toggle)
+
+The frame around the six rebuilt screens was the last piece still inherited from the pre-rebuild UI: a 72px `<header>` styled by tag name in `globals.css` (the same rule that had squashed a screen's own header during the triad rebuild), a bottom `<nav>` of plain text buttons with no semantics, and no way to change language before signing in. The blueprint says nothing about navigation structure; only `§4.3` (RTL first) and the mobile-first stance bind this pass, so it is a design pass under those two rules, not a spec closure.
+
+| Gap | What changed | Proof |
+|---|---|---|
+| Shell markup lived inline in `page.tsx`, styled by global tag selectors; the language toggle had no accessible name and no `lang`; the nav announced nothing; screens on phones lost 72px to a header that carried only the brand and the toggle | `AppShell` (own CSS module, logical properties only — no `left`/`right`): a 56px header with the brand as the document's `h1` (screens keep their `h2`) and the language toggle written in the language it switches *to* (`EN` / `عربي`) with an `aria-label` and `lang` in that language; a `<nav aria-label>` of five cells with direction-neutral line icons and one-line labels, the active cell in the accent colour and `aria-current="page"`, fixed to the bottom within thumb reach on phones (with `env(safe-area-inset-bottom)`) and moved into the header beside the brand from 900px up; content frame `min(100%, 1080px)`. Onboarding renders inside the same shell without the nav. `globals.css` is now fonts, tokens, resets, the sign-in frame and the three shared utilities (`.eyebrow`, `.muted`, `.cta`/`.full`) — the dead `.cards`/`.film`/`.results`/`.search`/`header select`/`.notice`/`.link` rules and the tag-level `header`/`nav` rules are gone (continuing M6). | Browser at 375×812: header 61px, nav 66px with every label on one line (the profile tab is "ملفي" for that reason), `aria-current` moves with the view, no horizontal scroll; at desktop width the nav sits inside the header and the bottom padding drops to 0 |
+| No language toggle on the sign-in screen: a reader who cannot read Arabic had no way to switch before creating an account | `AuthScreen` shows the same `LanguageToggle` in the card's top end corner; a choice made at the door is the user's most recent explicit choice, so it wins over the profile's saved preference on arrival (once), and onboarding step 1 opens with it preselected | Browser: signed out, the toggle flips `dir`/`lang` and the heading to English and back |
+
+Still open (design, not spec): the visual direction itself (dark cinematic vs. light, see `UI_MOCKUP_REVIEW_2026-09-03.md`) is undecided, so the shell keeps the current light palette and the Cairo/Segoe pairing; no icons in screen headers; no desktop side navigation.
+
+---
+
 ## Project setup
 
 | Item | Built | Blueprint | Evidence / gap |
@@ -284,6 +309,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Unit tests | ✅ | — | `profiles.service.spec.ts`, 7 tests |
 | Frontend: profile screen (account, taste profile, privacy) | ✅ | 🟡 | rebuilt 2026-09-03 (table above): rename, language, market + platforms (`§4.1`, display/availability only), pseudonymous id, rounds/watched counts, model version + `§9.3` band, wipe-and-restart behind confirmation; export/delete shown as not built (`§2.4 #9`) |
 | Frontend: create/switch/edit/delete profiles | 🟡 | — | one profile auto-created; edit ✅ and wipe-and-recreate ✅ on the profile screen; no picker/switching (`§2.4 #10` satisfied by the data model, not the UI) |
+| Frontend: app shell (header, navigation, language toggle) | ✅ | `§4.3` | rebuilt 2026-09-03 (`AppShell`, table above): brand as `h1`, accessible language toggle also on the sign-in screen, five-cell bottom nav with icons and `aria-current` on phones / header nav from 900px, logical properties only; `globals.css` reduced to what is shared |
 
 ## Catalog
 
