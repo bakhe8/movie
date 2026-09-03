@@ -221,18 +221,80 @@ describe('TriadsService', () => {
 
     it('requires at least three watched titles before a triad can be created', async () => {
       profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
-      triadsRepository.findOne.mockResolvedValue(null); // no active triad
-      triadsRepository.find.mockResolvedValue([]); // no completed triads
+      triadsRepository.findOne
+        .mockResolvedValueOnce(null) // no active triad
+        .mockResolvedValueOnce(null); // no previous completed triad
       statesRepository.find.mockResolvedValue([{ titleId: 't1' }, { titleId: 't2' }]); // only 2 watched
 
-      await expect(service.getCurrent('user-1', 'profile-1')).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.getCurrent('user-1', 'profile-1')).rejects.toThrow(
+        'Mark at least three films as watched before starting a ranking round',
+      );
       expect(titlesRepository.createQueryBuilder).not.toHaveBeenCalled();
+    });
+
+    // H1: TriadsService used to exclude every title that had ever appeared in
+    // any completed triad -- with W watched titles a profile could complete
+    // at most floor(W/3) triads, ever (5 max on the 15-title seed catalog),
+    // and a user with exactly 3 watched titles who ranked them got "mark at
+    // least three" back even though they just had. Repetition is a soft
+    // penalty in the blueprint's selection score (BP §8.2 "-λr·Repeat"), not
+    // a permanent ban -- BP §8.1 even names deliberate re-testing of a past
+    // comparison ("verification/refutation in an independent context") as
+    // one of the six triad functions.
+    describe('H1: title reuse across triads', () => {
+      it("excludes only the most recently completed triad's titles, not every title ever ranked", async () => {
+        profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+        triadsRepository.findOne
+          .mockResolvedValueOnce(null) // no active triad
+          .mockResolvedValueOnce({ titleIds: ['t4', 't5', 't6'] }); // most recently completed triad
+        statesRepository.find.mockResolvedValue(
+          ['t1', 't2', 't3', 't4', 't5', 't6'].map((titleId) => ({ titleId })),
+        );
+        const builder = titlesQueryBuilderMock([{ id: 't1' }, { id: 't2' }, { id: 't3' }] as Title[], 3);
+        titlesRepository.createQueryBuilder.mockReturnValue(builder);
+
+        await service.getCurrent('user-1', 'profile-1');
+
+        // t1-t3 (from an older, already-completed triad) must stay eligible --
+        // only t4-t6 (the immediately previous triad) are excluded.
+        expect(builder.andWhere).toHaveBeenCalledWith('title.id NOT IN (:...recentlyUsedTitleIds)', {
+          recentlyUsedTitleIds: ['t4', 't5', 't6'],
+        });
+      });
+
+      it('applies no exclusion filter when there is no previous completed triad', async () => {
+        profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+        triadsRepository.findOne
+          .mockResolvedValueOnce(null) // no active triad
+          .mockResolvedValueOnce(null); // no previous completed triad
+        statesRepository.find.mockResolvedValue([{ titleId: 't1' }, { titleId: 't2' }, { titleId: 't3' }]);
+        const builder = titlesQueryBuilderMock([{ id: 't1' }, { id: 't2' }, { id: 't3' }] as Title[], 3);
+        titlesRepository.createQueryBuilder.mockReturnValue(builder);
+
+        await service.getCurrent('user-1', 'profile-1');
+
+        expect(builder.andWhere).not.toHaveBeenCalled();
+      });
+
+      it('reports "mark another film", not "mark three", when 3+ watched titles exist but all were just used', async () => {
+        profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+        triadsRepository.findOne
+          .mockResolvedValueOnce(null) // no active triad
+          .mockResolvedValueOnce({ titleIds: ['t1', 't2', 't3'] }); // just-completed triad used all 3 watched titles
+        statesRepository.find.mockResolvedValue([{ titleId: 't1' }, { titleId: 't2' }, { titleId: 't3' }]);
+        titlesRepository.createQueryBuilder.mockReturnValue(titlesQueryBuilderMock([], 0));
+
+        await expect(service.getCurrent('user-1', 'profile-1')).rejects.toThrow(
+          'Mark another film as watched to start a new ranking round',
+        );
+      });
     });
 
     it('records shownAt when a new triad is created', async () => {
       profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
-      triadsRepository.findOne.mockResolvedValue(null); // no active triad
-      triadsRepository.find.mockResolvedValue([]); // no completed triads
+      triadsRepository.findOne
+        .mockResolvedValueOnce(null) // no active triad
+        .mockResolvedValueOnce(null); // no previous completed triad
       statesRepository.find.mockResolvedValue([{ titleId: 't1' }, { titleId: 't2' }, { titleId: 't3' }]);
       titlesRepository.createQueryBuilder.mockReturnValue(
         titlesQueryBuilderMock([{ id: 't1' }, { id: 't2' }, { id: 't3' }] as Title[], 3),
@@ -252,8 +314,8 @@ describe('TriadsService', () => {
       const winner = { id: 'triad-winner', profileId: 'profile-1', status: 'active' as const };
       triadsRepository.findOne
         .mockResolvedValueOnce(null) // no active triad yet, when we first check
+        .mockResolvedValueOnce(null) // no previous completed triad
         .mockResolvedValueOnce(winner); // re-fetched after losing the insert race
-      triadsRepository.find.mockResolvedValue([]); // no completed triads
       statesRepository.find.mockResolvedValue([{ titleId: 't1' }, { titleId: 't2' }, { titleId: 't3' }]);
       titlesRepository.createQueryBuilder.mockReturnValue(
         titlesQueryBuilderMock([{ id: 't1' }, { id: 't2' }, { id: 't3' }] as Title[], 3),
@@ -267,8 +329,9 @@ describe('TriadsService', () => {
 
     it('does not swallow a save error unrelated to the unique constraint', async () => {
       profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
-      triadsRepository.findOne.mockResolvedValue(null);
-      triadsRepository.find.mockResolvedValue([]);
+      triadsRepository.findOne
+        .mockResolvedValueOnce(null) // no active triad
+        .mockResolvedValueOnce(null); // no previous completed triad
       statesRepository.find.mockResolvedValue([{ titleId: 't1' }, { titleId: 't2' }, { titleId: 't3' }]);
       titlesRepository.createQueryBuilder.mockReturnValue(
         titlesQueryBuilderMock([{ id: 't1' }, { id: 't2' }, { id: 't3' }] as Title[], 3),

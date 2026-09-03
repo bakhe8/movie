@@ -1,7 +1,7 @@
 # Implementation Status — code versus blueprint
 
-> **Snapshot 2026-09-03, after the "close the six cheap gaps" change, a security/code-quality audit, a NestJS 10→11 migration, a dev-tooling security bump, a `SCHEMA.md` doc-sync fix, and closing blueprint gaps 9, 2 and 3** (base `3f60884` on `main`).
-> Verified for this revision: backend vitest suite **56 tests / 6 files pass**; backend e2e suite **16 tests pass** over real HTTP against `postgres-test` with all seven migrations applied; Python pytest **39 tests pass** (+2 gap 9, +8 gap 2, +3 gap 3); `tsc --noEmit` clean for `apps/backend`, `apps/frontend` and `packages/shared`; `eslint` clean for both `apps/frontend` and `apps/backend`; `ruff` clean for `services/workers`; `npm audit` clean — 0 vulnerabilities, production and dev. `train-profile` was run **manually against the real local dev database** for the first time in this codebase's history (both the ≥5-triad and <5-triad paths, then again after gap 3's ranking-format change), which is how two previously-undiscovered, always-failing bugs in it were found and fixed (`uuid[]` parsing, a numpy-float leak into a psycopg2 parameter) — see the gap-2 table below. Gap 3 (title-id ranking, `Idempotency-Key`) was verified the same way as the manual browser pass below, freshly re-run today: register → Discover (mark 3 watched) → Rank (reorder, save) → confirmed via the network tab that the persisted triad carried real title-id `ranking`, `shownAt` < `answeredAt`, `modelVersion: null`, and the generated idempotency key; My list → Profile → language toggle → logout carried forward from an earlier snapshot, unaffected by today's changes.
+> **Snapshot 2026-09-03, after the "close the six cheap gaps" change, a security/code-quality audit, a NestJS 10→11 migration, a dev-tooling security bump, a `SCHEMA.md` doc-sync fix, closing blueprint gaps 9, 2 and 3, an independent audit's H1 (triad pool exhaustion) fixed, plus a frontend ↔ backend boundary assessment (documentation only)** (base `093a1d3` on `main`).
+> Verified for this revision: backend vitest suite **59 tests / 6 files pass**; backend e2e suite **17 tests pass** over real HTTP against `postgres-test` with all seven migrations applied; Python pytest **39 tests pass** (+2 gap 9, +8 gap 2, +3 gap 3); `tsc --noEmit` clean for `apps/backend`, `apps/frontend` and `packages/shared`; `eslint` clean for both `apps/frontend` and `apps/backend`; `ruff` clean for `services/workers`; `npm audit` clean — 0 vulnerabilities, production and dev. `train-profile` was run **manually against the real local dev database** for the first time in this codebase's history (both the ≥5-triad and <5-triad paths, then again after gap 3's ranking-format change), which is how two previously-undiscovered, always-failing bugs in it were found and fixed (`uuid[]` parsing, a numpy-float leak into a psycopg2 parameter) — see the gap-2 table below. Gap 3 (title-id ranking, `Idempotency-Key`) was verified the same way as the manual browser pass below, freshly re-run today: register → Discover (mark 3 watched) → Rank (reorder, save) → confirmed via the network tab that the persisted triad carried real title-id `ranking`, `shownAt` < `answeredAt`, `modelVersion: null`, and the generated idempotency key; My list → Profile → language toggle → logout carried forward from an earlier snapshot, unaffected by today's changes. H1 (a concurrent independent audit's finding, [AUDIT_2026-09-03.md](AUDIT_2026-09-03.md)) was independently reproduced before fixing, then re-verified with a new e2e test running three real ranking rounds over real HTTP.
 >
 > Two verdicts per row, because "the code exists and runs" and "it does what the blueprint requires" are different claims:
 >
@@ -79,6 +79,16 @@ While verifying this end-to-end, found and fixed two independent, previously-und
 
 `training.py`'s `ORDER BY` now uses `COALESCE("answeredAt", "createdAt")` (was `createdAt` alone, ADR-31's interim stand-in) — real `answeredAt` for triads completed after this migration, the old proxy only for legacy rows with none recorded. Still open: `triads.holdout`/`correctsTriadId` (same M1 plan step, [SCHEMA.md](SCHEMA.md) §2.4) — no selection policy sets `holdout` yet regardless.
 
+## Closed on 2026-09-03 (H1 — triad pool exhaustion, from an independent audit)
+
+Not one of the originally numbered gaps below — found by a concurrent independent audit ([AUDIT_2026-09-03.md](AUDIT_2026-09-03.md) §2 H1), reproduced and confirmed independently before fixing (see ADR-34).
+
+| Bug | What changed | Proof |
+|---|---|---|
+| `TriadsService.getCurrent()` excluded every title that had ever appeared in *any* completed triad for the profile — a title entered at most one triad, ever. With W watched titles: `floor(W/3)` triads for life (5 max on the 15-title seed catalog); the `likely`/`strong` confidence bands and the ≥5-triad hold-out (gap 2) were unreachable in dev; a user with exactly 3 watched titles who had just ranked them got "mark at least three films" back — false, they already had. Violates `§8.2` (`Repeat` is a penalty term, `-λr·Repeat`, not a hard filter) and `§8.1` (re-testing a past comparison is one of six intended triad functions) | `getCurrent()` now excludes only the immediately previous completed triad's three titles (ADR-34) — `random-v1` has no scoring function to apply `Repeat` as a soft penalty through, so a one-triad lookback is its policy-appropriate stand-in until the adaptive policy exists. The two failure cases now get distinct messages: "mark at least three" only when genuinely fewer than 3 are watched; "mark another film" when 3+ are watched but all were just used | 3 new backend unit tests (59 total) — older-triad titles stay eligible, no filter when there's no previous triad, the corrected message; new e2e test in `test/triad-rank.e2e-spec.ts` — 6 watched titles, three real ranking rounds over real HTTP, round 3 lands back on round 1's exact titles (would have 400'd before the fix); 17 e2e total |
+
+While adding the e2e test, found and fixed an unrelated, pre-existing test-fragility bug in the gap-3 idempotency e2e test: it used a hard-coded `Idempotency-Key`, which collides with a leftover row from an earlier run because `postgres-test`'s `tmpfs` volume survives a container stop/start cycle (only a true recreate wipes it) — reproduced (a second consecutive `npm run test:e2e` failed with `409` instead of `201`) and fixed with a fresh `randomUUID()` per run.
+
 ---
 
 ## Project setup
@@ -92,9 +102,27 @@ While verifying this end-to-end, found and fixed two independent, previously-und
 | Documentation set | ✅ | — | reorganized 2026-09-03; index in [README.md](README.md) |
 | Plackett–Luce ranker (Python) | ✅ | ✅ | `§7.2`: listwise event, not three pairwise comparisons; deterministic init; refuses undescribed titles |
 | Enrichment worker (Python) | ✅ | 🟡 | structured output via the Responses API ✅ (gap 9 closed above); `§15.4` acceptance tests ❌; never run against the actual catalog, only unit-tested |
-| Shared TypeScript types package | ✅ | ✅ | API-aligned types, compiles; not yet consumed by the apps (ADR-1) |
+| Shared TypeScript types package | ✅ | ✅ | API-aligned types, compiles; not yet consumed by the apps (ADR-1) — see *Frontend ↔ backend boundary* |
 | Makefile | ✅ | — | mirrors npm scripts; `poetry` assumed for Python |
 | CI | ❌ | ❌ | `§12.1` |
+
+## Frontend ↔ backend boundary (assessed 2026-09-03)
+
+Verdict: **separated in responsibilities, not in contract.** Two processes, one JSON channel, no code shared across the line — but the contract between them is kept by hand in three copies and nothing at compile time enforces it. Assessed by reading both apps and grepping every import across the boundary; prompted by the same day's mockup review ([UI_MOCKUP_REVIEW_2026-09-03.md](UI_MOCKUP_REVIEW_2026-09-03.md)).
+
+| Item | Built | Blueprint | Evidence / gap |
+|---|---|---|---|
+| One channel: `fetch` + JSON to `NEXT_PUBLIC_API_URL`; CORS restricted to `FRONTEND_URL` | ✅ | — | `apps/frontend/app/lib/api.ts`, `apps/backend/src/main.ts`; the `/api` prefix and the URL are kept in step by a comment, not by shared config |
+| No code import across the line (frontend ↛ backend or `packages/shared`; backend ↛ frontend) | ✅ | — | grep over both `src` trees, 2026-09-03 |
+| Backend is the trust boundary: `ValidationPipe` (`whitelist`, `forbidNonWhitelisted`), owner checks, `SafeUser`, throttling | ✅ | ✅ | `§21.3`; IDOR and throttling e2e suites |
+| Frontend holds no business logic: no scoring, sorting or filtering; only the UI reorder and the `Idempotency-Key` | ✅ | ✅ | `§12.2`: ranking and scores come from the backend; `ListScreen` renders title and description only |
+| Backend holds no presentation: no views, no static files, no UI copy (only the `ar`/`en` language code) | ✅ | — | |
+| Next.js server layer unused: every component is `'use client'`, no `app/api`, no server actions — no second backend hiding in the frontend | ✅ | — | a static export is possible; the PWA shell is gap 8 |
+| Contract enforced at compile time | ❌ | — | three hand-kept copies: `packages/shared/src/types.ts` (consumed by nobody), backend entities + `title-fingerprint.type.ts` ("keep both copies in sync by hand"), `apps/frontend/app/lib/api.ts` ("mirrors backend shapes"); drift is caught only by the backend e2e suite and the frontend has no tests. Fix per ADR-11: emit the OpenAPI description from the controllers, generate the frontend client and types from it, delete the copies |
+| Response DTO layer (entity shape ≠ public contract) | ❌ | ❌ | `§14`, ADR-15: controllers return TypeORM entities; a new column is public by default; the password hash is stripped by hand in `AuthService` only |
+| Triad response carries its items | ❌ | — | see *Triads*: N+1 title fetches |
+| Session token handling | 🟡 | — | JWT in `localStorage`, no refresh (ADR-26, before Alpha) — see *Authentication and accounts* |
+| Independently deployable | ❌ | — | by decision (ADR-1: release together; compose has no app containers; `npm run dev` runs both) until `§12.3` signals |
 
 ## Authentication and accounts
 
@@ -143,14 +171,14 @@ While verifying this end-to-end, found and fixed two independent, previously-und
 | `GET /profiles/:id/triads/current` (creates or returns active) | ✅ | 🟡 | `§14 /triads/next`: watched-only ✅, propensity + policy ✅, `shownAt`/`modelVersion`/`experimentId` columns exist (gap 3) though `modelVersion` is `NULL` under `random-v1`; no `requestId` (API envelope, target contract); target is `POST /api/v1/triads/next` (ADR-15) |
 | `POST /triads/:id/rank` | ✅ | 🟡 | `§14`: optional `Idempotency-Key` header ✅ (gap 3, ADR-32); membership check ✅ (ranking must be the triad's own title ids); no time/window check; `§13.2`: `answeredAt`, `modelVersion` recorded ✅ |
 | `GET /profiles/:id/triads` (completed) | ✅ | — | |
-| Random policy `random-v1` | ✅ | 🟡 | ρ = 1/C(pool,3) ✅, `policyVersion` ✅, independent `displayOrder` ✅ (`§4.3`, `§8.3`); `§8.3` unmet: session limit/fatigue, reserved hold-out, director/language guard |
+| Random policy `random-v1` | ✅ | 🟡 | ρ = 1/C(pool,3) ✅, `policyVersion` ✅, independent `displayOrder` ✅ (`§4.3`, `§8.3`); titles are reusable after one intervening triad, not excluded for life (H1, ADR-34); `§8.3` still unmet: session limit/fatigue, reserved hold-out, director/language guard |
 | Adaptive policy (`§8.1` functions, `§8.2` score, `§7.5` Fisher targeting) | ❌ | ❌ | [RANKING_ALGORITHM.md](RANKING_ALGORITHM.md) §9 |
 | Ranking validation (title ids, ADR-15) | ✅ | ✅ | exactly 3 distinct ids matching the fetched triad's own `titleIds`; was index-based before gap 3 |
 | Replacement (`not_watched` / `not_remembered`) | ❌ | ❌ | `§4.3`, `§13.1`, `§14`; semantics fixed in ADR-17; `metadata.replacements` reserved, never written |
 | Training trigger from the backend | ❌ | ❌ | `§12.2`; ADR-25 |
-| Unit tests | ✅ | — | `triads.service.spec.ts`, 20 tests |
+| Unit tests | ✅ | — | `triads.service.spec.ts`, 23 tests |
 | Frontend: instruction copy fixed to `§4.3` («حسب إعجابك الشخصي، من الأكثر إلى الأقل») | ✅ | ✅ | `lib/copy.ts` |
-| Frontend: three cards, drag + ↑/↓ (keyboard path), position numbers, save, next round auto-loads | ✅ | 🟡 | RTL/keyboard ✅; no licensed poster on the card (`§4.3`); no critic scores ✅ |
+| Frontend: three cards, drag + ↑/↓ (keyboard path), position numbers, save, next round auto-loads | ✅ | 🟡 | RTL/keyboard ✅; no licensed poster on the card (`§4.3`); no critic scores ✅; drag is HTML5 `draggable`/`dataTransfer`, which does not fire on touch — on phones only the ↑/↓ path works (the same mechanism failed the touch test in [UI_MOCKUP_REVIEW_2026-09-03.md](UI_MOCKUP_REVIEW_2026-09-03.md) E1; not re-verified on the app itself) |
 | Frontend: two replacement buttons + dialog | ❌ | ❌ | `§4.3` |
 | Frontend: progress indicator, periodic "model updated" result | ❌ | — | `§4.3` "periodic, not necessarily per triad"; count open per `App. C` |
 | Frontend: N+1 title fetches per triad | 🟡 | — | `RankScreen` fetches each title separately; target `/triads/next` returns items inline |
@@ -216,8 +244,8 @@ While verifying this end-to-end, found and fixed two independent, previously-und
 
 | Item | Built | Blueprint | Evidence / gap |
 |---|---|---|---|
-| Backend unit tests (6 files, 56 tests) | ✅ | — | re-run 2026-09-03; +8 with the gap-3 triad rework |
-| Backend e2e: auth guard + IDOR + rate limiting + triad ranking over real HTTP + `postgres-test` (16 tests) | ✅ | ✅ | `§21.3` object-level authorization; re-run 2026-09-03 with all seven migrations; `test/throttling.e2e-spec.ts` (ADR-29) and `test/triad-rank.e2e-spec.ts` (gap 3, ADR-32) added today; still not full functional coverage of every route |
+| Backend unit tests (6 files, 59 tests) | ✅ | — | re-run 2026-09-03; +8 with the gap-3 triad rework, +3 with the H1 title-reuse fix |
+| Backend e2e: auth guard + IDOR + rate limiting + triad ranking over real HTTP + `postgres-test` (17 tests) | ✅ | ✅ | `§21.3` object-level authorization; re-run 2026-09-03 with all seven migrations; `test/throttling.e2e-spec.ts` (ADR-29) and `test/triad-rank.e2e-spec.ts` (gap 3/ADR-32, H1/ADR-34) added today; still not full functional coverage of every route |
 | Functional API tests (titles, triads, recommendations) | ❌ | — | |
 | Frontend tests | ❌ | — | |
 | Python tests (36) | ✅ | — | re-run 2026-09-03; +2 with the gap-9 enrichment-worker fix, +8 with the gap-2 temporal hold-out |
@@ -257,4 +285,4 @@ While verifying this end-to-end, found and fixed two independent, previously-und
 
 **Next milestone (in order):** the replacement endpoint + two UI buttons (ADR-17) and `triads.holdout`/`correctsTriadId` (same M1 step, [SCHEMA.md](SCHEMA.md) §2.4); then a training trigger through the FastAPI service (ADR-25) and the real confidence-band criteria now that held-out metrics exist (gap 5); then M5 + persisted recommendations and outcomes (gap 4) so the post-watch loop can close; then consent/onboarding (gap 7) and the admin board. Gaps 2, 3 and 9 are done.
 
-**Last updated**: 2026-09-03 · **Status**: core loop (auth → mark watched → rank → train by CLI → recommend) runs locally. Closed today: the original six cheap gaps, five security/code-quality audit findings, the NestJS 10→11 migration (ADR-29), a dev-tooling security bump (ADR-30), and blueprint gaps 9 (enrichment worker), 2 (temporal hold-out, ADR-31) and 3 (triad event completeness, ADR-32). `npm audit` clean end to end. Six blueprint-conformance gaps still fall short: 1 (schema), 4 (recommendations not persisted), 5 (confidence band), 6 (fingerprint provenance/V2), 7 (onboarding), 8 (PWA) — list above.
+**Last updated**: 2026-09-03 · **Status**: core loop (auth → mark watched → rank → train by CLI → recommend) runs locally. Closed today: the original six cheap gaps, five security/code-quality audit findings, the NestJS 10→11 migration (ADR-29), a dev-tooling security bump (ADR-30), blueprint gaps 9 (enrichment worker), 2 (temporal hold-out, ADR-31) and 3 (triad event completeness, ADR-32), and an independent audit's H1 finding — permanent title exclusion across triads (ADR-34). `npm audit` clean end to end. Six blueprint-conformance gaps still fall short: 1 (schema), 4 (recommendations not persisted), 5 (confidence band), 6 (fingerprint provenance/V2), 7 (onboarding), 8 (PWA) — list above. Assessed today: the frontend ↔ backend boundary — separated in responsibilities, not in contract (section above).

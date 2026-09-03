@@ -41,20 +41,37 @@ export class TriadsService {
       return activeTriad;
     }
 
-    const rankedTriads = await this.triadsRepository.find({
+    // Only the most recently completed triad's titles are excluded, not
+    // every title this profile has ever ranked (H1, ADR-34): repetition is
+    // a soft penalty in the blueprint's selection score (BP §8.2 "-λr·Repeat"),
+    // never a permanent ban (BP §8.1 even names "verification/refutation in
+    // an independent context" as a deliberate re-test of a past comparison).
+    // random-v1 has no scoring function to apply a soft penalty through, so
+    // "not the immediately previous triad" is its policy-appropriate stand-in.
+    const previousTriad = await this.triadsRepository.findOne({
       where: { profileId, status: 'completed' },
+      order: { createdAt: 'DESC' },
       select: { titleIds: true },
     });
-    const rankedTitleIds = rankedTriads.flatMap((triad) => triad.titleIds);
+    const recentlyUsedTitleIds = previousTriad?.titleIds ?? [];
     const watchedStates = await this.statesRepository.find({
       where: { profileId, state: 'watched' },
       select: { titleId: true },
     });
     const watchedTitleIds = watchedStates.map((state) => state.titleId);
-    const { titles, poolSize } = await this.selectRandomTitles(watchedTitleIds, rankedTitleIds);
+    const { titles, poolSize } = await this.selectRandomTitles(watchedTitleIds, recentlyUsedTitleIds);
 
     if (titles.length < 3) {
-      throw new BadRequestException('Mark at least three films as watched before starting a ranking round');
+      // Two genuinely different situations (H1): fewer than 3 watched titles
+      // exist at all, vs. there are 3+ but all remaining ones were just used
+      // in the previous triad -- the fix is "mark one more film", not "mark
+      // three", and telling a user who already has three to do that again is
+      // the exact false message this replaces.
+      const message =
+        watchedTitleIds.length < 3
+          ? 'Mark at least three films as watched before starting a ranking round'
+          : 'Mark another film as watched to start a new ranking round';
+      throw new BadRequestException(message);
     }
 
     const titleIds = titles.map((title) => title.id);
@@ -168,14 +185,14 @@ export class TriadsService {
     }
   }
 
-  private async selectRandomTitles(watchedTitleIds: string[], rankedTitleIds: string[]): Promise<CandidateSelection> {
+  private async selectRandomTitles(watchedTitleIds: string[], recentlyUsedTitleIds: string[]): Promise<CandidateSelection> {
     if (watchedTitleIds.length < 3) {
       return { titles: [], poolSize: 0 };
     }
     const queryBuilder = this.titlesRepository.createQueryBuilder('title').orderBy('RANDOM()').take(3);
     queryBuilder.where('title.id IN (:...watchedTitleIds)', { watchedTitleIds });
-    if (rankedTitleIds.length > 0) {
-      queryBuilder.andWhere('title.id NOT IN (:...rankedTitleIds)', { rankedTitleIds });
+    if (recentlyUsedTitleIds.length > 0) {
+      queryBuilder.andWhere('title.id NOT IN (:...recentlyUsedTitleIds)', { recentlyUsedTitleIds });
     }
     // getManyAndCount() runs the COUNT without the take(3)/LIMIT, so
     // poolSize is the full eligible pool, not just the 3 selected.

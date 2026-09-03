@@ -2,10 +2,39 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test } from '@nestjs/testing';
+import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import type { Repository } from 'typeorm';
 import { AppModule } from '../src/modules/app/app.module';
 import { Title } from '../src/entities/title.entity';
+
+async function registerUser(app: INestApplication, label: string) {
+  const email = `${label}-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const response = await request(app.getHttpServer())
+    .post('/auth/register')
+    .send({ email, password: 'CorrectHorseBattery1', firstName: 'Rank', lastName: label })
+    .expect(201);
+  return response.body.access_token as string;
+}
+
+async function createProfile(app: INestApplication, token: string, label: string) {
+  const response = await request(app.getHttpServer())
+    .post('/profiles')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ name: `${label} ${Date.now()}` })
+    .expect(201);
+  return response.body.id as string;
+}
+
+async function markWatched(app: INestApplication, token: string, profileId: string, titleIds: string[]) {
+  for (const titleId of titleIds) {
+    await request(app.getHttpServer())
+      .patch(`/profiles/${profileId}/titles/${titleId}/state`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ state: 'watched' })
+      .expect(200);
+  }
+}
 
 // Exercises the gap-3 rework (ADR-32) over real HTTP against a real Postgres:
 // ranking submitted as title ids rather than indices, and Idempotency-Key
@@ -17,28 +46,10 @@ describe('Triad ranking (real HTTP, real DB)', () => {
   let titleIds: string[];
 
   async function registerAndCreateProfile() {
-    const email = `rank-check-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
-    const authResponse = await request(app.getHttpServer())
-      .post('/auth/register')
-      .send({ email, password: 'CorrectHorseBattery1', firstName: 'Rank', lastName: 'Check' })
-      .expect(201);
-    const token = authResponse.body.access_token as string;
-
-    const profileResponse = await request(app.getHttpServer())
-      .post('/profiles')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ name: `Rank check ${Date.now()}` })
-      .expect(201);
-
-    for (const titleId of titleIds) {
-      await request(app.getHttpServer())
-        .patch(`/profiles/${profileResponse.body.id}/titles/${titleId}/state`)
-        .set('Authorization', `Bearer ${token}`)
-        .send({ state: 'watched' })
-        .expect(200);
-    }
-
-    return { token, profileId: profileResponse.body.id as string };
+    const token = await registerUser(app, 'rank-check');
+    const profileId = await createProfile(app, token, 'Rank check');
+    await markWatched(app, token, profileId, titleIds);
+    return { token, profileId };
   }
 
   beforeAll(async () => {
@@ -105,7 +116,12 @@ describe('Triad ranking (real HTTP, real DB)', () => {
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
     const ranking = [...(current.body.titleIds as string[])];
-    const idempotencyKey = '11111111-2222-4333-8444-555555555555';
+    // A fresh key per run: postgres-test's tmpfs volume survives a
+    // stop/start cycle of the same container (only a true recreate wipes
+    // it), so a hard-coded key here would collide with a leftover row from
+    // an earlier run and turn this into an accidental idempotencyKey-reuse
+    // conflict (409) instead of testing a real retry.
+    const idempotencyKey = randomUUID();
 
     const first = await request(app.getHttpServer())
       .post(`/triads/${current.body.id}/rank`)
@@ -123,5 +139,55 @@ describe('Triad ranking (real HTTP, real DB)', () => {
 
     expect(retry.body.id).toBe(first.body.id);
     expect(retry.body.answeredAt).toBe(first.body.answeredAt);
+  });
+
+  // H1: getCurrent() used to exclude every title that had ever appeared in
+  // any completed triad for the profile, so a title could enter at most one
+  // triad, ever -- with exactly 6 watched titles a third triad was
+  // impossible even though only the second triad's 3 titles were "just
+  // used". Now only the immediately previous triad is excluded, so round 3
+  // must land back on round 1's titles.
+  it('reuses a title from an earlier (non-immediately-previous) triad instead of excluding it forever', async () => {
+    const titlesRepository = app.get<Repository<Title>>(getRepositoryToken(Title));
+    const suffix = Date.now();
+    const sixTitles = await titlesRepository.save([
+      { internalId: `E2E-H1-A-${suffix}`, titleEn: 'H1 Check A', titleAr: 'أ' },
+      { internalId: `E2E-H1-B-${suffix}`, titleEn: 'H1 Check B', titleAr: 'ب' },
+      { internalId: `E2E-H1-C-${suffix}`, titleEn: 'H1 Check C', titleAr: 'ج' },
+      { internalId: `E2E-H1-D-${suffix}`, titleEn: 'H1 Check D', titleAr: 'د' },
+      { internalId: `E2E-H1-E-${suffix}`, titleEn: 'H1 Check E', titleAr: 'هـ' },
+      { internalId: `E2E-H1-F-${suffix}`, titleEn: 'H1 Check F', titleAr: 'و' },
+    ]);
+    const sixTitleIds = new Set(sixTitles.map((title) => title.id));
+
+    const token = await registerUser(app, 'h1-check');
+    const profileId = await createProfile(app, token, 'H1 check');
+    await markWatched(app, token, profileId, [...sixTitleIds]);
+
+    async function rankCurrent(): Promise<Set<string>> {
+      const current = await request(app.getHttpServer())
+        .get(`/profiles/${profileId}/triads/current`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      const usedTitleIds: string[] = current.body.titleIds;
+      await request(app.getHttpServer())
+        .post(`/triads/${current.body.id}/rank`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ ranking: usedTitleIds })
+        .expect(201);
+      return new Set(usedTitleIds);
+    }
+
+    const round1 = await rankCurrent();
+    const round2 = await rankCurrent();
+    // With exactly 6 watched titles and round 2 forced to avoid round 1's 3
+    // (the only 3 left unexcluded), round 1 and round 2 are already known to
+    // be complementary halves of the 6 -- this just documents that.
+    expect(round1.union(round2)).toEqual(sixTitleIds);
+
+    // Before the H1 fix this would 400 with "mark at least three films" --
+    // all 6 titles would already be permanently excluded by rounds 1 and 2.
+    const round3 = await rankCurrent();
+    expect(round3).toEqual(round1);
   });
 });

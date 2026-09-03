@@ -1,7 +1,7 @@
 # Architecture Decision Records
 
 **Status**: Living log. Every decision cites the blueprint section it serves (`BP §x.y`) or states that it is this repository's own engineering choice within the blueprint's constraints. A decision that contradicts the blueprint is a bug in this file. Product-level open questions that must be settled by experiment are **not** decided here — they are listed in `BP App. C` and [SPECIFICATION.md §11](SPECIFICATION.md).
-**Version**: 2.5 — 2026-09-03 (ADR-1…13 rewritten for consistency; ADR-14…26 added to close the gaps found in the documentation audit; ADR-27…28 added from a code-quality/security audit; ADR-29 added for the NestJS 10→11 migration; ADR-30 added for the `@typescript-eslint`/`vitest` dev-tooling bump; ADR-31 added for the training temporal hold-out, gap 2; ADR-32 added for triad event completeness, gap 3).
+**Version**: 2.6 — 2026-09-03 (ADR-1…13 rewritten for consistency; ADR-14…26 added to close the gaps found in the documentation audit; ADR-27…28 added from a code-quality/security audit; ADR-29 added for the NestJS 10→11 migration; ADR-30 added for the `@typescript-eslint`/`vitest` dev-tooling bump; ADR-31 added for the training temporal hold-out, gap 2; ADR-32 added for triad event completeness, gap 3; ADR-33 added for prediction display formatting; ADR-34 added for the H1 triad-reuse fix).
 
 Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 
@@ -229,6 +229,13 @@ Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 **Consequences.** Recommendation, taste-profile and work-page components accept `confidenceBand` and a Personal Fit level, never raw scores. The mockup cells «ملاءمة 94%» and «ثقة التوقع 88%» are replaced by a level and a band. SPECIFICATION §5.2–§5.4 carry the UX contract.
 **Revisit when.** The `BP App. C` "confidence display" experiment (SPECIFICATION §11 open-experiments table: verbal only vs calibrated % later) runs, after calibration against post-watch outcomes passes the `BP §16.5` gate with Brier/ECE reported per cohort. Until then the display is verbal.
 
+## ADR-34 — Random policy excludes only the previous triad's titles, not every title ever ranked (H1)
+
+**Context.** `TriadsService.getCurrent()` excluded every title that had ever appeared in *any* completed triad for the profile, so a title could enter at most one triad, ever: with W watched titles a profile got `floor(W/3)` triads for its entire lifetime (5 max on the 15-title seed catalog), the `likely`/`strong` confidence bands and the ≥5-triad hold-out (ADR-31) became unreachable in dev, and a user with exactly 3 watched titles who had just ranked them got "mark at least three films" back — a false message; they already had. Found by an independent audit ([AUDIT_2026-09-03.md](AUDIT_2026-09-03.md) §2 H1), reproduced and confirmed independently before fixing.
+**Decision.** `getCurrent()` now excludes only the immediately previous completed triad's three titles, not the full history. `BP §8.2`'s selection score treats repetition as a penalty term ("`-λr·Repeat`"), not a hard filter, and `BP §8.1` names "verification/refutation in an independent context" — a deliberate *re-test* of a past comparison — as one of six intended triad functions; a permanent ban contradicts both. `random-v1` has no scoring function to apply a soft, graduated penalty through, so "not the triad that was just completed" is its policy-appropriate stand-in until the adaptive policy (`BP §8.1`–`§8.2`, still gap territory) exists to compute a real `Repeat` term. The "fewer than 3 watched" and "3+ watched but the pool is temporarily empty because they were all just used" cases now get distinct messages instead of one misleading one.
+**Consequences.** A title can be reused after just one intervening triad. `random-v1`'s other `BP §8.3` gaps (session limit/fatigue, reserved hold-out, director/language guard) are unchanged and still open.
+**Revisit when.** The adaptive policy lands and can express repetition as a real scored penalty instead of a fixed one-triad lookback.
+
 ---
 
 ## Summary
@@ -268,6 +275,7 @@ Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 | 31 | Temporal hold-out in training; `createdAt` ~ `answeredAt` | `BP §16.1` | done (ADR-32); `holdout` still open |
 | 32 | Triad event completeness: timestamps, `Idempotency-Key`, ranking by title id | `BP §13.2`, `§14`, ADR-15 | — |
 | 33 | Prediction display: verbal confidence everywhere, Personal Fit never a % | `BP §4.4`, `§7.2`, `§9.3` | App. C confidence-display experiment after calibration |
+| 34 | `random-v1` excludes only the previous triad, not full history (H1) | `BP §8.1`, `§8.2` | adaptive policy computes a real `Repeat` penalty |
 
 ## How to add a decision
 
