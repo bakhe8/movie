@@ -292,7 +292,7 @@ What is **not** in the database today (see §2 for the target): nothing — ever
 | taste_profiles | `user_model_snapshots` (+ posterior, time layers, exceptions since M4) | partial — the M4 columns exist but `PlackettLuceRanker.fit()` never populates them |
 | recommendations | `recommendations` | present since M5; written since 2026-09-03 — `RecommendationsService.findForProfile()` persists one row per shown result (ADR-58); `outcomes` recording against it still missing (blueprint gap 4's other half) |
 | outcomes | `outcomes` | present since M5, empty |
-| model_versions / experiments | `model_versions`, `experiments`, `experiment_assignments` | present since M4, empty — random-v1 runs no experiments, `training.py` stamps no model-version row |
+| model_versions / experiments | `model_versions`, `experiments`, `experiment_assignments` | present since M4; `model_versions` written by `POST /admin/models`/`PATCH /admin/models/:version` since `b9bd39b`, and `active` is now read by `RecommendationsService.loadSnapshot()` too (ADR-76) — `training.py` still stamps no model-version row itself; `experiments`/`experiment_assignments` still empty, random-v1 runs no experiments |
 | consents / privacy_requests | `consents`, `privacy_requests` | present since M2 — no route reads/writes them yet (blueprint gap 7, PRIVACY.md §5) |
 | (rights registry, `§11.1`) | `source_records` | present since M3; 313 rows since 2026-09-04, one per director credit (`fieldName: 'director'`, `source: 'wikidata'`, `license: 'CC0'`) (ADR-70). No row cites any other field yet |
 | (Public Quality / Watchability, `§10.3`, `§6`) | `public_quality_sources`, `availability_snapshots` | present since M6, empty — both need a licensed data source that doesn't exist |

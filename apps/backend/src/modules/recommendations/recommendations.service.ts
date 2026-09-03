@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'node:crypto';
 import { QueryDeepPartialEntity, Repository } from 'typeorm';
+import { ModelVersion } from '../../entities/model-version.entity';
 import { Profile } from '../../entities/profile.entity';
 import { Recommendation } from '../../entities/recommendation.entity';
 import { Title } from '../../entities/title.entity';
@@ -158,6 +159,8 @@ export class RecommendationsService {
     private readonly statesRepository: Repository<UserTitleState>,
     @InjectRepository(Recommendation)
     private readonly recommendationsRepository: Repository<Recommendation>,
+    @InjectRepository(ModelVersion)
+    private readonly modelVersionsRepository: Repository<ModelVersion>,
   ) {}
 
   async findForProfile(userId: string, profileId: string, limit: number): Promise<RecommendationResult[]> {
@@ -258,18 +261,40 @@ export class RecommendationsService {
     }));
   }
 
-  // Ownership, then the latest snapshot; both surfaces refuse to guess
+  // Ownership, then the served snapshot; both surfaces refuse to guess
   // before a model exists or against a model of the wrong shape.
+  //
+  // model_versions.active pins the version an admin wants served (BP §18.1's
+  // rollback control) -- AdminModelsService already enforces at most one
+  // active row, but until now nothing read it back, so activating a version
+  // had no effect on what was actually served (F10). When a version is
+  // pinned, prefer this profile's latest snapshot trained under that exact
+  // modelVersion; a profile with no snapshot under the pinned version (never
+  // retrained since the pin, or the pin points at a version this profile
+  // hasn't reached yet) falls back to its own latest snapshot regardless of
+  // version, same as when nothing is pinned at all -- a rollback narrows
+  // which snapshot is preferred, it never turns a servable profile into an
+  // unservable one.
   private async loadSnapshot(userId: string, profileId: string): Promise<UserModelSnapshot> {
     const profile = await this.profilesRepository.findOne({ where: { id: profileId, userId } });
     if (!profile) {
       throw new NotFoundException('Profile not found');
     }
 
-    const snapshot = await this.snapshotsRepository.findOne({
-      where: { profileId },
-      order: { createdAt: 'DESC' },
-    });
+    const activeVersion = await this.modelVersionsRepository.findOne({ where: { active: true } });
+    let snapshot: UserModelSnapshot | null = null;
+    if (activeVersion) {
+      snapshot = await this.snapshotsRepository.findOne({
+        where: { profileId, modelVersion: activeVersion.version },
+        order: { createdAt: 'DESC' },
+      });
+    }
+    if (!snapshot) {
+      snapshot = await this.snapshotsRepository.findOne({
+        where: { profileId },
+        order: { createdAt: 'DESC' },
+      });
+    }
     if (!snapshot) {
       throw new ConflictException('Recommendations are unavailable until the preference model is trained');
     }

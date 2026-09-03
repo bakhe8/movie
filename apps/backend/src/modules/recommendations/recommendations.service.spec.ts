@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import type { Repository } from 'typeorm';
+import { ModelVersion } from '../../entities/model-version.entity';
 import { Profile } from '../../entities/profile.entity';
 import { Recommendation } from '../../entities/recommendation.entity';
 import { Title } from '../../entities/title.entity';
@@ -140,6 +141,7 @@ describe('RecommendationsService', () => {
   let snapshotsRepository: ReturnType<typeof repoMock>;
   let statesRepository: ReturnType<typeof repoMock>;
   let recommendationsRepository: { insert: ReturnType<typeof vi.fn> };
+  let modelVersionsRepository: ReturnType<typeof repoMock>;
   let service: RecommendationsService;
 
   beforeEach(() => {
@@ -148,12 +150,17 @@ describe('RecommendationsService', () => {
     snapshotsRepository = repoMock();
     statesRepository = repoMock();
     recommendationsRepository = { insert: vi.fn().mockResolvedValue({}) };
+    modelVersionsRepository = repoMock();
+    // No active pin by default -- every existing test keeps serving each
+    // profile's own latest snapshot regardless of modelVersion, unchanged.
+    modelVersionsRepository.findOne.mockResolvedValue(null);
     service = new RecommendationsService(
       profilesRepository as unknown as Repository<Profile>,
       titlesRepository as unknown as Repository<Title>,
       snapshotsRepository as unknown as Repository<UserModelSnapshot>,
       statesRepository as unknown as Repository<UserTitleState>,
       recommendationsRepository as unknown as Repository<Recommendation>,
+      modelVersionsRepository as unknown as Repository<ModelVersion>,
     );
   });
 
@@ -851,6 +858,55 @@ describe('RecommendationsService', () => {
       const withoutV3Result = result.find((item) => item.title.id === 'v1v2-only');
       const v1v2Length = FINGERPRINT_V1_DIMENSIONS.length + FINGERPRINT_V2_DIMENSIONS.length;
       expect(withoutV3Result?.fingerprintCoverage).toBeCloseTo(v1v2Length / FINGERPRINT_DIMENSIONS.length);
+    });
+  });
+
+  // F10, BP §18.1's rollback control: AdminModelsService.updateModel() already
+  // enforced at most one active model_versions row, but nothing read it back
+  // -- activating a version had no effect on what was actually served.
+  describe('serving the model_versions.active pin (F10, BP §18.1)', () => {
+    it('queries model_versions for the active pin before falling back to each profile\'s latest snapshot when none is active', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot());
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      await service.findForProfile('user-1', 'profile-1', 10);
+
+      expect(modelVersionsRepository.findOne).toHaveBeenCalledWith({ where: { active: true } });
+    });
+
+    it('serves the snapshot trained under the active model version, not merely the profile\'s latest', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      modelVersionsRepository.findOne.mockResolvedValue({ version: 'pinned-version', active: true });
+      const pinnedSnapshot = { ...warmthOnlySnapshot(), modelVersion: 'pinned-version' };
+      snapshotsRepository.findOne.mockImplementation(({ where }: { where: Record<string, unknown> }) =>
+        Promise.resolve('modelVersion' in where ? pinnedSnapshot : { ...warmthOnlySnapshot(), modelVersion: 'newer-unpinned-version' }),
+      );
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+      expect(result[0].modelVersion).toBe('pinned-version');
+    });
+
+    it('falls back to the profile\'s own latest snapshot when it has none trained under the active version', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      modelVersionsRepository.findOne.mockResolvedValue({ version: 'pinned-version', active: true });
+      const latestSnapshot = { ...warmthOnlySnapshot(), modelVersion: 'this-profile-never-reached-the-pin' };
+      snapshotsRepository.findOne.mockImplementation(({ where }: { where: Record<string, unknown> }) =>
+        Promise.resolve('modelVersion' in where ? null : latestSnapshot),
+      );
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+      expect(result[0].modelVersion).toBe('this-profile-never-reached-the-pin');
     });
   });
 });

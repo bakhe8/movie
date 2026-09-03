@@ -475,7 +475,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Auth throttling (5 req/min) + global 60 req/min | ✅ | — | `§21.3` |
 | Deactivated accounts locked out of every guarded route, not just login | ✅ | ✅ | `§21.3`; H2 fix, ADR-35 — `validateUser()` (what every guarded request actually runs) now checks `active` too, not only `login()` |
 | Refresh tokens | ✅ | — | ADR-26, `7603900`: rotated on use, family-level reuse detection (an old token reused revokes the whole chain), `refresh_tokens` table; frontend adoption is F8, open |
-| Roles (`users.role`) for the admin board | 🟡 | ❌ | `§5.1`; `AdminGuard` exists and checks `users.role`, but no admin route exists yet to guard |
+| Roles (`users.role`) for the admin board | ✅ | ✅ | `§5.1`; `AdminGuard` guards the whole `AdminController` (`@UseGuards(AuthGuard('jwt'), AdminGuard)`) — a signed-in non-admin gets 403, never 404 |
 | Unit tests | ✅ | — | `auth.service.spec.ts`, 10 tests |
 | Frontend: login / register (`AuthScreen`) + onboarding (`OnboardingScreen`) | ✅ | 🟡 | `§4.1`: language, market and platforms collected and saved; the "what we collect and why" step now records `watch_history`/`personalization_individual` consent (ADR-60) — `personalization_pooled`/`analytics_first_party` disclosure+opt-out, `terms_privacy` at registration, and CSV import still missing (gap 7) |
 | Frontend: session persistence, auto-redirect, logout | ✅ | — | `localStorage` via `lib/session.tsx` |
@@ -502,7 +502,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Fingerprint field (`FilmFingerprintV1`, 13 dims) | ✅ | 🟡 | V1 frozen (ADR-19); per-dimension `confidence`/`content_features` provenance still empty (no ingestion pass writes there yet) — separate from director-credit provenance (`people`/`credits`/`source_records`), which is loaded, gap 6 closed (ADR-70) |
 | Fingerprint field V2 (15 namespaced families, nested `fingerprint.v2`) | ✅ | 🟡 | extracted for all 300 demo titles (session C); wired into the trainer/scorer since 2026-09-04 (ADR-69); People/Cultural-context blocks still unbuilt (`FINGERPRINT_SCHEMA.md` §3.1) |
 | Fingerprint field V3 (12 namespaced form families, nested `fingerprint.v3`) | ✅ | 🟡 | extracted for all 300 demo titles (session C, `FINGERPRINT_SCHEMA.md` §3.3); wired into the trainer/scorer as a 40-dim vector (V1+V2+V3) since 2026-09-04 (ADR-75); People/Cultural-context blocks still unbuilt |
-| Rights registry (`source_records`) | 🟡 | 🟡 | `§11.1` — populated since 2026-09-04 for director credits (313 rows, ADR-70); `unknown`/`non_commercial_only` are displayable through the free launch (owner decision 2026-09-04, DATA_LICENSING.md §0, ADR-72), not blocked on `commercial_allowed` |
+| Rights registry (`source_records`) | 🟡 | 🟡 | `§11.1` — populated since 2026-09-04 for director credits (313 rows, ADR-70); `POST /admin/titles/:titleId/source-records` now lets an admin add one by hand too, but no bulk catalog-wide ingestion pass writes rows for fields beyond director credits yet (phase 5); `unknown`/`non_commercial_only` are displayable through the free launch (owner decision 2026-09-04, DATA_LICENSING.md §0, ADR-72), not blocked on `commercial_allowed` |
 | Admin write endpoints | ❌ | — | no admin role |
 | Seed script (15 dev titles) | ✅ | ❌ | `§17.1`: 300–500-film balanced research catalog with rights |
 | Fingerprint batch generation | ❌ | ❌ | `§15.3` |
@@ -584,8 +584,8 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Consent capture (`consents`) | ✅ | 🟡 | `§13.1`, `§2.4 #9`; all six live purposes now recorded (`d0b7d43`, gap 7's write side closed in full): `watch_history`/`personalization_individual` from onboarding since 2026-09-03 (ADR-60), plus `terms_privacy` (mandatory checkbox at registration), `personalization_pooled` (default on, PRIVACY.md §3) and `analytics_first_party` (default off pending the owner's confirmation) from onboarding step 2; purposes in [PRIVACY.md](PRIVACY.md) §3. Restrictions (`no_pooled`) still unenforced in training, below |
 | Export / delete / reset endpoints | ✅ | ✅ | `§14`, `§18.1`, ADR (privacy rights, `9bc53d4`); `/api/privacy/{export,delete,delete/:id/cancel,reset,requests}` — export synchronous at Alpha scale, delete schedules a safety-window purge (cancellable), reset clears one profile's taste data only |
 | Restrictions (`no_pooled`, `pause_all`) | ❌ | ❌ | [PRIVACY.md](PRIVACY.md) §4; `profiles.pausedAt` exists since M1, unused; `no_pooled` not yet enforced by the shared-latent-space retrain (F5, open) |
-| Audit log | 🟡 | 🟡 | `§21.3`; `audit_log` has a writer now (privacy requests write to it, `9bc53d4`) but no reader — no admin board or query surface exists yet |
-| Admin board (`§5.1`, `§17.2`) | ❌ | ❌ | required for Alpha, not optional |
+| Audit log | 🟡 | 🟡 | `§21.3`; `audit_log` has both a writer (privacy requests and every admin write, `9bc53d4`/`b9bd39b`) and a reader now (`GET /admin/audit-log`) — no dedicated board UI to browse it yet (frontend, phase 4.2) |
+| Admin board (`§5.1`, `§17.2`) | 🟡 | 🟡 | API complete (`b9bd39b`, `905f5ff`): catalog edits, rights rows, fingerprint review queue, model version registration/activation (F10 makes activation actually change what's served, ADR-76), experiments, recent triads, user deactivation, privacy requests, audit log, `GET /admin/metrics`; frontend screens (`§4.2`) still open, session B's |
 | Privacy documentation | ✅ | 🟡 | [PRIVACY.md](PRIVACY.md) rewritten; team review before launch, outside counsel deferred to the revenue-model study (owner decision 2026-09-04, ADR-72) |
 | PIA, DPO, breach plan, regional residency decision | ❌ | — | [PRIVACY.md](PRIVACY.md) §13 |
 
