@@ -15,6 +15,7 @@ import { TriadsModule } from '../triads/triads.module';
 import { RecommendationsModule } from '../recommendations/recommendations.module';
 import { UserTitleStateModule } from '../user-title-state/user-title-state.module';
 import { WatchEventsModule } from '../watch-events/watch-events.module';
+import { OutcomesModule } from '../outcomes/outcomes.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { WatchEventsModule } from '../watch-events/watch-events.module';
     UserTitleStateModule,
     ConsentsModule,
     WatchEventsModule,
+    OutcomesModule,
   ],
   controllers: [AppController],
   providers: [
