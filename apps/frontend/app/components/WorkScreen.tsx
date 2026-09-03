@@ -376,7 +376,7 @@ export function WorkScreen({
               </button>
               <button
                 type="button"
-                className={styles.ghost}
+                className={state === 'watchlist' ? `${styles.ghost} ${styles.later}` : styles.ghost}
                 onClick={() => change('watchlist', t.laterNotice)}
                 disabled={busy || state === 'watchlist'}
               >

@@ -318,3 +318,19 @@
   flex: 1;
   min-width: 0;
 }
+
+/* The later list's heading carries its role hue (decision 27). */
+.section[data-role="later"] h3 {
+  color: var(--role-later);
+}
+
+.section[data-role="later"] h3::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-inline-end: var(--sp-2);
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: middle;
+}

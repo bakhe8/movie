@@ -193,3 +193,28 @@
     font-size: var(--fs-34);
   }
 }
+
+/* Track identity (decision 27): the heading takes the track's role hue and a
+   dot of it; the cards below stay neutral. */
+.trackHeader h3::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-inline-end: var(--sp-2);
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: middle;
+}
+
+.track[data-track="safe"] h3 {
+  color: var(--role-safe);
+}
+
+.track[data-track="discovery"] h3 {
+  color: var(--role-discovery);
+}
+
+.track[data-track="outside_usual"] h3 {
+  color: var(--role-outside);
+}

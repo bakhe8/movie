@@ -31,6 +31,18 @@
   --accent: #0a7268; /* 4.9:1 on --well, 5.8:1 on white (audit 2026-09-04) */
   --accent-ink: #ffffff;
   --accent-soft: rgba(10, 114, 104, 0.12);
+  /* Role hues (decision 27, 2026-09-04): each carries one meaning -- the three
+     recommendation tracks and the "later" list state -- never the action,
+     the fit meter or the confidence. Values searched for >= 4.5:1 as text on
+     bg, surface, well and their own soft wash in this theme. */
+  --role-safe: #2a5cb2;
+  --role-safe-soft: rgba(42, 92, 178, 0.12);
+  --role-discovery: #7f37be;
+  --role-discovery-soft: rgba(127, 55, 190, 0.12);
+  --role-outside: #ab2b56;
+  --role-outside-soft: rgba(171, 43, 86, 0.12);
+  --role-later: #885007;
+  --role-later-soft: rgba(136, 80, 7, 0.12);
 
   /* Poster edge: visible in light only (Q5, Q14). */
   --poster-edge: var(--line);
@@ -88,6 +100,14 @@
     --accent: #2cc4b6;
     --accent-ink: #062a27;
     --accent-soft: rgba(44, 196, 182, 0.16);
+    --role-safe: #779ddf;
+    --role-safe-soft: rgba(119, 157, 223, 0.16);
+    --role-discovery: #b88cde;
+    --role-discovery-soft: rgba(184, 140, 222, 0.16);
+    --role-outside: #de7c9d;
+    --role-outside-soft: rgba(222, 124, 157, 0.16);
+    --role-later: #de8512;
+    --role-later-soft: rgba(222, 133, 18, 0.16);
     --poster-edge: transparent;
     --shadow-float: none;
   }
@@ -105,6 +125,14 @@
   --accent: #2cc4b6;
   --accent-ink: #062a27;
   --accent-soft: rgba(44, 196, 182, 0.16);
+  --role-safe: #779ddf;
+  --role-safe-soft: rgba(119, 157, 223, 0.16);
+  --role-discovery: #b88cde;
+  --role-discovery-soft: rgba(184, 140, 222, 0.16);
+  --role-outside: #de7c9d;
+  --role-outside-soft: rgba(222, 124, 157, 0.16);
+  --role-later: #de8512;
+  --role-later-soft: rgba(222, 133, 18, 0.16);
   --poster-edge: transparent;
   --shadow-float: none;
 }

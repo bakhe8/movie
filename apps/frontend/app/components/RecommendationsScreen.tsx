@@ -253,7 +253,7 @@ export function RecommendationsScreen({
         const shown = isExpanded ? trackItems : trackItems.slice(0, TRACK_PREVIEW);
         const hidden = trackItems.length - shown.length;
         return (
-          <section key={track} className={styles.track} aria-label={tracks[track].name}>
+          <section key={track} className={styles.track} data-track={track} aria-label={tracks[track].name}>
             <div className={styles.trackHeader}>
               <h3>{tracks[track].name}</h3>
               <p>{tracks[track].purpose}</p>

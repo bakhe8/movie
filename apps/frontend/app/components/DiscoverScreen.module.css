@@ -363,3 +363,12 @@
   flex: 1;
   min-width: 0;
 }
+
+/* "On your list" (decision 27): the later hue on its soft wash. */
+.ghost.later,
+.ghost.later:disabled {
+  border-color: var(--role-later);
+  background: var(--role-later-soft);
+  color: var(--role-later);
+  opacity: 1;
+}

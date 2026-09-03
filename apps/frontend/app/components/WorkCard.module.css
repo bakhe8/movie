@@ -316,3 +316,48 @@
   padding-top: 0;
   border-top: 0;
 }
+
+/* Track chip (work page only): the track's role hue on its soft wash. */
+.trackChip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: max-content;
+  padding: 2px var(--sp-2);
+  border-radius: var(--r-chip);
+  font-size: var(--fs-13);
+  font-weight: var(--w-semibold);
+  line-height: 1.6;
+}
+
+.trackChip::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.track_safe {
+  color: var(--role-safe);
+  background: var(--role-safe-soft);
+}
+
+.track_discovery {
+  color: var(--role-discovery);
+  background: var(--role-discovery-soft);
+}
+
+.track_outside_usual {
+  color: var(--role-outside);
+  background: var(--role-outside-soft);
+}
+
+/* "On your list": the later hue, readable even though the button is inert. */
+.ghost.later,
+.ghost.later:disabled {
+  border-color: var(--role-later);
+  background: var(--role-later-soft);
+  color: var(--role-later);
+  opacity: 1;
+}

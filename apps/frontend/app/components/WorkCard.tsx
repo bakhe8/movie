@@ -1,6 +1,7 @@
 'use client';
 
 import type { LibraryRankingItem, Recommendation } from '../lib/api';
+import { TRACK_COPY } from '../lib/copy';
 import { formatConfidence, formatNumber, formatPersonalFit, formatReason, type PersonalFitLevel } from '../lib/format';
 import { Poster } from './Poster';
 import styles from './WorkCard.module.css';
@@ -185,6 +186,12 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
         </div>
       )}
 
+      {/* On the work page no section names the track, so the card does
+          (decision 27: the track's role hue). */}
+      {headless && rec && (
+        <span className={`${styles.trackChip} ${styles[`track_${rec.track}`]}`}>{TRACK_COPY[lang][rec.track].name}</span>
+      )}
+
       {reason && (
         <p className={styles.reason}>
           {reason} {weak && t.reasonWeak}
@@ -272,7 +279,12 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
 
       {!isRanking && !headless && (
         <div className={styles.actions}>
-          <button type="button" className={styles.ghost} onClick={props.onAddToList} disabled={props.busy || props.listed}>
+          <button
+            type="button"
+            className={props.listed ? `${styles.ghost} ${styles.later}` : styles.ghost}
+            onClick={props.onAddToList}
+            disabled={props.busy || props.listed}
+          >
             {props.listed ? t.added : t.addToList}
           </button>
           <button type="button" className={styles.ghost} onClick={props.onMarkWatched} disabled={props.busy}>

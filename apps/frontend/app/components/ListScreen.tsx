@@ -296,7 +296,7 @@ export function ListScreen({
         />
       </div>
 
-      <section className={styles.section} aria-label={t.watchlist}>
+      <section className={styles.section} data-role="later" aria-label={t.watchlist}>
         <div className={styles.sectionHeader}>
           <h3>
             {t.watchlist}
