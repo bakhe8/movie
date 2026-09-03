@@ -73,13 +73,6 @@
 
   /* Touch target floor on pointer-coarse devices. */
   --tap: 44px;
-
-  /* Legacy aliases for the one stylesheet not yet on the tokens
-     (components/AppShell.module.css, blocked on decision Q19 / board
-     conflict #8). Remove with the AppShell rebuild. */
-  --card: var(--surface);
-  --ink: var(--text);
-  --canvas: var(--bg);
 }
 
 /* Dark by system preference, unless the user explicitly chose light. */

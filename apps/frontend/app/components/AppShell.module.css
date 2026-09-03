@@ -1,158 +1,260 @@
-/* App shell: the header (identity + language), the navigation (fixed to the
-   bottom on small screens, inside the header on wide ones) and the content
-   frame. Screens own their titles (an eyebrow and an h2); the shell carries
-   only what every screen shares. Blueprint §4.3 (RTL first): logical
-   properties throughout, no left/right. */
+/* App shell (identity decisions Q19 revised, Q20): two bars.
+   Phone: a top bar with menu (start) · brand (centre) · search (end), a
+   preferences drawer under it, the content, and five fixed tabs at the bottom.
+   Wide: one header with brand · sections inline · preferences; no bottom tabs.
+   On app/styles/tokens.css only; logical properties throughout. */
 
 .shell {
   min-height: 100vh;
-  /* Room for the fixed bottom navigation on small screens (65px + a gap). */
-  padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
 }
 
+/* Room for the fixed bottom tabs on the phone (tab height + safe area). */
+.withNav {
+  padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+}
+
+/* --- Top bar -------------------------------------------------------------- */
+
 .header {
-  display: flex;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.bar {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: var(--sp-2);
   min-height: 56px;
-  padding: 8px max(16px, calc((100vw - 1080px) / 2));
-  background: var(--card);
-  border-bottom: 1px solid #e8ecee;
+  padding: var(--sp-1) max(var(--sp-3), calc((100vw - 1080px) / 2));
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  gap: var(--sp-2);
   margin: 0;
-  font-size: 18px;
-  font-weight: 900;
+  font-size: var(--fs-16);
+  font-weight: var(--w-bold);
 }
 
 .mark {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-button);
   background: var(--accent);
-  color: #fff;
-  font-size: 15px;
-  font-weight: 900;
+  color: var(--accent-ink);
+  font-family: var(--font-display);
+  font-size: var(--fs-14);
+  font-weight: var(--w-bold);
+}
+
+.iconButton {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-button);
+  background: transparent;
+  color: var(--text);
+}
+
+.iconButton svg {
+  width: 24px;
+  height: 24px;
+}
+
+.iconButton[aria-expanded="true"] {
+  background: var(--well);
+}
+
+.searchSpacer {
+  width: 44px;
+  height: 44px;
+}
+
+/* Inline sections and inline preferences: wide screens only. */
+.inlineNav,
+.prefsInline {
+  display: none;
 }
 
 .language {
   min-height: 40px;
   min-width: 44px;
   padding: 6px 10px;
-  border: 1px solid #dfe4e8;
-  border-radius: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-button);
   background: transparent;
   color: var(--muted);
-  font-weight: 700;
+  font: inherit;
+  font-size: var(--fs-13);
+  font-weight: var(--w-semibold);
 }
 
-.language:focus-visible,
-.tab:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+/* --- Preferences drawer (phone) ------------------------------------------- */
+
+.menu {
+  display: grid;
+  gap: var(--sp-3);
+  padding: var(--sp-3) max(var(--sp-3), calc((100vw - 1080px) / 2)) var(--sp-4);
+  border-top: 1px solid var(--line);
+  background: var(--surface);
 }
+
+/* The `hidden` attribute must win over the grid display above. */
+.menu[hidden] {
+  display: none;
+}
+
+.menuTitle {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-13);
+  font-weight: var(--w-medium);
+}
+
+/* --- Content -------------------------------------------------------------- */
 
 .content {
   width: min(100%, 1080px);
   margin: 0 auto;
-  padding: 30px 20px 42px;
+  padding: var(--sp-6) var(--sp-4) var(--sp-8);
 }
 
-/* Navigation: five equal cells within thumb reach, icon over label, the
-   active cell in the accent colour and announced as the current page. */
-.nav {
+/* --- Bottom tabs (phone) -------------------------------------------------- */
+
+.tabs {
   position: fixed;
-  z-index: 2;
+  z-index: 3;
   inset-inline: 0;
   bottom: 0;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
-  background: var(--card);
-  border-top: 1px solid #e4e8ea;
+  padding: var(--sp-1) var(--sp-1) calc(var(--sp-1) + env(safe-area-inset-bottom, 0px));
+  background: var(--surface);
+  border-top: 1px solid var(--line);
 }
 
-.tab {
+.tab,
+.inlineTab {
   display: grid;
   justify-items: center;
   gap: 3px;
   min-height: 52px;
-  padding: 6px 2px;
+  padding: var(--sp-1) 2px;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--r-button);
   background: transparent;
   color: var(--muted);
-  font-size: 11.5px;
-  font-weight: 700;
+  font: inherit;
+  font-size: var(--fs-12);
+  font-weight: var(--w-medium);
   line-height: 1.2;
 }
 
-.tab span {
+.tab span,
+.inlineTab span {
   max-width: 100%;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
-.tab svg {
+.tab svg,
+.inlineTab svg {
   width: 24px;
   height: 24px;
 }
 
-.tab[aria-current="page"] {
+/* The current section: the accent, and a slightly heavier stroke. */
+.tab[aria-current="page"],
+.inlineTab[aria-current="page"] {
   color: var(--accent);
+  font-weight: var(--w-semibold);
 }
 
-.tab[aria-current="page"] svg {
+.tab[aria-current="page"] svg,
+.inlineTab[aria-current="page"] svg {
   stroke-width: 2.4;
 }
 
+/* --- Focus ---------------------------------------------------------------- */
+
+.iconButton:focus-visible,
+.language:focus-visible,
+.tab:focus-visible,
+.inlineTab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* --- Wide screens --------------------------------------------------------- */
+
 @media (min-width: 900px) {
-  .shell {
+  .withNav {
     padding-bottom: 0;
   }
 
-  .header {
+  .bar {
+    grid-template-columns: auto 1fr auto;
     min-height: 64px;
   }
 
-  /* Wide screens: the navigation sits in the header between brand and
-     language, labels beside icons. */
-  .nav {
-    position: static;
-    display: flex;
-    gap: 4px;
-    padding: 0;
-    background: transparent;
-    border: 0;
+  .brand {
+    justify-content: flex-start;
+    font-size: var(--fs-20);
   }
 
-  .tab {
+  /* Menu, search and the drawer are phone affordances. */
+  .menuButton,
+  .searchButton,
+  .searchSpacer,
+  .menu {
+    display: none;
+  }
+
+  .inlineNav {
+    display: flex;
+    justify-content: center;
+    gap: var(--sp-1);
+  }
+
+  .inlineTab {
     grid-auto-flow: column;
     align-items: center;
-    gap: 8px;
+    gap: var(--sp-2);
     min-height: 40px;
-    padding: 6px 12px;
-    font-size: 14px;
+    padding: var(--sp-1) var(--sp-3);
+    font-size: var(--fs-14);
   }
 
-  .tab svg {
+  .inlineTab svg {
     width: 20px;
     height: 20px;
   }
 
-  .tab[aria-current="page"] {
-    background: #fff0eb;
+  .inlineTab[aria-current="page"] {
+    background: var(--accent-soft);
+  }
+
+  .prefsInline {
+    display: flex;
+  }
+
+  .tabs {
+    display: none;
   }
 
   .content {
-    padding: 42px 20px;
+    padding: var(--sp-8) var(--sp-4);
   }
 }
