@@ -94,7 +94,7 @@ Separate new-user and new-item experiments use frozen features at the cutoff; a 
 
 ## 8. Baselines and the acceptance gate (`BP §16.3`, `§16.5`)
 
-Fair baselines: popularity / critic prior (from a licensed Public Quality source; IMDb free data may be used **offline only**, never in a served component — [DATA_LICENSING.md](DATA_LICENSING.md)); simple genre/content similarity; Bradley–Terry pairwise; collaborative filtering/BPR once internal data exists; random or semi-fixed triads vs adaptive; in the Phase 0 lab: triads vs pairs vs single ratings under equal time.
+Fair baselines: popularity / critic prior (from the Public Quality source — IMDb ratings under their non-commercial terms during the free period, owner decision 2026-09-04, [DATA_LICENSING.md](DATA_LICENSING.md) §3.2); simple genre/content similarity; Bradley–Terry pairwise; collaborative filtering/BPR once internal data exists; random or semi-fixed triads vs adaptive; in the Phase 0 lab: triads vs pairs vs single ratings under equal time.
 
 **Gate for any model version**: it must improve NLL, learning per minute, calibration and post-watch outcomes, without increasing fatigue or degrading language/country coverage, and must beat the best simpler alternative — measured on a cohort with confidence intervals fixed before the test. Raising one accuracy number is not enough.
 

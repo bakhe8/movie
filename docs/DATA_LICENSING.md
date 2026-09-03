@@ -2,7 +2,7 @@
 
 **Status**: Derived from blueprint `§11` (rights registry per field, catalog pipeline, data-quality rules), `§4.2` (user imports), `§7.5` (external seed data), `§17.1` (research catalog), `App. B` (pre-launch checklist), `App. D` (sources). Decisions: ADR-13, ADR-19, ADR-23.
 **Not legal advice.** Terms quoted or paraphrased here were read on the dates stated; they change. Gate 4 (`BP` executive summary) requires a documented rights registry and a legal review **before the first revenue** (a paid tier, ads or referral commission) — not before development, testing or the free launch. Owner decision 2026-09-04, §0 below.
-**Version**: 2.1 — 2026-09-04.
+**Version**: 2.2 — 2026-09-04.
 
 ---
 
@@ -10,11 +10,11 @@
 
 The product is built to production grade — notices, consents, exports, deletion, audit, internal reviews — and **launches free, with zero revenue of any kind**: no paid tier, no ads, no referral commission. Only after a period of real usage is the revenue model studied (which features go paid or stay free by observed attraction, pricing by LLM model strength, several providers). Every licensing question in this document is an **input to that cost / benefit / profit study**, not a prerequisite for building. Consequences:
 
-- **No license request, API agreement, permission letter or external counsel engagement is a gate** for development, testing, alpha, beta or the free launch. Each source is used under the terms that apply to a free, non-revenue service: Wikidata (CC0), Wikipedia (CC BY-SA, attribution), TMDB's free key (non-commercial, attribution), GroupLens research terms, our own LLM derivatives.
+- **No license request, API agreement, permission letter or external counsel engagement is a gate** for development, testing, alpha, beta or the free launch. Each source is used under the terms that apply to a free, non-revenue service: Wikidata (CC0), Wikipedia (CC BY-SA, attribution), TMDB's free key (non-commercial, attribution), IMDb's non-commercial datasets (attribution, no redistribution), GroupLens research terms, our own LLM derivatives.
 - `licenseStatus: 'non_commercial_only'`, and `'unknown'` with a named source, are **displayable** while the service earns nothing. `commercial_allowed` becomes the display condition only when revenue starts.
 - The rights registry (`source_records`) is still filled per value — it is cheap, and it is what turns the later switch into a data change instead of a rebuild. A missing row is hygiene debt, not a display block.
 - The free period must be genuinely free: the "where to watch" link carries no commission until the revenue decision (`BP §14.1`'s "disclosed referral" waits for it).
-- What stays prohibited in every stage, because it is a boundary and not paperwork: IMDb free datasets in any served component; scraping any provider; personal data sent to the LLM.
+- What stays prohibited in every stage, because it is a boundary and not paperwork: scraping any provider; bulk redistribution of any third-party dataset (values are shown per title with attribution, never re-exported); personal data sent to the LLM.
 - Agreements open together at the revenue-model decision — TMDB commercial terms, availability partner, GroupLens permission (only if a seeded component is still served), external counsel — and their cost is a line in that study.
 
 ## 1. The rule: access is not a license (`BP §11.1`)
@@ -26,8 +26,8 @@ Every field, image, clip, score and availability record has a row in the rights 
 | Source | What it gives | Terms (as understood; verify) | Allowed use for us | Phase |
 |---|---|---|---|---|
 | **Wikidata** | ids, titles in many languages incl. Arabic, year, credits, countries, links to other ids | CC0 | display, store, derive, train | Phase 0 seed ([م14]) |
-| **IMDb non-commercial datasets** | titles, ratings, credits | personal/non-commercial only ([م15]) | offline research and baselines only; **never** in a served component | research |
-| **IMDb commercial (AWS Data Exchange)** | licensed metadata/ratings | paid agreement | anything the contract allows | later, if economics justify |
+| **IMDb non-commercial datasets** | titles, ratings, votes, credits (official daily TSV dumps) | personal/non-commercial only; attribution line required; no redistribution ([م15]) | **required by the owner (2026-09-04)**: ratings and votes as the Public Quality source, plus titles/credits for matching, in served components through the free launch (§0), keyed by `tconst`, each value with a registry row and IMDb's attribution line; local copies refreshed from the official dumps only; never re-exported in bulk; the commercial license (AWS Data Exchange) is an input to the revenue study | Phase 0+ (Public Quality) |
+| **IMDb commercial (AWS Data Exchange)** | licensed metadata/ratings | paid agreement | anything the contract allows | at the revenue-model study, if the economics justify |
 | **TMDB API** | metadata, alternate titles, languages, images | free key for non-commercial use; commercial use requires an agreement; attribution required; the terms restrict use of TMDB content for AI/ML purposes ([م16], [م26]) | images and metadata under the free key, with attribution, through the free launch (§0); fingerprints are derived from Wikipedia/Wikidata text, not TMDB, so the AI/ML clause is not exercised; commercial terms are an input to the revenue study | Phase 0+ (free key) |
 | **Availability provider (e.g. JustWatch partner program)** | where to watch per market, audio/subtitles | partner agreement; no public free API; no scraping | user-declared platforms plus a plain, commission-free link until the revenue decision; dated partner snapshots for Watchability after it — filter/context only, never a taste feature | partner: after the revenue decision (`BP App. C`: user-declared platforms until then) |
 | **MovieLens / Tag Genome (GroupLens)** | ratings, tags | research license: commercial or revenue-bearing use requires prior written permission from a GroupLens faculty member ([م17]) | offline baselines and methodology prototyping; seeding a served component is permitted under the research terms while the service earns nothing (§0), though ADR-13 starts the shared space from Alpha-cohort data anyway; permission is requested at the revenue decision only if a seeded component is still served | research; seeding optional |
@@ -44,7 +44,7 @@ CC0: free for any purpose, no attribution obligation (we credit it anyway). Cove
 
 ### 3.2 IMDb
 
-The free datasets are explicitly non-commercial; using them in a served commercial product is a violation, not a gray area. They may be used for offline baselines (`BP §16.3`) in research notebooks. Commercial data via AWS Data Exchange is a later economic decision.
+The owner has ruled the free datasets **essential** (2026-09-04): they are the Public Quality source (`public_quality_sources`, `BP §10.3`: per-source, dated, never averaged) and a matching aid for titles and credits. They are used under their published terms during the free period (§0): official dumps only (`title.ratings`, `title.basics`, `title.crew`, `name.basics` as needed), stored locally and refreshed from the dumps, every served value with a `source_records` row (`non_commercial_only`) and IMDb's attribution line rendered wherever a value appears, no bulk redistribution — the user data export contains the user's own data, not IMDb columns. Two honest notes: IMDb's wording is "personal and non-commercial", narrower than TMDB's free tier, so this is the source most exposed if revenue ever starts before its commercial license is in place; and the datasets are not an API — no scraping of imdb.com pages in any stage. The commercial license (AWS Data Exchange) is a line in the revenue-model study, with "drop the IMDb values" as the priced alternative.
 
 ### 3.3 TMDB
 
@@ -93,7 +93,7 @@ Credits page and API metadata list every source actually used with the attributi
 
 - [ ] Rights registry populated for every field, image and availability value in the catalog (source and attribution; status may be `non_commercial_only`)
 - [ ] Wikidata provenance recorded per value
-- [ ] IMDb free data confirmed absent from every served component
+- [ ] IMDb: values come from the official dumps only, each with a registry row, the attribution line rendered, no bulk re-export
 - [ ] LLM inputs verified rights-clear (Wikipedia/Wikidata text, own synopses); outputs versioned with provenance
 - [ ] Image display limited to rows with a known status (`commercial_allowed` or `non_commercial_only`) and the attribution each requires
 - [ ] Attribution rendered for every used source (Wikidata, Wikipedia CC BY-SA, TMDB)
@@ -102,6 +102,7 @@ Credits page and API metadata list every source actually used with the attributi
 
 ### 6.2 At the revenue-model study — inputs to cost / benefit / profit, decided together
 
+- [ ] IMDb: commercial license (AWS Data Exchange) priced — or the IMDb values dropped
 - [ ] TMDB: written commercial agreement covering the uses in §3.3, or TMDB dropped for text cards
 - [ ] Availability partner: agreement with Saudi coverage, SLA, attribution — or user-declared platforms stay
 - [ ] MovieLens/Tag Genome: written GroupLens permission if a seeded component is still served — or re-seed from internal data
@@ -113,8 +114,8 @@ Credits page and API metadata list every source actually used with the attributi
 
 | Do not | Because | Instead |
 |---|---|---|
-| Use IMDb free dumps in the product | non-commercial license | Wikidata + licensed provider |
-| Take revenue (paid tier, ads, commission) while still on the TMDB free key or MovieLens research terms | those terms are non-commercial | decide the agreements in the revenue study first; text cards and internal seeding are the built fallbacks |
+| Re-export or redistribute IMDb, TMDB or MovieLens values in bulk (dumps, API listings, data files) | dataset terms | show per title with attribution; exports carry the user's own data only |
+| Take revenue (paid tier, ads, commission) while still on the TMDB free key, IMDb's non-commercial datasets or MovieLens research terms | those terms are non-commercial | decide the agreements in the revenue study first; text cards and internal seeding are the built fallbacks |
 | Scrape any provider | terms and law | licensed APIs and contracts |
 | Show a poster without a registry row | rights | text card until licensed |
 | Send user data to the LLM | privacy | film evidence only, `store=false` |
@@ -129,5 +130,6 @@ Credits page and API metadata list every source actually used with the attributi
 ---
 
 **Changelog**
+- 2.2 (2026-09-04): owner ruling — IMDb non-commercial datasets are essential: Public Quality source and matching aid in served components through the free launch, under their terms (official dumps, attribution, no redistribution); commercial license deferred to the revenue study like every other agreement. §0, matrix, §3.2, §6, §7.
 - 2.1 (2026-09-04): owner decision — the launch is free with zero revenue; no license request, API agreement, permission or counsel engagement gates development, testing or the free launch; all of them move to the revenue-model study as cost/benefit inputs. New §0; §1 display rule tied to revenue; TMDB, availability and MovieLens rows and notes rewritten; §6 split into a team-internal pre-launch list and a revenue-study list; red flags updated.
 - 2.0 (2026-09-03): rewritten. Replaced a verbatim TMDB quote of uncertain provenance with a paraphrase flagged for counsel; removed unverifiable catalog-size and cost figures and an ad-hoc week-based timeline that conflicted with `BP §18`; added user imports, LLM derivatives, images and the Phase 0 catalog steps; aligned the checklist with `BP App. B`.
