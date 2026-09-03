@@ -107,17 +107,20 @@ export function OnboardingScreen({
   // are already logged, otherwise Discover -- one tap, not a blocked triad
   // and then a second tap (owner decision 2026-09-03).
   onDone: (destination: 'rank' | 'discover') => void;
-  onSkip: () => void;
+  // "Later" leaves onboarding by the same rule: it never lands on a blocked triad.
+  onSkip: (destination: 'rank' | 'discover') => void;
 }) {
   const t = labels[lang];
   const { profile, refreshProfile } = useSession();
   const [step, setStep] = useState<Step>(1);
   // null until the count arrives (or if it fails): treated as "not enough".
+  // Counted once on arrival, since "later" can leave from step 1.
   const [watchedCount, setWatchedCount] = useState<number | null>(null);
   const profileId = profile?.id;
+  const destination: 'rank' | 'discover' = watchedCount !== null && watchedCount >= 3 ? 'rank' : 'discover';
 
   useEffect(() => {
-    if (step !== 3 || !profileId) return;
+    if (!profileId) return;
     let cancelled = false;
     api
       .getWatchedTitles(profileId)
@@ -130,7 +133,7 @@ export function OnboardingScreen({
     return () => {
       cancelled = true;
     };
-  }, [step, profileId]);
+  }, [profileId]);
   const [language, setLanguage] = useState<PreferredLanguage>(profile?.preferredLanguage ?? lang);
   const [market, setMarket] = useState(profile?.market ?? '');
   const [platforms, setPlatforms] = useState<Set<string>>(new Set(profile?.platforms ?? []));
@@ -264,7 +267,7 @@ export function OnboardingScreen({
             <button type="button" className={styles.primary} onClick={saveStepOne} disabled={saving}>
               {saving ? t.saving : t.next}
             </button>
-            <button type="button" className={styles.link} onClick={onSkip}>
+            <button type="button" className={styles.link} onClick={() => onSkip(destination)}>
               {t.skip}
             </button>
           </div>
@@ -319,8 +322,8 @@ export function OnboardingScreen({
         ))}
       </ol>
       <div className={styles.actions}>
-        <button type="button" className={styles.primary} onClick={() => onDone(watchedCount !== null && watchedCount >= 3 ? 'rank' : 'discover')}>
-          {watchedCount !== null && watchedCount >= 3 ? t.startRanking : t.start}
+        <button type="button" className={styles.primary} onClick={() => onDone(destination)}>
+          {destination === 'rank' ? t.startRanking : t.start}
         </button>
         <button type="button" className={styles.ghost} onClick={() => setStep(2)}>
           {t.back}

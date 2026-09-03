@@ -159,6 +159,25 @@ export function WorkScreen({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
+  // The originating screen only knows what happened on it this session; the
+  // server's lists are the record (watched wins over the watchlist).
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([api.getWatchedTitles(profileId), api.getWatchlist(profileId)])
+      .then(([watched, watchlist]) => {
+        if (cancelled) return;
+        const isWatched = watched.some((entry) => entry.titleId === title.id && entry.state === 'watched');
+        const isListed = watchlist.some((entry) => entry.titleId === title.id);
+        setState(isWatched ? 'watched' : isListed ? 'watchlist' : null);
+      })
+      .catch(() => {
+        // Keep what the originating screen knew.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profileId, title.id]);
+
   useEffect(() => {
     if (!notice) return;
     const timer = window.setTimeout(() => setNotice(null), 4000);

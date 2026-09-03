@@ -121,9 +121,9 @@ export default function Home() {
             setOnboarding('done');
             setView(destination);
           }}
-          onSkip={() => {
+          onSkip={(destination) => {
             setOnboarding('done');
-            setView('rank');
+            setView(destination);
           }}
         />
       </AppShell>
