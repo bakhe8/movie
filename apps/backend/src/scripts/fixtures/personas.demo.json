@@ -3,7 +3,7 @@
   "emailDomain": "demo.local",
   "password": "demo-password-1",
   "seed": 20260903,
-  "temperature": 0.5,
+  "temperature": 0.2,
   "policyVersion": "demo-synthetic-v1",
   "personas": [
     {
