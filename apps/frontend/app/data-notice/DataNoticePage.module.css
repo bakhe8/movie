@@ -10,7 +10,7 @@
 
 .sources {
   width: 100%;
-  min-width: 640px;
+  min-width: 520px;
   border-collapse: collapse;
   font-size: var(--fs-14);
 }
