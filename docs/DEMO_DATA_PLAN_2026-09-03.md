@@ -123,7 +123,13 @@ Licensing (D4, [DATA_LICENSING.md](DATA_LICENSING.md) §4): facts and labels are
 
 Growing the catalog to the blueprint's 300–500 is now curation only: append rows to the list and re-run.
 
-### WS2 — Fingerprints — **code done 2026-09-03; the run waits for the owner's Anthropic key**
+### WS2 — Fingerprints — **done 2026-09-03: 300/300 extracted, 0 failures**
+
+**The run** (2026-09-03, ~18:02–18:09 local): 300 titles in 439 s at 4-way concurrency, 0 failures, 0 refusals; 295 complete fingerprints and the 5 deliberately partial ones; every fingerprint carries `modelVersion: claude-sonnet-5`, `extractorVersion: enrichment-worker-v2`, `generatedBy: anthropic`, all 13 `confidence` values (mean 0.61, range 0.15–0.98), `sourceIds` from the fixture, `licenseStatus: unknown`, `reviewStatus: unreviewed`. Per-dimension spread over the catalog (sd 0.14–0.22 on every axis; psychologicalDepth highest mean 0.76, actionIntensity lowest 0.35) shows the extractor is not collapsing to the midpoint. Report: `catalog.demo.enrichment-report.md`.
+
+**Model actually used**: Sonnet 5, not the Opus 5 configured in `.env.example`. At run time Opus 5's structured-output path answered `529 Overloaded` on every attempt over about two minutes (four spaced attempts plus the SDK's own six retries) while plain Opus 5 calls and Sonnet 5 structured calls succeeded. The session switched the local `.env` model to Sonnet 5 so that the whole run carries one `modelVersion` (the single Opus 5 extraction done earlier for `DEMO0001` was re-extracted with `--force`). Moving the catalog to Opus 5 later is `--force` with the model variable changed back, about ten minutes.
+
+**Setup lessons recorded for the next machine**: a *Personal* (identity-linked) Console key needs `ANTHROPIC_WORKSPACE_ID` (the API answers 400 without it; commit `b4bf55f`); a Workspace-type key does not. The Console's evaluation plan has no credits until billing is set up (the API answers 400 "credit balance is too low"). A free-form `confidence` map in the output schema came back empty on the first real call; the schema now names all thirteen confidence fields (commit `7f01281`).
 
 **Delivered**:
 
@@ -139,9 +145,9 @@ Deliberately partial titles (two dimensions removed after extraction, `extractor
 
 Placeholders (`--placeholder`): deterministic genre-centroid vectors with seeded jitter, `extractorVersion: 'demo-placeholder-v1'`, `generatedBy: 'placeholder'`, `confidence` 0.3 on every dimension — never mistaken for an extraction, and re-extracted by the next real run because their version is not current.
 
-**To run** (owner): put `ANTHROPIC_API_KEY=…` in `.env` (the two model variables are already there), then `make catalog-enrich`. Expected: 295 complete + 5 partial fingerprints in about 10 minutes at 4-way concurrency, well under five dollars of usage at the configured model's list price; then commit the fixture and the report. Re-running is a no-op until the extractor or model version changes.
+**To re-run** (owner): `ANTHROPIC_API_KEY`, `ANTHROPIC_WORKSPACE_ID` (identity-linked keys only) and the two model variables in `.env`, then `make catalog-enrich`. A re-run is a no-op until the extractor or model version changes; `--force` re-extracts everything.
 
-Acceptance: 295 complete fingerprints, 5 partial; every complete one has 13 finite numbers in [0, 1], a `confidence` entry per dimension, `sourceIds`, `extractorVersion: 'enrichment-worker-v2'`, `modelVersion` set, `licenseStatus: 'unknown'`, `reviewStatus: 'unreviewed'`. This is the first time the enrichment worker runs against a real catalog — the report's failures/refusals are a `§15.4` acceptance-test input.
+Acceptance — **met**: 295 complete fingerprints, 5 partial; every complete one has 13 finite numbers in [0, 1], a `confidence` entry per dimension, `sourceIds`, `extractorVersion: 'enrichment-worker-v2'`, `modelVersion` set, `licenseStatus: 'unknown'`, `reviewStatus: 'unreviewed'` (checked by script over the committed fixture). This was the first time the enrichment worker ran against a real catalog: zero failures and zero refusals is the `§15.4` acceptance-test input for this run; human review sampling (§7 below, the owner's 30 films) is still open.
 
 ### WS3 — Personas and activity (`db:seed:demo`, 4–6 h incl. tests)
 
@@ -216,7 +222,7 @@ The pass is judged against ADR-33 (no percentage, no merged score) and `§4.4` (
 |---|---|---|---|
 | WS0 | ½ h | — | — |
 | WS1 curation + fetch script | **done** | — | the owner's review of the Arabic slice and the nine forced swaps |
-| WS2 | **code done**; ~10 min run | — | `ANTHROPIC_API_KEY` in `.env` (owner), then `make catalog-enrich` |
+| WS2 | **done** (300/300 in 439 s) | — | — |
 | WS3 | 4–6 h | WS1/WS2 | `postgres-test` for the double-run check |
 | WS4 | 1 h | — | WS3 output |
 | WS5 | 1–2 h | — | a fresh backend build on a side port (do not restart a concurrent session's server) |
@@ -274,3 +280,4 @@ Owner's decision, 2026-09-03, in answer to "what is the alternative to an OpenAI
 | 2026-09-03 | owner's correction: nothing is built or judged against the 15-title fixture; the catalog (WS1) is the first step, and 200 titles is the floor with the scripts sized for the 300–500 Phase 0 target |
 | 2026-09-03 | WS1 delivered at 300 titles: curated list, `fetch-catalog.ts`, `catalog.demo.json`, build report, `catalog:fetch` scripts; WS2/WS3 inputs updated to the fixture's real fields (`descriptionSource`, `descriptionAr`, `evidence`) |
 | 2026-09-03 | D1 decided (Anthropic) and recorded as §8 in ADR form; WS2 code delivered: worker ported, batch runner `enrich_catalog.py`, 31 tests, `make catalog-enrich`; the extraction run itself waits for the owner's key |
+| 2026-09-03 | WS2 run completed: 300/300 fingerprints on Sonnet 5 (Opus 5 structured outputs were returning 529 at the time), 0 failures; fixture and enrichment report committed; §8's ADR text was verified and written by session A as ADR-63 |
