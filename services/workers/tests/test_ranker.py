@@ -1,7 +1,9 @@
+import math
+
 import numpy as np
 import pytest
 
-from src.ranker import PlackettLuceRanker, compute_pairwise_accuracy
+from src.ranker import PlackettLuceRanker, compute_nll, compute_pairwise_accuracy
 
 
 def make_triad_dataset():
@@ -147,3 +149,31 @@ class TestComputePairwiseAccuracy:
         ranker.weights = np.array([1.0])
 
         assert compute_pairwise_accuracy([], {}, ranker) == 0.0
+
+
+class TestComputeNll:
+    def test_no_triads_returns_zero_instead_of_dividing_by_zero(self):
+        ranker = PlackettLuceRanker(fingerprint_dim=1)
+        ranker.weights = np.array([1.0])
+
+        assert compute_nll([], {}, ranker) == 0.0
+
+    def test_zero_weights_give_the_uniform_baseline_nll(self):
+        # With every score tied, each Plackett-Luce step is a uniform draw:
+        # P(1st of 3) = 1/3, P(1st of remaining 2) = 1/2, so NLL per triad is
+        # exactly ln(3) + ln(2) = ln(6) -- a precise value to pin the formula
+        # against, not just a directional check.
+        triads, fingerprints = make_triad_dataset()
+        ranker = PlackettLuceRanker(fingerprint_dim=1)
+        ranker.weights = np.array([0.0])
+
+        assert compute_nll(triads, fingerprints, ranker) == pytest.approx(math.log(6))
+
+    def test_a_better_aligned_model_scores_a_lower_nll_than_an_inverted_one(self):
+        triads, fingerprints = make_triad_dataset()
+        aligned = PlackettLuceRanker(fingerprint_dim=1)
+        aligned.weights = np.array([1.0])  # matches the ground-truth ordering
+        inverted = PlackettLuceRanker(fingerprint_dim=1)
+        inverted.weights = np.array([-1.0])  # exactly backwards
+
+        assert compute_nll(triads, fingerprints, aligned) < compute_nll(triads, fingerprints, inverted)

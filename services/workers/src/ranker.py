@@ -226,3 +226,41 @@ def compute_pairwise_accuracy(
                 total += 1
 
     return correct / total if total > 0 else 0.0
+
+
+def compute_nll(
+    triads: List[Tuple[Tuple[str, str, str], List[int]]],
+    fingerprints: Dict[str, np.ndarray],
+    ranker: PlackettLuceRanker,
+) -> float:
+    """
+    Mean negative log-likelihood per triad under a fitted model -- the same
+    listwise Plackett-Luce likelihood `fit()` optimizes, but *without* the L2
+    term: regularization shapes the optimization objective, it is not part of
+    the predictive fit this reports (blueprint §16.2; RANKING_ALGORITHM.md §6
+    step 4 "Evaluate on the held-out slice: NLL, ...").
+
+    Args:
+        triads: List of triadic rankings to evaluate against -- typically a
+            held-out slice the model was NOT fitted on.
+        fingerprints: Mapping of title_id to fingerprint; every id must be present.
+        ranker: Fitted PlackettLuceRanker model.
+
+    Returns:
+        Mean NLL per triad (lower is better); 0.0 for an empty `triads`.
+    """
+    if not triads:
+        return 0.0
+
+    total = 0.0
+    for triad_ids, ranking in triads:
+        scores = np.array([ranker.predict_score(tid, _require_fingerprint(fingerprints, tid)) for tid in triad_ids])
+        for pos in range(2):
+            idx = ranking[pos]
+            remaining_indices = ranking[pos:]
+            remaining_scores = scores[remaining_indices]
+            total -= scores[idx] - logsumexp(remaining_scores)
+
+    # Plain Python float, not np.float64: this value is persisted straight to
+    # Postgres (training.py), and psycopg2 has no adapter for numpy scalars.
+    return float(total / len(triads))

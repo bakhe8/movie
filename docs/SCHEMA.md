@@ -2,7 +2,7 @@
 
 **Status**: Derived from blueprint `§13` (entities and event shapes), `§11` (rights registry), `§7.5`–`§7.6`, `§21`. Two layers, kept apart on purpose:
 
-- **§1 Current physical schema** — exactly what the five TypeORM migrations in `apps/backend/src/migrations/` create (verified 2026-09-03). This is the truth for anyone writing SQL today.
+- **§1 Current physical schema** — exactly what the six TypeORM migrations in `apps/backend/src/migrations/` create (verified 2026-09-03). This is the truth for anyone writing SQL today.
 - **§2 Target schema** — the `BP §13.1` entity set expressed as tables, plus the migration plan from §1 to §2.
 
 Naming (ADR-16): tables `snake_case` plural; columns are TypeORM's default `camelCase` and therefore **quoted** in raw SQL (`"profileId"`); primary keys `uuid` via `uuid_generate_v4()`; timestamps `TIMESTAMP` (UTC by convention). One exception to plural naming exists today (`user_title_state`); it is renamed in step M1 below. Schema changes go through `npm run migration:generate` / `npm run db:migrate` only — `synchronize` is off in every environment.
@@ -11,7 +11,7 @@ Naming (ADR-16): tables `snake_case` plural; columns are TypeORM's default `came
 
 ## 1. Current physical schema (migrated)
 
-Migrations, in order: `1788410140231-InitialSchema`, `1788411790951-AddTriadEventFields`, `1788412500000-SplitImportedRatingFromInAppState`, `1788418200000-ArabicFirstProfileDefault`, `1788421102891-AddOneActiveTriadPerProfileConstraint`. Extension: `uuid-ossp`. The `ankane/pgvector` image is used but no column has the `vector` type yet.
+Migrations, in order: `1788410140231-InitialSchema`, `1788411790951-AddTriadEventFields`, `1788412500000-SplitImportedRatingFromInAppState`, `1788418200000-ArabicFirstProfileDefault`, `1788421102891-AddOneActiveTriadPerProfileConstraint`, `1788424108820-AddHeldOutTrainingMetrics`. Extension: `uuid-ossp`. The `ankane/pgvector` image is used but no column has the `vector` type yet.
 
 ```sql
 users (
@@ -68,6 +68,7 @@ user_model_snapshots (                                           -- one row per 
   "biasTerms" json,                                              -- { titleId: δ }; PlackettLuceRanker.fit() never populates this yet, so it is always {} today
   "modelVersion" varchar NOT NULL, "trainingTriadCount" integer NOT NULL,
   "validationAccuracy" real, "pairwiseAccuracy" real,            -- pairwiseAccuracy is in-sample today
+  "heldOutTriadCount" integer, "heldOutNll" real, "heldOutPairwiseAccuracy" real,  -- NULL below the 5-triad floor (ADR-31); heldOutPairwiseAccuracy is the out-of-sample counterpart to pairwiseAccuracy above
   "createdAt" timestamp
 )
 ```
@@ -229,12 +230,12 @@ triad_replacements (                                                            
 )
 
 -- Models -----------------------------------------------------------------------------
+-- heldOutTriadCount/heldOutNll/heldOutPairwiseAccuracy already exist in §1
+-- (migration AddHeldOutTrainingMetrics, ADR-31) -- not repeated in this ALTER.
 ALTER TABLE user_model_snapshots
   ADD COLUMN posterior json,                                                    -- per-weight uncertainty (BP §13.1)
   ADD COLUMN "recentWeights" real[],                                            -- recent-window layer (BP §7.3); NULL in MVP
   ADD COLUMN exceptions json,                                                   -- [{ titleId, delta, tagged }] (BP §7.4)
-  ADD COLUMN "heldOutTriadCount" integer, ADD COLUMN "heldOutNll" real,
-  ADD COLUMN "heldOutPairwiseAccuracy" real,                                    -- replaces in-sample pairwiseAccuracy as the reported metric
   ADD COLUMN "calibratedAgainst" varchar FK shared_latent_space_versions(version);
 CREATE INDEX ON user_model_snapshots ("profileId", "createdAt" DESC);
 
@@ -299,7 +300,7 @@ Each step is one TypeORM migration; none require data backfill beyond defaults b
 | M1 | rename `user_title_state` → `user_title_states`; `profiles.market/platforms/pausedAt`; `users.role`; `triads.shownAt/answeredAt/modelVersion/idempotencyKey/holdout/correctsTriadId` + indexes; `triad_replacements`; `user_title_states.triadEligible` | replacement endpoint, event completeness (`BP §13.2`, `§14`) |
 | M2 | `consents`, `privacy_requests`, `audit_log` | onboarding consent, export/delete/reset |
 | M3 | `source_records`, `content_features`, `localized_titles`, `people`, `credits`, `title_editions` | rights registry, FTS search, provenance |
-| M4 | `model_versions`, `experiments`, `experiment_assignments`; `user_model_snapshots` additions | reproducibility, held-out metrics |
+| M4 | `model_versions`, `experiments`, `experiment_assignments`; `user_model_snapshots` additions (`posterior`, `recentWeights`, `exceptions`, `calibratedAgainst` — held-out metrics already exist, ADR-31) | reproducibility, calibration |
 | M5 | `recommendations`, `outcomes`, `watch_events`, `library_imports` | persisted recommendations, post-watch loop, imports |
 | M6 | `public_quality_sources`, `availability_snapshots` | Public Quality and Watchability layers (need licensed sources first) |
 | M7 | `shared_latent_space_versions`; `embeddings.vector` → pgvector `vector(n)` + IVFFLAT index | `BP §7.5`; semantic candidate retrieval |
@@ -307,6 +308,7 @@ Each step is one TypeORM migration; none require data backfill beyond defaults b
 ---
 
 **Changelog**
+- 2.3 (2026-09-03): sixth migration `AddHeldOutTrainingMetrics` (ADR-31, gap 2) applied -- adds `heldOutTriadCount`/`heldOutNll`/`heldOutPairwiseAccuracy` to `user_model_snapshots`; §1 updated and the same three columns removed from the M4 target-plan ALTER (already done, not still pending).
 - 2.2 (2026-09-03): fifth migration `AddOneActiveTriadPerProfileConstraint` (ADR-28) applied -- a partial unique index, not a new table; §1's migration count and `triads` DDL updated to match, and the pre-existing "three migrations" text (already stale before this fix -- the list below it named four) corrected. Also noted that `user_model_snapshots.biasTerms` is always `{}` today, since `PlackettLuceRanker.fit()` never populates it (found in the same audit pass).
 - 2.1 (2026-09-03): fourth migration `ArabicFirstProfileDefault` applied; `profiles.preferredLanguage` now defaults to `'ar'` in §1, removed from the M1 plan.
 - 2.0 (2026-09-03): rewritten. The previous version described an aspirational snake_case DDL that did not match the migrated schema, named a `db/migrations/001_init_schema.sql` that does not exist, and mixed `not_remembered` into the title-state enum; it is replaced by the current-vs-target split above.

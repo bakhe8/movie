@@ -1,6 +1,23 @@
 import numpy as np
 
-from src.training import FINGERPRINT_DIMENSIONS, fingerprint_vector
+from src.ranker import PlackettLuceRanker
+from src.training import FINGERPRINT_DIMENSIONS, fingerprint_vector, train_and_evaluate
+
+
+def make_triads(n: int):
+    """
+    `n` synthetic, temporally-ordered (oldest first) triads over a
+    perfectly-learnable 1-D fingerprint space (C > B > A on every one), each
+    tagged with its position so a test can tell which ones a given fit() call
+    actually received.
+    """
+    triads = [((f"A{i}", f"B{i}", f"C{i}"), [2, 1, 0]) for i in range(n)]
+    fingerprints = {}
+    for i in range(n):
+        fingerprints[f"A{i}"] = np.array([0.1])
+        fingerprints[f"B{i}"] = np.array([0.5])
+        fingerprints[f"C{i}"] = np.array([0.9])
+    return triads, fingerprints
 
 
 def complete_fingerprint(**overrides):
@@ -44,3 +61,69 @@ class TestFingerprintVector:
         vector = fingerprint_vector(complete_fingerprint(themes=["loss"], confidence={}))
 
         assert len(vector) == len(FINGERPRINT_DIMENSIONS)
+
+
+class TestTrainAndEvaluate:
+    # RANKING_ALGORITHM.md §6 step 2: below 5 completed triads there isn't
+    # enough data left after a split to make held-out metrics meaningful, so
+    # none are reported at all -- not computed on a 0-1 triad slice.
+    def test_below_five_triads_trains_on_everything_and_reports_no_held_out_metrics(self):
+        triads, fingerprints = make_triads(4)
+
+        result = train_and_evaluate(triads, fingerprints)
+
+        assert result.training_triad_count == 4
+        assert result.held_out_triad_count == 0
+        assert result.held_out_nll is None
+        assert result.held_out_pairwise_accuracy is None
+
+    def test_five_or_more_triads_holds_out_floor_0_2n_most_recent(self):
+        for n, expected_held_out in [(5, 1), (9, 1), (10, 2), (25, 5)]:
+            triads, fingerprints = make_triads(n)
+
+            result = train_and_evaluate(triads, fingerprints)
+
+            assert result.held_out_triad_count == expected_held_out, f"n={n}"
+            assert result.held_out_nll is not None
+            assert result.held_out_pairwise_accuracy is not None
+
+    def test_served_weights_are_still_fit_on_every_triad_not_just_the_training_slice(self):
+        # Step 6: the held-out split affects only which metrics get reported;
+        # the model actually served is always refit on all of it.
+        triads, fingerprints = make_triads(10)
+
+        result = train_and_evaluate(triads, fingerprints)
+
+        assert result.training_triad_count == 10
+        # A perfectly-learnable dataset fit on all of it should be perfectly accurate in-sample.
+        assert result.pairwise_accuracy == 1.0
+
+    def test_holds_out_the_temporally_last_slice_not_the_first(self, monkeypatch):
+        triads, fingerprints = make_triads(10)
+        seen_triad_sets = []
+        original_fit = PlackettLuceRanker.fit
+
+        def spy_fit(self, triads_arg, fingerprints_arg, population_priors=None):
+            seen_triad_sets.append(list(triads_arg))
+            return original_fit(self, triads_arg, fingerprints_arg, population_priors)
+
+        monkeypatch.setattr(PlackettLuceRanker, "fit", spy_fit)
+
+        train_and_evaluate(triads, fingerprints)
+
+        # First fit() call is the eval fit, trained on the training slice only.
+        eval_fit_triads = seen_triad_sets[0]
+        assert eval_fit_triads == triads[:8]  # the 2 most recent (last) triads held out
+        assert eval_fit_triads != triads[2:]  # not the first 2 dropped instead
+
+    def test_deterministic_for_the_same_events(self):
+        # Reproducibility from the event log alone (blueprint §18.1; ADR-22)
+        # must hold for the held-out metrics too, not just the served weights.
+        triads, fingerprints = make_triads(10)
+
+        first = train_and_evaluate(triads, fingerprints)
+        second = train_and_evaluate(triads, fingerprints)
+
+        np.testing.assert_array_equal(first.weights, second.weights)
+        assert first.held_out_nll == second.held_out_nll
+        assert first.held_out_pairwise_accuracy == second.held_out_pairwise_accuracy

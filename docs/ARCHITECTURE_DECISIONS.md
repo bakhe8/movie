@@ -1,7 +1,7 @@
 # Architecture Decision Records
 
 **Status**: Living log. Every decision cites the blueprint section it serves (`BP §x.y`) or states that it is this repository's own engineering choice within the blueprint's constraints. A decision that contradicts the blueprint is a bug in this file. Product-level open questions that must be settled by experiment are **not** decided here — they are listed in `BP App. C` and [SPECIFICATION.md §11](SPECIFICATION.md).
-**Version**: 2.3 — 2026-09-03 (ADR-1…13 rewritten for consistency; ADR-14…26 added to close the gaps found in the documentation audit; ADR-27…28 added from a code-quality/security audit; ADR-29 added for the NestJS 10→11 migration; ADR-30 added for the `@typescript-eslint`/`vitest` dev-tooling bump).
+**Version**: 2.4 — 2026-09-03 (ADR-1…13 rewritten for consistency; ADR-14…26 added to close the gaps found in the documentation audit; ADR-27…28 added from a code-quality/security audit; ADR-29 added for the NestJS 10→11 migration; ADR-30 added for the `@typescript-eslint`/`vitest` dev-tooling bump; ADR-31 added for the training temporal hold-out, gap 2).
 
 Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 
@@ -201,6 +201,13 @@ Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 **Consequences.** `vitest.config.ts`/`vitest.e2e.config.ts` needed no changes (both only use the small, version-stable `defineConfig`/`plugins`/`test.include` surface). Full backend suite (unit + e2e) and lint re-verified green under the new versions. `npm audit`, full (including dev): 10 → 0.
 **Revisit when.** A future `test:cov`/`--ui` workflow is actually adopted — worth re-confirming the vitest version in use still isn't in CVE-2026-47429's affected range before turning on any network-exposed vitest server.
 
+## ADR-31 — Temporal hold-out in training (gap 2); `createdAt` stands in for `answeredAt`
+
+**Context.** `training.py` fit on every completed triad and reported `pairwiseAccuracy` on that same set — an in-sample number, not a validation metric (`BP §8.3`, `§16.1`, `§17.2`; RANKING_ALGORITHM.md §6). Implementing §6's real protocol exactly needs `triads.answeredAt` for temporal ordering and `triads.holdout` for policy-reserved rows — neither column exists yet (gap 3, `IMPLEMENTATION_STATUS.md`).
+**Decision.** Order completed triads by `createdAt` instead: with the one-active-triad-per-profile constraint (ADR-28), a profile's triads are created and completed in strict sequence, so creation order already equals answer order today — an accurate stand-in until gap 3 adds the real column, not an approximation of something else. `train_and_evaluate()` (services/workers/src/training.py) holds out the most recent `max(1, n // 5)` triads when `n ≥ 5` (§6 step 2, `floor(0.2n)` computed exactly via integer division since 0.2 = 1/5); below that, no held-out metrics are computed or persisted (`NULL`, not a metric over 0–1 triads). Two separate `PlackettLuceRanker` instances are used — one fit on the training slice only (for the held-out metrics), a fresh second one fit on all `complete_triads` for the actually-served weights (§6 step 6) — because `fit()` only zero-initializes when `self.weights is None`, so reusing one instance across two fits would silently break ADR-22's determinism guarantee for the second fit. `compute_nll()` (new, `ranker.py`) reports mean NLL per held-out triad, without the L2 term (that shapes the optimization objective, not the predictive fit being reported).
+**Consequences.** Migration `AddHeldOutTrainingMetrics` adds `heldOutTriadCount`/`heldOutNll`/`heldOutPairwiseAccuracy` to `user_model_snapshots` (nullable; `pairwiseAccuracy` is kept, unchanged, as the in-sample number). Running this end-to-end against a real database — for the first time in this codebase's history, since no test exercises `train_profile()` itself, only the pure `fingerprint_vector()` — surfaced two independent, previously-undiscovered bugs that made `train-profile` fail on every real invocation: (1) psycopg2 has no default typecaster for a `uuid[]` column and returned it as raw Postgres text, silently iterated character-by-character wherever the code expected a list (fixed with `psycopg2.extras.register_uuid()`, with every id re-cast to `str` immediately after fetching so the rest of the module's `str`-keyed logic is unaffected); (2) `compute_nll()`'s return value stayed a numpy `float64`, which psycopg2 cannot adapt as a query parameter (fixed by casting to a native Python `float`). Both would have blocked *any* use of `train-profile` against a real database, hold-out or not.
+**Revisit when.** Gap 3 adds `triads.answeredAt`/`holdout` — swap the `ORDER BY` to `answeredAt` and exclude `holdout = true` rows from both the split and the served refit.
+
 ---
 
 ## Summary
@@ -237,6 +244,7 @@ Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 | 28 | One active triad per profile (DB constraint) | `BP §4.3` | second in-progress status |
 | 29 | NestJS 11, not 12 | audit | `@nestjs/throttler` v12 support |
 | 30 | `@typescript-eslint`/`vitest` minimal patched bump | audit | `--ui`/`--cov` workflow adopted |
+| 31 | Temporal hold-out in training; `createdAt` ~ `answeredAt` | `BP §16.1` | gap 3 adds `answeredAt`/`holdout` |
 
 ## How to add a decision
 

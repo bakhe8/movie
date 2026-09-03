@@ -1,7 +1,7 @@
 # Implementation Status — code versus blueprint
 
-> **Snapshot 2026-09-03, after the "close the six cheap gaps" change, a security/code-quality audit, a NestJS 10→11 migration, a dev-tooling security bump, a `SCHEMA.md` doc-sync fix, and closing blueprint gap 9** (base `4816691` on `main`).
-> Verified for this revision: backend vitest suite **48 tests / 6 files pass**; backend e2e suite **13 tests pass** over real HTTP against `postgres-test` with all five migrations applied; Python pytest **28 tests pass** (+2 with the enrichment-worker fix); `tsc --noEmit` clean for `apps/backend`, `apps/frontend` and `packages/shared`; `eslint` clean for both `apps/frontend` and `apps/backend`; `ruff` clean for `services/workers`; `npm audit` clean — 0 vulnerabilities, production and dev. `SCHEMA.md` §1 now lists all five migrations (it had drifted after the triad-constraint migration and, independently, already understated the count before that). The manual browser pass (register → Discover → Rank → My list → Profile → language toggle → logout) was verified in an earlier snapshot and is carried forward; nothing in today's work touched the frontend UI or its dependencies.
+> **Snapshot 2026-09-03, after the "close the six cheap gaps" change, a security/code-quality audit, a NestJS 10→11 migration, a dev-tooling security bump, a `SCHEMA.md` doc-sync fix, and closing blueprint gaps 9 and 2** (base `30af3a9` on `main`).
+> Verified for this revision: backend vitest suite **48 tests / 6 files pass**; backend e2e suite **13 tests pass** over real HTTP against `postgres-test` with all six migrations applied; Python pytest **36 tests pass** (+2 gap 9, +8 gap 2); `tsc --noEmit` clean for `apps/backend`, `apps/frontend` and `packages/shared`; `eslint` clean for both `apps/frontend` and `apps/backend`; `ruff` clean for `services/workers`; `npm audit` clean — 0 vulnerabilities, production and dev. `train-profile` was run **manually against the real local dev database** for the first time in this codebase's history (both the ≥5-triad and <5-triad paths), which is how two previously-undiscovered, always-failing bugs in it were found and fixed (`uuid[]` parsing, a numpy-float leak into a psycopg2 parameter) — see the gap-2 table below. The manual browser pass (register → Discover → Rank → My list → Profile → language toggle → logout) was verified in an earlier snapshot and is carried forward; nothing in today's work touched the frontend UI or its dependencies.
 >
 > Two verdicts per row, because "the code exists and runs" and "it does what the blueprint requires" are different claims:
 >
@@ -47,13 +47,14 @@ Nothing left open from this line of audit.
 These run today and contradict or fall short of the blueprint; a green test suite makes them invisible.
 
 1. **Schema covers 7 of the target tables** — `recommendations`, `outcomes`, `watch_events`, `triad_replacements`, `consents`, `privacy_requests`, `source_records`, `content_features`, `localized_titles`, `model_versions`, `experiments`, `audit_log`, `shared_latent_space_versions` are missing (`§13.1`, `§11.1`; [SCHEMA.md](SCHEMA.md) §2.4 migration plan M1–M7).
-2. **Model "validation" is in-sample** — `training.py` fits on all completed triads and computes `pairwiseAccuracy` on the same triads. `§8.3`, `§16.1`, `§17.2` require a temporal held-out slice with whole triads (ADR-22).
 3. **Triad event lacks `shownAt`/`answeredAt`/`modelVersion` columns** (`§13.2`); `POST …/rank` has no idempotency key (`§14`), only a status guard; ranking is index-based (ADR-15 moves to title ids).
 4. **Recommendations are never persisted** — no reason, no display propensity, no `experimentId`/`requestId` (`§13.1`, `§14`, `§14.1`). Without the log the post-watch loop (`§4.5`) cannot close and `§16` has nothing to read.
-5. **Confidence band is a triad-count heuristic** — `§9.2`/`§9.3` require evidence diversity, held-out prediction success and fingerprint quality (ADR-21). The fingerprint-quality input now exists (one-band demotion); the rest does not.
+5. **Confidence band is a triad-count heuristic** — `§9.2`/`§9.3` require evidence diversity, held-out prediction success and fingerprint quality (ADR-21). The fingerprint-quality input now exists (one-band demotion); the held-out prediction input now exists too (gap 2 below); the rest does not.
 6. **Fingerprints carry no provenance and cover part of `§6.1`** — the 15 seeded rows leave `confidence` empty; families characters/ending/people/cultural context are absent (V1 is frozen; V2 planned — [FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md)).
 7. **Onboarding collects no market, platforms, or consent** (`§4.1`, `§13.1`, `§2.4 #9`).
 8. **Not a PWA yet** — no web manifest or service worker (`§5.1`, ADR-5).
+
+(Numbering keeps gaps 1, 3–8 as originally assigned; gaps 2 and 9 are closed — see the tables below.)
 
 ## Closed on 2026-09-03 (gap 9 — enrichment worker)
 
@@ -62,6 +63,14 @@ These run today and contradict or fall short of the blueprint; a green test suit
 | Enrichment worker diverged from `§15.3`/ADR-23: Chat Completions instead of the Responses API, no `store=false`, hard-coded default model id, Pydantic field `schema_version` vs TypeScript `schemaVersion`, no provenance fields | `enrichment.py` rewritten onto `client.responses.parse()`/`.create()` with `store=False`; `FilmEnrichmentWorker` now requires `OPENAI_FINGERPRINT_MODEL`/`OPENAI_EXPLANATION_MODEL` (raises if unset, no hard-coded default — added to `.env.example`); Pydantic field renamed `schemaVersion`; `generate_fingerprint()` stamps `generatedBy`/`generatedAt`/`modelVersion`/`extractorVersion`/`sourceIds` after the call (the model can't know these about itself) and `licenseStatus: 'unknown'`/`reviewStatus: 'unreviewed'` (honest placeholders — no `source_records`/review queue exists yet, gap 1) | `services/workers/tests/test_enrichment.py` rewritten against the new API shape, 2 new tests (provenance stamping, missing-config error); 28 Python tests pass |
 
 Still open: `§15.4` acceptance tests, and the worker has still never run against the actual catalog (only unit-tested against a mocked client) — both need the rights registry from gap 1 first.
+
+## Closed on 2026-09-03 (gap 2 — temporal hold-out in training)
+
+| Gap | What changed | Proof |
+|---|---|---|
+| Model "validation" was in-sample: `training.py` fit on every completed triad and reported `pairwiseAccuracy` on that same set — not a validation metric (`§8.3`, `§16.1`, `§17.2`; ADR-22) | `train_and_evaluate()` (new, pure function in `training.py`) holds out the most recent `max(1, n // 5)` completed triads when `n ≥ 5` (RANKING_ALGORITHM.md §6), ordered by `createdAt` as an interim stand-in for the not-yet-existing `answeredAt` (ADR-31); fits a fresh `PlackettLuceRanker` on the training slice for held-out NLL (`compute_nll()`, new) and pairwise accuracy, then a second fresh instance on all triads for the actually-served weights, unchanged from before. Migration `AddHeldOutTrainingMetrics` adds `heldOutTriadCount`/`heldOutNll`/`heldOutPairwiseAccuracy` to `user_model_snapshots` (all `NULL` below the 5-triad floor) | 8 new Python tests (temporal split direction verified via a `fit()` spy, determinism, the below-floor path); **manually run against the local dev database end-to-end** with synthetic data (`docker exec` + `python -m src.training <profileId>`) for both the ≥5 and <5 cases, confirming the persisted row matches; 36 Python tests pass |
+
+While verifying this end-to-end, found and fixed two independent, previously-undiscovered bugs that made `train-profile` fail on **every** real invocation, `git blame`-old: (1) psycopg2 has no default typecaster for a `uuid[]` column, so `triads."titleIds"` came back as raw Postgres array text and was silently iterated character-by-character everywhere the code expected a list — `psycopg2.extras.register_uuid()` now fixes the read, with every id re-cast to `str` right after so the rest of the module is unaffected; (2) `compute_nll()`'s result stayed a numpy `float64`, which psycopg2 cannot adapt as a query parameter — cast to a native `float`. Neither bug is unit-testable without a real database, which is exactly why `train_profile()` itself was never covered — only its pure `fingerprint_vector()` sub-function was.
 
 ---
 
@@ -144,8 +153,8 @@ Still open: `§15.4` acceptance tests, and the worker has still never run agains
 
 | Item | Built | Blueprint | Evidence / gap |
 |---|---|---|---|
-| `PlackettLuceRanker.fit()` via CLI `train-profile` | ✅ | 🟡 | `§7.1`: `b(m)` present as zero placeholder ✅, `θᵀφ` ✅, `δ` as per-title bias ✅, `pᵀq` deferred (allowed); deterministic zero init ✅ (ADR-22); `§7.5` calibration absent |
-| Temporal hold-out and held-out metrics | ❌ | ❌ | gap 2; ADR-22 |
+| `PlackettLuceRanker.fit()` via CLI `train-profile` | ✅ | 🟡 | `§7.1`: `b(m)` present as zero placeholder ✅, `θᵀφ` ✅, `δ` wired end to end (persisted, read by `RecommendationsService`) but `bias_terms` is never populated by `fit()` — always `{}` today, so δ contributes nothing yet; `pᵀq` deferred (allowed); deterministic zero init ✅ (ADR-22); `§7.5` calibration absent. First real (non-mocked) run against a live database was 2026-09-03, verifying gap 2 below — see that row for two bugs it surfaced |
+| Temporal hold-out and held-out metrics | ✅ | ✅ | gap 2 closed above; ADR-22, ADR-31; `RANKING_ALGORITHM.md` §6 |
 | Unknown-feature handling | ✅ | ✅ | trainer excludes triads with incomplete fingerprints; ranker refuses undescribed titles (ADR-19) |
 | BFGS listwise MLE with L2 | ✅ | ✅ | `§7.2` |
 | Snapshot persistence (`user_model_snapshots`) | ✅ | 🟡 | `§13.1 taste_profiles`: no posterior, time layers, exceptions, held-out metrics, `calibratedAgainst` |
@@ -204,7 +213,7 @@ Still open: `§15.4` acceptance tests, and the worker has still never run agains
 | Backend e2e: auth guard + IDOR + rate limiting over real HTTP + `postgres-test` (13 tests) | ✅ | ✅ | `§21.3` object-level authorization; re-run 2026-09-03 with all five migrations; `test/throttling.e2e-spec.ts` added with the NestJS 11 migration (ADR-29); not functional coverage |
 | Functional API tests (titles, triads, recommendations) | ❌ | — | |
 | Frontend tests | ❌ | — | |
-| Python tests (28) | ✅ | — | re-run 2026-09-03; +2 with the gap-9 enrichment-worker fix |
+| Python tests (36) | ✅ | — | re-run 2026-09-03; +2 with the gap-9 enrichment-worker fix, +8 with the gap-2 temporal hold-out |
 | Offline evaluation protocol (`§16.1`), metrics beyond in-sample pairwise (`§16.2`), baselines (`§16.3`), acceptance gate (`§16.5`) | ❌ | ❌ | |
 | Automated tests for triad, replacement, delete, export (`§18.1`) | 🟡 | ❌ | triad ranking only |
 | Performance with 100+ titles / 50+ triads | ❌ | — | |
@@ -239,6 +248,6 @@ Still open: `§15.4` acceptance tests, and the worker has still never run agains
 
 ---
 
-**Next milestone (in order):** migration M1 with `shownAt`/`answeredAt`/`modelVersion`/idempotency on triads (gap 3) and the replacement endpoint + two UI buttons (ADR-17); then temporal hold-out in training (gap 2) and a training trigger through the FastAPI service (ADR-25); then M5 + persisted recommendations and outcomes (gap 4) so the post-watch loop can close; then consent/onboarding (gap 7) and the admin board. Gap 9 (enrichment worker) is done.
+**Next milestone (in order):** migration M1 with `shownAt`/`answeredAt`/`modelVersion`/idempotency on triads (gap 3) and the replacement endpoint + two UI buttons (ADR-17); then a training trigger through the FastAPI service (ADR-25) and the real confidence-band criteria now that held-out metrics exist (gap 5); then M5 + persisted recommendations and outcomes (gap 4) so the post-watch loop can close; then consent/onboarding (gap 7) and the admin board. Gaps 2 and 9 are done.
 
 **Last updated**: 2026-09-03 · **Status**: core loop (auth → mark watched → rank → train by CLI → recommend) runs locally; six blueprint gaps, five security/code-quality audit findings, the NestJS 10→11 migration (ADR-29), a dev-tooling security bump (ADR-30), and blueprint gap 9 (enrichment worker) closed today; `npm audit` clean end to end; eight blueprint-conformance pieces still fall short (list above).

@@ -199,7 +199,7 @@ Tests every model version must pass: recovers known weights from synthetic listw
 
 ## 17. Current implementation (2026-09-03)
 
-`services/workers/src/ranker.py` implements the listwise PL fit with deterministic zero initialization, `population_priors` (unused, all zero), per-title `bias_terms`, BFGS, and in-sample `compute_pairwise_accuracy`; it refuses undescribed titles instead of zero-filling. `training.py` is the CLI trainer (all completed triads whose three titles have complete fingerprints; no hold-out yet); 26 unit tests pass. No selection policy beyond `random-v1` (in the NestJS backend), no confidence criteria, no shared space, no attribution gate, no FastAPI service. Details: [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md).
+`services/workers/src/ranker.py` implements the listwise PL fit with deterministic zero initialization, `population_priors` (unused, all zero), a `bias_terms` field that is wired end to end but never populated by `fit()` (always `{}`), BFGS, in-sample `compute_pairwise_accuracy`, and `compute_nll`; it refuses undescribed titles instead of zero-filling. `training.py` is the CLI trainer: all completed triads whose three titles have complete fingerprints, ordered by `createdAt` as a stand-in for `answeredAt` (ADR-31), with the most recent `floor(0.2n)` held out for evaluation when `n ≥ 5` per §6 above; the served weights are still refit on all of it. 36 unit tests pass. No selection policy beyond `random-v1` (in the NestJS backend), no confidence criteria, no shared space, no attribution gate, no FastAPI service. Details: [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md).
 
 ## References
 
