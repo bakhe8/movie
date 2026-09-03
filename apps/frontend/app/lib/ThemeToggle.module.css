@@ -18,6 +18,7 @@
 
 .option {
   min-width: 44px;
+  min-height: var(--tap);
   padding: 0 var(--sp-3);
   border: 0;
   border-radius: calc(var(--r-button) - 3px);

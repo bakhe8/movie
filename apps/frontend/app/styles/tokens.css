@@ -28,9 +28,9 @@
   --text: #161c1c;
 
   /* Single action colour (Q6): the only saturated colour in the UI. */
-  --accent: #0b7a70;
+  --accent: #0a7268; /* 4.9:1 on --well, 5.8:1 on white (audit 2026-09-04) */
   --accent-ink: #ffffff;
-  --accent-soft: rgba(11, 122, 112, 0.12);
+  --accent-soft: rgba(10, 114, 104, 0.12);
 
   /* Poster edge: visible in light only (Q5, Q14). */
   --poster-edge: var(--line);
@@ -165,4 +165,26 @@ svg {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
   }
+}
+
+/* Every control meets the tap token in height (decision Q7; audit
+   2026-09-04): text inputs and selects included. Checkboxes and radios keep
+   their size; their label is the target. */
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  min-height: var(--tap);
+}
+
+/* Focus safety net: anything focusable without its own :focus-visible rule
+   still shows the accent ring (audit 2026-09-04). Component rules win by
+   specificity where they exist. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }

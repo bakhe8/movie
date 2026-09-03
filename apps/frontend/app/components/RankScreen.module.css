@@ -232,7 +232,7 @@
 }
 
 .ghost {
-  min-height: 36px;
+  min-height: var(--tap);
   padding: 0 var(--sp-3);
   border: 1px solid var(--line);
   border-radius: var(--r-button);
@@ -269,7 +269,7 @@
 }
 
 .primarySmall {
-  min-height: 40px;
+  min-height: var(--tap);
   padding: 0 var(--sp-4);
   border: 0;
   border-radius: var(--r-button);

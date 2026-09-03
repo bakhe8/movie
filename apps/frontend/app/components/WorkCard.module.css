@@ -228,7 +228,7 @@
 }
 
 .ghost {
-  min-height: 40px;
+  min-height: var(--tap);
   padding: 0 var(--sp-3);
   border: 1px solid var(--line);
   border-radius: var(--r-button);
@@ -274,6 +274,11 @@
 /* The title as a button when the card opens the work page: text only, the
    full tap target is the title line, no button chrome. */
 .titleButton {
+  /* The whole title line is the control; a tap-height hit area is drawn by
+     ::before so the layout does not move (audit 2026-09-04). */
+  position: relative;
+  display: block;
+  width: 100%;
   padding: 0;
   border: 0;
   background: transparent;
@@ -281,6 +286,12 @@
   font: inherit;
   text-align: start;
   cursor: pointer;
+}
+
+.titleButton::before {
+  content: "";
+  position: absolute;
+  inset: -11px 0;
 }
 
 .titleButton:hover {
