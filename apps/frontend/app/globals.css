@@ -1,32 +1,7 @@
-@import url("https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap");
-
-/* Global styles: fonts, tokens, resets, the sign-in frame and the few shared
-   utilities (.eyebrow, .muted, .cta/.full) every screen uses. Everything
-   else lives in a CSS module next to its component (AppShell for the
-   header/navigation/content frame, one module per screen). */
-
-body,
-button,
-input,
-select {
-  font-family: "Segoe UI Variable", "Segoe UI", Tahoma, sans-serif;
-}
-
-[dir="rtl"],
-[dir="rtl"] button,
-[dir="rtl"] input,
-[dir="rtl"] select {
-  font-family: "Cairo", sans-serif;
-}
-
-:root {
-  --ink: #17212a;
-  --muted: #6c7782;
-  --accent: #ec5b3e;
-  --gold: #f8c85d;
-  --canvas: #f5f7f8;
-  --card: #fff;
-}
+/* Global reset only. Colour, type, radius and spacing live in
+   styles/tokens.css (imported after this file in app/layout.tsx); every
+   component styles itself in the CSS module beside it. Nothing here may
+   name a colour, a font or a size. */
 
 * {
   box-sizing: border-box;
@@ -34,99 +9,15 @@ select {
 
 body {
   margin: 0;
-  background: var(--canvas);
-  color: var(--ink);
 }
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
 button {
   cursor: pointer;
-}
-
-/* Sign-in / create-account frame (the form itself is AuthScreen.module.css). */
-.auth {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: linear-gradient(145deg, #eaf3f5, #fdf2dd);
-}
-
-.auth section {
-  position: relative;
-  width: min(100%, 480px);
-  padding: 42px 32px;
-  background: #fff;
-  border-radius: 20px;
-  box-shadow: 0 24px 60px #16212a19;
-}
-
-.auth h1 {
-  font-size: clamp(34px, 8vw, 52px);
-  line-height: 1.04;
-  margin: 18px 0;
-}
-
-/* Shared utilities. */
-.eyebrow {
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-}
-
-.muted {
-  color: var(--muted);
-  line-height: 1.55;
-}
-
-form {
-  display: grid;
-  gap: 12px;
-  margin: 30px 0 15px;
-}
-
-input,
-select {
-  min-height: 48px;
-  width: 100%;
-  border: 1px solid #dfe4e8;
-  border-radius: 12px;
-  padding: 12px;
-  background: #fff;
-}
-
-.cta {
-  min-height: 50px;
-  border: 0;
-  border-radius: 12px;
-  background: var(--ink);
-  color: #fff;
-  font-weight: 800;
-  padding: 12px;
-}
-
-.cta:disabled {
-  opacity: 0.45;
-}
-
-.full {
-  display: block;
-  width: min(100%, 350px);
-  margin: 28px auto;
-}
-
-@media (max-width: 720px) {
-  .auth section {
-    padding: 38px 24px;
-  }
-
-  .auth h1 {
-    padding-top: 22px;
-  }
 }

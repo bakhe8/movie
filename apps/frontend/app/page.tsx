@@ -76,7 +76,12 @@ export default function Home() {
   // about to see onboarding, firing recommendation/list requests (and their
   // designed 409 "no model yet" replies) that the user never asked for.
   if (!profile || onboarding === 'unknown') {
-    return <p className="muted">{lang === 'ar' ? 'جارٍ إعداد ملفك…' : 'Setting up your profile…'}</p>;
+    // Tokens only (globals.css no longer carries utility classes).
+    return (
+      <p style={{ margin: 0, padding: 'var(--sp-6) var(--sp-4)', color: 'var(--muted)', fontSize: 'var(--fs-14)' }}>
+        {lang === 'ar' ? 'جارٍ إعداد ملفك…' : 'Setting up your profile…'}
+      </p>
+    );
   }
 
   // M9: the header toggle used to be a local-only preview -- profile.preferredLanguage
