@@ -81,6 +81,12 @@ describe('Triad ranking (real HTTP, real DB)', () => {
       .expect(200);
     expect(current.body.status).toBe('active');
     expect(current.body.shownAt).not.toBeNull();
+    // The three titles come inline, in displayOrder, public columns only --
+    // the screen never fetches them one by one.
+    const items = current.body.items as { id: string; titleAr: string; fingerprint?: unknown }[];
+    expect(items.map((item) => item.id)).toEqual(current.body.displayOrder);
+    expect(items[0].titleAr).toBeTruthy();
+    expect(items[0]).not.toHaveProperty('fingerprint');
     const [first, second, third] = current.body.titleIds as string[];
 
     const ranked = await request(app.getHttpServer())

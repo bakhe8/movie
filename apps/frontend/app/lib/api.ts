@@ -74,6 +74,9 @@ export interface Triad {
   profileId: string;
   titleIds: string[];
   displayOrder: string[] | null;
+  // The three titles in displayOrder, so the screen renders in one round
+  // trip (no fingerprint or external ids -- the catalog's public columns).
+  items: Title[];
   // Title ids in ranked order, best-liked first -- not indices into
   // titleIds (ADR-15).
   ranking: string[] | null;

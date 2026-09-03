@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { isUUID } from 'class-validator';
-import { EntityManager, Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
 import { Profile } from '../../entities/profile.entity';
 import { Title } from '../../entities/title.entity';
 import { Triad } from '../../entities/triad.entity';
@@ -26,6 +26,18 @@ interface CandidateSelection {
   poolSize: number;
 }
 
+// What the triad screen needs about each title -- never the fingerprint or
+// external ids (the catalog's public columns, see TitlesService).
+export type TriadItem = Pick<
+  Title,
+  'id' | 'internalId' | 'titleEn' | 'titleAr' | 'description' | 'releaseYear' | 'genres' | 'createdAt' | 'updatedAt'
+>;
+
+// A triad as the API returns it: the row plus its three titles in
+// displayOrder, so the client renders in one round trip instead of one
+// call per title (target contract API.md §2.3 `items`).
+export type TriadWithItems = Triad & { items: TriadItem[] };
+
 @Injectable()
 export class TriadsService {
   constructor(
@@ -41,7 +53,7 @@ export class TriadsService {
     private readonly replacementsRepository: Repository<TriadReplacement>,
   ) {}
 
-  async getCurrent(userId: string, profileId: string): Promise<Triad> {
+  async getCurrent(userId: string, profileId: string): Promise<TriadWithItems> {
     await this.assertProfileOwnership(userId, profileId);
 
     const activeTriad = await this.triadsRepository.findOne({
@@ -49,7 +61,7 @@ export class TriadsService {
       order: { createdAt: 'ASC' },
     });
     if (activeTriad) {
-      return activeTriad;
+      return this.withItems(activeTriad);
     }
 
     // Only the most recently completed triad's titles are excluded, not
@@ -95,7 +107,7 @@ export class TriadsService {
     const titleIds = titles.map((title) => title.id);
 
     try {
-      return await this.triadsRepository.save(
+      const created = await this.triadsRepository.save(
         this.triadsRepository.create({
           profileId,
           titleIds,
@@ -111,6 +123,7 @@ export class TriadsService {
           metadata: { reasonForSelection: 'random-watched-unranked' },
         }),
       );
+      return this.withItems(created);
     } catch (error) {
       if (!this.isUniqueConstraintError(error)) {
         throw error;
@@ -123,15 +136,46 @@ export class TriadsService {
       if (!winner) {
         throw error;
       }
-      return winner;
+      return this.withItems(winner);
     }
+  }
+
+  // Attach the three titles in displayOrder (falling back to titleIds for
+  // legacy rows), selecting only the catalog's public columns.
+  private async withItems(triad: Triad): Promise<TriadWithItems> {
+    const order = triad.displayOrder ?? triad.titleIds ?? [];
+    if (order.length === 0) {
+      return { ...triad, items: [] };
+    }
+    const titles = await this.titlesRepository.find({
+      where: { id: In(order) },
+      select: {
+        id: true,
+        internalId: true,
+        titleEn: true,
+        titleAr: true,
+        description: true,
+        releaseYear: true,
+        genres: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    const byId = new Map(titles.map((title) => [title.id, title as TriadItem]));
+    const items = order.map((id) => byId.get(id)).filter((title): title is TriadItem => title !== undefined);
+    return { ...triad, items };
   }
 
   private isUniqueConstraintError(error: unknown): boolean {
     return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505';
   }
 
-  async rank(userId: string, triadId: string, rankTriadDto: RankTriadDto, idempotencyKey?: string): Promise<Triad> {
+  async rank(
+    userId: string,
+    triadId: string,
+    rankTriadDto: RankTriadDto,
+    idempotencyKey?: string,
+  ): Promise<TriadWithItems> {
     this.assertRankingShape(rankTriadDto.ranking);
 
     if (idempotencyKey) {
@@ -149,7 +193,7 @@ export class TriadsService {
           throw new ConflictException('Idempotency-Key was already used for a different triad');
         }
         await this.assertProfileOwnership(userId, replay.profileId);
-        return replay;
+        return this.withItems(replay);
       }
     }
 
@@ -172,7 +216,7 @@ export class TriadsService {
     triad.status = 'completed';
 
     try {
-      return await this.triadsRepository.save(triad);
+      return this.withItems(await this.triadsRepository.save(triad));
     } catch (error) {
       if (!idempotencyKey || !this.isUniqueConstraintError(error)) {
         throw error;
@@ -184,7 +228,7 @@ export class TriadsService {
       if (!winner) {
         throw error;
       }
-      return winner;
+      return this.withItems(winner);
     }
   }
 
@@ -193,7 +237,7 @@ export class TriadsService {
   // item alone is swapped for another eligible watched title, and the triad
   // gets a fresh displayOrder. The reason is exposure bookkeeping, never a
   // preference -- nothing here enters training, a prior or a score.
-  async replace(userId: string, triadId: string, replaceTriadItemDto: ReplaceTriadItemDto): Promise<Triad> {
+  async replace(userId: string, triadId: string, replaceTriadItemDto: ReplaceTriadItemDto): Promise<TriadWithItems> {
     const triad = await this.triadsRepository.findOne({ where: { id: triadId } });
     if (!triad) {
       throw new NotFoundException('Triad not found');
@@ -216,7 +260,7 @@ export class TriadsService {
     // One transaction: the exposure change, the event row and the triad
     // update all land or none do -- a triad must never keep showing a title
     // the user just said they haven't watched.
-    return this.triadsRepository.manager.transaction(async (manager) => {
+    const updated = await this.triadsRepository.manager.transaction(async (manager) => {
       await this.applyReplacementReason(
         manager,
         triad.profileId,
@@ -249,6 +293,7 @@ export class TriadsService {
       }
       return manager.save(triad);
     });
+    return this.withItems(updated);
   }
 
   async findCompleted(userId: string, profileId: string): Promise<Triad[]> {

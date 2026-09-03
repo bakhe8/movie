@@ -157,7 +157,7 @@ The "next milestone" of the previous snapshot. Built as one change because the s
 |---|---|---|
 | No replacement endpoint; `not_watched`/`not_remembered` had no semantics in code; `triadEligible` did not exist; the triad screen used HTML5 drag-and-drop (does not fire on touch) and had one generic path for "can't rank this" (`§4.3`, `§13.1`, `§14`; ADR-17) | Migration `AddTriadReplacements`: `triad_replacements` (append-only, FK-cascaded, indexed on `triadId`) and `user_title_state.triadEligible`. `POST /api/triads/:triadId/replace { titleId, reason }` (`TriadsService.replace()`): owner + active + membership checks; picks a random eligible watched title outside the triad and outside the previous completed triad (the ADR-34 lookback); one transaction writes the state change (`not_watched` → state `not_watched`, `watchedAt` null; `not_remembered` → `triadEligible` false, watch kept), the event row, and the triad (same slot, fresh `displayOrder`); when nothing eligible is left or a 4th replacement is requested the event is still logged with `replacementTitleId: null` and the triad becomes `skipped`. `getCurrent()` now draws only from `triadEligible` titles and its 400 carries `{ reason: 'need_more_watched', needed }`. `RankScreen` rebuilt: pointer-event reorder (touch/pen/mouse, `touch-action: none` handle, live drop-slot highlight) plus ↑/↓ buttons as the keyboard path; two separate neutral buttons per card with an inline confirmation that states the swap is not an opinion; skeleton/blocked/failed states; the blocked state says exactly how many more films to mark; 44 px targets; CSS module. `api.ts` gains `replaceTriadItem` and `ApiError.details`; shared types updated | 12 new backend unit tests (72 total; the transaction's three writes, both reasons, the exclusion set, the skipped path, the limit, the eligibility filter, the structured 400); new `test/triad-replace.e2e-spec.ts` (3 tests, 25 e2e total) over real HTTP + Postgres; **manually verified in the browser** — see the snapshot note above |
 
-Still open from the same ADR: `maxReplacementsPerTriad` is an interim constant (3) rather than a policy parameter set by the Phase 0 test; replacement rate is not yet on any metrics board (`§17.1`, `§21.2`); the triad still carries ids only (the client fetches the three titles separately — target contract returns items inline); and whether the redrawn `displayOrder` after a swap should override the user's in-progress order is now a `BP App. C` question (blueprint v1.2) rather than a code decision.
+Still open from the same ADR: `maxReplacementsPerTriad` is an interim constant (3) rather than a policy parameter set by the Phase 0 test; replacement rate is not yet on any metrics board (`§17.1`, `§21.2`); ~~the triad still carries ids only~~ (closed the same day: `items` inline on every triad response, API.md 1.7); and whether the redrawn `displayOrder` after a swap should override the user's in-progress order is now a `BP App. C` question (blueprint v1.2) rather than a code decision.
 
 ---
 
@@ -250,7 +250,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Next.js server layer unused: every component is `'use client'`, no `app/api`, no server actions — no second backend hiding in the frontend | ✅ | — | a static export is possible; the PWA shell is gap 8 |
 | Contract enforced at compile time | ❌ | — | three hand-kept copies: `packages/shared/src/types.ts` (consumed by nobody), backend entities + `title-fingerprint.type.ts` ("keep both copies in sync by hand"), `apps/frontend/app/lib/api.ts` ("mirrors backend shapes"); drift is caught only by the backend e2e suite and the frontend has no tests. Fix per ADR-11: emit the OpenAPI description from the controllers, generate the frontend client and types from it, delete the copies |
 | Response DTO layer (entity shape ≠ public contract) | ❌ | ❌ | `§14`, ADR-15: controllers return TypeORM entities; a new column is public by default; the password hash is stripped by hand in `AuthService` only |
-| Triad response carries its items | ❌ | — | see *Triads*: N+1 title fetches |
+| Triad response carries its items | ✅ | — | every `Triad` response (`current`, `rank`, `replace`) carries `items` in `displayOrder`, public columns only (API.md 1.7); the screen renders in one round trip |
 | Session token handling | 🟡 | — | JWT in `localStorage`, no refresh (ADR-26, before Alpha) — see *Authentication and accounts* |
 | Independently deployable | ❌ | — | by decision (ADR-1: release together; compose has no app containers; `npm run dev` runs both) until `§12.3` signals |
 
@@ -307,12 +307,12 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Ranking validation (title ids, ADR-15) | ✅ | ✅ | exactly 3 distinct ids matching the fetched triad's own `titleIds`; was index-based before gap 3 |
 | Replacement (`not_watched` / `not_remembered`) | ✅ | ✅ | `POST /triads/:id/replace` per ADR-17 (closed above): swaps one item, fresh `displayOrder`, `triad_replacements` row, `not_watched` clears exposure, `not_remembered` clears `triadEligible`; never a preference signal; `skipped` when nothing is left. `metadata.replacements` stays reserved and unused — the table is the record |
 | Training trigger from the backend | ❌ | ❌ | `§12.2`; ADR-25 |
-| Unit tests | ✅ | — | `triads.service.spec.ts`, 35 tests |
+| Unit tests | ✅ | — | `triads.service.spec.ts`, 36 tests |
 | Frontend: instruction copy fixed to `§4.3` («حسب إعجابك الشخصي، من الأكثر إلى الأقل») | ✅ | ✅ | `lib/copy.ts` |
 | Frontend: three cards, pointer-driven reorder (touch/pen/mouse) + ↑/↓ (keyboard path), position numbers, save, next round auto-loads | ✅ | 🟡 | rebuilt 2026-09-03 (ADR-17 table above); RTL ✅, 44 px targets ✅; touch reorder verified with dispatched `PointerEvent`s in the browser (the pane's own drag emulation hangs — noted in the snapshot); no licensed poster on the card (`§4.3`, none is licensed yet — text card); no critic scores ✅; progress/"model updated" still open below |
 | Frontend: two replacement buttons + inline confirmation | ✅ | ✅ | `§4.3`: «لم أشاهده» / «لا أتذكره» per card, each confirming with copy that says the swap is not an opinion; skipped round → reload → the structured "mark one more film" message |
-| Frontend: progress indicator, periodic "model updated" result | ❌ | — | `§4.3` "periodic, not necessarily per triad"; count open per `App. C` |
-| Frontend: N+1 title fetches per triad | 🟡 | — | `RankScreen` fetches each title separately; target `/triads/next` returns items inline |
+| Frontend: rounds counter; periodic "model updated" result | 🟡 | — | completed-rounds line under the instruction with the `§5.1` "three to five rounds" range (the exact count stays open per `App. C`), and a first-result notice after the third round; the periodic "model updated" result needs the training trigger (ADR-25) |
+| Frontend: N+1 title fetches per triad | ✅ | — | closed 2026-09-03: `RankScreen` renders `triad.items`; the per-title fallback remains only for a response without `items` |
 | Frontend tests | ❌ | — | no test setup |
 
 ## Model training (Python)
@@ -376,7 +376,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 
 | Item | Built | Blueprint | Evidence / gap |
 |---|---|---|---|
-| Backend unit tests (7 files, 90 tests) | ✅ | — | re-run 2026-09-03; +8 with the gap-3 triad rework, +3 with the H1 title-reuse fix, +12 with the ADR-17 replacement endpoint, +5 with the library ranking, +3 with the onboarding profile fields |
+| Backend unit tests (7 files, 91 tests) | ✅ | — | re-run 2026-09-03; +8 with the gap-3 triad rework, +3 with the H1 title-reuse fix, +12 with the ADR-17 replacement endpoint, +5 with the library ranking, +3 with the onboarding profile fields, +1 for inline triad items |
 | Backend e2e: auth guard + IDOR + rate limiting + triad ranking + triad replacement over real HTTP + `postgres-test` (4 files, 25 tests) | ✅ | ✅ | `§21.3` object-level authorization; re-run 2026-09-03 with all eight migrations; `test/throttling.e2e-spec.ts` (ADR-29), `test/triad-rank.e2e-spec.ts` (gap 3/ADR-32, H1/ADR-34) and `test/triad-replace.e2e-spec.ts` (ADR-17) added today; still not full functional coverage of every route |
 | Functional API tests (titles, triads, recommendations) | ❌ | — | |
 | Frontend tests | ❌ | — | |

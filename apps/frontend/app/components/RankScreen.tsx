@@ -18,6 +18,11 @@ const labels = {
     save: 'حفظ الترتيب',
     saving: 'جارٍ الحفظ…',
     saved: 'تم الحفظ. هذه جولة جديدة.',
+    rounds: (n: string) => `جولاتك المكتملة: ${n}`,
+    // SPECIFICATION §5.1 step 4: 3–5 seed rounds; the exact count is an open
+    // App. C experiment, so this is a range, not a target.
+    roundsHint: 'ثلاث إلى خمس جولات تكفي لأول نتيجة، وكل جولة بعدها تحسّنها.',
+    firstResult: 'اكتملت ثلاث جولات. توصياتك الأولى وترتيب مكتبتك يظهران بعد تدريب نموذجك.',
     dragHandle: 'اسحب لتغيير الترتيب',
     moveUp: 'ارفع درجة',
     moveDown: 'أنزل درجة',
@@ -48,6 +53,9 @@ const labels = {
     save: 'Save ranking',
     saving: 'Saving…',
     saved: 'Saved. Here is a new round.',
+    rounds: (n: string) => `Completed rounds: ${n}`,
+    roundsHint: 'Three to five rounds are enough for a first result; every round after that improves it.',
+    firstResult: 'Three rounds done. Your first recommendations and library ranking appear once your model is trained.',
     dragHandle: 'Drag to reorder',
     moveUp: 'Move up',
     moveDown: 'Move down',
@@ -113,6 +121,7 @@ export function RankScreen({ lang, profileId }: { lang: Lang; profileId: string 
   const [replacing, setReplacing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
+  const [completedRounds, setCompletedRounds] = useState<number | null>(null);
   // Pointer handlers read the live drag state through this ref so they never
   // see a stale closure mid-gesture; `drag` (state) only drives rendering.
   const dragRef = useRef<DragState | null>(null);
@@ -122,10 +131,11 @@ export function RankScreen({ lang, profileId }: { lang: Lang; profileId: string 
   const hydrate = useCallback(async (current: Triad) => {
     // Cards are shown in the server's displayOrder (randomised independently
     // of titleIds so position bias can be measured, blueprint §4.3). The
-    // triad carries ids only, so this is three fetches until the target
-    // contract returns items inline.
-    const displayIds = current.displayOrder ?? current.titleIds;
-    const titles = await Promise.all(displayIds.map((id) => api.getTitle(id)));
+    // triad carries its three titles inline in that order; the per-title
+    // fallback only covers a response from an older backend.
+    const titles = current.items?.length
+      ? current.items
+      : await Promise.all((current.displayOrder ?? current.titleIds).map((id) => api.getTitle(id)));
     setTriad(current);
     setOrder(titles);
     setPending(null);
@@ -133,6 +143,12 @@ export function RankScreen({ lang, profileId }: { lang: Lang; profileId: string 
 
   const loadTriad = useCallback(async () => {
     setPhase({ kind: 'loading' });
+    // Rounds so far, shown next to the instruction; independent of whether a
+    // new triad can be drawn right now.
+    api
+      .getCompletedTriads(profileId)
+      .then((completed) => setCompletedRounds(completed.length))
+      .catch(() => setCompletedRounds(null));
     try {
       const current = await api.getCurrentTriad(profileId);
       await hydrate(current);
@@ -250,7 +266,11 @@ export function RankScreen({ lang, profileId }: { lang: Lang; profileId: string 
       // an "already submitted" error.
       const ranking = order.map((title) => title.id);
       await api.rankTriad(triad.id, ranking, crypto.randomUUID());
-      setNotice(t.saved);
+      const reached = (completedRounds ?? 0) + 1;
+      setCompletedRounds(reached);
+      // The third round is where a first result becomes possible (§5.1 step
+      // 5); training is still a manual step, hence "once your model is trained".
+      setNotice(reached === 3 ? t.firstResult : t.saved);
       await loadTriad();
     } catch {
       setNotice(t.loadFailed);
@@ -289,6 +309,13 @@ export function RankScreen({ lang, profileId }: { lang: Lang; profileId: string 
       <p className="eyebrow">{t.eyebrow}</p>
       <h2>{t.title}</h2>
       {phase.kind === 'ready' && <p className={styles.hint}>{t.hint}</p>}
+      {completedRounds !== null && (
+        <p className={styles.rounds}>
+          <span className={styles.roundsCount}>{t.rounds(formatNumber(completedRounds, lang))}</span>
+          {' · '}
+          {t.roundsHint}
+        </p>
+      )}
     </div>
   );
 
@@ -348,6 +375,9 @@ export function RankScreen({ lang, profileId }: { lang: Lang; profileId: string 
       <ol className={drag ? `${styles.list} ${styles.dragging}` : styles.list}>
         {order.map((title, index) => {
           const name = lang === 'ar' ? title.titleAr : title.titleEn;
+          // The other language's title helps recognise a film known under a
+          // different name (same as Discover and the library).
+          const alt = lang === 'ar' ? title.titleEn : title.titleAr;
           const lifted = drag?.from === index;
           const isTarget = drag !== null && drag.to !== drag.from && drag.to === index;
           const isPending = pending?.titleId === title.id;
@@ -369,6 +399,7 @@ export function RankScreen({ lang, profileId }: { lang: Lang; profileId: string 
               </span>
               <div className={styles.body}>
                 <h3 className={styles.title}>{name}</h3>
+                {alt && alt !== name && <p className={styles.alt}>{alt}</p>}
                 {meta && <p className={styles.meta}>{meta}</p>}
                 {title.description && <p className={styles.desc}>{title.description}</p>}
               </div>

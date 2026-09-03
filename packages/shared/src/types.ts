@@ -137,6 +137,8 @@ export interface Triad {
   profileId: string;
   titleIds: string[];
   displayOrder: string[] | null;
+  /** The three titles in displayOrder (public columns only), so the client needs no per-title fetch. */
+  items: Title[];
   // Title ids in ranked order, best-liked first -- not indices into
   // titleIds (ADR-15).
   ranking: string[] | null;

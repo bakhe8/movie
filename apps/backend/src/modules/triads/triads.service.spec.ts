@@ -19,7 +19,9 @@ function repoMock() {
   };
   return {
     findOne: vi.fn(),
-    find: vi.fn(),
+    // Defaults to an empty result so the items lookup in withItems() (a
+    // titlesRepository.find) never trips a test that isn't about it.
+    find: vi.fn(async () => []),
     count: vi.fn(),
     save: vi.fn(async (entity: unknown) => entity),
     create: vi.fn((data: unknown) => data),
@@ -160,7 +162,7 @@ describe('TriadsService', () => {
 
         const result = await service.rank('user-1', 'triad-1', { ranking: validRanking }, idempotencyKey);
 
-        expect(result).toBe(alreadySubmitted);
+        expect(result).toMatchObject(alreadySubmitted);
         expect(triadsRepository.save).not.toHaveBeenCalled();
       });
 
@@ -229,8 +231,34 @@ describe('TriadsService', () => {
 
       const result = await service.getCurrent('user-1', 'profile-1');
 
-      expect(result).toBe(existing);
+      expect(result).toMatchObject(existing);
       expect(triadsRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('returns the three titles inline, in displayOrder, with only the public columns selected', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      triadsRepository.findOne.mockResolvedValue({
+        id: 'triad-active',
+        profileId: 'profile-1',
+        status: 'active',
+        titleIds: ['t1', 't2', 't3'],
+        displayOrder: ['t3', 't1', 't2'],
+      });
+      titlesRepository.find.mockResolvedValue([
+        { id: 't1', titleEn: 'One' },
+        { id: 't2', titleEn: 'Two' },
+        { id: 't3', titleEn: 'Three' },
+      ]);
+
+      const result = await service.getCurrent('user-1', 'profile-1');
+
+      // One round trip for the screen instead of one call per title.
+      expect(result.items.map((item) => item.id)).toEqual(['t3', 't1', 't2']);
+      const [findOptions] = titlesRepository.find.mock.calls[0];
+      // Never the fingerprint or external ids (the catalog's public columns).
+      expect(findOptions.select).not.toHaveProperty('fingerprint');
+      expect(findOptions.select).not.toHaveProperty('externalIds');
+      expect(findOptions.select).toMatchObject({ id: true, titleAr: true, titleEn: true, releaseYear: true });
     });
 
     it('requires at least three watched titles before a triad can be created', async () => {
@@ -373,7 +401,7 @@ describe('TriadsService', () => {
 
       const result = await service.getCurrent('user-1', 'profile-1');
 
-      expect(result).toBe(winner);
+      expect(result).toMatchObject(winner);
     });
 
     it('does not swallow a save error unrelated to the unique constraint', async () => {

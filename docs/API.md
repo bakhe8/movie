@@ -47,7 +47,8 @@ Profile { id, userId, name, preferredLanguage: 'ar'|'en', market: string|null /*
 Title { id, internalId, titleEn, titleAr, description|null, releaseYear|null, genres|null, externalIds?, fingerprint? }
 UserTitleState { id, profileId, titleId, state, watchedAt|null, triadEligible /* false after 'not_remembered' (ADR-17) */,
                  importedRating|null, ratingSource:'import'|null, notes|null, updatedAt, title? }
-Triad { id, profileId, titleIds: string[3], displayOrder: string[3]|null, ranking: string[3]|null /* titleIds, best first */,
+Triad { id, profileId, titleIds: string[3], displayOrder: string[3]|null, items: Title[3] /* in displayOrder; public columns only */,
+        ranking: string[3]|null /* titleIds, best first */,
         shownAt|null, answeredAt|null, modelVersion|null /* null under random-v1, which uses no model */, idempotencyKey|null,
         policyVersion|null, selectionPropensity|null, experimentId|null, sessionId|null, metadata|null, status, createdAt }
 Recommendation { title, personalFitScore, publicQualityScore|null, watchabilityScore|null,
@@ -162,6 +163,7 @@ Ranking is sent as title ids (not indices), on both the unversioned route and th
 ---
 
 **Changelog**
+- 1.7 (2026-09-03): every `Triad` response (`current`, `rank`, `replace`) carries `items` — the three titles in `displayOrder`, public columns only — so the triad screen needs no per-title fetch (the target contract's inline items, brought forward).
 - 1.6 (2026-09-03): `Profile` gains `market` and `platforms` (onboarding, `BP §4.1`); accepted by `POST /profiles` and `PATCH /profiles/:profileId`.
 - 1.5 (2026-09-03): `GET /api/profiles/:profileId/library/ranking` -- the library's personal ranking, positions only (ADR-33), sharing the recommendation scoring path.
 - 1.4 (2026-09-03): replacement endpoint implemented (ADR-17) -- `POST /api/triads/:triadId/replace`; `UserTitleState` gains `triadEligible`; `GET …/triads/current` draws from eligible titles only and its 400 carries `{ reason: 'need_more_watched', needed }`.

@@ -18,6 +18,24 @@
   line-height: 1.5;
 }
 
+.rounds {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.roundsCount {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.alt {
+  margin: 0 0 2px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .list {
   display: grid;
   gap: 12px;
