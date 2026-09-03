@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Post, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, ParseUUIDPipe, Post, Request, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { RankTriadDto } from './dto/rank-triad.dto';
 import { ReplaceTriadItemDto } from './dto/replace-triad-item.dto';
@@ -12,7 +12,7 @@ export class TriadsController {
   @Get('profiles/:profileId/triads/current')
   getCurrent(
     @Request() request: { user: { id: string } },
-    @Param('profileId') profileId: string,
+    @Param('profileId', ParseUUIDPipe) profileId: string,
   ) {
     return this.triadsService.getCurrent(request.user.id, profileId);
   }
@@ -20,7 +20,7 @@ export class TriadsController {
   @Get('profiles/:profileId/triads')
   findCompleted(
     @Request() request: { user: { id: string } },
-    @Param('profileId') profileId: string,
+    @Param('profileId', ParseUUIDPipe) profileId: string,
   ) {
     return this.triadsService.findCompleted(request.user.id, profileId);
   }
@@ -28,7 +28,7 @@ export class TriadsController {
   @Post('triads/:triadId/rank')
   rank(
     @Request() request: { user: { id: string } },
-    @Param('triadId') triadId: string,
+    @Param('triadId', ParseUUIDPipe) triadId: string,
     @Body() rankTriadDto: RankTriadDto,
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
@@ -43,7 +43,7 @@ export class TriadsController {
   @Post('triads/:triadId/replace')
   replace(
     @Request() request: { user: { id: string } },
-    @Param('triadId') triadId: string,
+    @Param('triadId', ParseUUIDPipe) triadId: string,
     @Body() replaceTriadItemDto: ReplaceTriadItemDto,
   ) {
     return this.triadsService.replace(request.user.id, triadId, replaceTriadItemDto);

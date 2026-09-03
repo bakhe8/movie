@@ -180,9 +180,6 @@ describe('Cross-user access (IDOR) and auth guards', () => {
   // malformed id (or any id-shaped route colliding with a real one) fell
   // through to a Postgres cast error and came back as an unhandled 500 --
   // cheap noise for error monitoring, and the wrong contract (400 expected).
-  // triads.controller.ts's `:triadId`/`:profileId` params are a known
-  // remaining gap here -- left out because another session was actively
-  // editing that file concurrently with this fix (see IMPLEMENTATION_STATUS.md).
   describe('malformed ids (H4)', () => {
     it('rejects a malformed profileId with 400, not 500', async () => {
       await request(app.getHttpServer())
@@ -212,6 +209,45 @@ describe('Cross-user access (IDOR) and auth guards', () => {
       await request(app.getHttpServer())
         .get('/profiles/not-a-uuid/recommendations')
         .set('Authorization', `Bearer ${userA.token}`)
+        .expect(400);
+    });
+
+    // TriadsController was left out of the original H4 fix -- another
+    // session was actively editing triads.controller.ts (the replacement
+    // feature) at the time; closed now that its work has landed.
+    it('rejects a malformed profileId on the current-triad route with 400, not 500', async () => {
+      await request(app.getHttpServer())
+        .get('/profiles/not-a-uuid/triads/current')
+        .set('Authorization', `Bearer ${userA.token}`)
+        .expect(400);
+    });
+
+    it('rejects a malformed profileId on the completed-triads route with 400, not 500', async () => {
+      await request(app.getHttpServer())
+        .get('/profiles/not-a-uuid/triads')
+        .set('Authorization', `Bearer ${userA.token}`)
+        .expect(400);
+    });
+
+    it('rejects a malformed triadId on the rank route with 400, not 500', async () => {
+      await request(app.getHttpServer())
+        .post('/triads/not-a-uuid/rank')
+        .set('Authorization', `Bearer ${userA.token}`)
+        .send({
+          ranking: [
+            '11111111-1111-4111-8111-111111111111',
+            '22222222-2222-4222-8222-222222222222',
+            '33333333-3333-4333-8333-333333333333',
+          ],
+        })
+        .expect(400);
+    });
+
+    it('rejects a malformed triadId on the replace route with 400, not 500', async () => {
+      await request(app.getHttpServer())
+        .post('/triads/not-a-uuid/replace')
+        .set('Authorization', `Bearer ${userA.token}`)
+        .send({ titleId: '11111111-1111-4111-8111-111111111111', reason: 'not_watched' })
         .expect(400);
     });
   });
