@@ -42,3 +42,6 @@ env/
 
 # Docker
 docker-compose.override.yml
+
+# Live cross-session coordination board (per machine, never committed)
+.claude/SESSIONS.md
