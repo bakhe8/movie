@@ -4,6 +4,7 @@ from src.ranker import PlackettLuceRanker
 from src.training import (
     FINGERPRINT_DIMENSIONS,
     compute_genre_diversity,
+    compute_language_diversity,
     fingerprint_vector,
     ranking_to_indices,
     train_and_evaluate,
@@ -127,6 +128,37 @@ class TestComputeGenreDiversity:
         assert compute_genre_diversity(triads, {}) == 0
 
 
+class TestComputeLanguageDiversity:
+    # Blueprint gap 6/gap 5 (BP §9.2): the second named diversity axis,
+    # mirroring TestComputeGenreDiversity exactly -- same rule, single value
+    # per title instead of a list.
+    def test_counts_distinct_languages_across_every_title_in_every_triad(self):
+        triads, _ = make_triads(2)
+        languages = {
+            "A0": "ar", "B0": "en", "C0": "ar",
+            "A1": "fr", "B1": "en", "C1": "fr",
+        }
+
+        assert compute_language_diversity(triads, languages) == 3  # ar, en, fr
+
+    def test_one_language_repeated_across_every_title_scores_one(self):
+        triads, _ = make_triads(3)
+        languages = {tid: "ar" for triad_ids, _ in triads for tid in triad_ids}
+
+        assert compute_language_diversity(triads, languages) == 1
+
+    def test_a_title_missing_from_the_languages_mapping_contributes_nothing_not_a_failure(self):
+        triads, _ = make_triads(1)  # ("A0", "B0", "C0")
+        languages = {"A0": "ar", "B0": "en"}  # C0 has no known language
+
+        assert compute_language_diversity(triads, languages) == 2
+
+    def test_no_titles_have_any_known_language_scores_zero(self):
+        triads, _ = make_triads(2)
+
+        assert compute_language_diversity(triads, {}) == 0
+
+
 class TestTrainAndEvaluate:
     # RANKING_ALGORITHM.md §6 step 2: below 5 completed triads there isn't
     # enough data left after a split to make held-out metrics meaningful, so
@@ -144,6 +176,7 @@ class TestTrainAndEvaluate:
         # same floor as the held-out metrics above (ADR-31).
         assert result.standard_errors is None
         assert result.training_genre_diversity is None
+        assert result.training_language_diversity is None
 
     def test_five_or_more_triads_holds_out_floor_0_2n_most_recent(self):
         for n, expected_held_out in [(5, 1), (9, 1), (10, 2), (25, 5)]:
@@ -156,8 +189,9 @@ class TestTrainAndEvaluate:
             assert result.held_out_pairwise_accuracy is not None
             assert result.standard_errors is not None
             assert result.standard_errors.shape == (1,)  # one per fingerprint dimension
-            # No genres passed in this test -- absence, not zero diversity.
+            # No genres/languages passed in this test -- absence, not zero diversity.
             assert result.training_genre_diversity == 0
+            assert result.training_language_diversity == 0
 
     def test_genre_diversity_reflects_the_genres_mapping_passed_in(self):
         triads, fingerprints = make_triads(5)
@@ -166,6 +200,14 @@ class TestTrainAndEvaluate:
         result = train_and_evaluate(triads, fingerprints, genres)
 
         assert result.training_genre_diversity == 3
+
+    def test_language_diversity_reflects_the_languages_mapping_passed_in(self):
+        triads, fingerprints = make_triads(5)
+        languages = {"A0": "ar", "B1": "en", "C2": "fr"}
+
+        result = train_and_evaluate(triads, fingerprints, genres=None, languages=languages)
+
+        assert result.training_language_diversity == 3
 
     def test_served_weights_are_still_fit_on_every_triad_not_just_the_training_slice(self):
         # Step 6: the held-out split affects only which metrics get reported;

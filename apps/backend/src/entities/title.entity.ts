@@ -24,6 +24,12 @@ export class Title {
   @Column('simple-array', { nullable: true })
   genres: string[];
 
+  // Wikidata P364, single value (blueprint gap 6/gap 5, BP §9.2's language
+  // diversity axis). NULL for titles ingested before this column existed or
+  // whose source has no recorded original language.
+  @Column({ type: 'varchar', nullable: true })
+  originalLanguage: string | null;
+
   @Column({ type: 'json', nullable: true })
   externalIds: {
     imdb?: string;

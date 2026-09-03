@@ -88,12 +88,17 @@ export class UserModelSnapshot {
   // Distinct genre count across the titles in the triads this snapshot was
   // trained on (blueprint gap 5, BP §9.2's "sufficient effective evidence
   // (not one series repeated)" and "diversity of ... genres" read together).
-  // The only one of §9.2's three named diversity axes (directors/languages/
-  // genres) with real data today -- people/credits/source_records are still
-  // empty (blueprint gap 6). NULL for snapshots trained before this column
-  // existed.
+  // NULL for snapshots trained before this column existed.
   @Column({ type: 'integer', nullable: true })
   trainingGenreDiversity: number | null;
+
+  // Same idea, the second of §9.2's three named diversity axes: distinct
+  // Title.originalLanguage count across the triads this snapshot was trained
+  // on. The third axis (director) still has no data -- people/credits/
+  // source_records stay empty until a real ingestion pass runs (blueprint
+  // gap 6). NULL for snapshots trained before this column existed.
+  @Column({ type: 'integer', nullable: true })
+  trainingLanguageDiversity: number | null;
 
   @CreateDateColumn()
   createdAt: Date;

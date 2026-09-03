@@ -68,6 +68,12 @@ const POSTERIOR_STABILITY_Z = 1.0;
 // floor for "not just one thing".
 const MIN_TRAINING_GENRE_DIVERSITY = 2;
 
+// Same floor, the second of §9.2's three named diversity axes: fewer than 2
+// distinct Title.originalLanguage values across the training triads. The
+// third axis (director) has no data yet -- people/credits/source_records
+// stay empty until a real ingestion pass runs (blueprint gap 6).
+const MIN_TRAINING_LANGUAGE_DIVERSITY = 2;
+
 // One step down per band. A title with unknown fingerprint dimensions cannot be
 // recommended with the same confidence as a fully described one (blueprint §9.1
 // "fingerprint confidence", §9.2 last criterion; ADR-19).
@@ -358,13 +364,15 @@ export class RecommendationsService {
 
   // Provisional heuristic banding covering four of blueprint §9.2's five
   // criteria: evidence quantity ("عدد أدلة فعال كافٍ"), held-out prediction
-  // success, stable posterior direction, and diversity of evidence (gap 5).
+  // success, stable posterior direction, and diversity of evidence -- now
+  // two of the three named diversity axes, genre and language (gap 5/gap 6).
   // Still NOT the fully calibrated confidence system blueprint §9.3/§16.2
-  // describes -- director/language diversity has no data yet (people/credits
-  // are empty, blueprint gap 6; only genre diversity is checked below), and
-  // no Brier/ECE calibration exists (ADR-21). Until then this thresholding
-  // is deliberately conservative and must never be presented to the user as
-  // a precise probability; it only decides which verbal band copy to show.
+  // describes -- director diversity has no data yet (people/credits/
+  // source_records are empty, blueprint gap 6, still open for that one axis),
+  // and no Brier/ECE calibration exists (ADR-21). Until then this
+  // thresholding is deliberately conservative and must never be presented to
+  // the user as a precise probability; it only decides which verbal band
+  // copy to show.
   private confidenceBand(snapshot: UserModelSnapshot): ConfidenceBand {
     // Each of these three is NULL below the same 5-triad floor (ADR-31) --
     // below it, every check here is a no-op and banding falls through to the
@@ -386,6 +394,12 @@ export class RecommendationsService {
     // Fewer than 2 distinct genres across the training evidence: "one series
     // repeated" by BP §9.2's own phrase, not diverse evidence.
     if (snapshot.trainingGenreDiversity !== null && snapshot.trainingGenreDiversity < MIN_TRAINING_GENRE_DIVERSITY) {
+      return 'inconclusive';
+    }
+
+    // Same check, the language axis: fewer than 2 distinct original languages
+    // across the training evidence.
+    if (snapshot.trainingLanguageDiversity !== null && snapshot.trainingLanguageDiversity < MIN_TRAINING_LANGUAGE_DIVERSITY) {
       return 'inconclusive';
     }
 

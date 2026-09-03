@@ -2,7 +2,7 @@
 
 **Status**: Derived from blueprint `§13` (entities and event shapes), `§11` (rights registry), `§7.5`–`§7.6`, `§21`. Two layers, kept apart on purpose:
 
-- **§1 Current physical schema** — exactly what the seventeen TypeORM migrations in `apps/backend/src/migrations/` create (verified 2026-09-03). This is the truth for anyone writing SQL today.
+- **§1 Current physical schema** — exactly what the eighteen TypeORM migrations in `apps/backend/src/migrations/` create (verified 2026-09-03). This is the truth for anyone writing SQL today.
 - **§2 Target schema** — the `BP §13.1` entity set expressed as tables, plus the migration plan from §1 to §2.
 
 Naming (ADR-16): tables `snake_case` plural; columns are TypeORM's default `camelCase` and therefore **quoted** in raw SQL (`"profileId"`); primary keys `uuid` via `uuid_generate_v4()`; timestamps `TIMESTAMP` (UTC by convention). The one plural-naming exception (`user_title_state`) was renamed to `user_title_states` in M1. Schema changes go through `npm run migration:generate` / `npm run db:migrate` only — `synchronize` is off in every environment.
@@ -11,7 +11,7 @@ Naming (ADR-16): tables `snake_case` plural; columns are TypeORM's default `came
 
 ## 1. Current physical schema (migrated)
 
-Migrations, in order: `1788410140231-InitialSchema`, `1788411790951-AddTriadEventFields`, `1788412500000-SplitImportedRatingFromInAppState`, `1788418200000-ArabicFirstProfileDefault`, `1788421102891-AddOneActiveTriadPerProfileConstraint`, `1788424108820-AddHeldOutTrainingMetrics`, `1788425067800-AddTriadEventCompleteness`, `1788428400000-AddTriadReplacements`, `1788432000000-AddProfileMarketAndPlatforms`, `1788435000000-CompleteM1Plan`, `1788438000000-AddM2ConsentAndAuditTables`, `1788440000000-AddM3RightsRegistryAndCatalogProvenance`, `1788442000000-AddM4ModelVersioningAndExperiments`, `1788444000000-AddM5RecommendationsAndWatchEvents`, `1788446000000-AddM6PublicQualityAndAvailability`, `1788448000000-AddM7SharedLatentSpaceVersions`, `1788450000000-AddTrainingGenreDiversity`. Extension: `uuid-ossp`. The `ankane/pgvector` image is used but no column has the `vector` type yet — `embeddings.vector` is still `real[]`, deliberately unconverted (see the note below §1's DDL block).
+Migrations, in order: `1788410140231-InitialSchema`, `1788411790951-AddTriadEventFields`, `1788412500000-SplitImportedRatingFromInAppState`, `1788418200000-ArabicFirstProfileDefault`, `1788421102891-AddOneActiveTriadPerProfileConstraint`, `1788424108820-AddHeldOutTrainingMetrics`, `1788425067800-AddTriadEventCompleteness`, `1788428400000-AddTriadReplacements`, `1788432000000-AddProfileMarketAndPlatforms`, `1788435000000-CompleteM1Plan`, `1788438000000-AddM2ConsentAndAuditTables`, `1788440000000-AddM3RightsRegistryAndCatalogProvenance`, `1788442000000-AddM4ModelVersioningAndExperiments`, `1788444000000-AddM5RecommendationsAndWatchEvents`, `1788446000000-AddM6PublicQualityAndAvailability`, `1788448000000-AddM7SharedLatentSpaceVersions`, `1788450000000-AddTrainingGenreDiversity`, `1788452000000-AddTrainingLanguageDiversity`. Extension: `uuid-ossp`. The `ankane/pgvector` image is used but no column has the `vector` type yet — `embeddings.vector` is still `real[]`, deliberately unconverted (see the note below §1's DDL block).
 
 ```sql
 users (
@@ -37,6 +37,7 @@ titles (
   "releaseYear" integer, genres text,                            -- TypeORM simple-array (comma-joined)
   "externalIds" json,                                            -- { imdb?, tmdb?, wikidata? }
   fingerprint json,                                              -- FilmFingerprintV1 or NULL (see FINGERPRINT_SCHEMA.md)
+  "originalLanguage" varchar,                                    -- Wikidata P364, single value; NULL for titles ingested before this column existed or with no recorded language (gap 5/gap 6, ADR-64)
   "createdAt" timestamp, "updatedAt" timestamp
 )
 
@@ -94,6 +95,7 @@ user_model_snapshots (                                           -- one row per 
   exceptions json,                                                -- [{ titleId, delta, tagged }] (BP §7.4); never populated
   "calibratedAgainst" varchar,                                   -- FK shared_latent_space_versions(version) once M7 creates that table (M4, ADR-54); plain column until then
   "trainingGenreDiversity" integer,                              -- distinct genre count across the training triads (gap 5); NULL below the 5-triad floor (ADR-62)
+  "trainingLanguageDiversity" integer,                           -- distinct titles.originalLanguage count across the training triads (gap 5/gap 6); NULL below the same floor (ADR-64)
   "createdAt" timestamp,
   INDEX ("profileId", "createdAt" DESC)                          -- M4
 )
@@ -482,6 +484,7 @@ Each step is one TypeORM migration; none require data backfill beyond defaults b
 ---
 
 **Changelog**
+- 2.16 (2026-09-03): eighteenth migration `AddTrainingLanguageDiversity` applied -- adds `titles.originalLanguage varchar` and `user_model_snapshots.trainingLanguageDiversity integer` (blueprint gap 5/gap 6, ADR-64). The second of `BP §9.2`'s three named diversity axes (genre, ADR-62, above): `originalLanguage` is Wikidata P364, a structured field the demo catalog fixture already carries per title, so unlike director (still blocked -- people/credits/source_records stay empty until a real ingestion pass runs against the loaded catalog) this axis needed only a column. `training.py`'s `train_profile()` now reads `originalLanguage` alongside `genres` and writes `trainingLanguageDiversity` the same way `trainingGenreDiversity` is written; `RecommendationsService.confidenceBand()` demotes to `inconclusive` below 2 distinct languages, mirroring the genre check exactly. Verified with a real `up()`/`down()`/`up()` round trip against `postgres-test`, the full backend suite (139/139) and Python suite (96/96).
 - 2.15 (2026-09-03): seventeenth migration `AddTrainingGenreDiversity` applied -- adds `user_model_snapshots.trainingGenreDiversity integer` (blueprint gap 5, ADR-62). Same migration lands alongside `posterior` finally being populated (schema unchanged -- that column has existed since M4): `training.py` now writes real per-weight standard errors and a training-genre-diversity count above the same 5-triad floor `heldOutTriadCount` uses. §1's `user_model_snapshots` DDL comments updated to match; verified with a real `up()`/`down()`/`up()` round trip against `postgres-test`, the full e2e suite (45/45), and a real (non-automated) `train_profile()` run against `postgres-test` confirming both columns round-trip correctly through actual Postgres.
 - 2.14 (2026-09-03): no migration -- application code. `RecommendationsService.findForProfile()` now writes one `recommendations` row per shown result (ADR-58), the first write to any M2–M7 table since the schema plan closed. §1's `recommendations` DDL comment, the entity map and the M5 plan row updated to say so.
 - 2.13 (2026-09-03): sixteenth migration `AddM7SharedLatentSpaceVersions` applied -- closes the table half of M7: `shared_latent_space_versions` created, and the `FK_user_model_snapshots_calibratedAgainst` constraint M4 deferred (ADR-54) added now that the target table exists. The other M7 item, converting `embeddings.vector` from `real[]` to pgvector's `vector(n)`, is deliberately not done: no document or code in this repository specifies a dimension `n` -- unlike every other item across all seven steps, this one had no literal target DDL to implement, because no embedding-generation code exists and the table is empty everywhere. Asked the user rather than inventing a product/vendor decision; deferred (ADR-57). This is the only item left open across the entire seven-step migration plan. §1 DDL, the entity map and the M7 plan row updated to match; verified with a real `up()`/`down()`/`up()` round trip against `postgres-test` and the full e2e suite (41/41) passing after.

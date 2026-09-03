@@ -156,7 +156,19 @@ Both had been deferred as needing either real ML work or an undecided metric. In
 
 Both new fields are `NULL` below the same 5-triad floor `heldOutTriadCount` already uses (ADR-31) and for every snapshot trained before this migration — existing behavior unchanged in both cases, verified by every pre-existing snapshot mock (none of which set the new fields) still passing unmodified. Full suites green: Python 85 tests, backend 118 unit / 45 e2e; `tsc`/`eslint`/`ruff` clean. Verified beyond the automated suites too: a disposable script seeded a real profile with 6 titles (3 "Thriller"/3 "Drama") and 6 completed triads directly into `postgres-test`, ran `train_profile()` for real, and confirmed `posterior`/`trainingGenreDiversity` round-tripped through actual Postgres (not just pure-Python objects in a unit test) — `{"standardErrors": [...13 values]}`, `trainingGenreDiversity: 2` (ADR-62).
 
-**Still open**: director/language diversity — the other two of `§9.2`'s three named diversity axes — blocked on gap 6's still-empty `people`/`credits` tables, not fixable by another wiring pass. No Brier/ECE calibration exists, so `confidenceBand()` is still a verbal heuristic, never a precise probability.
+**Still open at the time**: director/language diversity, the other two of `§9.2`'s three named axes — language closed the same day once the demo catalog's data turned out to already exist, see below.
+
+## Closed on 2026-09-03 (blueprint gap 5, remainder — language diversity)
+
+Checking what the demo catalog fixture (WS1/WS2, session C) actually carries per title found `originalLanguage` (Wikidata P364, structured) already present — unlike director, which needs `people`/`credits` populated by a real ingestion pass this codebase can't run yet (no director/cast property is fetched anywhere today; that's still gap 6, unchanged). Language diversity needed only a column and the same wiring genre diversity already used (ADR-62).
+
+| Gap | What changed | Proof |
+|---|---|---|
+| Language diversity (`§9.2`'s second named diversity axis): no per-title language data existed in the schema at all | `titles` gains `originalLanguage varchar` (migration `AddTrainingLanguageDiversity`); `training.py`'s `compute_language_diversity()` mirrors `compute_genre_diversity()` exactly (single value instead of a list); new `trainingLanguageDiversity integer` column on `user_model_snapshots`. `confidenceBand()` overrides to `'inconclusive'` when `< 2` distinct languages, same as genre | 4 new Python unit tests (counting, one-language-repeated, missing-title-data, none-known) + 2 new `train_and_evaluate` cases + 4 new TypeScript unit tests |
+
+Both columns are `NULL` for every title/snapshot that predates this migration — unchanged behavior for them, verified by every pre-existing snapshot mock still passing unmodified. Full suites green: Python 96 tests (also fixed a stale local venv missing the `anthropic` package that had been blocking the full suite, `test_training.py`/`test_ranker.py` unaffected either way), backend 139 unit tests; `tsc`/`eslint`/`ruff` clean. Verified with a real `up()`/`down()`/`up()` migration round trip against `postgres-test` (ADR-64).
+
+**Still open**: director diversity, the last of `§9.2`'s three named axes — blocked on gap 6's still-empty `people`/`credits` tables (no ingestion pass exists, and `fetch-catalog.ts` fetches no director/cast property today), not fixable by another wiring pass. No Brier/ECE calibration exists, so `confidenceBand()` is still a verbal heuristic, never a precise probability.
 
 ## Closed on 2026-09-03 (blueprint gap 7, partial — onboarding records two of four purposes)
 
@@ -484,7 +496,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Three tracks | ❌ | ❌ | every result is `safe` (`§4.4`, ADR-8) |
 | Candidate filtering | ✅ | ✅ | excludes `watched` and unfingerprinted only; `not_watched` stays a candidate (`§2.4 #3`) |
 | Unknown dimensions | ✅ | ✅ | pool-mean imputation, `fingerprintCoverage`, one-band demotion (`§11.3`, ADR-19) |
-| Confidence band (verbal, no %) | ✅ | 🟡 | band from triad count, fingerprint-quality demotion, held-out prediction success, posterior stability and genre diversity (ADR-59, ADR-62); director/language diversity still missing, blocked on gap 6 (gap 5) |
+| Confidence band (verbal, no %) | ✅ | 🟡 | band from triad count, fingerprint-quality demotion, held-out prediction success, posterior stability, genre and language diversity (ADR-59, ADR-62, ADR-64); director diversity still missing, blocked on gap 6 (gap 5) |
 | Internal rerank blend (`§10.3`, ADR-20) | ❌ | ❌ | |
 | Attribution gate + `evidenceSource` | 🟡 | 🟡 | every reason carries `evidenceSource: 'individual'` (MVP phase 1 of `§7.6`, SPECIFICATION §5.3) and the screen labels it "from your own choices"; the gate itself (`population_enriched`, `§12.2`) waits for the shared space (ADR-13) |
 | Outcomes endpoint | ❌ | ❌ | `§13.1 outcomes` — table exists since M5, empty |
