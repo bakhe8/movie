@@ -30,6 +30,7 @@ EXTRACTOR_VERSION = "enrichment-worker-v2"
 # a truncated fingerprint.
 FINGERPRINT_MAX_TOKENS = 8192
 EXPLANATION_MAX_TOKENS = 2048
+CLIENT_MAX_RETRIES = 6
 
 
 class FilmFingerprintV1(BaseModel):
@@ -82,6 +83,51 @@ class FilmFingerprintV1(BaseModel):
     licenseStatus: Optional[str] = None
     # 'unreviewed' until a human review queue exists (FINGERPRINT_SCHEMA.md §8).
     reviewStatus: Optional[str] = None
+
+
+class FingerprintConfidence(BaseModel):
+    """Per-dimension confidence, 0-1 -- one named field per dimension so the
+    structured-output schema *requires* all thirteen. A free-form map came
+    back empty from the model on the first real run; a named object cannot."""
+
+    pacing: float
+    rhythmVariance: float
+    ambiguity: float
+    psychologicalDepth: float
+    warmth: float
+    darkness: float
+    linearity: float
+    dialogueDensity: float
+    actionIntensity: float
+    plotComplexity: float
+    visualComplexity: float
+    soundscapeComplexity: float
+    colorSaturation: float
+
+
+class FingerprintOutput(BaseModel):
+    """What the model is asked to produce: the thirteen dimensions, themes and
+    a complete confidence object. Provenance is never part of this schema --
+    generate_fingerprint() stamps it afterwards onto the published
+    FilmFingerprintV1, whose shape (confidence as a map) stays unchanged."""
+
+    pacing: float = Field(..., description="Pacing 0-1 (slow to fast)")
+    rhythmVariance: float = Field(..., description="Rhythm variance 0-1 (consistent to varied)")
+    ambiguity: float = Field(..., description="Ambiguity 0-1 (clear to ambiguous)")
+    psychologicalDepth: float = Field(..., description="Psychological depth 0-1 (shallow to deep)")
+    warmth: float = Field(..., description="Emotional warmth 0-1 (cold to warm)")
+    darkness: float = Field(..., description="Darkness 0-1 (light to dark)")
+    linearity: float = Field(..., description="Narrative structure 0-1 (linear to fragmented)")
+    dialogueDensity: float = Field(..., description="Dialogue density 0-1 (sparse to dense)")
+    actionIntensity: float = Field(..., description="Action intensity 0-1 (contemplative to action-heavy)")
+    plotComplexity: float = Field(..., description="Plot complexity 0-1 (simple to complex)")
+    visualComplexity: float = Field(..., description="Visual complexity 0-1 (minimal to elaborate)")
+    soundscapeComplexity: float = Field(..., description="Soundscape complexity 0-1 (minimal to elaborate)")
+    colorSaturation: float = Field(..., description="Color saturation 0-1 (desaturated/black-and-white to vivid)")
+    themes: list[str] = Field(default_factory=list, description="Primary themes, short phrases")
+    confidence: FingerprintConfidence = Field(
+        ..., description="How well the evidence supports each score, 0-1 per dimension; low where the plot text says little"
+    )
 
 
 def _refusal_text(response) -> Optional[str]:
@@ -141,7 +187,10 @@ class FilmEnrichmentWorker:
             # optional configuration, never a hard-coded value.
             workspace_id = os.environ.get("ANTHROPIC_WORKSPACE_ID")
             headers = {"anthropic-workspace-id": workspace_id} if workspace_id else None
-            self._client = anthropic.Anthropic(default_headers=headers)
+            # Batch extraction is latency-tolerant: let the SDK's exponential
+            # backoff absorb 429/529/5xx bursts (default is 2 retries; a 529
+            # "Overloaded" got through that on the first real catalog run).
+            self._client = anthropic.Anthropic(default_headers=headers, max_retries=CLIENT_MAX_RETRIES)
         return self._client
 
     def _resolve_model(self, env_var: str) -> str:
@@ -207,13 +256,13 @@ Provide scores for all dimensions. For dimensions you're less confident about, p
                 max_tokens=FINGERPRINT_MAX_TOKENS,
                 system=instructions,
                 messages=[{"role": "user", "content": input_text}],
-                output_format=FilmFingerprintV1,
+                output_format=FingerprintOutput,
             )
         except anthropic.APIError as error:
             raise ValueError(f"Anthropic fingerprint request failed: {error}") from error
 
-        parsed = getattr(response, "parsed_output", None)
-        if not isinstance(parsed, FilmFingerprintV1):
+        output = getattr(response, "parsed_output", None)
+        if not isinstance(output, FingerprintOutput):
             refusal = _refusal_text(response)
             if refusal:
                 raise ValueError(f"The model refused to fingerprint this film: {refusal}")
@@ -222,6 +271,10 @@ Provide scores for all dimensions. For dimensions you're less confident about, p
                 raise ValueError("The fingerprint response hit the token ceiling before a complete JSON object")
             raise ValueError(f"The model did not return a parsed fingerprint (stop_reason={stop_reason or 'unknown'})")
 
+        parsed = FilmFingerprintV1(
+            **output.model_dump(exclude={"confidence"}),
+            confidence=output.confidence.model_dump(),
+        )
         parsed.generatedBy = "anthropic"
         parsed.generatedAt = datetime.now(timezone.utc)
         parsed.modelVersion = _served_model(response, model)

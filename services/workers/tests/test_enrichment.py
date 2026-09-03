@@ -3,7 +3,13 @@ from unittest.mock import MagicMock
 import anthropic
 import pytest
 
-from src.enrichment import EXTRACTOR_VERSION, FilmEnrichmentWorker, FilmFingerprintV1
+from src.enrichment import (
+    EXTRACTOR_VERSION,
+    FilmEnrichmentWorker,
+    FilmFingerprintV1,
+    FingerprintConfidence,
+    FingerprintOutput,
+)
 
 FINGERPRINT_KWARGS = dict(
     pacing=0.5,
@@ -22,9 +28,19 @@ FINGERPRINT_KWARGS = dict(
 )
 
 
-def _parsed_response(fingerprint, served_model="claude-test-served"):
+def _model_output(**overrides):
+    """What the model returns: dimensions + themes + a complete confidence object."""
+    return FingerprintOutput(
+        **FINGERPRINT_KWARGS,
+        themes=["identity"],
+        confidence=FingerprintConfidence(**{key: 0.7 for key in FINGERPRINT_KWARGS}),
+        **overrides,
+    )
+
+
+def _parsed_response(output, served_model="claude-test-served"):
     """Shape of anthropic's ParsedMessage as this worker reads it."""
-    return MagicMock(parsed_output=fingerprint, stop_reason="end_turn", stop_details=None, model=served_model)
+    return MagicMock(parsed_output=output, stop_reason="end_turn", stop_details=None, model=served_model)
 
 
 def _text_response(text):
@@ -44,30 +60,41 @@ def worker():
 
 class TestGenerateFingerprint:
     def test_returns_the_parsed_fingerprint_on_success(self, worker):
-        fake_fingerprint = FilmFingerprintV1(**FINGERPRINT_KWARGS)
-        worker._client.messages.parse = MagicMock(return_value=_parsed_response(fake_fingerprint))
+        worker._client.messages.parse = MagicMock(return_value=_parsed_response(_model_output()))
 
         result = worker.generate_fingerprint("Arrival", "desc", "plot")
 
         assert isinstance(result, FilmFingerprintV1)
         assert result.pacing == 0.5
+        assert result.themes == ["identity"]
+
+    def test_confidence_is_published_as_a_complete_per_dimension_map(self, worker):
+        # The output schema names all thirteen confidence fields (a free-form
+        # map came back empty on the first real run); the published
+        # FilmFingerprintV1 keeps its map shape so the three copies stay equal.
+        worker._client.messages.parse = MagicMock(return_value=_parsed_response(_model_output()))
+
+        result = worker.generate_fingerprint("Arrival", "desc", "plot")
+
+        assert set(result.confidence) == set(FINGERPRINT_KWARGS)
+        assert all(value == 0.7 for value in result.confidence.values())
+        assert FingerprintOutput.model_json_schema()["properties"]["confidence"]["$ref"].endswith("FingerprintConfidence")
+        assert set(FingerprintConfidence.model_json_schema()["required"]) == set(FINGERPRINT_KWARGS)
 
     def test_uses_structured_output_with_the_schema_and_the_configured_model(self, worker):
-        fake_fingerprint = FilmFingerprintV1(**FINGERPRINT_KWARGS)
-        worker._client.messages.parse = MagicMock(return_value=_parsed_response(fake_fingerprint))
+        worker._client.messages.parse = MagicMock(return_value=_parsed_response(_model_output()))
 
         worker.generate_fingerprint("Arrival", "desc", "plot", additional_context="Year: 2016")
 
         call = worker._client.messages.parse.call_args
         assert call.kwargs["model"] == "claude-test"
-        assert call.kwargs["output_format"] is FilmFingerprintV1
+        assert call.kwargs["output_format"] is FingerprintOutput
         prompt = call.kwargs["messages"][0]["content"]
         assert "Arrival" in prompt and "plot" in prompt and "Year: 2016" in prompt
         assert "film analyst" in call.kwargs["system"].lower()
 
     def test_stamps_provenance_the_model_could_not_know_about_itself(self, worker):
-        fake_fingerprint = FilmFingerprintV1(**FINGERPRINT_KWARGS)
-        worker._client.messages.parse = MagicMock(return_value=_parsed_response(fake_fingerprint))
+        worker._client.messages.parse = MagicMock(return_value=_parsed_response(_model_output()))
 
         result = worker.generate_fingerprint("Arrival", "desc", "plot", source_ids=["sr-1"])
 
@@ -83,8 +110,7 @@ class TestGenerateFingerprint:
         assert result.generatedAt is not None
 
     def test_falls_back_to_the_requested_model_id_when_the_response_has_none(self, worker):
-        fake_fingerprint = FilmFingerprintV1(**FINGERPRINT_KWARGS)
-        worker._client.messages.parse = MagicMock(return_value=_parsed_response(fake_fingerprint, served_model=None))
+        worker._client.messages.parse = MagicMock(return_value=_parsed_response(_model_output(), served_model=None))
 
         result = worker.generate_fingerprint("Arrival", "desc", "plot")
 
@@ -125,8 +151,8 @@ class TestGenerateFingerprint:
         monkeypatch.setenv("ANTHROPIC_WORKSPACE_ID", "wrkspc_test")
         FilmEnrichmentWorker(model="claude-test")._get_client()
 
-        assert constructed[0] == {"default_headers": None}
-        assert constructed[1] == {"default_headers": {"anthropic-workspace-id": "wrkspc_test"}}
+        assert constructed[0] == {"default_headers": None, "max_retries": 6}
+        assert constructed[1] == {"default_headers": {"anthropic-workspace-id": "wrkspc_test"}, "max_retries": 6}
 
     def test_requires_a_configured_model_when_no_override_is_given(self, monkeypatch):
         monkeypatch.delenv("ANTHROPIC_FINGERPRINT_MODEL", raising=False)
