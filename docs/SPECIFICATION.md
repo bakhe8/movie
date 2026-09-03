@@ -97,11 +97,13 @@ Naming rule: TypeScript/JSON use `camelCase`; SQL tables are `snake_case`, SQL c
 - Two separate neutral controls per card: "Haven't watched — replace" and "Don't remember — replace". Each calls the replace endpoint, logs the reason, and swaps only that item.
 - After submit: next triad loads. A visible "your model updated" result is periodic, not necessarily per triad (open experiment, `BP App. C`).
 - Ties / partial ranking: not offered until the `BP App. C` experiment decides between partial order and neutral replacement.
+- No prediction, score or confidence of any kind is displayed on this screen; the display rules of ADR-33 have nothing to apply to here.
 
 ### 5.3 Recommendations (`BP §4.4`, `§9.4`)
 
 - Three tracks, each short (3–5 items on the home screen, `BP §5.3`).
 - Each item: title, Personal Fit, Public Quality, Watchability (with market/platform), confidence band, one no-spoiler reason with `evidenceSource`, and actions: add to watchlist, "not relevant" (logged as an outcome only), where to watch.
+- Display formats (ADR-33): confidence is one of the four `BP §9.3` bands rendered as copy; Personal Fit is a verbal level, an ordinal position inside its track, or an unlabelled bar — never a percentage or a probability-like number; Public Quality carries its source and vote count; the four values and the confidence sit in separate labelled cells, no value is repeated on the card, and nothing is merged (ADR-20). This holds on every surface that shows a prediction — taste profile, work page, library ranking, share cards — not only here.
 - Reason text must be generated only from features that actually drove the score, must not spoil, must not attribute sensitive traits, and must describe the limit of confidence when confidence is weak (`BP §9.4`).
 - In MVP every displayed reason is `evidenceSource: individual` (phase 1 of `BP §7.6`); `population_enriched` reasons are disabled behind the `BP §17.3` cohort gate.
 
@@ -109,6 +111,7 @@ Naming rule: TypeScript/JSON use `camelCase`; SQL tables are `snake_case`, SQL c
 
 - Watched list, personal ranking of the library, watchlist, timeline.
 - Marking a recommended title as watched records a `watch_events` row (source, edition/audio/subtitles/provider when known) and an `outcomes` row against the recommendation; the title becomes eligible for later triads. No rating prompt.
+- The post-watch surface asks no preference question of any form — not stars, not thumbs, not "as expected / less than expected" (ADR-4 consequence, [UI_MOCKUP_REVIEW_2026-09-03.md](UI_MOCKUP_REVIEW_2026-09-03.md) §5.2). Its only inputs are watch facts (`watch-events`) and outcomes (`outcomes`); the film re-enters a later triad, which is where expectation meets reality (`BP §4.5`).
 
 ### 5.5 Admin board (`BP §5.1`, `§17.2`)
 
@@ -195,4 +198,5 @@ Do not "decide" these in code; instrument and test them.
 ---
 
 **Changelog**
+- 2.1 (2026-09-03): §5.2–§5.4 display rules from the mockup review (ADR-33; ADR-4 consequence): no prediction on the triad screen; verbal confidence and non-percentage Personal Fit on every prediction surface; no expectation question after a watch.
 - 2.0 (2026-09-03): rewritten as a derived engineering spec; removed duplicated product narrative, stale "Phase 1/2/3" roadmap, invented thresholds, hard-coded model names, a fabricated OpenAI header, and the merged-score/rating-prompt remnants of the pre-blueprint draft.
