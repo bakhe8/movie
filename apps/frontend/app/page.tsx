@@ -70,7 +70,12 @@ export default function Home() {
     );
   }
 
-  if (!profile) {
+  // Until the onboarding decision is made (one effect pass after the profile
+  // arrives), render the same placeholder instead of the signed-in shell:
+  // rendering `home` here mounted RecommendationsScreen for a user who was
+  // about to see onboarding, firing recommendation/list requests (and their
+  // designed 409 "no model yet" replies) that the user never asked for.
+  if (!profile || onboarding === 'unknown') {
     return <p className="muted">{lang === 'ar' ? 'جارٍ إعداد ملفك…' : 'Setting up your profile…'}</p>;
   }
 
