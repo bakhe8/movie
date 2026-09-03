@@ -1,9 +1,19 @@
 # Phase 1 Implementation Checklist
 
+> **Status snapshot (2026-09-03)** — verified against the code at commit `fc72d85`, not against
+> intentions. `[x]` means it exists in the repo and was exercised (unit test, e2e test, or the
+> manual browser pass below). Anything partial stays `[ ]` with a note saying exactly what exists.
+>
+> Verified on 2026-09-03: backend vitest suite (38 tests, 5 files) passes; Python worker pytest
+> suite (21 tests) passes; `tsc --noEmit` clean on both apps; all three migrations applied to the
+> local Postgres; full manual browser pass — register → Discover (mark 6 titles watched) → Rank
+> (load triad, reorder, save, next triad auto-loads) → My list (watched list + "model not trained
+> yet" message) → Profile → language toggle → logout.
+
 ## Project Setup ✅ COMPLETED
 - [x] Monorepo structure (Next.js, NestJS, Python workers, shared types)
-- [x] Database schema defined (PostgreSQL with pgvector)
-- [x] Docker Compose for PostgreSQL + Redis
+- [x] Database schema defined (PostgreSQL with pgvector) — 3 TypeORM migrations in `apps/backend/src/migrations`
+- [x] Docker Compose for PostgreSQL + Redis (+ a disposable `postgres-test` service for e2e)
 - [x] Environment configuration template
 - [x] Documentation (architecture, schema, privacy, quickstart)
 - [x] Plackett-Luce ranker implementation (Python)
@@ -16,20 +26,20 @@
 ## Authentication & Users
 
 ### Backend
-- [ ] `AuthService` - Register, login, JWT token generation
-- [ ] `AuthController` - POST /auth/register, POST /auth/login, POST /auth/refresh
-- [ ] `JwtStrategy` - Validate tokens on protected endpoints
-- [ ] Password hashing (bcrypt or argon2)
-- [ ] Email validation
-- [ ] Refresh token mechanism
-- [ ] Tests: Unit tests for auth logic
+- [x] `AuthService` - Register, login, JWT token generation
+- [x] `AuthController` - POST /auth/register, POST /auth/login, GET /auth/profile (no /auth/refresh yet — see below)
+- [x] `JwtStrategy` - Validate tokens on protected endpoints
+- [x] Password hashing (bcrypt, cost 10)
+- [x] Email validation (`@IsEmail` in RegisterDto; password 8–64 chars)
+- [ ] Refresh token mechanism (single access token only)
+- [x] Tests: Unit tests for auth logic (`auth.service.spec.ts`, 7 tests)
 
 ### Frontend
-- [ ] Login page with email/password form
-- [ ] Register page with form validation
-- [ ] JWT token storage (localStorage or httpOnly cookie)
-- [ ] Auto-redirect to login if unauthenticated
-- [ ] Logout functionality
+- [x] Login page with email/password form (`AuthScreen`)
+- [x] Register page with form validation (required fields, email type, 8-char minimum password)
+- [x] JWT token storage — `localStorage` via `lib/session.tsx`
+- [x] Auto-redirect to login if unauthenticated (`page.tsx` renders `AuthScreen` when there is no session)
+- [x] Logout functionality (`ProfileScreen`)
 - [ ] Password reset flow (optional for MVP)
 
 ---
@@ -37,19 +47,20 @@
 ## Profiles Management
 
 ### Backend
-- [ ] `ProfilesService` - CRUD operations
-- [ ] `ProfilesController` - REST endpoints
-  - [ ] GET /profiles/{id} - Get profile details
-  - [ ] POST /profiles - Create new profile
-  - [ ] PATCH /profiles/{id} - Update profile
-  - [ ] DELETE /profiles/{id} - Delete profile
-- [ ] Profile validation (unique name per user)
-- [ ] Authorization (users can only access their own profiles)
-- [ ] Tests: Profile CRUD tests
+- [x] `ProfilesService` - CRUD operations
+- [x] `ProfilesController` - REST endpoints
+  - [x] GET /profiles - List the caller's profiles
+  - [x] GET /profiles/{id} - Get profile details
+  - [x] POST /profiles - Create new profile
+  - [x] PATCH /profiles/{id} - Update profile
+  - [x] DELETE /profiles/{id} - Delete profile
+- [x] Profile validation (unique name per user — DB unique constraint on `(userId, name)`)
+- [x] Authorization (users can only access their own profiles — ownership check on every profile-scoped route, covered by `test/idor.e2e-spec.ts`)
+- [x] Tests: Profile CRUD tests (`profiles.service.spec.ts`, 7 tests)
 
 ### Frontend
-- [ ] Profile page showing current profile
-- [ ] Create new profile dialog
+- [x] Profile page showing current profile (name, user email; `ProfileScreen`)
+- [ ] Create new profile dialog (the session provider auto-creates one default profile on first login)
 - [ ] Edit profile form
 - [ ] Delete profile confirmation
 - [ ] Switch between profiles (if user has multiple)
@@ -59,60 +70,60 @@
 ## Film Catalog Management
 
 ### Backend
-- [ ] `TitlesService` - Search, CRUD
-- [ ] `TitlesController` - REST endpoints
-  - [ ] GET /titles - List films with pagination
-  - [ ] GET /titles/{id} - Get film details
-  - [ ] POST /titles - Add new film (admin only)
-  - [ ] GET /titles/search?q={query} - Search by title
-- [ ] Fingerprint field on Title entity
-- [ ] Tests: Search functionality, pagination
+- [x] `TitlesService` - Search (ILIKE on `titleEn`/`titleAr`), list with pagination, get by id
+- [x] `TitlesController` - REST endpoints
+  - [x] GET /titles - List films with pagination
+  - [x] GET /titles/{id} - Get film details
+  - [ ] POST /titles - Add new film (admin only) — not implemented, no admin role exists
+  - [x] GET /titles/search?q={query} - Search by title
+- [x] Fingerprint field on Title entity (`FilmFingerprintV1`, 13 numeric dimensions + `themes`)
+- [ ] Tests: Search functionality, pagination (no `titles.service.spec.ts` yet)
 
 ### Frontend
-- [ ] Film search page with autocomplete
+- [x] Film search page with live (debounced) search (`DiscoverScreen`)
 - [ ] Film detail view (title, year, description, fingerprint)
 - [ ] Display fingerprint radar chart (optional for MVP)
-- [ ] No edit/delete for non-admins
+- [x] No edit/delete for non-admins (there is no write UI for titles at all)
 
 ### Data Seeding
-- [ ] Select 300-500 films to seed
-- [ ] Create migration/seed script
-- [ ] Manually add films via admin API
-- [ ] Generate fingerprints (batch job)
+- [ ] Select 300-500 films to seed — **15 films** seeded so far (`scripts/seed.ts`)
+- [x] Create migration/seed script (`npm run db:seed`)
+- [ ] Manually add films via admin API (no admin API)
+- [ ] Generate fingerprints (batch job) — the 15 seeded fingerprints are hand-entered placeholders, not worker output
 
 ---
 
 ## Triadic Ranking (Core Feature)
 
 ### Backend
-- [ ] `TriadsService` - Generate, store, score
-- [ ] `TriadsController` - REST endpoints
-  - [ ] GET /profiles/{id}/triads/current - Get next triad to rank
-  - [ ] POST /triads/{id}/rank - Submit ranking
-  - [ ] GET /triads/{id} - Get triad details
-  - [ ] GET /profiles/{id}/triads - List user's completed triads
-- [ ] Triad generation logic:
-  - [ ] Select 3 random unranked films initially
-  - [ ] Later: select films to distinguish between similar preferences
-- [ ] Ranking validation (ensure valid ranking [0,1,2])
-- [ ] "Haven't watched" / "Don't remember" replacement logic — two distinct neutral states, neither a preference signal (blueprint §2.4 principle #3, §4.3)
-- [ ] Tests: Triad generation, ranking validation
+- [x] `TriadsService` - Generate, store (scoring lives in the Python ranker, not here)
+- [x] `TriadsController` - REST endpoints
+  - [x] GET /profiles/{id}/triads/current - Get next triad to rank (creates one if none is active)
+  - [x] POST /triads/{id}/rank - Submit ranking
+  - [ ] GET /triads/{id} - Get triad details — not implemented
+  - [x] GET /profiles/{id}/triads - List user's completed triads
+- [x] Triad generation logic:
+  - [x] Select 3 random watched, not-yet-ranked films (policy `random-v1`; each triad records `policyVersion`, `displayOrder` shuffled independently of `titleIds`, and `selectionPropensity` = 1/C(pool,3) for later off-policy evaluation)
+  - [ ] Later: select films to distinguish between similar preferences (adaptive policy)
+- [x] Ranking validation (ensure valid ranking [0,1,2]; rejects re-submission of a completed triad)
+- [ ] "Haven't watched" / "Don't remember" replacement logic — two distinct neutral states, neither a preference signal (blueprint §2.4 principle #3, §4.3). `metadata.replacements` is reserved on the entity but nothing writes it.
+- [x] Tests: Triad generation, ranking validation (`triads.service.spec.ts`, 10 tests)
 
 ### Frontend
-- [ ] Triadic ranking interface (3 cards visible)
-  - [ ] Film poster/title for each card, licensed poster only — no critic scores shown in the triad (blueprint §4.3)
-  - [ ] Click to rank (1st → 2nd → 3rd), plus a keyboard-accessible alternative to drag/click for RTL clarity
-  - [ ] Visual feedback for selected ranking
-  - [ ] Submit button
+- [x] Triadic ranking interface (3 cards visible) (`RankScreen`)
+  - [ ] Film poster/title for each card, licensed poster only — no critic scores shown in the triad (blueprint §4.3). **Today: title, year, genres, description only; no poster field exists on Title yet.** No critic scores are shown, as required.
+  - [x] Click to rank plus a keyboard-accessible alternative — drag-and-drop **and** ↑/↓ buttons on every card
+  - [x] Visual feedback for selected ranking (position number per card)
+  - [x] Submit button
   - [ ] "Haven't watched? Replace" and "Don't remember it well? Replace" as two separate buttons
 - [ ] Film replacement dialog (show similar films to replace with)
 - [ ] Progress indicator (X of N triads completed — N is not a fixed constant; first-value target is 3-5 triads and Alpha completion target is 20-30 triads per blueprint §17.2, exact count is an open question per blueprint Appendix C)
-- [ ] Confirmation on submit
-- [ ] Next triad automatically loads
-- [ ] Tests: Ranking component behavior
+- [ ] Confirmation on submit (currently saves and immediately loads the next round)
+- [x] Next triad automatically loads
+- [ ] Tests: Ranking component behavior (no frontend test setup yet)
 
 ### Placeholder for AI Integration
-- [ ] Triad generation strategy (initially random)
+- [x] Triad generation strategy (initially random)
 - [ ] TODO: Connect to Python ranker (Phase 1b)
   - Compute information gain
   - Select most informative triads
@@ -122,45 +133,45 @@
 ## Preference Model Training
 
 ### Python Worker
-- [ ] `PlackettLuceRanker.fit()` - Train from triads
-  - [ ] Collect all completed triads for user
-  - [ ] Extract fingerprints
-  - [ ] Run MLE optimization
-  - [ ] Store weights in database
-- [ ] `PlackettLuceRanker.predict_score()` - Score films
-- [ ] `compute_pairwise_accuracy()` - Validate model
-- [ ] Tests: MLE convergence, accuracy measurement
+- [x] `PlackettLuceRanker.fit()` - Train from triads (`src/training.py`, CLI `train-profile <profile-uuid>`)
+  - [x] Collect all completed triads for profile (direct Postgres read via `DATABASE_URL`)
+  - [x] Extract fingerprints (13 dimensions, same order as the backend)
+  - [x] Run MLE optimization (BFGS, L2 regularisation; population prior term `b_i` threaded through, currently all-zero)
+  - [x] Store weights in database (`user_model_snapshots`, with `pairwiseAccuracy` and `trainingTriadCount`)
+- [x] `PlackettLuceRanker.predict_score()` - Score films
+- [x] `compute_pairwise_accuracy()` - Validate model
+- [x] Tests: MLE convergence, accuracy measurement, population-prior effect (`tests/test_ranker.py`, `tests/test_training.py`)
 
 ### Backend Integration
-- [ ] `RankerService` - Wrapper around Python worker
+- [ ] `RankerService` - Wrapper around Python worker — **none; training is a manual CLI run, the backend never invokes Python**
 - [ ] Job queue integration:
   - [ ] Trigger retraining after each N triads (e.g., every 5)
-  - [ ] Store trained weights in `user_model_snapshots`
+  - [x] Store trained weights in `user_model_snapshots` (written by the Python CLI directly)
   - [ ] Handle job failures gracefully
-- [ ] Cache user weights in Redis
-- [ ] Tests: Model storage and retrieval
+- [ ] Cache user weights in Redis (Redis container runs; nothing in the backend uses it)
+- [ ] Tests: Model storage and retrieval (only the read side is covered, in `recommendations.service.spec.ts`)
 
 ---
 
 ## Recommendations Generation
 
 ### Backend
-- [ ] `RecommendationsService` - Score and rank films
-- [ ] `RecommendationsController`
-  - [ ] GET /profiles/{id}/recommendations - Get top N recommendations
+- [x] `RecommendationsService` - Score and rank films
+- [x] `RecommendationsController`
+  - [x] GET /profiles/{id}/recommendations - Get top N recommendations (`?limit=`); returns 409 until a model snapshot exists
   - [ ] POST /recommendations/{id}/feedback - Log user feedback
-- [ ] Scoring logic:
-  - [ ] Load user's preference weights
-  - [ ] Compute Personal Fit, Public Quality, and Watchability separately for all unwatched films (blueprint §4.4 — never merge into one score)
-  - [ ] Sort candidates by Personal Fit within each of the three tracks (safe / discovery / outside-usual)
-  - [ ] Filter (already watched, etc.)
-  - [ ] Return top 10 with a confidence BAND (Initial/Likely/Strong/Inconclusive), not a raw percentage (blueprint §7.2, §9.3)
-- [ ] Cache invalidation after triad ranking
-- [ ] Tests: Recommendation scoring
+- [x] Scoring logic:
+  - [x] Load user's preference weights (latest `user_model_snapshots` row; rejects dimension mismatch)
+  - [x] Compute Personal Fit, Public Quality, and Watchability separately (blueprint §4.4 — never merge into one score). **Personal Fit is computed; Public Quality and Watchability are returned as explicit `null` because no data source for either exists yet.**
+  - [ ] Sort candidates by Personal Fit within each of the three tracks (safe / discovery / outside-usual) — every result is `track: 'safe'` today; no discovery/outside-usual policy exists
+  - [x] Filter (already watched / not_watched, titles without a fingerprint)
+  - [x] Return top N with a confidence BAND (Initial/Likely/Strong/Inconclusive), not a raw percentage (blueprint §7.2, §9.3). **The band is a provisional heuristic on `trainingTriadCount`, not the calibrated system blueprint §16.2 requires.**
+- [ ] Cache invalidation after triad ranking (no cache yet)
+- [x] Tests: Recommendation scoring (`recommendations.service.spec.ts`, 9 tests)
 
 ### Frontend
-- [ ] Recommendations page
-  - [ ] Display top recommendations (10), grouped by safe / discovery / outside-usual
+- [ ] Recommendations page — `ListScreen` renders a flat title+description list when recommendations exist, and a translated "not trained yet / empty / error" message otherwise. Not yet:
+  - [ ] Grouped by safe / discovery / outside-usual
   - [ ] Show Personal Fit, Public Quality, and Watchability as three separate values, plus confidence band
   - [ ] Show top reasons (dimensions that drove recommendation), no-spoiler
   - [ ] Show similar films
@@ -170,7 +181,7 @@
 - [ ] Tests: Recommendations rendering
 
 ### Explanation Module (Optional for MVP)
-- [ ] `ExplanationService` - Call OpenAI for natural language explanation
+- [ ] `ExplanationService` - Call OpenAI for natural language explanation (`enrichment.py` has an unused `generate_recommendation_explanation`; nothing calls it)
 - [ ] Template for explanation (no LLM needed initially)
 - [ ] Example: "You enjoy psychological dramas with complex narratives. Interstellar matches your taste for narrative ambiguity and complexity." (no bare numeric feature score shown to the user — explanations describe the evidence qualitatively; a calibrated percentage is never shown pre-calibration, blueprint §7.2, §9.4)
 
@@ -179,19 +190,21 @@
 ## User State Management
 
 ### Backend
-- [ ] `UserTitleStateService` - Manage watched/watchlist/interested
-- [ ] Controller endpoints:
-  - [ ] PATCH /profiles/{id}/titles/{titleId}/state - Update state
-  - [ ] GET /profiles/{id}/watched-titles - List watched
-  - [ ] GET /profiles/{id}/watchlist - List watchlist
-- [ ] States: watched, not_watched, watchlist, interested
-- [ ] Tests: State transitions
+- [x] `UserTitleStateService` - Manage watched/watchlist/interested
+- [x] Controller endpoints:
+  - [x] PATCH /profiles/{id}/titles/{titleId}/state - Update state
+  - [x] GET /profiles/{id}/watched-titles - List watched
+  - [x] GET /profiles/{id}/watchlist - List watchlist
+- [x] States: watched, not_watched, watchlist, interested
+- [x] No in-app rating: the PATCH endpoint cannot write a rating. `importedRating` + `ratingSource: 'import'` exist for a future list-import path only (blueprint §2.4 principle #2, §4.5; migration `SplitImportedRatingFromInAppState`)
+- [x] Tests: State transitions (`user-title-state.service.spec.ts`, 5 tests)
 
 ### Frontend
-- [ ] Mark films as watched/not watched
+- [x] Mark films as watched (`DiscoverScreen`)
+- [ ] Mark films as not watched
 - [ ] Add to watchlist
-- [ ] View watch history
-- [ ] Integrate with search results (show state)
+- [x] View watch history (`ListScreen`, "Watched films")
+- [ ] Integrate with search results (show state) — Discover only remembers clicks made in the current session; it does not load existing states on mount
 
 ---
 
@@ -204,7 +217,7 @@
   - [ ] GET /admin/triads/latest - View recent rankings
   - [ ] GET /admin/recommendations/test - Test recommendation engine
   - [ ] GET /admin/films/missing-fingerprints - Films without fingerprints
-- [ ] Authorization: Admin role only
+- [ ] Authorization: Admin role only (no roles exist)
 
 ### Frontend
 - [ ] Admin login with elevated privileges
@@ -218,27 +231,31 @@
 ## Testing & Quality Assurance
 
 ### Unit Tests
-- [ ] Auth logic (login, token validation)
-- [ ] Ranker accuracy (Plackett-Luce on synthetic data)
-- [ ] Recommendation scoring
-- [ ] State transitions (watched/not-watched)
+- [x] Auth logic (login, token validation)
+- [x] Ranker accuracy (Plackett-Luce on synthetic data)
+- [x] Recommendation scoring
+- [x] State transitions (watched/not-watched)
 
 ### API Tests (Backend)
-- [ ] Auth endpoints (register, login)
-- [ ] Profile CRUD
+`test/idor.e2e-spec.ts` runs over real HTTP against the disposable `postgres-test` container
+(`npm run test:e2e`). It proves the auth guard (401 without a token) and that every
+profile-scoped route rejects another user's profile — profiles CRUD, triads, recommendations,
+title state, watchlist. It is **not** functional coverage of the endpoints themselves:
+- [ ] Auth endpoints (register, login) — register is exercised as setup; login is unit-tested only
+- [ ] Profile CRUD — ownership/404 paths only
 - [ ] Titles search and pagination
-- [ ] Triads generation and ranking
-- [ ] Recommendations generation
+- [ ] Triads generation and ranking — ownership only
+- [ ] Recommendations generation — ownership only
 
 ### E2E Tests (Frontend)
-- [ ] Complete ranking flow (login → rank 5 triads → view recommendations)
+- [ ] Complete ranking flow (login → rank 5 triads → view recommendations) — done **manually** on 2026-09-03, not automated
 - [ ] Film search and viewing
 - [ ] State management (watch/unwatched)
 
 ### Manual Testing
-- [ ] Triadic ranking interface feels responsive
-- [ ] Recommendations update after ranking
-- [ ] No N+1 queries in database
+- [x] Triadic ranking interface feels responsive (browser pass 2026-09-03: load, reorder, save, next round)
+- [ ] Recommendations update after ranking — not verified; no training run has been done against a real profile yet
+- [ ] No N+1 queries in database (`RankScreen` fetches each of the 3 titles with a separate GET /titles/{id})
 - [ ] Performance with 100+ films, 50+ rankings
 
 ---
@@ -246,8 +263,8 @@
 ## Database & Infrastructure
 
 ### PostgreSQL
-- [ ] Create all tables from schema.md
-- [ ] Add indexes for performance
+- [x] Create all tables from schema.md (3 migrations: InitialSchema, AddTriadEventFields, SplitImportedRatingFromInAppState)
+- [ ] Add indexes for performance — only primary keys and unique constraints exist, no explicit indexes
 - [ ] Test on 1000s of titles, 100s of triads
 - [ ] Backup strategy
 
@@ -257,10 +274,10 @@
 - [ ] (Future: Job queue with BullMQ)
 
 ### Docker
-- [ ] Verify PostgreSQL + pgvector builds
-- [ ] Verify Redis builds
-- [ ] docker-compose.yml tested locally
-- [ ] Environment variable substitution works
+- [x] Verify PostgreSQL + pgvector builds (`ankane/pgvector`, healthy)
+- [x] Verify Redis builds (healthy; unused by the app so far)
+- [x] docker-compose.yml tested locally (dev `postgres` on host port 5433, `postgres-test` on 5544)
+- [x] Environment variable substitution works (compose defaults + `.env`)
 
 ---
 
@@ -269,12 +286,12 @@
 ### Backend
 - [ ] Fingerprinting job processor
 - [ ] Queue fingerprinting for new films
-- [ ] Store fingerprint in title.fingerprint field
+- [ ] Store fingerprint in title.fingerprint field (column exists; nothing writes worker output into it yet)
 - [ ] Handle OpenAI errors gracefully
 
 ### Python Worker
-- [ ] `FilmEnrichmentWorker.generate_fingerprint()`
-- [ ] Call OpenAI Responses API with schema enforcement
+- [x] `FilmEnrichmentWorker.generate_fingerprint()` (`src/enrichment.py`)
+- [x] Call OpenAI with schema enforcement (structured output, `response_format=FilmFingerprintV1`)
 - [ ] Batch processing capability
 - [ ] Retry logic for failed API calls
 
@@ -289,16 +306,16 @@
 
 ### Local Development ✅
 - [x] Docker Compose setup
-- [x] npm dev working
+- [x] npm dev working (`npm run dev` starts both apps; backend on :3101 under `/api`, frontend on :3000)
 
 ### Staging (Pre-Launch)
 - [ ] Deploy backend to staging environment
 - [ ] Deploy frontend to staging
-- [ ] Database migrations tested
+- [ ] Database migrations tested (applied locally only)
 - [ ] Environment variables configured
-- [ ] CORS properly configured
-- [ ] Rate limiting enabled
-- [ ] Logging configured
+- [x] CORS properly configured (origin from `FRONTEND_URL`, default `http://localhost:3000`, credentials on)
+- [x] Rate limiting enabled (global `ThrottlerGuard`, 60 requests / 60 s)
+- [ ] Logging configured (Nest default logger only)
 
 ### Production (Post-MVP Validation)
 - [ ] Choose hosting platform (Vercel, Lambda, etc.)
@@ -317,7 +334,7 @@
 - [ ] Terms of Service drafted
 - [ ] Consent flow implemented
 - [ ] Data export endpoint working
-- [ ] Data deletion endpoint working
+- [ ] Data deletion endpoint working (DELETE /profiles/{id} cascades a profile's data; no account-level deletion)
 - [ ] Audit logging enabled
 
 ### Saudi Arabia PDPL
@@ -339,8 +356,8 @@
 ### Data Quality
 - [ ] No corrupted triads in database
 - [ ] Preference weights converge (loss decreases)
-- [ ] No duplicate films in triads
-- [ ] Replacement logic works correctly
+- [ ] No duplicate films in triads (guaranteed by construction in `random-v1`, not yet checked on real data)
+- [ ] Replacement logic works correctly (not built)
 
 ---
 
@@ -358,10 +375,10 @@
 
 ## Launch Readiness Checklist
 
-- [ ] All Phase 1 core features working
+- [ ] All Phase 1 core features working (core loop works locally; replacement buttons, training trigger, and recommendation UI are missing)
 - [ ] Database schema tested
-- [ ] 300-500 films seeded with fingerprints
-- [ ] Plackett-Luce ranker trained and validated
+- [ ] 300-500 films seeded with fingerprints (15 hand-entered)
+- [ ] Plackett-Luce ranker trained and validated (unit-tested on synthetic data only)
 - [ ] 80-150 Alpha users onboarded (blueprint §17.2); accepters complete 20-30 triads
 - [ ] No critical bugs in testing
 - [ ] Documentation complete
@@ -372,6 +389,6 @@
 
 ---
 
-**Last Updated**: 2025-01-02  
-**Status**: In Progress  
-**Next Milestone**: Complete backend core endpoints (auth, profiles, triads)
+**Last Updated**: 2026-09-03  
+**Status**: In Progress — the core loop (auth → mark watched → rank triads → train → recommend) exists end-to-end and runs locally; training is still a manual CLI step  
+**Next Milestone**: "Haven't watched" / "Don't remember" replacement (API + two UI buttons), automatic retraining trigger from the backend, and growing the catalog toward 300-500 titles with worker-generated fingerprints
