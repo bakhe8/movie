@@ -1,0 +1,168 @@
+/* Design tokens — the single source for colour, type, radius and spacing.
+   Decisions: docs/IDENTITY_DECISIONS_2026-09-03.md (questions 1–15, 24).
+
+   Theme model (Q1): three states. The bare `:root` block is the complete
+   LIGHT palette. `@media (prefers-color-scheme: dark)` redefines only the
+   colour tokens when the user has NOT explicitly chosen light
+   (`:root:not([data-theme="light"])`), and `:root[data-theme="dark"]`
+   redefines them again so an explicit choice wins in both directions.
+   No colour is ever defined only inside a theme block. `data-theme` is set
+   before first paint by the boot script in app/layout.tsx and kept in sync
+   by app/lib/theme.tsx.
+
+   Accent values were adjusted at the contrast check the decisions asked for:
+   the decided #0F8F84 reads 3.6:1 against the light ground / with white text,
+   so the light value is #0B7A70 (4.7:1). The dark value #2CC4B6 passes on
+   black (9.7:1) and with its dark ink (7.1:1). */
+
+:root {
+  color-scheme: light;
+
+  /* Light palette — off-white with a hint of the accent hue (Q5), a darker
+     "well" behind poster rows (Q5), no shadows on cards (Q8). */
+  --bg: #f3f5f5;
+  --surface: #ffffff;
+  --well: #e8ecec;
+  --line: #d3dada;
+  --muted: #5c6b6b;
+  --text: #161c1c;
+
+  /* Single action colour (Q6): the only saturated colour in the UI. */
+  --accent: #0b7a70;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(11, 122, 112, 0.12);
+
+  /* Poster edge: visible in light only (Q5, Q14). */
+  --poster-edge: var(--line);
+
+  /* Floating layers (menu, sheet) take one shadow in light only (Q8). */
+  --shadow-float: 0 12px 32px rgba(22, 28, 28, 0.16);
+
+  /* Type (Q9–Q11). Font families come from next/font in app/layout.tsx. */
+  --font-ui: var(--font-plex-arabic), "Segoe UI", "Noto Sans Arabic", system-ui, sans-serif;
+  --font-display: var(--font-readex), var(--font-ui);
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-14: 14px;
+  --fs-16: 16px;
+  --fs-20: 20px;
+  --fs-26: 26px;
+  --fs-34: 34px;
+  --fs-44: 44px;
+  --lh-body: 1.5;
+  --lh-ui: 1.4;
+  --lh-heading: 1.3;
+  --w-regular: 400;
+  --w-medium: 500;
+  --w-semibold: 600;
+  --w-bold: 700;
+
+  /* Radius (Q15): one value for cards and buttons, one for chips. */
+  --r-card: 8px;
+  --r-button: 8px;
+  --r-chip: 4px;
+
+  /* Spacing scale. */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-12: 48px;
+
+  /* Touch target floor on pointer-coarse devices. */
+  --tap: 44px;
+}
+
+/* Dark by system preference, unless the user explicitly chose light. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #000000;
+    --surface: #121616;
+    --well: #1b2121;
+    --line: #263030;
+    --muted: #9aa9a9;
+    --text: #ecf1f1;
+    --accent: #2cc4b6;
+    --accent-ink: #062a27;
+    --accent-soft: rgba(44, 196, 182, 0.16);
+    --poster-edge: transparent;
+    --shadow-float: none;
+  }
+}
+
+/* Dark by explicit choice — wins over the system preference. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #000000;
+  --surface: #121616;
+  --well: #1b2121;
+  --line: #263030;
+  --muted: #9aa9a9;
+  --text: #ecf1f1;
+  --accent: #2cc4b6;
+  --accent-ink: #062a27;
+  --accent-soft: rgba(44, 196, 182, 0.16);
+  --poster-edge: transparent;
+  --shadow-float: none;
+}
+
+/* Base application of the tokens. Specificity matches globals.css's
+   `[dir="rtl"] button` rules so the token font wins in both directions. */
+body,
+[dir="rtl"] body,
+[dir="ltr"] body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-16);
+  line-height: var(--lh-body);
+  letter-spacing: 0;
+}
+
+button,
+input,
+select,
+textarea,
+[dir="rtl"] button,
+[dir="rtl"] input,
+[dir="rtl"] select,
+[dir="rtl"] textarea,
+[dir="ltr"] button,
+[dir="ltr"] input,
+[dir="ltr"] select,
+[dir="ltr"] textarea {
+  font-family: var(--font-ui);
+  letter-spacing: 0;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  font-weight: var(--w-bold);
+  line-height: var(--lh-heading);
+  letter-spacing: 0;
+}
+
+/* Numbers align in columns everywhere (Q12). */
+html {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Icons take the text colour so they follow the theme (Q24). */
+svg {
+  color: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

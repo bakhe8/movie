@@ -9,6 +9,42 @@
         "dev"
       ],
       "port": 3000
+    },
+    {
+      "name": "frontend-3100",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "-w",
+        "apps/frontend",
+        "--",
+        "-p",
+        "3100"
+      ],
+      "port": 3100
+    },
+    {
+      "name": "backend-3101",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "-w",
+        "apps/backend"
+      ],
+      "port": 3101
+    },
+    {
+      "name": "frontend-3000",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "-w",
+        "apps/frontend"
+      ],
+      "port": 3000
     }
   ]
 }

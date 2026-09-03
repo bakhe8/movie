@@ -2,6 +2,8 @@
 
 import type { ReactNode } from 'react';
 import styles from './AppShell.module.css';
+import { ThemeToggle } from '../lib/theme';
+import prefStyles from '../lib/ThemeToggle.module.css';
 
 export type View = 'home' | 'rank' | 'discover' | 'list' | 'profile';
 export const VIEWS: readonly View[] = ['home', 'rank', 'discover', 'list', 'profile'];
@@ -145,7 +147,11 @@ export function AppShell({
             ))}
           </nav>
         )}
-        <LanguageToggle lang={lang} onToggle={onToggleLanguage} className={styles.language} />
+        {/* Preference group (decisions Q2): theme beside language, same shape. */}
+        <div className={prefStyles.prefs}>
+          <ThemeToggle lang={lang} />
+          <LanguageToggle lang={lang} onToggle={onToggleLanguage} className={styles.language} />
+        </div>
       </header>
       <main className={styles.content}>{children}</main>
     </div>
