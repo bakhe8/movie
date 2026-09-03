@@ -184,7 +184,7 @@ Third screen from [UI_MOCKUP_REVIEW_2026-09-03.md](UI_MOCKUP_REVIEW_2026-09-03.m
 |---|---|---|
 | `DiscoverScreen` forgot every mark on reload (state lived only in component memory), had no starter list, no watchlist, no undo, no progress toward the first triad, and no bilingual title on the card (`§4.2`, SPECIFICATION §5.1 step 3) | Rebuilt: existing `watched`/`watchlist` states load on mount; a progress card counts watched titles toward the three that unlock ranking (dots + "one/two more films" copy, then a button to the ranking screen); an empty query lists the catalogue as the starter set (`§4.2` "اختيار سريع من عناوين معروفة"), search stays debounced with a result count, a no-results state and "show more" paging; every card shows the title in both languages (alternate-title search is a backend gap), year · genres, description; per card: «شاهدته», «لاحقًا» (watchlist), and for a watched title a «مُشاهَد» chip with «تراجع» that returns it to `not_watched` — exposure unknown, never a negative signal (`§2.4 #3`). No rating anywhere (ADR-4). Numerals via `formatNumber`; 44 px targets; CSS module | `tsc`/`eslint` clean; **verified in the browser** at 375×812: eight existing marks shown on load, progress + ranking button, search «بان» → one result, a nonsense query → the no-results state and back to the starter list, «لاحقًا» → "on your list", «تراجع» → the count dropped from 8 to 7 and the card returned to its unmarked controls, both `PATCH …/state` calls 200 |
 
-Still open, all backend: CSV import (`§4.2`, `POST /library/imports`), alternate-title search (`localized_titles`, FTS), and a genuinely diverse starter list (today it is the seed catalogue in title order).
+Second pass, 2026-09-03: `GET /titles/starter` returns a deterministic, genre-diverse sample (round-robin across primary genres, largest genre first, newest first within a genre; 3 unit tests on `diversify()`), and catalogue search folds Arabic hamza/taa marbuta/alef maqsura on both sides (`foldArabic` + SQL `translate()`; 2 unit tests, 4 e2e tests over real Postgres in `test/titles-search.e2e-spec.ts`). Still open, all backend: CSV import (`§4.2`, `POST /library/imports`) and alternate-title search (`localized_titles`, FTS — M3).
 
 ---
 
@@ -288,14 +288,14 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 
 | Item | Built | Blueprint | Evidence / gap |
 |---|---|---|---|
-| `TitlesService` list/search/get | ✅ | ❌ | ILIKE on `titleEn`/`titleAr`; `§5.1` alternate titles / `§13.1` `localized_titles` / `§12.1` FTS missing |
+| `TitlesService` list/search/get/starter | ✅ | 🟡 | ILIKE on `titleEn`/`titleAr` **with Arabic folding on both sides** since 2026-09-03 (hamza forms of alef → ا, ة → ه, ى → ي, tashkeel/tatweel ignored; `translate()` in SQL, `foldArabic` in code) so «احلام» finds «أحلام»; `GET /titles/starter` — the `§4.2` diverse starter list, a deterministic round-robin across primary genres (`diversify()`); still missing: `§5.1` alternate titles / `§13.1` `localized_titles` / `§12.1` FTS (M3) |
 | Fingerprint field (`FilmFingerprintV1`, 13 dims) | ✅ | 🟡 | V1 frozen (ADR-19); provenance empty; gap 6 |
 | Rights registry (`source_records`) | ❌ | ❌ | `§11.1` — seeded rows carry `licenseStatus: 'unknown'` |
 | Admin write endpoints | ❌ | — | no admin role |
 | Seed script (15 dev titles) | ✅ | ❌ | `§17.1`: 300–500-film balanced research catalog with rights |
 | Fingerprint batch generation | ❌ | ❌ | `§15.3` |
 | Tests: search/pagination | ❌ | — | |
-| Frontend: search + mark watched (`DiscoverScreen`) | ✅ | 🟡 | rebuilt 2026-09-03 (table above): existing marks load, progress to the first triad, starter list (the catalogue), watchlist, undo, bilingual titles; `§4.2` still missing CSV import and alternate-title search (backend) |
+| Frontend: search + mark watched (`DiscoverScreen`) | ✅ | 🟡 | rebuilt 2026-09-03 (table above), second pass the same day: the starter list now comes from `GET /titles/starter` (genre-diverse, with a line saying it is not by taste) with a "browse the whole catalogue" toggle, and search benefits from the server's Arabic folding; existing marks load, progress to the first triad, watchlist, undo, bilingual titles; `§4.2` still missing CSV import and alternate-title search (backend) |
 | Frontend: work page (fingerprint, fit reason, public quality and availability separate) | ❌ | ❌ | `§5.3` |
 
 ## Triads (core loop)
@@ -379,8 +379,8 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 
 | Item | Built | Blueprint | Evidence / gap |
 |---|---|---|---|
-| Backend unit tests (7 files, 93 tests) | ✅ | — | re-run 2026-09-03; +8 with the gap-3 triad rework, +3 with the H1 title-reuse fix, +12 with the ADR-17 replacement endpoint, +5 with the library ranking, +3 with the onboarding profile fields, +1 for inline triad items, +2 for recommendation reasons |
-| Backend e2e: auth guard + IDOR + rate limiting + triad ranking + triad replacement over real HTTP + `postgres-test` (4 files, 25 tests) | ✅ | ✅ | `§21.3` object-level authorization; re-run 2026-09-03 with all eight migrations; `test/throttling.e2e-spec.ts` (ADR-29), `test/triad-rank.e2e-spec.ts` (gap 3/ADR-32, H1/ADR-34) and `test/triad-replace.e2e-spec.ts` (ADR-17) added today; still not full functional coverage of every route |
+| Backend unit tests (8 files, 98 tests) | ✅ | — | re-run 2026-09-03; +8 with the gap-3 triad rework, +3 with the H1 title-reuse fix, +12 with the ADR-17 replacement endpoint, +5 with the library ranking, +3 with the onboarding profile fields, +1 for inline triad items, +2 for recommendation reasons, +5 for the starter list and Arabic folding |
+| Backend e2e: auth guard + IDOR + rate limiting + triad ranking + triad replacement over real HTTP + `postgres-test` + catalogue search/starter (6 files, 41 tests) | ✅ | ✅ | `§21.3` object-level authorization; re-run 2026-09-03 with all eight migrations; `test/throttling.e2e-spec.ts` (ADR-29), `test/triad-rank.e2e-spec.ts` (gap 3/ADR-32, H1/ADR-34) and `test/triad-replace.e2e-spec.ts` (ADR-17) added today; still not full functional coverage of every route; `test/titles-search.e2e-spec.ts` added the same day |
 | Functional API tests (titles, triads, recommendations) | ❌ | — | |
 | Frontend tests | ❌ | — | |
 | Python tests (36) | ✅ | — | re-run 2026-09-03; +2 with the gap-9 enrichment-worker fix, +8 with the gap-2 temporal hold-out |
