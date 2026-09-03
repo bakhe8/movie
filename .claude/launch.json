@@ -45,6 +45,48 @@
         "apps/frontend"
       ],
       "port": 3000
+    },
+    {
+      "name": "backend-3111-C",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "cd /d %LOCALAPPDATA%\\Temp\\claude\\C--Users-Bakheet-Projects-movie\\cc3e92c6-6671-4924-b28d-7474c0a0c45b\\scratchpad\\head-checkout\\apps\\backend && set API_PORT=3111&& set FRONTEND_URL=http://localhost:3110&& node dist/main.js"
+      ],
+      "port": 3111
+    },
+    {
+      "name": "frontend-3110-C",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "cd /d %LOCALAPPDATA%\\Temp\\claude\\C--Users-Bakheet-Projects-movie\\cc3e92c6-6671-4924-b28d-7474c0a0c45b\\scratchpad\\head-checkout\\apps\\frontend && set NEXT_PUBLIC_API_URL=http://localhost:3111/api&& npx next dev --webpack -p 3110"
+      ],
+      "port": 3110
+    },
+    {
+      "name": "model-service-8001",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "src.model_service"
+      ],
+      "cwd": "services/workers",
+      "port": 8001
+    },
+    {
+      "name": "frontend-3120-G",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "-w",
+        "apps/frontend",
+        "--",
+        "-p",
+        "3120"
+      ],
+      "port": 3120
     }
   ]
 }
