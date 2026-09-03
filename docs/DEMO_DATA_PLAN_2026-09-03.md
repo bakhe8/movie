@@ -459,6 +459,19 @@ The served path confirms the baseline: `train_profile` on the 75 rounds chose 0.
 
 Wiring is a model-service change (the served vector would grow from 28 to 40 keys); requested from its owner as C10 with this evidence and the same rules as ADR-69 (V3 read from `fingerprint.v3.features`, a title without the block excluded from training, penalty chosen by held-out NLL).
 
+**Wired and re-measured — 2026-09-04 (C10, commit `6abf34d` by the model-service owner; the owner chose the shared penalty grid over a per-block one).** The trainer serves 40 keys as `plackett-luce-v3`. On the served path, same 75 rounds:
+
+| What | 28 keys (served before) | 40 keys (served now) |
+|---|---|---|
+| `train_profile` on `claude@judge.local` (71 usable, 14 held out) | NLL 1.076 · acc 80.95 % · penalty 0.03 | **NLL 0.823 · acc 85.71 % · penalty 0.03** — the offline V1+V2+V3 row to the third decimal |
+| `GET …/library/ranking`, Spearman with Claude's order over all 61 films | 0.846 | **0.896**, `modelVersion: plackett-luce-v3` |
+| Top of the ranking (Claude's rank) | Persona #3, In the Mood for Love #1, Stalker #6… | In the Mood for Love **#1**, Persona #3, Mulholland Drive #10, Tokyo Story #2, Yi Yi #5, Stalker #6 |
+| Tracked films (model / Claude) | Totoro #41/#39 · Amélie #58/#50 · Fight Club #57/#59 | Totoro #38/#39 · Amélie #57/#50 · Fight Club #55/#59 |
+| Largest remaining disagreements | Capernaum #12/#36 · Battle of Algiers #52/#30 · Memento #25/#47 · Toy Story #60/#40 | Memento #23/#47 · Toy Story #60/#40 · Seven Samurai #35/#19 · Lost in Translation #7/#23 · Capernaum #20/#36 · The Seventh Seal #21/#9 |
+
+Two observations for the model-service owner rather than for the catalog: Toy Story stays at #60 for a #40 — the block gave the model the word (playfulness 0.85) but the served weights still rank it by everything else, so animation/family register may need its own family or the People/Cultural side blocks; and every one of the fifteen recommendations now cites `information.expositionDirectness ↓` as its first reason (the second varies: soundscape, psychological depth, deliberateness) — correct as a score explanation, poor as a display: the reason picker should prefer diversity across a page of results (`BP §9.4`).
+
+
 ### 7.4 The cultural-context block — Wikidata facts and coverage, 2026-09-04
 
 Owner's directive after §7.3: start the cultural block from Wikidata. Specified in [FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md) §3.4 as what `BP §6.1` says it is — a separate factual block, never a taste dimension and never about the viewer: original languages (P364), production countries (P495), setting places with their countries (P840 → P17), setting eras with dates (P2408 → P580/P582/P585 or a decade/century/year label), dialects explicitly unknown. Read by a new fetcher (`npm run catalog:cultural`) through the catalog's Wikidata cache, CC0, stored on the fixture entry and as categorical `content_features` rows (NULL value, codes as shares) by the seed. Nothing in the fingerprint, the trainer or the API reads it.
@@ -518,3 +531,4 @@ Owner's decision, 2026-09-03, in answer to "what is the alternative to an OpenAI
 | 2026-09-04 | Personas regenerated on 28 keys (V2 half of θ per persona, τ 0.2 → 0.4 by re-calibration, generator reads `MODEL_DIMENSIONS`); WS4 bar met on the served model: `slow-burn` recovery 0.87, held-out accuracy 0.83 |
 | 2026-09-04 | §7.3: third block (form families, 12 keys) specified in FINGERPRINT_SCHEMA §3.3, extracted for all 300 titles (0 failures), published to the dev database with provenance rows, evaluated offline against Claude's order; wiring requested as C10 |
 | 2026-09-04 | §7.4: cultural-context block from Wikidata (languages, countries, setting places and eras, CC0) on all 300 titles, stored as categorical provenance rows; coverage report per language / country / slice / tier is the first `BP §11.3` measurement |
+| 2026-09-04 | §7.3 re-measured after C10 (`6abf34d`, 40 keys served): judge NLL 0.823 / acc 85.7 %, API Spearman 0.896 (from 0.846); two observations passed to the model-service owner |
