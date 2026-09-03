@@ -3,12 +3,14 @@
  * No I/O, no TypeORM: everything here is deterministic given a seed, so the
  * unit tests pin the behaviour and `seed-demo.ts` stays a thin writer.
  *
- * The persona model: a hidden taste vector θ over the 13 fingerprint
- * dimensions; utility u = θ·x with unknown dimensions imputed at the
- * midpoint (never zero, ADR-19); a triad ranking is an exact Plackett–Luce
- * sample — utility / τ plus Gumbel noise, best first — so the learner's own
- * assumption holds and accuracy lands around 0.8–0.9, not 1.0.
+ * The persona model: a hidden taste vector θ over the model's 28 fingerprint
+ * dimensions (13 V1 keys, then the 15 V2 family keys, in the trainer's order —
+ * ADR-69); utility u = θ·x with unknown dimensions imputed at the midpoint
+ * (never zero, ADR-19); a triad ranking is an exact Plackett–Luce sample —
+ * utility / τ plus Gumbel noise, best first — so the learner's own assumption
+ * holds and accuracy lands around 0.8–0.9, not 1.0.
  */
+import { FINGERPRINT_V2_DIMENSIONS } from '../entities/title-fingerprint.type';
 import type { FilmFingerprintV1 } from '../entities/title-fingerprint.type';
 import type { Title } from '../entities/title.entity';
 
@@ -27,6 +29,16 @@ export const DIMENSIONS = [
   'soundscapeComplexity',
   'colorSaturation',
 ] as const;
+
+/**
+ * The 28 keys a persona's θ and the trainer's weights are indexed by: V1 at the
+ * top level of the fingerprint, then the V2 families read from
+ * `fingerprint.v2.features` (FINGERPRINT_SCHEMA.md §3.1). Same order as
+ * `FINGERPRINT_DIMENSIONS` in `services/workers/src/training.py` and the
+ * scorer, so a persona's hidden θ and the learned weights compare position by
+ * position (the recovery score in `train_demo.py`).
+ */
+export const MODEL_DIMENSIONS = [...DIMENSIONS, ...FINGERPRINT_V2_DIMENSIONS] as const;
 
 export interface PersonaSpec {
   slug: string;
@@ -128,10 +140,20 @@ export function gumbel(rng: Rng): number {
 // Fingerprints and utility
 // ---------------------------------------------------------------------------
 
-/** The 13 dimensions in model order; a missing or non-finite value is `null` (unknown), never 0. */
+/**
+ * The 28 dimensions in model order; a missing or non-finite value is `null`
+ * (unknown), never 0. V1 keys are read at the top level, V2 keys from the
+ * nested `v2.features` block — the same two-shape read as the trainer's
+ * `fingerprint_vector()`.
+ */
 export function fingerprintVector(fingerprint: CatalogEntry['fingerprint']): (number | null)[] {
-  return DIMENSIONS.map((dimension) => {
-    const value = fingerprint?.[dimension];
+  const v2 = fingerprint?.v2;
+  const v2Features =
+    v2 && typeof v2 === 'object' && (v2 as { features?: unknown }).features && typeof (v2 as { features?: unknown }).features === 'object'
+      ? ((v2 as { features: Record<string, unknown> }).features as Record<string, unknown>)
+      : {};
+  return MODEL_DIMENSIONS.map((dimension) => {
+    const value = dimension.includes('.') ? v2Features[dimension] : fingerprint?.[dimension];
     return typeof value === 'number' && Number.isFinite(value) ? value : null;
   });
 }
@@ -142,8 +164,8 @@ export function isCompleteFingerprint(fingerprint: CatalogEntry['fingerprint']):
 
 /** θ·x with unknown dimensions imputed at the 0.5 midpoint (ADR-19: unknown ≠ zero). */
 export function utility(theta: readonly number[], vector: readonly (number | null)[]): number {
-  if (theta.length !== DIMENSIONS.length || vector.length !== DIMENSIONS.length) {
-    throw new Error(`utility() expects ${DIMENSIONS.length}-dimensional inputs`);
+  if (theta.length !== MODEL_DIMENSIONS.length || vector.length !== MODEL_DIMENSIONS.length) {
+    throw new Error(`utility() expects ${MODEL_DIMENSIONS.length}-dimensional inputs`);
   }
   return theta.reduce((total, weight, index) => total + weight * (vector[index] ?? 0.5), 0);
 }
@@ -427,8 +449,8 @@ export function validatePersona(persona: PersonaSpec): string[] {
   if (!/^[a-z][a-z0-9-]*$/.test(persona.slug)) {
     problems.push(`${persona.slug}: slug must be lower-case kebab`);
   }
-  if (persona.theta.length !== DIMENSIONS.length) {
-    problems.push(`${persona.slug}: theta must have ${DIMENSIONS.length} values`);
+  if (persona.theta.length !== MODEL_DIMENSIONS.length) {
+    problems.push(`${persona.slug}: theta must have ${MODEL_DIMENSIONS.length} values (13 V1 keys, then the 15 V2 family keys)`);
   }
   if (persona.watched < 3) {
     problems.push(`${persona.slug}: at least 3 watched titles are needed for a triad`);

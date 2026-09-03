@@ -29,9 +29,9 @@ def test_committed_personas_fixture_is_valid():
     fixture = load_personas(DEFAULT_PERSONAS)
     slugs = [persona["slug"] for persona in fixture["personas"]]
     assert slugs == ["slow-burn", "spectacle", "warm-talky", "newcomer"]
-    # The personas were generated on V1 only; their theta stays 13 long and is
-    # zero-padded to the 28-dimension model at comparison time (hidden_theta).
-    assert all(len(persona["theta"]) == len(FINGERPRINT_V1_DIMENSIONS) for persona in fixture["personas"])
+    # Regenerated on all 28 keys (2026-09-04, after ADR-69): every theta spans the model.
+    assert all(len(persona["theta"]) == len(FINGERPRINT_DIMENSIONS) for persona in fixture["personas"])
+    assert fixture["temperature"] == 0.4
     assert fixture["emailDomain"] == "demo.local"
 
 
@@ -124,9 +124,16 @@ def test_recovery_under_the_28_dimension_model_splits_v1_from_spurious_v2(tmp_pa
     assert rows[0].recovery_v1 == pytest.approx(1.0)
     assert rows[0].recovery == pytest.approx(1 / math.sqrt(2))
     assert rows[0].v2_weight_share == pytest.approx(1 / math.sqrt(2))
-    # The acceptance floor reads the V1 recovery: a persona the model recovers on
-    # its own dimensions passes even when the full-vector cosine is below the floor.
+    # A 13-key persona is judged on its V1 recovery: the model recovers it on its
+    # own dimensions, so it passes even though the full-vector cosine is below the floor.
+    assert rows[0].theta_covers_model is False
     assert acceptance(rows, fixture) == []
+    # A 28-key persona is judged on the full vector: the same weights now fail the bar.
+    full = {**fixture, "personas": [{**fixture["personas"][0], "theta": [1.0] + [0.0] * (n_all - 1)}, fixture["personas"][1]]}
+    rows_full = train_demo_profiles([DemoProfile("rich", "rich@demo.local", "p1")], full, trainer=lambda _pid: _result(weights))
+    assert rows_full[0].theta_covers_model is True
+    assert rows_full[0].recovery == pytest.approx(1 / math.sqrt(2))
+    assert any("recovery" in problem and "V1" not in problem for problem in acceptance(rows_full, full))
     table = format_table(rows, fixture)
     assert "rec-v1" in table and "v2-share" in table and "lambda" in table
     assert rows[0].chosen_regularization is None  # the fake result carries no such field: unknown, not 0

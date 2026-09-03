@@ -68,6 +68,10 @@ class DemoRow:
     # The L2 strength the trainer chose by held-out NLL (ADR-69); None when the
     # trainer result carries no such field.
     chosen_regularization: Optional[float] = None
+    # True when the persona's theta spans the whole model (28 values): the bar then
+    # reads the full-vector recovery. A 13-value (V1-only) theta is judged on its
+    # own sub-vector, since its generator never saw the V2 families.
+    theta_covers_model: bool = False
 
 
 def cosine(left: Sequence[float], right: Sequence[float]) -> Optional[float]:
@@ -151,6 +155,7 @@ def train_demo_profiles(profiles: List[DemoProfile], fixture: Dict[str, Any], tr
                 recovery_v1=cosine(weights[:n_v1], list(theta)[:n_v1]) if theta is not None else None,
                 v2_weight_share=(v2_norm / total_norm) if len(weights) > n_v1 and total_norm > 0 else None,
                 chosen_regularization=getattr(result, "chosen_regularization", None),
+                theta_covers_model=theta is not None and len(theta) == len(weights) and len(weights) > n_v1,
             )
         )
     return rows
@@ -185,11 +190,13 @@ def acceptance(rows: List[DemoRow], fixture: Dict[str, Any]) -> List[str]:
         if row.error:
             problems.append(f"{row.slug}: training failed ({row.error})")
         if row.slug == richest["slug"] and not row.error:
-            # The floor is on the V1 sub-vector, where the generator defined the persona;
-            # the full-vector recovery is printed as a diagnostic (spurious V2 weight
-            # from correlated features lowers it without the pipeline being wrong).
-            if row.recovery_v1 is None or row.recovery_v1 < RECOVERY_FLOOR:
-                problems.append(f"{row.slug}: V1 recovery {row.recovery_v1} below {RECOVERY_FLOOR} -- the seed→train→rank pipeline, not the persona, is wrong")
+            # The floor reads the recovery over the dimensions the generator defined the
+            # persona on: the full 28-vector for a 28-key theta (the fixture since
+            # 2026-09-04), the V1 sub-vector for a legacy 13-key one.
+            bar_recovery = row.recovery if row.theta_covers_model else row.recovery_v1
+            label = "recovery" if row.theta_covers_model else "V1 recovery"
+            if bar_recovery is None or bar_recovery < RECOVERY_FLOOR:
+                problems.append(f"{row.slug}: {label} {bar_recovery} below {RECOVERY_FLOOR} -- the seed→train→rank pipeline, not the persona, is wrong")
             if row.held_out_pairwise_accuracy is None or row.held_out_pairwise_accuracy < HELD_OUT_FLOOR:
                 problems.append(f"{row.slug}: held-out pairwise accuracy {row.held_out_pairwise_accuracy} below {HELD_OUT_FLOOR}")
     return problems

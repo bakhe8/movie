@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   CatalogEntry,
   DIMENSIONS,
+  MODEL_DIMENSIONS,
   catalogEntryToTitle,
   combinations,
   featureRowsFor,
   fingerprintVector,
+  isCompleteFingerprint,
   hashSeed,
   mulberry32,
   rankByUtility,
@@ -20,9 +22,17 @@ import {
 
 const NOW = new Date('2026-09-03T12:00:00Z');
 
+/** A catalog entry whose fingerprint is `vector` in MODEL_DIMENSIONS order: V1 at the top level, V2 under `v2.features`. */
 function entry(index: number, vector: number[] | null): CatalogEntry {
   const fingerprint = vector
-    ? Object.fromEntries(DIMENSIONS.map((dimension, position) => [dimension, vector[position]]))
+    ? {
+        ...Object.fromEntries(DIMENSIONS.map((dimension, position) => [dimension, vector[position]])),
+        v2: {
+          features: Object.fromEntries(
+            MODEL_DIMENSIONS.slice(DIMENSIONS.length).map((dimension, position) => [dimension, vector[DIMENSIONS.length + position]]),
+          ),
+        },
+      }
     : null;
   return {
     internalId: `DEMO${String(index).padStart(4, '0')}`,
@@ -39,7 +49,7 @@ function entry(index: number, vector: number[] | null): CatalogEntry {
 // A synthetic catalog: 40 films along one axis (pacing), the rest at the midpoint.
 function catalog(size = 40): CatalogEntry[] {
   return Array.from({ length: size }, (_, index) =>
-    entry(index + 1, DIMENSIONS.map((dimension) => (dimension === 'pacing' ? index / (size - 1) : 0.5))),
+    entry(index + 1, MODEL_DIMENSIONS.map((dimension) => (dimension === 'pacing' ? index / (size - 1) : 0.5))),
   );
 }
 
@@ -59,10 +69,23 @@ describe('deterministic randomness', () => {
 
 describe('utility', () => {
   it('imputes unknown dimensions at the midpoint, never zero', () => {
-    const theta = DIMENSIONS.map(() => 1);
-    const vector = fingerprintVector({ pacing: 1 }); // 12 unknowns
-    expect(vector.filter((value) => value === null)).toHaveLength(12);
-    expect(utility(theta, vector)).toBeCloseTo(1 + 12 * 0.5);
+    const theta = MODEL_DIMENSIONS.map(() => 1);
+    const vector = fingerprintVector({ pacing: 1 }); // 27 unknowns: 12 V1 and the whole V2 block
+    expect(vector).toHaveLength(28);
+    expect(vector.filter((value) => value === null)).toHaveLength(27);
+    expect(utility(theta, vector)).toBeCloseTo(1 + 27 * 0.5);
+  });
+
+  it('reads V2 families from the nested block in the trainer\'s order', () => {
+    const vector = fingerprintVector({ pacing: 0.2, v2: { features: { 'tone.irony': 0.9, 'ending.optimism': 0.1 } } });
+    expect(vector[0]).toBe(0.2);
+    expect(vector[MODEL_DIMENSIONS.indexOf('tone.irony')]).toBe(0.9);
+    expect(vector[MODEL_DIMENSIONS.indexOf('ending.optimism')]).toBe(0.1);
+    expect(vector[MODEL_DIMENSIONS.indexOf('tone.unease')]).toBeNull();
+    // A title with every V1 key but no v2 block is incomplete for the 28-key model, as in the trainer.
+    const v1Only = Object.fromEntries(DIMENSIONS.map((dimension) => [dimension, 0.5]));
+    expect(isCompleteFingerprint(v1Only)).toBe(false);
+    expect(isCompleteFingerprint({ ...v1Only, v2: { features: Object.fromEntries(MODEL_DIMENSIONS.slice(13).map((d) => [d, 0.5])) } })).toBe(true);
   });
 
   it('rejects the wrong dimensionality', () => {
@@ -71,7 +94,7 @@ describe('utility', () => {
 });
 
 describe('sampleWatched', () => {
-  const theta = DIMENSIONS.map((dimension) => (dimension === 'pacing' ? 1 : 0));
+  const theta = MODEL_DIMENSIONS.map((dimension) => (dimension === 'pacing' ? 1 : 0));
 
   it('returns the requested count without duplicates and honours mustInclude', () => {
     const picked = sampleWatched(mulberry32(1), catalog(), theta, 20, { mustInclude: ['DEMO0001'] });
@@ -254,7 +277,7 @@ describe('fixture mapping and validation', () => {
       nameAr: 'x',
       nameEn: 'x',
       taste: '',
-      theta: DIMENSIONS.map(() => 0),
+      theta: MODEL_DIMENSIONS.map(() => 0),
       watched: 4,
       triads: 1,
       watchlist: 0,
