@@ -4,16 +4,27 @@ import type { Repository } from 'typeorm';
 import { Profile } from '../../entities/profile.entity';
 import { Title } from '../../entities/title.entity';
 import { Triad } from '../../entities/triad.entity';
+import { TriadReplacement } from '../../entities/triad-replacement.entity';
 import { UserTitleState } from '../../entities/user-title-state.entity';
 import { TriadsService } from './triads.service';
 
 function repoMock() {
+  // `manager.transaction(run)` hands `run` the same manager mock, so a test
+  // can assert every write that happened inside the transaction.
+  const manager = {
+    findOne: vi.fn(),
+    save: vi.fn(async (entity: unknown) => entity),
+    create: vi.fn((_target: unknown, data: unknown) => data),
+    transaction: vi.fn(async (run: (manager: unknown) => Promise<unknown>) => run(manager)),
+  };
   return {
     findOne: vi.fn(),
     find: vi.fn(),
+    count: vi.fn(),
     save: vi.fn(async (entity: unknown) => entity),
     create: vi.fn((data: unknown) => data),
     createQueryBuilder: vi.fn(),
+    manager,
   };
 }
 
@@ -32,6 +43,7 @@ describe('TriadsService', () => {
   let titlesRepository: ReturnType<typeof repoMock>;
   let triadsRepository: ReturnType<typeof repoMock>;
   let statesRepository: ReturnType<typeof repoMock>;
+  let replacementsRepository: ReturnType<typeof repoMock>;
   let service: TriadsService;
 
   const otherUserProfile = { id: 'profile-owned-by-someone-else' };
@@ -41,11 +53,13 @@ describe('TriadsService', () => {
     titlesRepository = repoMock();
     triadsRepository = repoMock();
     statesRepository = repoMock();
+    replacementsRepository = repoMock();
     service = new TriadsService(
       profilesRepository as unknown as Repository<Profile>,
       titlesRepository as unknown as Repository<Title>,
       triadsRepository as unknown as Repository<Triad>,
       statesRepository as unknown as Repository<UserTitleState>,
+      replacementsRepository as unknown as Repository<TriadReplacement>,
     );
   });
 
@@ -305,6 +319,41 @@ describe('TriadsService', () => {
       expect(result.shownAt).toBeInstanceOf(Date);
     });
 
+    it('draws only from watched titles that are still triad-eligible (ADR-17)', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      triadsRepository.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+      statesRepository.find.mockResolvedValue([{ titleId: 't1' }, { titleId: 't2' }, { titleId: 't3' }]);
+      titlesRepository.createQueryBuilder.mockReturnValue(
+        titlesQueryBuilderMock([{ id: 't1' }, { id: 't2' }, { id: 't3' }] as Title[], 3),
+      );
+
+      await service.getCurrent('user-1', 'profile-1');
+
+      // A "don't remember" title stays watched but must never be asked about
+      // again -- the pool query has to say so, not just the write side.
+      expect(statesRepository.find).toHaveBeenCalledWith({
+        where: { profileId: 'profile-1', state: 'watched', triadEligible: true },
+        select: { titleId: true },
+      });
+    });
+
+    it('tells the client how many more watched titles it needs, as structured fields', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      triadsRepository.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+      statesRepository.find.mockResolvedValue([{ titleId: 't1' }]); // only 1 watched
+
+      const error = await service.getCurrent('user-1', 'profile-1').catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(BadRequestException);
+      // Target contract shape (API.md §2.2) alongside Nest's default fields,
+      // so the UI can say "mark two more" instead of parsing English prose.
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        statusCode: 400,
+        reason: 'need_more_watched',
+        needed: 2,
+      });
+    });
+
     it('returns the winning row instead of a duplicate when it loses a race to create the active triad', async () => {
       // Two concurrent getCurrent() calls for the same profile can both see
       // "no active triad" and both attempt to insert one; the DB's partial
@@ -363,6 +412,171 @@ describe('TriadsService', () => {
         order: { createdAt: 'DESC' },
       });
       expect(result).toEqual([{ id: 'triad-1' }]);
+    });
+  });
+
+  // The two neutral replacement controls (blueprint §4.3, ADR-17). Neither
+  // reason is a preference: these tests pin the exposure bookkeeping each
+  // one implies, the append-only event row, and the "nothing left to swap
+  // in" path -- not any effect on ranking data, because there is none.
+  describe('replace', () => {
+    const titleA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const titleB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const titleC = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const spare = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+    const activeTriad = () => ({
+      id: 'triad-1',
+      profileId: 'profile-1',
+      status: 'active' as const,
+      titleIds: [titleA, titleB, titleC],
+      displayOrder: [titleC, titleA, titleB],
+    });
+
+    // Call order inside replace(): triad -> ownership -> prior replacement
+    // count -> previous completed triad -> eligible watched states -> the
+    // transaction (state row, event row, triad).
+    function arrange({
+      triad = activeTriad(),
+      eligible = [titleA, titleB, titleC, spare],
+      previousTriad = null as { titleIds: string[] } | null,
+      priorReplacements = 0,
+      stateRow = { profileId: 'profile-1', titleId: titleB, state: 'watched', watchedAt: new Date(), triadEligible: true } as
+        | Record<string, unknown>
+        | null,
+    } = {}) {
+      triadsRepository.findOne.mockResolvedValueOnce(triad).mockResolvedValueOnce(previousTriad);
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      replacementsRepository.count.mockResolvedValue(priorReplacements);
+      statesRepository.find.mockResolvedValue(eligible.map((titleId) => ({ titleId })));
+      triadsRepository.manager.findOne.mockResolvedValue(stateRow);
+      return triad;
+    }
+
+    it('throws 404 when the triad does not exist', async () => {
+      triadsRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.replace('user-1', 'missing', { titleId: titleB, reason: 'not_watched' }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it("throws 404 (not 403) for another user's triad and writes nothing", async () => {
+      triadsRepository.findOne.mockResolvedValue(activeTriad());
+      profilesRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.replace('attacker-user', 'triad-1', { titleId: titleB, reason: 'not_watched' }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(triadsRepository.manager.transaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects a triad that is no longer active', async () => {
+      arrange({ triad: { ...activeTriad(), status: 'completed' as never } });
+
+      await expect(
+        service.replace('user-1', 'triad-1', { titleId: titleB, reason: 'not_watched' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(triadsRepository.manager.transaction).not.toHaveBeenCalled();
+    });
+
+    it("rejects a title that is not one of the triad's own three", async () => {
+      arrange();
+
+      await expect(
+        service.replace('user-1', 'triad-1', { titleId: spare, reason: 'not_watched' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(triadsRepository.manager.transaction).not.toHaveBeenCalled();
+    });
+
+    it('not_watched: swaps the same slot, redraws displayOrder, clears exposure, and logs the event', async () => {
+      const stateRow = { profileId: 'profile-1', titleId: titleB, state: 'watched', watchedAt: new Date(), triadEligible: true };
+      arrange({ stateRow });
+
+      const result = await service.replace('user-1', 'triad-1', { titleId: titleB, reason: 'not_watched' });
+
+      expect(result.status).toBe('active');
+      expect(result.titleIds).toEqual([titleA, spare, titleC]);
+      expect([...(result.displayOrder as string[])].sort()).toEqual([titleA, titleC, spare].sort());
+      // Exposure unknown, not a negative signal (BP §2.4 #3): the title
+      // leaves the watched set and its watch date goes with it.
+      expect(stateRow).toMatchObject({ state: 'not_watched', watchedAt: null, triadEligible: true });
+      expect(triadsRepository.manager.create).toHaveBeenCalledWith(TriadReplacement, {
+        triadId: 'triad-1',
+        replacedTitleId: titleB,
+        replacementTitleId: spare,
+        reason: 'not_watched',
+      });
+      // state row, event row, triad -- all inside the one transaction
+      expect(triadsRepository.manager.transaction).toHaveBeenCalledTimes(1);
+      expect(triadsRepository.manager.save).toHaveBeenCalledTimes(3);
+      expect(triadsRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('not_remembered: keeps the watch, clears triadEligible, and still swaps the item', async () => {
+      const stateRow = { profileId: 'profile-1', titleId: titleB, state: 'watched', watchedAt: new Date(), triadEligible: true };
+      arrange({ stateRow });
+
+      const result = await service.replace('user-1', 'triad-1', { titleId: titleB, reason: 'not_remembered' });
+
+      expect(result.titleIds).toEqual([titleA, spare, titleC]);
+      // Still watched (not recommendable), never asked about in a triad again.
+      expect(stateRow).toMatchObject({ state: 'watched', triadEligible: false });
+      expect(stateRow.watchedAt).toBeInstanceOf(Date);
+    });
+
+    it('never picks the replaced title, a title already in the triad, or one from the previous completed triad', async () => {
+      const fresh = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+      arrange({ eligible: [titleA, titleB, titleC, spare, fresh], previousTriad: { titleIds: [spare] } });
+
+      const result = await service.replace('user-1', 'triad-1', { titleId: titleB, reason: 'not_watched' });
+
+      // spare is excluded by the same one-triad lookback getCurrent() uses
+      // (ADR-34), so `fresh` is the only legal pick.
+      expect(result.titleIds).toEqual([titleA, fresh, titleC]);
+    });
+
+    it('marks the triad skipped, with a null replacement in the event, when nothing eligible is left', async () => {
+      arrange({ eligible: [titleA, titleB, titleC] });
+
+      const result = await service.replace('user-1', 'triad-1', { titleId: titleB, reason: 'not_watched' });
+
+      expect(result.status).toBe('skipped');
+      expect(result.titleIds).toEqual([titleA, titleB, titleC]);
+      expect(triadsRepository.manager.create).toHaveBeenCalledWith(
+        TriadReplacement,
+        expect.objectContaining({ replacedTitleId: titleB, replacementTitleId: null }),
+      );
+    });
+
+    it('marks the triad skipped once the per-triad replacement limit is exceeded, without drawing', async () => {
+      arrange({ priorReplacements: 3 });
+
+      const result = await service.replace('user-1', 'triad-1', { titleId: titleB, reason: 'not_remembered' });
+
+      expect(result.status).toBe('skipped');
+      expect(statesRepository.find).not.toHaveBeenCalled();
+      // The user's statement is still recorded even though nothing was swapped.
+      expect(triadsRepository.manager.create).toHaveBeenCalledWith(
+        TriadReplacement,
+        expect.objectContaining({ reason: 'not_remembered', replacementTitleId: null }),
+      );
+    });
+
+    it('creates the state row when none exists for the title yet', async () => {
+      arrange({ stateRow: null });
+
+      await service.replace('user-1', 'triad-1', { titleId: titleB, reason: 'not_watched' });
+
+      // The mock's create() hands back the same object the service then
+      // mutates, so only the identifying fields are stable to assert on here;
+      // the reason's effect is checked on what was saved.
+      expect(triadsRepository.manager.create).toHaveBeenCalledWith(
+        UserTitleState,
+        expect.objectContaining({ profileId: 'profile-1', titleId: titleB }),
+      );
+      expect(triadsRepository.manager.save).toHaveBeenCalledWith(
+        expect.objectContaining({ profileId: 'profile-1', titleId: titleB, state: 'not_watched', watchedAt: null }),
+      );
     });
   });
 });

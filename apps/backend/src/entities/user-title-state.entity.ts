@@ -30,6 +30,14 @@ export class UserTitleState {
   @Column({ type: 'timestamp', nullable: true })
   watchedAt: Date | null;
 
+  // Whether this watched title may still be asked about in a triad. Cleared
+  // by the "don't remember" replacement control (ADR-17): the watch stays
+  // (the title is not recommendable) but the user is never asked to rank
+  // it again. Only TriadsService.replace() writes false; nothing sets it
+  // back today. Not a preference signal -- never read by training.
+  @Column({ type: 'boolean', default: true })
+  triadEligible: boolean;
+
   // Never written by the general in-app state-update endpoint — see UpdateTitleStateDto.
   // The only legitimate writer is a future import pipeline (e.g. a user-provided CSV list),
   // which must also set ratingSource: 'import'. This is a low-confidence auxiliary signal,

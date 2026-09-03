@@ -50,6 +50,9 @@ export interface UserTitleState {
   titleId: string;
   state: TitleState;
   watchedAt: string | null;
+  // false after a "don't remember" replacement (ADR-17): still watched, never
+  // asked about in a triad again. Only the replace endpoint writes it.
+  triadEligible: boolean;
   // Import-only, low-confidence auxiliary signal (blueprint §4.2) — never set via
   // setTitleState below. Present here only because the backend response includes it.
   importedRating: number | null;
@@ -76,6 +79,10 @@ export interface Triad {
   createdAt: string;
 }
 
+// The two neutral reasons for swapping a triad item (blueprint §4.3, ADR-17).
+// Deliberately no "didn't like it": the only preference signal is the ranking.
+export type ReplacementReason = 'not_watched' | 'not_remembered';
+
 export type ConfidenceBand = 'initial' | 'likely' | 'strong' | 'inconclusive';
 export type RecommendationTrack = 'safe' | 'discovery' | 'outside_usual';
 
@@ -99,6 +106,11 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    // The full error body: NestJS's `{ statusCode, message, error }` plus any
+    // structured fields a route adds (e.g. `{ reason: 'need_more_watched',
+    // needed }` from the triad endpoint), so screens can act on a reason
+    // instead of parsing English prose.
+    public details: Record<string, unknown> = {},
   ) {
     super(message);
     this.name = 'ApiError';
@@ -123,7 +135,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     const message = Array.isArray(body.message) ? body.message.join(', ') : body.message || response.statusText;
-    throw new ApiError(message, response.status);
+    throw new ApiError(message, response.status, typeof body === 'object' && body !== null ? body : {});
   }
 
   if (response.status === 204) {
@@ -170,6 +182,15 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ ranking }),
       headers: { 'Idempotency-Key': idempotencyKey },
+    }),
+
+  // Swaps one item of the active triad for another watched title (ADR-17).
+  // Returns the updated triad; `status: 'skipped'` means nothing eligible was
+  // left to swap in and the caller should fetch the current triad again.
+  replaceTriadItem: (triadId: string, titleId: string, reason: ReplacementReason) =>
+    request<Triad>(`/triads/${triadId}/replace`, {
+      method: 'POST',
+      body: JSON.stringify({ titleId, reason }),
     }),
 
   getRecommendations: (profileId: string, limit = 10) =>

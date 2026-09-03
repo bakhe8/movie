@@ -1,16 +1,25 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { isUUID } from 'class-validator';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { Profile } from '../../entities/profile.entity';
 import { Title } from '../../entities/title.entity';
 import { Triad } from '../../entities/triad.entity';
+import { ReplacementReason, TriadReplacement } from '../../entities/triad-replacement.entity';
 import { UserTitleState } from '../../entities/user-title-state.entity';
 import { RankTriadDto } from './dto/rank-triad.dto';
+import { ReplaceTriadItemDto } from './dto/replace-triad-item.dto';
 
 // Bumped whenever the triad-selection policy changes; see
 // docs/movie_taste_platform_blueprint_ar.md section 13.2 (triad_events).
 const TRIAD_POLICY_VERSION = 'random-v1';
+
+// Policy parameter (ADR-17): a triad that would need more than this many
+// replacements is abandoned (`skipped`) rather than patched indefinitely.
+// ADR-17 leaves the value to be "set before the Phase 0 test"; this is the
+// interim number, and the replacement rate it produces is itself a Phase 0
+// metric (BP §17.1).
+const MAX_REPLACEMENTS_PER_TRIAD = 3;
 
 interface CandidateSelection {
   titles: Title[];
@@ -28,6 +37,8 @@ export class TriadsService {
     private readonly triadsRepository: Repository<Triad>,
     @InjectRepository(UserTitleState)
     private readonly statesRepository: Repository<UserTitleState>,
+    @InjectRepository(TriadReplacement)
+    private readonly replacementsRepository: Repository<TriadReplacement>,
   ) {}
 
   async getCurrent(userId: string, profileId: string): Promise<Triad> {
@@ -54,11 +65,7 @@ export class TriadsService {
       select: { titleIds: true },
     });
     const recentlyUsedTitleIds = previousTriad?.titleIds ?? [];
-    const watchedStates = await this.statesRepository.find({
-      where: { profileId, state: 'watched' },
-      select: { titleId: true },
-    });
-    const watchedTitleIds = watchedStates.map((state) => state.titleId);
+    const watchedTitleIds = await this.eligibleWatchedTitleIds(profileId);
     const { titles, poolSize } = await this.selectRandomTitles(watchedTitleIds, recentlyUsedTitleIds);
 
     if (titles.length < 3) {
@@ -67,11 +74,22 @@ export class TriadsService {
       // in the previous triad -- the fix is "mark one more film", not "mark
       // three", and telling a user who already has three to do that again is
       // the exact false message this replaces.
+      const needed = watchedTitleIds.length < 3 ? 3 - watchedTitleIds.length : 1;
       const message =
         watchedTitleIds.length < 3
           ? 'Mark at least three films as watched before starting a ranking round'
           : 'Mark another film as watched to start a new ranking round';
-      throw new BadRequestException(message);
+      // NestJS's default error shape plus the structured fields of the target
+      // contract (API.md §2.2: `{ reason: 'need_more_watched', needed }`), so
+      // the client can say exactly how many more films to mark instead of
+      // parsing English prose.
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'Bad Request',
+        message,
+        reason: 'need_more_watched',
+        needed,
+      });
     }
 
     const titleIds = titles.map((title) => title.id);
@@ -170,12 +188,124 @@ export class TriadsService {
     }
   }
 
+  // One of the two neutral replacement controls (blueprint §4.3, ADR-17):
+  // the user says "haven't watched" or "don't remember" about one item, that
+  // item alone is swapped for another eligible watched title, and the triad
+  // gets a fresh displayOrder. The reason is exposure bookkeeping, never a
+  // preference -- nothing here enters training, a prior or a score.
+  async replace(userId: string, triadId: string, replaceTriadItemDto: ReplaceTriadItemDto): Promise<Triad> {
+    const triad = await this.triadsRepository.findOne({ where: { id: triadId } });
+    if (!triad) {
+      throw new NotFoundException('Triad not found');
+    }
+    await this.assertProfileOwnership(userId, triad.profileId);
+
+    if (triad.status !== 'active') {
+      throw new BadRequestException('Only an active triad can have an item replaced');
+    }
+    if (!triad.titleIds.includes(replaceTriadItemDto.titleId)) {
+      throw new BadRequestException("Title is not one of this triad's three title ids");
+    }
+
+    const priorReplacements = await this.replacementsRepository.count({ where: { triadId } });
+    const replacementTitleId =
+      priorReplacements < MAX_REPLACEMENTS_PER_TRIAD
+        ? await this.pickReplacementTitle(triad.profileId, triad.titleIds)
+        : null;
+
+    // One transaction: the exposure change, the event row and the triad
+    // update all land or none do -- a triad must never keep showing a title
+    // the user just said they haven't watched.
+    return this.triadsRepository.manager.transaction(async (manager) => {
+      await this.applyReplacementReason(
+        manager,
+        triad.profileId,
+        replaceTriadItemDto.titleId,
+        replaceTriadItemDto.reason,
+      );
+
+      // Append-only event (SCHEMA.md §2.3); replacementTitleId stays NULL
+      // when nothing could be swapped in.
+      await manager.save(
+        manager.create(TriadReplacement, {
+          triadId: triad.id,
+          replacedTitleId: replaceTriadItemDto.titleId,
+          replacementTitleId,
+          reason: replaceTriadItemDto.reason,
+        }),
+      );
+
+      if (replacementTitleId) {
+        // Same slot, new title; displayOrder is re-drawn so the swapped-in
+        // card's position is as unbiased as the original draw (ADR-17).
+        triad.titleIds = triad.titleIds.map((id) => (id === replaceTriadItemDto.titleId ? replacementTitleId : id));
+        triad.displayOrder = this.shuffle([...triad.titleIds]);
+      } else {
+        // Nothing eligible left, or the per-triad limit is exceeded: the
+        // event above is still recorded, the triad is abandoned rather than
+        // patched. The next getCurrent() draws a fresh one -- or says exactly
+        // how many more watched titles it needs.
+        triad.status = 'skipped';
+      }
+      return manager.save(triad);
+    });
+  }
+
   async findCompleted(userId: string, profileId: string): Promise<Triad[]> {
     await this.assertProfileOwnership(userId, profileId);
     return this.triadsRepository.find({
       where: { profileId, status: 'completed' },
       order: { createdAt: 'DESC' },
     });
+  }
+
+  // The neutral bookkeeping each replacement reason implies (ADR-17).
+  private async applyReplacementReason(
+    manager: EntityManager,
+    profileId: string,
+    titleId: string,
+    reason: ReplacementReason,
+  ): Promise<void> {
+    const existing = await manager.findOne(UserTitleState, { where: { profileId, titleId } });
+    const state = existing ?? manager.create(UserTitleState, { profileId, titleId, state: 'watched' });
+    if (reason === 'not_watched') {
+      // Exposure unknown: the title leaves the watched set (and so the triad
+      // pool) and stays a recommendation candidate (BP §2.4 #3).
+      state.state = 'not_watched';
+      state.watchedAt = null;
+    } else {
+      // Watched but not recallable: still not recommendable, and never asked
+      // about in a triad again.
+      state.triadEligible = false;
+    }
+    await manager.save(state);
+  }
+
+  // A random watched, still-eligible title that is in neither the triad nor
+  // the immediately previous completed triad -- the same one-triad lookback
+  // getCurrent() applies (ADR-34). null when the pool has nothing left.
+  private async pickReplacementTitle(profileId: string, currentTitleIds: string[]): Promise<string | null> {
+    const previousTriad = await this.triadsRepository.findOne({
+      where: { profileId, status: 'completed' },
+      order: { createdAt: 'DESC' },
+      select: { titleIds: true },
+    });
+    const excluded = new Set([...currentTitleIds, ...(previousTriad?.titleIds ?? [])]);
+    const candidates = (await this.eligibleWatchedTitleIds(profileId)).filter((id) => !excluded.has(id));
+    if (candidates.length === 0) {
+      return null;
+    }
+    return candidates[Math.floor(Math.random() * candidates.length)];
+  }
+
+  // Watched titles the user can still be asked about: "don't remember"
+  // clears triadEligible while keeping the watch (ADR-17).
+  private async eligibleWatchedTitleIds(profileId: string): Promise<string[]> {
+    const watchedStates = await this.statesRepository.find({
+      where: { profileId, state: 'watched', triadEligible: true },
+      select: { titleId: true },
+    });
+    return watchedStates.map((state) => state.titleId);
   }
 
   private async assertProfileOwnership(userId: string, profileId: string): Promise<void> {

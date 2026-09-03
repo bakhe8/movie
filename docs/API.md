@@ -33,9 +33,10 @@ Verified against `apps/backend/src/modules/**` on 2026-09-03. Every profile-scop
 | PATCH | `/api/profiles/:profileId/titles/:titleId/state` | JWT | `{ state: watched\|not_watched\|watchlist\|interested, watchedAt?, notes? }` | UserTitleState | never accepts a rating |
 | GET | `/api/profiles/:profileId/watched-titles` | JWT | — | UserTitleState[] (+title) | |
 | GET | `/api/profiles/:profileId/watchlist` | JWT | — | UserTitleState[] (+title) | |
-| GET | `/api/profiles/:profileId/triads/current` | JWT | — | Triad | returns the active triad or creates one (`random-v1`); 400 if < 3 watched titles |
+| GET | `/api/profiles/:profileId/triads/current` | JWT | — | Triad | returns the active triad or creates one (`random-v1`) from watched titles that are still `triadEligible`; 400 with `{ reason: 'need_more_watched', needed }` (alongside the default `statusCode`/`message`/`error`) when fewer than 3 are eligible or all were just used in the previous triad |
 | GET | `/api/profiles/:profileId/triads` | JWT | — | Triad[] | completed only |
 | POST | `/api/triads/:triadId/rank` | JWT | `{ ranking: string[3] (titleIds, best first), sessionId? }`, header `Idempotency-Key?` (UUID) | Triad | 400 if already completed or `ranking` isn't exactly this triad's own title ids; a repeated `Idempotency-Key` for the same triad returns the original result instead of erroring; reusing one for a different triad is `409` |
+| POST | `/api/triads/:triadId/replace` | JWT | `{ titleId, reason: 'not_watched' \| 'not_remembered' }` | Triad | the two neutral replacement controls (ADR-17): swaps only that item for a random other eligible watched title (never one from the previous completed triad) and redraws `displayOrder`; writes a `triad_replacements` row; `not_watched` sets the title's state to `not_watched` (stays a recommendation candidate), `not_remembered` keeps it watched but clears `triadEligible`; no preference signal. 400 if the triad is not active or `titleId` is not one of its three. Returns `status: 'skipped'` (event still logged with `replacementTitleId: null`) when nothing eligible is left or a 4th replacement is requested on one triad — the client then calls `GET …/triads/current` again |
 | GET | `/api/profiles/:profileId/recommendations` | JWT | `?limit(≤50, default 10)` | Recommendation[] | 409 until a model snapshot exists; excludes watched titles only (`not_watched` stays a candidate); unknown fingerprint dimensions imputed with the pool mean, never zero; results not persisted |
 
 Response shapes in use (from `apps/frontend/app/lib/api.ts`, which mirrors the entities):
@@ -43,7 +44,8 @@ Response shapes in use (from `apps/frontend/app/lib/api.ts`, which mirrors the e
 ```ts
 Profile { id, userId, name, preferredLanguage: 'ar'|'en', createdAt, updatedAt }
 Title { id, internalId, titleEn, titleAr, description|null, releaseYear|null, genres|null, externalIds?, fingerprint? }
-UserTitleState { id, profileId, titleId, state, watchedAt|null, importedRating|null, ratingSource:'import'|null, notes|null, updatedAt, title? }
+UserTitleState { id, profileId, titleId, state, watchedAt|null, triadEligible /* false after 'not_remembered' (ADR-17) */,
+                 importedRating|null, ratingSource:'import'|null, notes|null, updatedAt, title? }
 Triad { id, profileId, titleIds: string[3], displayOrder: string[3]|null, ranking: string[3]|null /* titleIds, best first */,
         shownAt|null, answeredAt|null, modelVersion|null /* null under random-v1, which uses no model */, idempotencyKey|null,
         policyVersion|null, selectionPropensity|null, experimentId|null, sessionId|null, metadata|null, status, createdAt }
@@ -88,7 +90,7 @@ Idempotency: state-changing calls that may be retried by the client (`rank`, `re
 | GET | `/api/v1/titles/:titleId` | work page | fingerprint summary (reviewed features only), Public Quality and Watchability separate (`BP §5.3`) | `/api/titles/:titleId` |
 | POST | `/api/v1/triads/next` | return a valid triad for this profile | only confirmed-watched items; returns `selectionPropensity`, `policyVersion`, `displayOrder`, `shownAt`; creates the triad event; `409` with `{ reason: 'need_more_watched', needed }` if the pool is too small | `GET …/triads/current` |
 | POST | `/api/v1/triads/:id/rank` | save one complete ranking | checks membership, `answeredAt` window, not already answered; requires `Idempotency-Key`; stores `answeredAt`, `modelVersion` | `/api/triads/:id/rank` |
-| POST | `/api/v1/triads/:id/replace` | replace one item | body `{ titleId, reason: 'not_watched' \| 'not_remembered' }`; writes `triad_replacements`; updates exposure per ADR-17; no preference signal; returns the updated triad with the new item and a fresh `displayOrder` | new |
+| POST | `/api/v1/triads/:id/replace` | replace one item | body `{ titleId, reason: 'not_watched' \| 'not_remembered' }`; writes `triad_replacements`; updates exposure per ADR-17; no preference signal; returns the updated triad with the new item and a fresh `displayOrder` | `/api/triads/:triadId/replace` (implemented 2026-09-03; the target adds the envelope, `Idempotency-Key` and items inline) |
 | POST | `/api/v1/watch-events` | record a watch (and edition) | body `{ profileId, titleId, watchedAt?, source: 'in_app'\|'import'\|'manual', audioLanguage?, subtitleLanguage?, provider? }`; does not imply liking; if the title was recommended, links an `outcomes` row | `PATCH …/state` (state stays for watchlist/interested) |
 | GET | `/api/v1/taste-profile?profileId=` | tendencies, confidence, unknown areas, exceptions | no uncalibrated percentages; each item has brief evidence, `confidenceBand`, `evidenceSource`, `modelVersion` | new |
 | GET | `/api/v1/recommendations?profileId=&track=&limit=` | three tracks | each item: `personalFit`, `publicQuality`, `watchability`, `confidenceBand`, `reason { text, features[], evidenceSource }`, `availability[]`, `selectionPropensity`, `recommendationId`; the call persists a `recommendations` row per item | `GET …/recommendations` |
@@ -158,6 +160,7 @@ Ranking is sent as title ids (not indices), on both the unversioned route and th
 ---
 
 **Changelog**
+- 1.4 (2026-09-03): replacement endpoint implemented (ADR-17) -- `POST /api/triads/:triadId/replace`; `UserTitleState` gains `triadEligible`; `GET …/triads/current` draws from eligible titles only and its 400 carries `{ reason: 'need_more_watched', needed }`.
 - 1.3 (2026-09-03): `personalFit` display note cites ADR-33 (verbal confidence, no percentage on any prediction surface).
 - 1.2 (2026-09-03): gap 3 closed -- `POST /api/triads/:triadId/rank` takes title ids (not indices) and an optional `Idempotency-Key`; `Triad` gains `shownAt`, `answeredAt`, `modelVersion`, `idempotencyKey`.
 - 1.1 (2026-09-03): `fingerprintCoverage` added to the implemented recommendation shape; candidate filter documented (watched only).

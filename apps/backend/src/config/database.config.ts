@@ -6,6 +6,7 @@ import { Embedding } from '../entities/embedding.entity';
 import { Profile } from '../entities/profile.entity';
 import { Title } from '../entities/title.entity';
 import { Triad } from '../entities/triad.entity';
+import { TriadReplacement } from '../entities/triad-replacement.entity';
 import { User } from '../entities/user.entity';
 import { UserModelSnapshot } from '../entities/user-model-snapshot.entity';
 import { UserTitleState } from '../entities/user-title-state.entity';
@@ -40,7 +41,7 @@ export function getConnectionOptions(): ConnectionOptions {
     username: process.env.POSTGRES_USER || 'movieapp',
     password,
     database: process.env.POSTGRES_DB || 'moviedb',
-    entities: [User, Profile, Title, Triad, Embedding, UserModelSnapshot, UserTitleState],
+    entities: [User, Profile, Title, Triad, TriadReplacement, Embedding, UserModelSnapshot, UserTitleState],
   };
 }
 

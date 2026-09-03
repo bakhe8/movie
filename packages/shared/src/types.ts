@@ -102,6 +102,8 @@ export interface UserTitleState {
   titleId: string;
   state: TitleState;
   watchedAt: string | null;
+  /** false after a "don't remember" replacement (ADR-17): still watched, never asked about in a triad again. */
+  triadEligible: boolean;
   importedRating: number | null;
   ratingSource: 'import' | null;
   notes: string | null;
@@ -110,6 +112,20 @@ export interface UserTitleState {
 }
 
 export type TriadStatus = 'active' | 'completed' | 'skipped';
+
+/** The two neutral reasons for swapping a triad item (§4.3, ADR-17); deliberately no "didn't like it". */
+export type ReplacementReason = 'not_watched' | 'not_remembered';
+
+/** One append-only replacement event on a triad (§13.1). Not a preference signal. */
+export interface TriadReplacement {
+  id: string;
+  triadId: string;
+  replacedTitleId: string;
+  /** null when nothing eligible was left and the triad was skipped instead. */
+  replacementTitleId: string | null;
+  reason: ReplacementReason;
+  createdAt: string;
+}
 
 /** One listwise triad event (blueprint §7.2, §13.2). */
 export interface Triad {
