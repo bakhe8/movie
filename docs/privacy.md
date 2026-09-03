@@ -60,7 +60,12 @@ This document outlines privacy commitments and compliance measures for the Movie
 2. First Login
    ├── Purpose-specific consent (separate toggles, scoped to what MVP Phase 1
    │   │  actually implements — see "Exclusions from MVP" below)
-   │   ├── [x] Use my rankings to improve recommendations
+   │   ├── [x] Use my rankings to improve recommendations — copy must disclose that
+   │   │       this includes my pseudonymous ranking patterns contributing to a
+   │   │       pooled model shared across profiles (blueprint §7.5), not only a
+   │   │       model trained on my own rankings alone; opt out via `no_collaborative`
+   │   │       (see "Right to Restrict Processing") without losing personalization
+   │   │       from your own individual rankings
    │   └── [x] Store my watched list for personalization
    │
 3. Feature Activation (Future — not built in Phase 1; toggle appears when shipped)
@@ -104,6 +109,8 @@ Stored Event Structure:
   // Email/account is linked via foreign key, not embedded
 }
 ```
+
+The shared latent space's batch training (blueprint §7.5) reads triads keyed only by `profile_id`, the same pseudonymous id as everywhere else — it never joins back to `user_id`/email, so a model export or the pooled training job carries no more identifying data than any other model-training path already covered by this section.
 
 ## User Rights
 
@@ -168,6 +175,8 @@ POST /api/profiles/{id}/restrictions
   restrictionType: 'no_ai_explanations' | 'no_collaborative' | 'pause_all'
 }
 ```
+
+`no_collaborative` now covers two things, not just a hypothetical future feature: (1) any user-facing collaborative/social recommendation surface (excluded from MVP anyway, see "Exclusions from MVP"), and (2) exclusion of this profile's triads from the shared latent space's pooled training data (blueprint §7.5) — the profile's own individually-fit model and recommendations continue to work, just without contributing to or benefiting from the cross-profile pooled space.
 
 ## Automated Decision-Making Disclosure
 
@@ -342,10 +351,12 @@ The system **should initially store data within Saudi Arabia or MENA region** to
 
 **Not implemented in Phase 1:**
 - Social features (no sharing profiles)
-- Collaborative filtering (no cross-user data)
+- User-facing collaborative filtering (no "people who liked X also liked Y", no visible cross-user recommendations)
 - Email recommendations
 - Third-party integrations (JustWatch, etc.)
 - Advertising targeting
+
+**Correction — this is narrower than "no cross-user data" was previously stated to mean:** blueprint §7.5 introduces a shared latent space, batch-trained on pooled pseudonymous triads and fingerprints across profiles, used silently from the Alpha stage (blueprint §17.2) to improve candidate generation and triad selection. This *does* involve cross-user data processing starting in Phase 1/Alpha — it is never shown to a user as "based on other users" (that's gated behind the §7.6/§17.3 disclosure gate, itself post-MVP), but the pooling and computation happen earlier than the line above previously implied. See "Ranking Personalization Consent" below for the disclosure this requires, and `no_collaborative` under "Right to Restrict Processing" for how a user opts out of it specifically.
 
 Each feature will require separate consent and privacy assessment before rollout.
 

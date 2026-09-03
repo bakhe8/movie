@@ -5,6 +5,7 @@ Complete reference documentation for the Movie Recommendation System. Start here
 > **Foundational document**: [movie_taste_platform_blueprint_ar.md](movie_taste_platform_blueprint_ar.md) (Arabic, v1.0) is the product's sole source of truth — vision, non-negotiable principles, UX, math, data, architecture, evaluation, privacy, and rollout. Provenance rule for everything else in this folder:
 > - **Content that contradicts the blueprint** must be fixed to match it, or deleted if it can't be reconciled — not just hedged with a caveat. (A pass doing this ran across SPECIFICATION.md, RANKING_ALGORITHM.md, ARCHITECTURE_DECISIONS.md, architecture.md, schema.md, privacy.md, PHASE1_CHECKLIST.md, QUICKSTART.md, and both READMEs — merged Personal Fit/Public Quality/Watchability scores, post-watch star ratings, an uncalibrated percentage "confidence", a utility model missing the population prior, fixed pass/fail numeric targets presented as promises, a fabricated future model name ("GPT-5.6 Luna") — but it was targeted via search, not an exhaustive sentence-by-sentence diff, so treat any remaining inconsistency you spot the same way: fix or delete on sight, don't assume it was already checked.)
 > - **Content that is simply absent from the blueprint** (specific SQL types, exact folder layout, specific dollar-cost estimates, etc.) is this repo's own elaboration, not part of the authoritative spec. It isn't necessarily wrong, but it wasn't decided by the blueprint either — treat it as an unverified draft needing review before anyone builds on it as if it were settled, especially anywhere it states a specific number, name, or product behavior with more confidence than the blueprint itself claims.
+> - **2026-09-03 addendum**: the blueprint gained §7.5-§7.6 (shared latent space calibration; silent-computation-vs-disclosed-attribution gating) and a `product_journey_ar.md` companion. A follow-up pass propagated this across RANKING_ALGORITHM.md, ARCHITECTURE_DECISIONS.md (new Decision 13), schema.md (`evidence_source`, `shared_latent_space_versions`), privacy.md (corrected the "no cross-user data in Phase 1" claim — pooled training now starts silently in Alpha), and DATA_LICENSING.md (flagged MovieLens/Tag Genome as **not yet cleared** for that specific production use — a legal-review blocker this design introduced, not a pre-existing one). Same rule applies: this was a targeted pass, not an exhaustive diff.
 
 ---
 
@@ -25,7 +26,13 @@ Complete reference documentation for the Movie Recommendation System. Start here
 
 ### 📋 Understanding the System
 
-3. **[SPECIFICATION.md](SPECIFICATION.md)** - Complete technical specification
+3. **[product_journey_ar.md](product_journey_ar.md)** (Arabic) - Narrative companion to the blueprint
+   - How the triad protocol resolves its four core objections
+   - How per-film weights are actually computed (content fingerprint, Plackett-Luce, exceptions)
+   - The shared latent space and silent-vs-disclosed attribution split (blueprint §7.5-§7.6)
+   - Idea → protocol → math → architecture → roadmap, as one continuous story
+
+4. **[SPECIFICATION.md](SPECIFICATION.md)** - Complete technical specification
    - Executive summary
    - Technology stack rationale
    - Film data sources
@@ -37,7 +44,7 @@ Complete reference documentation for the Movie Recommendation System. Start here
    - Privacy & compliance
    - Implementation phases
 
-4. **[ARCHITECTURE.md](architecture.md)** - System design & data flows
+5. **[ARCHITECTURE.md](architecture.md)** - System design & data flows
    - Architecture diagram
    - Data flow examples
    - Deployment topology
@@ -45,7 +52,7 @@ Complete reference documentation for the Movie Recommendation System. Start here
    - Security model
    - Scalability considerations
 
-5. **[ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md)** - Why we chose what
+6. **[ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md)** - Why we chose what
    - Decision-making rationale for all major choices
    - Tradeoffs for each decision
    - Migration paths if we change later
@@ -53,14 +60,14 @@ Complete reference documentation for the Movie Recommendation System. Start here
 
 ### 🔧 Implementation
 
-6. **[PHASE1_CHECKLIST.md](PHASE1_CHECKLIST.md)** - Detailed implementation tasks
+7. **[PHASE1_CHECKLIST.md](PHASE1_CHECKLIST.md)** - Detailed implementation tasks
    - Feature-by-feature breakdown
    - Subtasks and dependencies
    - Testing requirements
    - Success metrics
    - Launch readiness checklist
 
-7. **[RANKING_ALGORITHM.md](RANKING_ALGORITHM.md)** - Plackett-Luce model deep dive
+8. **[RANKING_ALGORITHM.md](RANKING_ALGORITHM.md)** - Plackett-Luce model deep dive
    - Mathematical foundation
    - Implementation details (Python/NumPy)
    - Numerical stability tricks
@@ -68,8 +75,9 @@ Complete reference documentation for the Movie Recommendation System. Start here
    - Training workflow
    - Performance optimization
    - Common pitfalls & solutions
+   - Population latent space & calibration, attribution gating (blueprint §7.5-§7.6)
 
-8. **[schema.md](schema.md)** - Database schema reference
+9. **[schema.md](schema.md)** - Database schema reference
    - All tables with DDL
    - Indexes and views
    - Migration strategy
@@ -77,16 +85,17 @@ Complete reference documentation for the Movie Recommendation System. Start here
 
 ### 🔐 Compliance & Business
 
-9. **[DATA_LICENSING.md](DATA_LICENSING.md)** - Data sources & legal compliance
+10. **[DATA_LICENSING.md](DATA_LICENSING.md)** - Data sources & legal compliance
    - Wikidata (CC0, recommended for MVP)
    - IMDb (free vs. commercial)
    - TMDB (free tier limitations)
    - JustWatch (availability integration)
+   - MovieLens/Tag Genome (⚠️ legal review required for the shared-latent-space use case)
    - MVP data strategy
    - Legal checklist
    - What NOT to do
 
-10. **[privacy.md](privacy.md)** - Privacy & Saudi Arabia PDPL
+11. **[privacy.md](privacy.md)** - Privacy & Saudi Arabia PDPL
     - User rights (access, delete, export, correct)
     - Consent model
     - Data minimization
@@ -320,6 +329,9 @@ Store triadic ranking events, rebuild model from events
 | **Event-Based** | Storing triads, rebuilding weights from them | SPECIFICATION.md §5 |
 | **PWA** | Progressive Web App (Next.js) | SPECIFICATION.md §1 |
 | **PDPL** | Saudi Arabia Personal Data Protection Law | privacy.md |
+| **Shared Latent Space** | Population-level factor model (~15-30 factors) pooling all profiles' triads/fingerprints; individual $w_u$ is calibrated onto it, not fit from scratch | blueprint §7.5, RANKING_ALGORITHM.md, product_journey_ar.md §2.10 |
+| **Attribution Gate** | Logic separating silent computational use of the shared latent space (from day one) from disclosed personal-insight claims (gated behind per-user statistical validation) | blueprint §7.6, RANKING_ALGORITHM.md, product_journey_ar.md §2.11 |
+| **evidence_source** | Field on recommendations/taste-profile responses: `individual` or `population_enriched` | blueprint §14, schema.md |
 
 ---
 

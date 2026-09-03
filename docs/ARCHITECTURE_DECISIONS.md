@@ -116,7 +116,9 @@ Learn user taste preferences from triadic rankings. Need simple, interpretable, 
 ### Decision
 **Plackett-Luce MLE** (linear model trained on triadic rankings)
 
-> Blueprint amendment (§7.1): the full utility model is $s(u,m) = b(m) + \theta_u^\top\phi_m + p_u^\top q_m + \delta_{u,m}$ — a shrunk population prior $b(m)$ and a collaborative term $p_u^\top q_m$ sit alongside the personal weight term. The collaborative term stays deferred (matches this decision's Phase 2+ path below), but $b(m)$ should be in the model from the start for cold-start smoothing, and must never be surfaced to the user merged with personal fit.
+> Blueprint amendment (§7.1): the full utility model is $s(u,m) = b(m) + \theta_u^\top\phi_m + p_u^\top q_m + \delta_{u,m}$ — a shrunk population prior $b(m)$ and a collaborative term $p_u^\top q_m$ sit alongside the personal weight term. $b(m)$ should be in the model from the start for cold-start smoothing, and must never be surfaced to the user merged with personal fit.
+>
+> **Correction to "the collaborative term stays deferred" above**: that's still true for $p_u^\top q_m$ specifically — collaborative filtering built from *this product's own* accumulated user interactions correctly waits for sufficient internal data (matches this decision's "Phase 2+" framing below). But blueprint §7.5 adds a second, earlier-arriving collaborative mechanism: a shared latent space seeded from *external* proxy data before real users exist, used silently from Alpha (blueprint §17.2) for candidate generation and triad selection — not deferred to Phase 2+. See Decision 13 below; don't read this entry as saying no cross-user signal exists until Phase 2.
 
 ### Rationale
 1. **Proven in literature** = well-studied, understood failure modes
@@ -420,6 +422,8 @@ Should user preference models be trained on our servers or on users' devices?
 6. No sharing: Never share or sell user data (policy + tech)
 ```
 
+> **Amendment**: "Centralized" here originally meant one profile's rankings training only that profile's own model. Blueprint §7.5 adds a second centralized process — a shared latent space batch-trained on *pooled* pseudonymous triads across profiles (used to calibrate individual $w_u$, not just to train it in isolation). That's a distinct processing purpose from #1 above ("use my rankings to improve *my* recommendations" doesn't, on its face, disclose "and pool them into a model that also shapes other people's triads/candidates"). See [privacy.md](privacy.md)'s consent-model update — this needs its own disclosure, not a silent extension of safeguard #1.
+
 ### Tradeoffs Given Up
 - ❌ User data on our servers (mitigated by consent + privacy controls)
 - ❌ Privacy risk if breach (mitigated by encryption + minimal data)
@@ -588,6 +592,48 @@ Phase 3+ (if sharding needed):
 
 ---
 
+## 13. Per-User-Only Fitting vs. Shared Latent Space Calibration
+
+### Context
+Section 3's Plackett-Luce model, as originally scoped, fits $w_u \in \mathbb{R}^{30-50}$ independently per profile from a handful of triads. That's a real identifiability problem (see [RANKING_ALGORITHM.md](RANKING_ALGORITHM.md)'s "Data Requirements"): a few triads can't reliably resolve 30-50 correlated dimensions. Blueprint §7.5 (added alongside this decision) resolves it architecturally, not by asking users for more triads.
+
+### Options Considered
+
+| Option | Pros | Cons |
+|--------|------|------|
+| **Per-user fitting only** (original) | Simple, no shared infra, fully isolated per profile | Needs 15-20+ triads before $w_u$ stabilizes; can't discover cross-genre axes from one person's data alone |
+| **Shared latent space + per-user calibration** (chosen, blueprint §7.5) | Fewer triads needed for a stable position; enables cross-genre insight the individual data alone can't support | Needs batch-retraining infra, a bootstrap data source, and new privacy/licensing surface area |
+| **Full collaborative filtering from day one** | Simplest single mechanism | Blueprint §7.1 already rejected this — no cold-start data to train it on |
+
+### Decision
+**Shared latent space, externally-seeded, with per-user MIRT/CAT-style calibration** (blueprint §7.5), gated by a strict silent-computation/disclosed-attribution split (blueprint §7.6) so users are never told about a cross-user pattern before it's validated on their own held-out data.
+
+### Rationale
+1. Directly fixes the identifiability problem this decision's own §3 entry left open
+2. External seeding avoids waiting on internal data the product doesn't have yet at launch
+3. The §7.6 attribution gate keeps this from degrading the trust promise Decision 9's privacy safeguards depend on
+4. Reuses existing infra: a scheduled batch job in the Python model service (no new service per §12.3's "when do we split services" criteria), and the existing `triads.selection_propensity` column for the feedback-loop controls this reuses (blueprint §21.2)
+
+### Tradeoffs Given Up
+- ❌ Not yet implementable as designed: the proposed external seed source is confirmed blocked, not merely unreviewed — GroupLens' license requires prior written permission for any commercial/revenue-bearing use of MovieLens/Tag Genome (verified against the dataset READMEs; see [DATA_LICENSING.md](DATA_LICENSING.md)), and this design's "silent" use still counts as that commercial use
+- ❌ New privacy surface: pooling pseudonymous triads across profiles is a distinct processing purpose needing its own consent disclosure (see [privacy.md](privacy.md))
+- ❌ A cohort-level acceptance gate (blueprint §16.5 via §17.3) must pass before *any* user sees a disclosed cross-user insight — slower to reach the "enrichment" phase than a naive design would promise
+
+### Migration Path
+```
+Pre-Alpha: Request written permission from GroupLens for the external bootstrap
+           (MovieLens/Tag Genome) — required by their license, confirmed, not optional
+           diligence. Proceed with the external seed ONLY once granted; otherwise
+           seed from nothing and let the space start empty
+Alpha (blueprint §17.2): Shared space in silent use only; internal pᵤᵀqₘ (Decision 3) still deferred
+Beta closed (blueprint §17.3): Cohort-level acceptance gate evaluated; only then can
+           any individual user's own §7.6 phase-3 gate unlock a disclosed claim
+Fallback if the legal review never clears external data: seed from Alpha-cohort
+           internal triads only — slower cold start, no licensing risk, same architecture
+```
+
+---
+
 ## Summary Table
 
 | Decision | Chosen | Rationale | Revisit If |
@@ -601,6 +647,7 @@ Phase 3+ (if sharding needed):
 | Profiles | Individual only | Clean data, privacy | User demand for family |
 | Recommendations | Real-time + cache | Fresh, responsive | Compute bottleneck |
 | API | REST | Simple, fast | Very complex queries |
+| Per-user model | Shared latent space + calibration | Fixes identifiability, enables cross-genre insight | MovieLens legal review blocks external seed (Decision 13) |
 
 ---
 

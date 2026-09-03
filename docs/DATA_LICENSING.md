@@ -16,6 +16,7 @@
 | **TMDB Free** | Custom ToS, attribution required (not CC0) | Free | ⚠️ Conditional | ✅ Yes | ❌ Not for ML/recs (display-only, w/ attribution) | Requires written agreement |
 | **TMDB Commercial** | Partnership | $$$$ | ✅ Yes | ✅ Yes | ❌ Phase 2+ | Best overall but needs negotiation |
 | **JustWatch** | Partnership | $$$$ | ✅ Conditional | ✅ Saudi Arabia | ❌ Phase 2+ | Critical for availability |
+| **MovieLens / Tag Genome** | GroupLens research license — commercial/revenue-bearing use requires prior written permission from a GroupLens faculty member (confirmed by reading the README) | Free | ❌ **BLOCKED without permission** | ⚠️ Weak | ❌ Research/offline only until permission obtained | See "❌ Commercial Use Blocked" below — do not seed a live-serving component before permission is documented |
 
 ---
 
@@ -229,6 +230,29 @@ This is WRONG for commercial AI/recommendations
 
 ---
 
+### MovieLens / Tag Genome (❌ COMMERCIAL USE BLOCKED — confirmed, not merely suspected)
+
+**What It Is**: GroupLens Research (University of Minnesota) rating/tag datasets, proposed elsewhere in this repo's docs (blueprint §7.5, §17.2; RANKING_ALGORITHM.md's "Population Latent Space & Calibration" section) as the pre-launch seed for the shared latent taste space.
+
+**Verified license terms** (checked directly against the GroupLens dataset READMEs — MovieLens 100k, 20M, 25M, 32M, and the standalone Tag Genome dataset all carry the same clause):
+
+> "The user may not use this information for any commercial or revenue-bearing purposes without first obtaining permission from a faculty member of the GroupLens Research Project at the University of Minnesota."
+
+Some dataset versions additionally restrict redistribution without separate permission (wording varies slightly by version — check the README of the *specific* dataset file actually downloaded, not this summary, before use).
+
+**What this means concretely**: this is not a gray area needing interpretation — it is an explicit prior-permission requirement. "Silent" backend use (blueprint §7.6) does not exempt it: seeding a factor model that shapes live triads/recommendations for a commercial product *is* the "commercial or revenue-bearing purpose" the clause is about, regardless of whether the affected user ever sees it disclosed. Tag Genome carries the identical restriction — it is not separately licensed or more permissive than the base MovieLens data.
+
+**Required action before any production use** (mirrors the TMDB Commercial Partnership pattern above — same kind of ask, different counterparty):
+1. Contact the GroupLens Research Project (a faculty member, per the license text — https://grouplens.org/datasets/movielens/) and request explicit written permission covering: seeding a production recommendation feature; training a derived factor/embedding model from the ratings and Tag Genome data; that model influencing live commercial recommendations and triad selection; retention duration; attribution requirements.
+2. Until that permission is obtained and documented here, MovieLens/Tag Genome are **research/offline use only** — safe for prototyping the factor-model methodology, benchmarking, or internal validation, never for the weights that actually ship in the shared latent space (blueprint §7.5).
+3. If permission is not obtained before Alpha needs the bootstrap, seed the shared latent space from the platform's own Alpha-cohort internal data only (slower cold start, zero licensing risk) — already documented as the fallback in blueprint §17.2 and ARCHITECTURE_DECISIONS.md Decision 13.
+
+**Action**: reflected in the Legal Checklist below and in blueprint §17.2's Alpha gate — the population latent space's external bootstrap is blocked on this permission, not merely "worth reviewing."
+
+Sources: [GroupLens MovieLens Datasets](https://grouplens.org/datasets/movielens/), [MovieLens ml-latest README](https://files.grouplens.org/datasets/movielens/ml-latest-README.html), [MovieLens ml-25m README](https://files.grouplens.org/datasets/movielens/ml-25m-README.html), [Tag Genome README](https://files.grouplens.org/datasets/tag-genome/README.html)
+
+---
+
 ## MVP Implementation Strategy
 
 ### Film Catalog: Build First, License Later
@@ -357,6 +381,7 @@ CREATE TABLE titles (
   - [ ] Saudi Arabia explicitly included
   - [ ] API key and data export access confirmed
 - [ ] **IMDb**: Confirmed NOT using free data in production
+- [ ] **MovieLens/Tag Genome**: Written permission obtained from a GroupLens faculty member (license requires this for any commercial/revenue-bearing use — confirmed, see detailed section above) BEFORE using it to seed the production shared latent space (blueprint §7.5); confirmed NOT used for live serving until that permission is documented; research/offline use only in the meantime
 - [ ] **Privacy**: Data retention/licensing disclosed to users
 - [ ] **Attribution**: All data sources credited in UI/docs
 
@@ -385,6 +410,7 @@ CREATE TABLE titles (
 | Use TMDB images without attribution | IP violation | Show "Powered by TMDB" + link |
 | Send user data to OpenAI | Privacy violation | Set store: false + minimize data |
 | Train model on TMDB descriptions | Contract violation | Train on Wikidata + OpenAI output |
+| Seed the production shared latent space (blueprint §7.5) from MovieLens/Tag Genome without written GroupLens permission | License violation — commercial use requires prior permission per the README | Get written permission first, or seed from Alpha-cohort internal data only |
 
 ---
 

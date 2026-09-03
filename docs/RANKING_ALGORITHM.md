@@ -3,6 +3,8 @@
 A detailed technical reference for implementing the Plackett-Luce model for learning user preferences from triadic rankings.
 
 > See [movie_taste_platform_blueprint_ar.md](movie_taste_platform_blueprint_ar.md) §7 for the authoritative utility model — the population prior term $b(m)$ from blueprint §7.1 is carried through the formula and the implementation below — and §16 for the full evaluation/calibration requirements (this doc's "pairwise accuracy" is one of several required metrics, not the only one — calibration (Brier/ECE) and per-language/country slices are release gates too).
+>
+> **This document previously described $w_u$ as fit independently per user from a random initialization.** That is superseded by blueprint §7.5 (shared latent space, MIRT/CAT-style calibration): $w_u$ should be estimated as a *calibration* onto a population-level factor space, not a from-scratch fit per user — see [Population Latent Space & Calibration](#population-latent-space--calibration) below. It is also superseded by blueprint §7.6 (silent computation vs. disclosed attribution): whatever this model computes internally, the string shown to the user must pass the [Attribution Gating](#attribution-gating-silent-vs-disclosed) rules before it can be phrased as personal insight. The base Plackett-Luce math and code below are still correct and still the core of the per-user fit — they are extended, not replaced.
 
 ---
 
@@ -44,6 +46,27 @@ Where:
 - $\delta_{u,i}$ = per-film bias (optional, set to 0 for simplicity initially; strongly shrunk once used, so one outlier film doesn't get generalized into $w_u$ — blueprint §7.4)
 
 $b(i)$ can be set to 0 in the very first implementation pass (equivalent to omitting it), but the term should exist in the code from the start so cold-start smoothing has somewhere principled to live, rather than being bolted on ad hoc later.
+
+### Detecting $\delta_{u,i}$ Without Circularity (blueprint §7.4)
+
+A naive approach flags $\delta_{u,i}$ as "exceptional" whenever the residual $U_{u,i}^{observed} - (b(i) + w_u^T x_i)$ is large. This is circular for a new user: $w_u$ isn't converged yet, so *everything* looks like a large residual, and nothing can reliably be called an exception.
+
+**Fix**: compute the residual against the population baseline (§ [Population Latent Space](#population-latent-space--calibration) below), which exists from day one regardless of how mature $w_u$ is for this specific user:
+
+```python
+def is_exception_candidate(user_ranking_position, film_id, w_u, population_baseline_fn, fingerprint, threshold=2.0):
+    """
+    population_baseline_fn: callable that scores a film using the shared
+    latent space (population-level expectation), independent of this
+    user's own w_u maturity — see Population Latent Space section.
+    """
+    individual_score = fingerprint @ w_u
+    population_score = population_baseline_fn(fingerprint)
+    residual = user_ranking_position - max(individual_score, population_score)
+    return residual > threshold  # candidate for explicit "exceptional favorite" tagging
+```
+
+Explicit user tagging ("this is a special favorite for personal reasons") remains faster and more accurate than this automatic detector; treat this as the fallback when no explicit tag exists, not the primary mechanism.
 
 **Interpretation**:
 - Higher $U_{u,i}$ = user prefers film more
@@ -250,6 +273,8 @@ After 10 triads:  w_u starts to stabilize
 After 15-20 triads: w_u reasonably stable
 After 30+ triads: Personalization strong, rare films handled
 ```
+
+**This curve assumes $w_u$ is fit independently per user (random init, as in the base implementation above).** Per blueprint §7.5, fitting $w_u$ as a *calibration* onto a pre-trained shared latent space (instead of random init) should make the "reasonably stable" point arrive earlier than 15-20, because far fewer effective degrees of freedom need to be resolved from this user's own triads alone. Treat 15-20 as the naive-fit fallback number, and validate the calibrated number experimentally per blueprint §16.5 rather than assuming an improvement without measuring it.
 
 ### Handling "Haven't Watched" Films
 
@@ -460,6 +485,94 @@ def monitor_model_quality(user_id):
 
 ---
 
+## Population Latent Space & Calibration
+
+> Authoritative source: blueprint §7.5. This section translates it into the implementation shape for this codebase.
+
+### Why per-user fitting alone doesn't scale to the fingerprint's dimensionality
+
+$w_u \in \mathbb{R}^d$ with $d$=30-50 is a real identifiability problem: a handful of triads cannot resolve 30-50 independent, often-correlated dimensions with any confidence. Fitting `w0 = np.random.randn(d) * 0.01` and letting BFGS converge per-user (as in the base `PlackettLuceRanker.fit` above) works, but needs the 15-20+ triads noted in [Data Requirements](#data-requirements) to stop being noisy.
+
+**Fix**: fit a shared factor model across *all* users' triads and fingerprints jointly — roughly 15-30 latent factors, retrained on a schedule (e.g. weekly batch job) — and treat a given user's $w_u$ as a *projection/calibration* onto that space rather than a free vector in $\mathbb{R}^d$.
+
+### Bootstrap before real users exist
+
+Seed the factor model from externally-licensed proxy data (MovieLens + Tag Genome, critic/audience-divergence patterns as a signal of latent axes genre doesn't explain) *before* launch, per blueprint §17.2 (Alpha). This is a different data source than the internal collaborative term $p_u^\top q_m$ in blueprint §7.1, which correctly still waits for sufficient internal interaction data — the externally-seeded factor space does not have that constraint because it isn't drawing on this product's own not-yet-existing user data. As real triads accumulate, blend the internal collaborative signal in; the two converge into one well-regularized space over time.
+
+> ❌ **Confirmed blocked without permission** (not merely unreviewed): GroupLens' license states explicitly that commercial/revenue-bearing use of MovieLens or Tag Genome requires prior written permission from a GroupLens faculty member — verified directly against the dataset READMEs, see [DATA_LICENSING.md](DATA_LICENSING.md)'s "MovieLens / Tag Genome" section for the exact quote and sources. Seeding a live production component counts as that commercial use even if done silently (blueprint §7.6 doesn't change what the license cares about). Do not implement `SharedLatentSpace.fit(..., external_seed_data=movielens_data)` against real MovieLens/Tag Genome files until that permission is obtained and documented. If unresolved before Alpha needs it, seed from Alpha-cohort internal data only (slower cold start, zero license risk).
+
+```python
+class SharedLatentSpace:
+    """Batch-retrained population-level factor model (blueprint §7.5)."""
+
+    def fit(self, all_users_triads, fingerprints, n_factors=20, external_seed_data=None):
+        """
+        all_users_triads: every user's triad events, pooled
+        external_seed_data: pre-launch proxy dataset (MovieLens/Tag Genome-derived
+            ratings or comparisons) used to initialize factors before internal
+            data exists — see blueprint §17.2
+        """
+        # Matrix factorization / contrastive embedding over pooled triads +
+        # fingerprints; external_seed_data anchors the factors pre-launch,
+        # internal triads dominate as they accumulate.
+        ...  # implementation detail: scheduled batch job, not per-request
+
+    def calibrate_user(self, user_triads, fingerprints, n_active_triads_max=None):
+        """
+        Project one user's triads onto the pre-trained factor space
+        (MIRT/CAT-style adaptive calibration) instead of fitting w_u
+        from scratch. Each new triad should be selected to maximize
+        Fisher information about this user's least-certain factor
+        (feeds into the triad-selection policy, blueprint §8.2) rather
+        than chosen arbitrarily.
+        """
+        ...  # returns calibrated w_u, with an uncertainty estimate per factor
+```
+
+### Acceptance gate
+
+Not a standalone gate — it is blueprint §16.5's general model-acceptance gate applied to this component: the shared space must improve NLL, per-minute learning, calibration, and post-watch outcomes without degrading language/country coverage, and must beat a no-shared-space individual baseline, measured on a **cohort**, not on one lucky user (blueprint §17.3, "بوابة الإفصاح الجماعي").
+
+### Feedback-loop risk
+
+Retraining on triads that were themselves partly shaped by this model's past recommendations reproduces the feedback-loop risk already logged in blueprint §21.2. Apply the same propensity-logging and off-policy-evaluation controls to the *batch retraining data*, not only to individual-user recommendation evaluation.
+
+---
+
+## Attribution Gating: Silent vs Disclosed
+
+> Authoritative source: blueprint §7.6. This governs what `predict_score` / `recommend_films` are allowed to say out loud, not what they're allowed to compute.
+
+The shared latent space (above) may be used freely and silently from day one for candidate generation, triad selection, and scoring — that's a pure quality improvement and the user never sees it as a claim. It must **not** be phrased to the user as personal insight ("we noticed you like X") until it's been validated on that specific user's own held-out triads, not merely on the cohort.
+
+| Phase | Condition | What can be shown as "about your taste"? |
+|---|---|---|
+| 1. Individual-only | From triad 1; overlaps blueprint §9.3's "أولي" tier (3-5 triads) | Only claims traceable to specific triads this user personally ranked |
+| 2. Balance | This user's own $w_u$ calibration is stable (illustrative: ~10-15 triads, not a hard cutoff) | Simple cross-genre links, only if they recur in *this user's own* contradictions — never citing other users |
+| 3. Enrichment | A population-derived factor is statistically shown to predict *this user's* held-out rankings better than their individual-only model (same held-out methodology as [Evaluation Metrics](#evaluation-metrics), applied as a pre-condition for display, not just a post-hoc metric) | May cite it as "similar to patterns we see in similar tastes," explicitly labeled as an addition to, not a replacement for, what came from their own choices |
+
+```python
+def get_recommendation_reason(user_id, film_id, individual_model, population_baseline, evidence):
+    """
+    Returns (reason_text, evidence_source) where evidence_source is
+    "individual" or "population_enriched" — this field is required on
+    GET /v1/recommendations and GET /v1/taste-profile (blueprint §14).
+    """
+    if evidence.is_individually_traceable():
+        return evidence.individual_reason_text(), "individual"
+
+    if evidence.passes_phase3_gate(user_id):  # held-out prediction check, §16.1 protocol
+        return evidence.enriched_reason_text(), "population_enriched"
+
+    # Falls back to a generic, non-attributed reason rather than
+    # borrowing population-level language it hasn't earned yet.
+    return evidence.generic_reason_text(), "individual"
+```
+
+Never let a `population_enriched` claim be phrased as if it came from `individual` evidence — that specific failure mode is the one this gate exists to prevent.
+
+---
+
 ## Common Pitfalls & Solutions
 
 | Problem | Symptom | Solution |
@@ -469,7 +582,7 @@ def monitor_model_quality(user_id):
 | **No convergence** | Loss doesn't decrease | Increase max_iter, reduce learning rate |
 | **Numerical instability** | NaN in weights | Use logsumexp, normalize fingerprints |
 | **Slow training** | Training takes > 10s | Vectorize computation, use GPU |
-| **Cold start** | New user has 0 triads | Start with generic model, adapt quickly |
+| **Cold start** | New user has 0 triads | Initialize $w_u$ by calibrating onto the shared latent space (blueprint §7.5) instead of `np.random.randn`, plus population prior $b(i)$ for candidate scoring |
 
 ---
 
@@ -586,8 +699,10 @@ def test_end_to_end_ranking_and_recommendation():
 - **Plackett-Luce Model**: Plackett (1975), "The analysis of permutations"
 - **MLE Optimization**: Boyd & Vandenberghe (2004), "Convex Optimization"
 - **SciPy BFGS**: https://docs.scipy.org/doc/scipy/reference/optimize.html
+- **Multidimensional Item Response Theory / Computerized Adaptive Testing**: background for the calibration approach in [Population Latent Space & Calibration](#population-latent-space--calibration) — see blueprint §7.5
+- [movie_taste_platform_blueprint_ar.md](movie_taste_platform_blueprint_ar.md) §7.1, §7.4-§7.6, §8.2, §9.3, §14, §16.1, §16.5, §17.2-§17.3, §21.2 — authoritative source for every cross-reference in this document
 
 ---
 
-**Last Updated**: 2025-01-02  
-**Status**: Ready for implementation
+**Last Updated**: 2026-09-03
+**Status**: Ready for implementation — base Plackett-Luce fit is implementation-ready; population calibration and attribution gating (added 2026-09-03) are design-complete pending the batch-retraining infrastructure described in blueprint §7.5

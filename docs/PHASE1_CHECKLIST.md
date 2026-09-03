@@ -164,7 +164,7 @@ listed here because a green test suite makes them invisible.
 | GET /triads/{id} | ❌ | — | |
 | GET /profiles/{id}/triads (completed) | ✅ | — | |
 | Random selection of 3 watched, unranked titles (`random-v1`) | ✅ | 🟡 | §8.2 propensity `ρ` logged (uniform 1/C(pool,3)) ✅, `policyVersion` ✅, `displayOrder` shuffled independently ✅ (§4.3, §8.3). §8.3 not met: no session limit/fatigue cost, no validation hold-out, no same-director/language guard |
-| Adaptive selection (distinguish similar preferences) | ❌ | ❌ | §8.1 six triad functions, §8.2 selection score, §7.5 Fisher-information targeting — none |
+| Adaptive selection (distinguish similar preferences) | ❌ | ❌ | §8.1 six triad functions, §8.2 selection score, §7.5 Fisher-information targeting — none. §7.5's external bootstrap (MovieLens/Tag Genome) is additionally confirmed license-blocked without written GroupLens permission (verified against the dataset READMEs — see `DATA_LICENSING.md`), not just unbuilt — plan Alpha-cohort-only seeding unless that permission is obtained first |
 | Ranking validation (permutation of [0,1,2]) | ✅ | — | |
 | "Haven't watched" / "Don't remember" replacement — two neutral states, no preference signal | ❌ | ❌ | §4.3, §13.1 `triad_replacements`, §14 `/triads/{id}/replace`. `metadata.replacements` is reserved on the entity, nothing writes it |
 | Tests: generation, ranking validation | ✅ | — | `triads.service.spec.ts`, 10 tests |

@@ -158,9 +158,10 @@ CREATE TABLE recommendations (
   confidence_raw NUMERIC(3, 2),        -- internal only; do not surface as a bare "% you'll like this" until calibrated
   track VARCHAR(20),                   -- 'safe' | 'discovery' | 'outside_usual' (blueprint §4.4)
   explanation TEXT,                    -- no-spoiler, generated only from features that actually drove the score
+  evidence_source VARCHAR(20) DEFAULT 'individual', -- 'individual' | 'population_enriched' (blueprint §7.6, §14) — the attribution gate's output; a recommendation whose score used the shared latent space (§7.5) computationally can still be 'individual' here if the *displayed reason* wasn't validated on this user yet
   
   -- Why this recommendation (top factors)
-  top_reasons JSONB DEFAULT '[]', -- [{ dimension: 'ambiguity', weight: 0.8, contribution: 0.64 }]
+  top_reasons JSONB DEFAULT '[]', -- [{ dimension: 'ambiguity', weight: 0.8, contribution: 0.64, evidence_source: 'individual' }]
   similar_titles UUID[],
   
   -- Model that generated this
@@ -194,7 +195,7 @@ CREATE TABLE user_model_snapshots (
   profile_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   
   -- Model state
-  weights NUMERIC(20, 10)[], -- Weight vector
+  weights NUMERIC(20, 10)[], -- Weight vector (w_u); once calibration (below) ships, this is a projection onto the shared space, not an independent from-scratch fit
   bias_terms JSONB DEFAULT '{}', -- { "title_id": 0.1, ... }
   
   -- Training metadata
@@ -202,12 +203,31 @@ CREATE TABLE user_model_snapshots (
   training_triad_count INTEGER,
   validation_accuracy NUMERIC(5, 4),
   pairwise_accuracy NUMERIC(5, 4),
+  calibrated_against_shared_space_version VARCHAR(50) REFERENCES shared_latent_space_versions(version), -- NULL until §7.5 calibration replaces independent per-user fitting; required for reproducibility once it does
   
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   
   INDEX (profile_id, created_at DESC)
 );
 ```
+
+### `shared_latent_space_versions` table (blueprint §7.5 — not yet implemented; schema reserved)
+```sql
+CREATE TABLE shared_latent_space_versions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  version VARCHAR(50) UNIQUE NOT NULL,
+  n_factors INTEGER, -- ~15-30 per blueprint §7.5
+  seed_data_sources JSONB DEFAULT '[]', -- e.g. [{ "source": "movielens", "license_status": "pending_review" }] — see DATA_LICENSING.md; must not list a source as usable here until its license_status is 'commercial_allowed'
+  training_cohort_size INTEGER, -- number of profiles' triads pooled into this version
+  acceptance_gate_metrics JSONB DEFAULT '{}', -- NLL, per-minute learning, calibration, coverage — the §16.5 gate this version must pass, applied via blueprint §17.3's cohort-level gate
+  active BOOLEAN DEFAULT false,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  
+  INDEX (active, created_at DESC)
+);
+```
+
+> Pooling triads/fingerprints across profiles into this table's training data is a distinct processing purpose from per-profile model training — it needs its own privacy disclosure (see [privacy.md](privacy.md) consent model) even though the underlying event rows (`triads`, `titles`) are unchanged; nothing here stores raw triads redundantly, the batch job reads them from the existing tables.
 
 ### `global_model_versions` table
 ```sql
