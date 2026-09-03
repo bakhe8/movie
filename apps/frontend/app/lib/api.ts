@@ -144,7 +144,23 @@ export type FingerprintDimension =
   | 'plotComplexity'
   | 'visualComplexity'
   | 'soundscapeComplexity'
-  | 'colorSaturation';
+  | 'colorSaturation'
+  // V2 families (FINGERPRINT_SCHEMA.md §3.1, ADR-69), namespaced `family.feature`.
+  | 'narrative.revelation'
+  | 'narrative.perspective'
+  | 'narrative.unreliability'
+  | 'tone.irony'
+  | 'tone.unease'
+  | 'tone.catharsis'
+  | 'tone.compassion'
+  | 'characters.agency'
+  | 'characters.moralAmbiguity'
+  | 'characters.transformation'
+  | 'characters.relationshipCentrality'
+  | 'ending.openness'
+  | 'ending.twist'
+  | 'ending.justice'
+  | 'ending.optimism';
 
 // Why a title ranks where it does (blueprint §9.4, ADR-20): only the
 // dimensions that actually raised its score, as keys and a direction; the

@@ -49,6 +49,24 @@ export const FEATURE_REASON_COPY = {
     visualComplexity: { higher: 'بصريات غنية', lower: 'بصريات بسيطة' },
     soundscapeComplexity: { higher: 'صوت غني', lower: 'صوت بسيط' },
     colorSaturation: { higher: 'ألوان مشبعة', lower: 'ألوان باهتة' },
+    // V2 families (FINGERPRINT_SCHEMA.md §3.1). `ending.*` is never shown:
+    // spoiler-free explanations only, so its phrases stay empty and
+    // formatReason skips it (SPOILER_DIMENSIONS).
+    'narrative.revelation': { higher: 'كشف تدريجي', lower: 'كل شيء معلوم مبكرًا' },
+    'narrative.perspective': { higher: 'تعدد وجهات النظر', lower: 'وجهة نظر واحدة' },
+    'narrative.unreliability': { higher: 'راوٍ لا يُوثق به', lower: 'راوٍ موثوق' },
+    'tone.irony': { higher: 'سخرية', lower: 'جدّية صادقة' },
+    'tone.unease': { higher: 'توتر مستمر', lower: 'طمأنينة' },
+    'tone.catharsis': { higher: 'تفريغ عاطفي', lower: 'عاطفة محبوسة' },
+    'tone.compassion': { higher: 'نظرة متعاطفة', lower: 'نظرة باردة' },
+    'characters.agency': { higher: 'شخصيات تقود الأحداث', lower: 'شخصيات تجرفها الأحداث' },
+    'characters.moralAmbiguity': { higher: 'غموض أخلاقي', lower: 'وضوح أخلاقي' },
+    'characters.transformation': { higher: 'شخصيات تتحول', lower: 'شخصيات ثابتة' },
+    'characters.relationshipCentrality': { higher: 'العلاقات في المركز', lower: 'قصة فرد' },
+    'ending.openness': { higher: '', lower: '' },
+    'ending.twist': { higher: '', lower: '' },
+    'ending.justice': { higher: '', lower: '' },
+    'ending.optimism': { higher: '', lower: '' },
   },
   en: {
     pacing: { higher: 'fast pacing', lower: 'calm pacing' },
@@ -64,6 +82,21 @@ export const FEATURE_REASON_COPY = {
     visualComplexity: { higher: 'rich visuals', lower: 'plain visuals' },
     soundscapeComplexity: { higher: 'a rich soundscape', lower: 'a plain soundscape' },
     colorSaturation: { higher: 'saturated colour', lower: 'muted colour' },
+    'narrative.revelation': { higher: 'gradual revelation', lower: 'everything known early' },
+    'narrative.perspective': { higher: 'many viewpoints', lower: 'a single viewpoint' },
+    'narrative.unreliability': { higher: 'an unreliable narrator', lower: 'a reliable narrator' },
+    'tone.irony': { higher: 'irony', lower: 'earnestness' },
+    'tone.unease': { higher: 'sustained unease', lower: 'ease' },
+    'tone.catharsis': { higher: 'emotional release', lower: 'withheld emotion' },
+    'tone.compassion': { higher: 'a compassionate gaze', lower: 'a detached gaze' },
+    'characters.agency': { higher: 'characters who drive events', lower: 'characters carried by events' },
+    'characters.moralAmbiguity': { higher: 'moral ambiguity', lower: 'moral clarity' },
+    'characters.transformation': { higher: 'characters who change', lower: 'characters who stay the same' },
+    'characters.relationshipCentrality': { higher: 'relationships at the centre', lower: 'one person\'s story' },
+    'ending.openness': { higher: '', lower: '' },
+    'ending.twist': { higher: '', lower: '' },
+    'ending.justice': { higher: '', lower: '' },
+    'ending.optimism': { higher: '', lower: '' },
   },
 } as const;
 
@@ -81,3 +114,9 @@ export const TRACK_COPY = {
     outside_usual: { name: 'Outside the usual', purpose: 'Higher-risk exploration to prevent a bubble, with the limits of confidence stated plainly.' },
   },
 } as const;
+
+// Dimensions that are never named to the user: an ending's shape is a
+// spoiler (FINGERPRINT_SCHEMA.md §3.1: internal use and spoiler-free
+// explanations only). The model may use them; the reason line and the
+// fingerprint section skip them.
+export const SPOILER_DIMENSIONS: ReadonlySet<string> = new Set(['ending.openness', 'ending.twist', 'ending.justice', 'ending.optimism']);

@@ -3,7 +3,7 @@
 // library ranking -- formats through these helpers, so a raw score or a
 // percentage cannot reach the user by accident.
 import type { ConfidenceBand, RecommendationReason } from './api';
-import { CONFIDENCE_BAND_COPY, FEATURE_REASON_COPY } from './copy';
+import { CONFIDENCE_BAND_COPY, FEATURE_REASON_COPY, SPOILER_DIMENSIONS } from './copy';
 
 type Lang = 'ar' | 'en';
 
@@ -36,7 +36,14 @@ export function formatPersonalFit(position: number, count: number): PersonalFitD
 // nothing lifted the title above the pool (an honest absence, not filler).
 export function formatReason(reason: RecommendationReason | undefined, lang: Lang): string | null {
   if (!reason || reason.features.length === 0) return null;
-  const phrases = reason.features.map((feature) => FEATURE_REASON_COPY[lang][feature.key][feature.direction]);
+  // A key this build has no words for (a newer family, ADR-69) or a spoiler
+  // dimension is skipped, never a crash: the reason is best-effort copy.
+  const copy = FEATURE_REASON_COPY[lang] as Partial<Record<string, { higher: string; lower: string }>>;
+  const phrases = reason.features
+    .filter((feature) => !SPOILER_DIMENSIONS.has(feature.key))
+    .map((feature) => copy[feature.key]?.[feature.direction])
+    .filter((phrase): phrase is string => Boolean(phrase));
+  if (phrases.length === 0) return null;
   return lang === 'ar' ? `ما يقرّبه من ذوقك: ${phrases.join('، ')}.` : `What brings it close to your taste: ${phrases.join(', ')}.`;
 }
 
