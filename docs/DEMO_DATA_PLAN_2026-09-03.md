@@ -209,7 +209,21 @@ Acceptance: 4 snapshots; `slow-burn` recovery ≥ 0.8 and held-out pairwise accu
 
 `make demo` = `npm run db:seed:demo && cd services/workers && poetry run python -m src.train_demo`.
 
-### WS5 — Browser judgment pass (1–2 h, mobile 375×812 with touch, Arabic then English)
+### WS5 — Browser judgment pass — **done 2026-09-03 (text-verified on an isolated HEAD stack, ports 3110/3111)**
+
+**How it ran.** A fresh export of the committed `HEAD` (frontend, backend, workers) served from a scratch directory on ports 3110/3111 against the dev database, so nothing of the other sessions' running servers or uncommitted tree was touched. The Browser pane was hidden for most of the pass, which blocks pointer actions and distorts screenshots, so the checks were made through the rendered page text (DOM) and the API as each persona; the one clean screenshot is the signed-in Home of `slow-burn`. A pointer-driven pass (drag reorder, the replacement confirmations) is still worth doing by hand.
+
+| Screen | `slow-burn` (strong) | `spectacle` (likely) | `warm-talky` (initial) | `newcomer` (inconclusive) |
+|---|---|---|---|---|
+| Home | band **قوي**; top: Persona, The Lighthouse, First Reformed, Mulholland Drive, The Seventh Seal, Andrei Rublev — slow, ambiguous, dark, as designed; one reason line per card («غموض مقصود، ألوان باهتة… من اختياراتك أنت»); Public Quality «لا مصدر مرخّص بعد», availability «غير معروف بعد» | band **محتمل**; Mad Max: Fury Road, RRR, Run Lola Run, Everything Everywhere All at Once | band **أولي**; Ismail Yassine in the Army, My Wife the Director General, Children of Heaven, My Neighbor Totoro | band **غير محسوم**; Spirited Away, Coco, Amélie, RRR — noise, as designed |
+| Library | «ترتيبك الشخصي»: 60 positions, no numbers; #1 Eraserhead, Rashomon, Memento, Stalker, Primer, Safe, Under the Skin … #58 Avatar, Star Wars, Guardians of the Galaxy; the partial title (The Choice) sits at #13 with coverage 0.85 and band **likely** — the ADR-19 demotion; watchlist 8; timeline 2025-03 → 2026-08; 5 notes («أعدت مشاهدته بعد سنوات.»); 3 imported ratings | ranking of 39: Avatar, City of God, The Raid on top; Hedi, Anatomy of a Fall at the bottom | ranking of 30: Tokyo Story, Wendy and Lucy, Halfaouine on top; Run Lola Run, The Blue Elephant at the bottom | ranking of 12 |
+| Discover | «سجّلت 60 أفلام كمُشاهَدة … الترتيب متاح»; starter list; search «المومياء» → 1 result, marked «شاهدته / في قائمتك» | — | — | — |
+| Rank | a fresh `random-v1` triad (Let the Right One In, The Fellowship of the Ring, Cinema Paradiso) with ↑/↓ and both controls «لم أشاهده» / «لا أتذكره»; «جولاتك المكتملة: 25» | opens on the seeded **active** triad (`demo-spectacle-open`) | fresh triad | fresh triad |
+| Profile | account, market and platforms editable, pseudonymous profile id, 25 rounds, 60 watched, model `plackett-luce-v1`, band **قوي**, wipe control | — | — | — |
+
+Findings for other scopes (recorded, not fixed here): the Discover progress copy says «60 أفلام» where Arabic wants «60 فيلمًا» (frontend copy); the Profile screen's market select reads «لم يُحدَّد بعد» in the DOM text although the profile has `market: SA` and onboarding was correctly skipped — worth a look at the select's initial value (frontend).
+
+The original checklist follows.
 
 Log in as each persona and check, in this order; every row is a screenshot in the final report:
 
@@ -242,7 +256,7 @@ The pass is judged against ADR-33 (no percentage, no merged score) and `§4.4` (
 | WS2 | **done** (300/300 in 439 s) | — | — |
 | WS3 | **done** — loaded into the dev database | — | — |
 | WS4 | **done** — trained, acceptance met | — | — |
-| WS5 | 1–2 h | — | a fresh backend build on a side port (do not restart a concurrent session's server) |
+| WS5 | **done** (text-verified; a pointer pass by hand remains) | — | — |
 | WS6 | 1 h | — | WS5 screenshots |
 
 About a day and a half remains. First visible result (Discover with 300 titles, placeholder fingerprints) after WS3 with `--placeholder`, roughly half a day.
@@ -300,3 +314,4 @@ Owner's decision, 2026-09-03, in answer to "what is the alternative to an OpenAI
 | 2026-09-03 | WS2 run completed: 300/300 fingerprints on Sonnet 5 (Opus 5 structured outputs were returning 529 at the time), 0 failures; fixture and enrichment report committed; §8's ADR text was verified and written by session A as ADR-63 |
 | 2026-09-03 | WS3 and WS4 code delivered: `seed-demo.ts` + pure library + `personas.demo.json`, 17 unit tests and a double-run e2e on `postgres-test`; `train_demo.py` + 4 tests; `db:seed:demo` scripts and `make demo`. The load into the dev database is announced on the session board before it runs |
 | 2026-09-03 | Dev database loaded and the four personas trained; noise temperature calibrated 0.5 → 0.2 against the real fingerprints; WS4 acceptance met (`slow-burn` recovery 0.83, held-out accuracy 0.75). WS5 (browser judgment pass) is next |
+| 2026-09-03 | WS5 done on an isolated HEAD stack (3110/3111): every persona in its expected band, rankings and recommendations match the designed tastes, the partial-title demotion is visible; two frontend copy/select findings recorded for session B. QUICKSTART §6.1 documents `make demo` and the persona logins. Remaining: WS6's status row (session A's file) and the owner's real-account judgment (§7) |

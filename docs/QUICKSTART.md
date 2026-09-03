@@ -102,6 +102,14 @@ cd services/workers && python -m src.training <profile-uuid>
 
 5. **قائمتي / My list** now shows a recommendation list computed from the snapshot. Until a snapshot exists the API answers 409 and the UI shows "not ready yet".
 
+### 6.1 Demo data instead of walking the loop by hand
+
+```bash
+make demo
+```
+
+Upserts the 300-title demo catalog (`apps/backend/src/scripts/fixtures/catalog.demo.json`, fingerprints included) and rebuilds four synthetic accounts with their activity, then trains each one. Sign in as `slow-burn@demo.local` (band strong), `spectacle@demo.local` (likely, with an open ranking round), `warm-talky@demo.local` (initial) or `newcomer@demo.local` (inconclusive); the password is in `fixtures/personas.demo.json`. Re-running is idempotent; `make demo-clean` removes the accounts and keeps the titles. Everything is described in [DEMO_DATA_PLAN_2026-09-03.md](DEMO_DATA_PLAN_2026-09-03.md), including what no demo data can show (public quality, availability).
+
 ## 7. Tests and checks
 
 ```bash
