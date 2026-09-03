@@ -1,0 +1,74 @@
+/* Sources footer: one quiet line at the end of the page; the verbatim
+   attribution sentences fold under it. Tokens only. */
+
+.footer {
+  display: grid;
+  gap: var(--sp-2);
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: var(--fs-12);
+  line-height: var(--lh-ui);
+}
+
+.line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-2);
+}
+
+.label {
+  font-weight: var(--w-medium);
+}
+
+.names {
+  color: var(--text);
+}
+
+.details {
+  min-width: 0;
+}
+
+.summary {
+  cursor: pointer;
+  width: max-content;
+  min-height: var(--tap);
+  display: inline-flex;
+  align-items: center;
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.summary:hover,
+.summary:focus-visible {
+  color: var(--text);
+}
+
+.list {
+  margin: var(--sp-1) 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--sp-1);
+}
+
+.item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-2);
+  overflow-wrap: anywhere;
+}
+
+.link {
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.link:hover,
+.link:focus-visible {
+  color: var(--text);
+}

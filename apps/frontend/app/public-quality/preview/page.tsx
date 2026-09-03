@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { resolveLang } from '../../legal/LegalPage';
-import { DescriptionCredit } from '../DescriptionCredit';
 import { PublicQualityCell } from '../PublicQualityCell';
-import type { PublicQuality, TextSource } from '../types';
+import { SourcesFooter, collectSources } from '../SourcesFooter';
+import type { PublicQuality } from '../types';
 import styles from './preview.module.css';
 
 export const metadata: Metadata = { title: 'Reel — Public Quality cell preview' };
@@ -35,11 +35,12 @@ const STATES: { name: string; quality: PublicQuality | null }[] = [
   { name: 'no source (null, never 0)', quality: null },
 ];
 
-const CREDITS: { name: string; source: TextSource | null }[] = [
-  { name: 'Wikipedia lead (CC BY-SA, link required)', source: { name: 'Wikipedia', attribution: 'Text from Wikipedia, licensed CC BY-SA 4.0', url: 'https://en.wikipedia.org/wiki/Cairo_Station' } },
-  { name: 'Wikidata stub (CC0, credited anyway, no page)', source: { name: 'Wikidata', attribution: 'Data from Wikidata (CC0)', url: null } },
-  { name: 'no registry row (renders nothing)', source: null },
-];
+// A work page's worth of sources, as WorkScreen would collect them.
+const PAGE = collectSources({
+  publicQuality: STATES[0].quality,
+  posterSource: { name: 'TMDB', attribution: 'This product uses the TMDB API but is not endorsed or certified by TMDB.' },
+  descriptionSource: { name: 'Wikipedia', attribution: 'Text from Wikipedia, licensed CC BY-SA 4.0', url: 'https://en.wikipedia.org/wiki/Cairo_Station' },
+});
 
 export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   if (process.env.NODE_ENV === 'production') {
@@ -57,14 +58,15 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
           </dl>
         </section>
       ))}
-      <h1 className={styles.h1}>DescriptionCredit — {lang}</h1>
-      {CREDITS.map((c) => (
-        <section key={c.name} className={styles.card} aria-label={c.name}>
-          <p className={styles.name}>{c.name}</p>
-          <p dir="auto">Cairo Station is a 1958 Egyptian crime-drama film directed by Youssef Chahine.</p>
-          <DescriptionCredit source={c.source} lang={lang} />
-        </section>
-      ))}
+      <h1 className={styles.h1}>SourcesFooter — {lang}</h1>
+      <section className={styles.card} aria-label="sources footer">
+        <p dir="auto">Cairo Station is a 1958 Egyptian crime-drama film directed by Youssef Chahine.</p>
+        <SourcesFooter lang={lang} sources={PAGE} />
+      </section>
+      <section className={styles.card} aria-label="sources footer, nothing known">
+        <p className={styles.name}>no sources (renders nothing)</p>
+        <SourcesFooter lang={lang} sources={collectSources({})} />
+      </section>
     </main>
   );
 }
