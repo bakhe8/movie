@@ -2,7 +2,9 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { InjectRepository } from '@nestjs/typeorm';
 import { isUUID } from 'class-validator';
 import { EntityManager, In, Repository } from 'typeorm';
+import { Outcome } from '../../entities/outcome.entity';
 import { Profile } from '../../entities/profile.entity';
+import { Recommendation } from '../../entities/recommendation.entity';
 import { Title } from '../../entities/title.entity';
 import { Triad } from '../../entities/triad.entity';
 import { ReplacementReason, TriadReplacement } from '../../entities/triad-replacement.entity';
@@ -51,6 +53,10 @@ export class TriadsService {
     private readonly statesRepository: Repository<UserTitleState>,
     @InjectRepository(TriadReplacement)
     private readonly replacementsRepository: Repository<TriadReplacement>,
+    @InjectRepository(Recommendation)
+    private readonly recommendationsRepository: Repository<Recommendation>,
+    @InjectRepository(Outcome)
+    private readonly outcomesRepository: Repository<Outcome>,
   ) {}
 
   async getCurrent(userId: string, profileId: string): Promise<TriadWithItems> {
@@ -216,7 +222,9 @@ export class TriadsService {
     triad.status = 'completed';
 
     try {
-      return this.withItems(await this.triadsRepository.save(triad));
+      const saved = await this.triadsRepository.save(triad);
+      await this.recordRankedOutcomes(saved);
+      return this.withItems(saved);
     } catch (error) {
       if (!idempotencyKey || !this.isUniqueConstraintError(error)) {
         throw error;
@@ -229,6 +237,44 @@ export class TriadsService {
         throw error;
       }
       return this.withItems(winner);
+    }
+  }
+
+  // BP §4.5's "compare prediction to real ranking" arrow, the one piece of
+  // the post-watch loop ADR-66/ADR-67 left open (blueprint gap 4, in full):
+  // when a title that was previously recommended (RecommendationsService.
+  // findForProfile(), ADR-58) turns up ranked in a just-completed triad,
+  // that comparison is now possible. One outcomes row per such title, not
+  // per triad -- each carries its own rankPosition and the specific
+  // recommendation it traces back to, mirroring OutcomesService's own
+  // append-only convention (ADR-67). A title never recommended writes
+  // nothing; most triads today are drawn straight from watched titles with
+  // no recommendation history, so that's the common case, not a bug. Only
+  // called from the fresh-completion path in rank() -- never from an
+  // idempotent replay or a lost-race retry, both of which return a triad
+  // the winning attempt already recorded outcomes for.
+  private async recordRankedOutcomes(triad: Triad): Promise<void> {
+    const ranking = triad.ranking;
+    if (!ranking) {
+      return;
+    }
+    for (const [rankPosition, titleId] of ranking.entries()) {
+      const recommendation = await this.recommendationsRepository.findOne({
+        where: { profileId: triad.profileId, titleId },
+        order: { createdAt: 'DESC' },
+      });
+      if (!recommendation) {
+        continue;
+      }
+      await this.outcomesRepository.save(
+        this.outcomesRepository.create({
+          recommendationId: recommendation.id,
+          type: 'ranked_later',
+          triadId: triad.id,
+          rankPosition,
+          occurredAt: triad.answeredAt ?? new Date(),
+        }),
+      );
     }
   }
 

@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import type { Repository } from 'typeorm';
+import { Outcome } from '../../entities/outcome.entity';
 import { Profile } from '../../entities/profile.entity';
+import { Recommendation } from '../../entities/recommendation.entity';
 import { Title } from '../../entities/title.entity';
 import { Triad } from '../../entities/triad.entity';
 import { TriadReplacement } from '../../entities/triad-replacement.entity';
@@ -46,6 +48,8 @@ describe('TriadsService', () => {
   let triadsRepository: ReturnType<typeof repoMock>;
   let statesRepository: ReturnType<typeof repoMock>;
   let replacementsRepository: ReturnType<typeof repoMock>;
+  let recommendationsRepository: ReturnType<typeof repoMock>;
+  let outcomesRepository: ReturnType<typeof repoMock>;
   let service: TriadsService;
 
   const otherUserProfile = { id: 'profile-owned-by-someone-else' };
@@ -56,12 +60,20 @@ describe('TriadsService', () => {
     triadsRepository = repoMock();
     statesRepository = repoMock();
     replacementsRepository = repoMock();
+    recommendationsRepository = repoMock();
+    outcomesRepository = repoMock();
+    // No matching recommendation by default -- recordRankedOutcomes() is then
+    // a no-op, matching every rank() test's behavior before ranked_later
+    // existed, unless a test below sets this up itself.
+    recommendationsRepository.findOne.mockResolvedValue(null);
     service = new TriadsService(
       profilesRepository as unknown as Repository<Profile>,
       titlesRepository as unknown as Repository<Title>,
       triadsRepository as unknown as Repository<Triad>,
       statesRepository as unknown as Repository<UserTitleState>,
       replacementsRepository as unknown as Repository<TriadReplacement>,
+      recommendationsRepository as unknown as Repository<Recommendation>,
+      outcomesRepository as unknown as Repository<Outcome>,
     );
   });
 
@@ -143,6 +155,81 @@ describe('TriadsService', () => {
       expect(result.ranking).toEqual(validRanking);
       expect(result.answeredAt).toBeInstanceOf(Date);
       expect(triadsRepository.save).toHaveBeenCalled();
+    });
+
+    // BP §4.5's "compare prediction to real ranking" arrow (blueprint gap
+    // 4, ranked_later): a title in the ranking that was previously
+    // recommended gets an outcomes row; one never recommended writes
+    // nothing.
+    describe('ranked_later outcomes', () => {
+      it('writes no outcome for a title that was never recommended (the common case)', async () => {
+        triadsRepository.findOne.mockResolvedValue({ ...activeTriad });
+        profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+        recommendationsRepository.findOne.mockResolvedValue(null);
+
+        await service.rank('user-1', 'triad-1', { ranking: validRanking });
+
+        expect(outcomesRepository.save).not.toHaveBeenCalled();
+      });
+
+      it('writes an outcome linking the most recent recommendation, with rankPosition matching the final ranking order', async () => {
+        triadsRepository.findOne.mockResolvedValue({ ...activeTriad });
+        profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+        recommendationsRepository.findOne.mockImplementation(({ where }: { where: { titleId: string } }) =>
+          where.titleId === titleA ? Promise.resolve({ id: 'rec-for-a', profileId: 'profile-1', titleId: titleA }) : Promise.resolve(null),
+        );
+
+        // validRanking = [titleC, titleA, titleB] -- titleA is second, index 1.
+        await service.rank('user-1', 'triad-1', { ranking: validRanking });
+
+        expect(outcomesRepository.save).toHaveBeenCalledTimes(1);
+        expect(outcomesRepository.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            recommendationId: 'rec-for-a',
+            type: 'ranked_later',
+            triadId: 'triad-1',
+            rankPosition: 1,
+          }),
+        );
+      });
+
+      it('writes one outcome per recommended title when more than one of the three was recommended', async () => {
+        triadsRepository.findOne.mockResolvedValue({ ...activeTriad });
+        profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+        recommendationsRepository.findOne.mockImplementation(({ where }: { where: { titleId: string } }) => {
+          if (where.titleId === titleA) return Promise.resolve({ id: 'rec-a', profileId: 'profile-1', titleId: titleA });
+          if (where.titleId === titleC) return Promise.resolve({ id: 'rec-c', profileId: 'profile-1', titleId: titleC });
+          return Promise.resolve(null);
+        });
+
+        await service.rank('user-1', 'triad-1', { ranking: validRanking });
+
+        expect(outcomesRepository.save).toHaveBeenCalledTimes(2);
+      });
+
+      it('queries recommendations scoped to this profile, not just the title id', async () => {
+        triadsRepository.findOne.mockResolvedValue({ ...activeTriad });
+        profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+
+        await service.rank('user-1', 'triad-1', { ranking: validRanking });
+
+        expect(recommendationsRepository.findOne).toHaveBeenCalledWith({
+          where: { profileId: 'profile-1', titleId: expect.any(String) },
+          order: { createdAt: 'DESC' },
+        });
+      });
+
+      it('does not write ranked_later outcomes on an idempotent replay of an already-completed triad', async () => {
+        const idempotencyKey = '99999999-9999-4999-8999-999999999999';
+        const alreadySubmitted = { ...activeTriad, status: 'completed' as const, ranking: validRanking, idempotencyKey };
+        triadsRepository.findOne.mockResolvedValueOnce(alreadySubmitted);
+        profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+        recommendationsRepository.findOne.mockResolvedValue({ id: 'rec-1', profileId: 'profile-1', titleId: titleA });
+
+        await service.rank('user-1', 'triad-1', { ranking: validRanking }, idempotencyKey);
+
+        expect(outcomesRepository.save).not.toHaveBeenCalled();
+      });
     });
 
     describe('idempotency', () => {

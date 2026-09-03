@@ -27,6 +27,7 @@ import * as path from 'path';
 import { DataSource, DataSourceOptions, EntityManager } from 'typeorm';
 import { DatabaseConfig } from '../config/database.config';
 import { Consent, ConsentPurpose } from '../entities/consent.entity';
+import { ContentFeature } from '../entities/content-feature.entity';
 import { Profile } from '../entities/profile.entity';
 import { Title } from '../entities/title.entity';
 import { Triad } from '../entities/triad.entity';
@@ -40,6 +41,7 @@ import {
   SAMPLE_NOTES,
   catalogEntryToTitle,
   combinations,
+  featureRowsFor,
   fingerprintVector,
   hashSeed,
   isCompleteFingerprint,
@@ -92,8 +94,53 @@ export interface PersonaSummary {
 
 export interface SeedDemoSummary {
   titlesUpserted: number;
+  contentFeatureRows: number;
+  contentFeatureRowsSuperseded: number;
   demoUsersRemoved: number;
   personas: PersonaSummary[];
+}
+
+/**
+ * The provenance behind every published fingerprint number (BP §13.3,
+ * FINGERPRINT_SCHEMA.md §3): one `content_features` row per (title,
+ * featureKey, extractorVersion), upserted on that key so a re-run is a
+ * no-op, and older extractor versions of the same feature marked
+ * `supersededBy` the new row — never deleted, never overwritten (BP §11.3).
+ */
+export async function seedContentFeatures(
+  manager: EntityManager,
+  catalog: CatalogEntry[],
+  uuidByInternalId: Map<string, string>,
+  now: Date,
+): Promise<{ rows: number; superseded: number }> {
+  const rows = catalog.flatMap((entry) => {
+    const titleId = uuidByInternalId.get(entry.internalId);
+    return titleId ? featureRowsFor(entry, titleId, now) : [];
+  });
+  const repository = manager.getRepository(ContentFeature);
+  for (let start = 0; start < rows.length; start += 500) {
+    await repository.upsert(rows.slice(start, start + 500), ['titleId', 'featureKey', 'extractorVersion']);
+  }
+  // Supersession: for each (title, feature) the newest validFrom row is current;
+  // every other row of that pair that is still open points at it.
+  const superseded = await manager.query(
+    `
+    WITH current AS (
+      SELECT DISTINCT ON ("titleId", "featureKey") id, "titleId", "featureKey"
+      FROM content_features
+      WHERE "titleId" = ANY($1::uuid[])
+      ORDER BY "titleId", "featureKey", "validFrom" DESC, id DESC
+    )
+    UPDATE content_features old
+    SET "supersededBy" = current.id
+    FROM current
+    WHERE old."titleId" = current."titleId" AND old."featureKey" = current."featureKey"
+      AND old.id <> current.id AND old."supersededBy" IS NULL
+    `,
+    [[...new Set(rows.map((row) => row.titleId))]],
+  );
+  const supersededCount = Array.isArray(superseded) && typeof superseded[1] === 'number' ? superseded[1] : 0;
+  return { rows: rows.length, superseded: supersededCount };
 }
 
 export function resolveFixturesDir(): string {
@@ -165,6 +212,8 @@ export async function seedDemo(dataSource: DataSource, options: SeedDemoOptions 
     });
     const uuidByInternalId = new Map(titles.map((title) => [title.internalId, title.id]));
     log(`titles: ${titles.length} upserted`);
+    const features = await seedContentFeatures(manager, catalog, uuidByInternalId, now);
+    log(`content_features: ${features.rows} rows upserted, ${features.superseded} older rows superseded`);
 
     // 2. A clean slate for the persona accounts, then rebuild each one.
     const demoUsersRemoved = await cleanDemo(manager, personas.emailDomain);
@@ -180,7 +229,13 @@ export async function seedDemo(dataSource: DataSource, options: SeedDemoOptions 
       );
       summaries.push(summary);
     }
-    return { titlesUpserted: titles.length, demoUsersRemoved, personas: summaries };
+    return {
+      titlesUpserted: titles.length,
+      contentFeatureRows: features.rows,
+      contentFeatureRowsSuperseded: features.superseded,
+      demoUsersRemoved,
+      personas: summaries,
+    };
   });
 }
 
@@ -430,7 +485,10 @@ async function main(): Promise<void> {
     }
     const summary = await seedDemo(dataSource, { fixturesDir, seed: args.seed ?? undefined, log: (line) => console.log(`  ${line}`) });
     const { personas } = loadFixtures(fixturesDir);
-    console.log(`\nSeeded ${summary.titlesUpserted} titles and ${summary.personas.length} personas (password: ${personas.password})`);
+    console.log(
+      `\nSeeded ${summary.titlesUpserted} titles (${summary.contentFeatureRows} provenance rows, ${summary.contentFeatureRowsSuperseded} superseded) ` +
+        `and ${summary.personas.length} personas (password: ${personas.password})`,
+    );
     for (const persona of summary.personas) {
       console.log(`  ${persona.email}  profile ${persona.profileId}`);
     }

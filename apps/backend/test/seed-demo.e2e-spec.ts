@@ -2,7 +2,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DataSource } from 'typeorm';
 import { getConnectionOptions } from '../src/config/database.config';
 import { Consent } from '../src/entities/consent.entity';
+import { ContentFeature } from '../src/entities/content-feature.entity';
 import { Profile } from '../src/entities/profile.entity';
+import { Title } from '../src/entities/title.entity';
+import { featureRowsFor } from '../src/scripts/seed-demo.lib';
 import { Triad } from '../src/entities/triad.entity';
 import { TriadReplacement } from '../src/entities/triad-replacement.entity';
 import { User } from '../src/entities/user.entity';
@@ -94,8 +97,38 @@ describe('seed-demo (postgres-test)', () => {
     expect(notRemembered).toHaveLength(2);
     expect(firstRows.states.filter((state) => state.ratingSource === 'import')).toHaveLength(3);
 
+    // Provenance rows: one per known feature of every DEMO title, upserted, older versions superseded.
+    const { catalog } = loadFixtures(fixturesDir);
+    const expectedRows = catalog.reduce((sum, entry) => sum + featureRowsFor(entry, 'x', now).length, 0);
+    expect(first.contentFeatureRows).toBe(expectedRows);
+    const demoTitles = await dataSource.getRepository(Title).find({ where: catalog.slice(0, 1).map((entry) => ({ internalId: entry.internalId })) });
+    const firstTitleRows = await dataSource.getRepository(ContentFeature).find({ where: { titleId: demoTitles[0].id } });
+    expect(firstTitleRows.length).toBe(featureRowsFor(catalog[0], demoTitles[0].id, now).length);
+    expect(firstTitleRows.every((row) => row.value !== null && row.supersededBy === null)).toBe(true);
+    // An older extractor version of one feature, planted before the second run, must end up superseded by the current row.
+    const planted = await dataSource.getRepository(ContentFeature).save({
+      titleId: demoTitles[0].id,
+      featureKey: 'pacing',
+      value: 0.1,
+      uncertainty: null,
+      sourceIds: [],
+      extractorVersion: 'enrichment-worker-v1',
+      licenseStatus: 'unknown',
+      reviewStatus: 'unreviewed',
+      validFrom: new Date('2026-01-01T00:00:00Z'),
+    });
+
     // Second run: same counts, same rankings, no duplicates.
     const second = await seedDemo(dataSource, { fixturesDir, now });
+    const plantedAfter = await dataSource.getRepository(ContentFeature).findOneByOrFail({ id: planted.id });
+    const currentPacing = await dataSource
+      .getRepository(ContentFeature)
+      .findOneByOrFail({ titleId: demoTitles[0].id, featureKey: 'pacing', extractorVersion: 'enrichment-worker-v2' });
+    expect(plantedAfter.supersededBy).toBe(currentPacing.id);
+    expect(currentPacing.supersededBy).toBeNull();
+    expect(second.contentFeatureRowsSuperseded).toBe(1);
+    expect(await dataSource.getRepository(ContentFeature).count({ where: { titleId: demoTitles[0].id } })).toBe(firstTitleRows.length + 1);
+    await dataSource.getRepository(ContentFeature).delete({ id: planted.id });
     const secondRows = await snapshot();
     expect(second.personas).toEqual(first.personas.map((persona) => ({ ...persona, profileId: expect.any(String) })));
     expect(secondRows.users).toHaveLength(4);

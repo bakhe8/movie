@@ -6,6 +6,8 @@ import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import type { Repository } from 'typeorm';
 import { AppModule } from '../src/modules/app/app.module';
+import { Outcome } from '../src/entities/outcome.entity';
+import { Recommendation } from '../src/entities/recommendation.entity';
 import { Title } from '../src/entities/title.entity';
 
 async function registerUser(app: INestApplication, label: string) {
@@ -195,5 +197,69 @@ describe('Triad ranking (real HTTP, real DB)', () => {
     // all 6 titles would already be permanently excluded by rounds 1 and 2.
     const round3 = await rankCurrent();
     expect(round3).toEqual(round1);
+  });
+
+  // BP §4.5's "compare prediction to real ranking" arrow (blueprint gap 4,
+  // ranked_later, ADR-68): a title that was previously recommended gets an
+  // outcomes row the moment it's ranked in a completed triad, with the
+  // recommendation it traces back to and its position in the final order.
+  it('writes a ranked_later outcome, linking the recommendation, when a previously-recommended title gets ranked', async () => {
+    const titlesRepository = app.get<Repository<Title>>(getRepositoryToken(Title));
+    const suffix = Date.now();
+    const threeTitles = await titlesRepository.save([
+      { internalId: `E2E-RANKEDLATER-A-${suffix}`, titleEn: 'Ranked Later A', titleAr: 'أ' },
+      { internalId: `E2E-RANKEDLATER-B-${suffix}`, titleEn: 'Ranked Later B', titleAr: 'ب' },
+      { internalId: `E2E-RANKEDLATER-C-${suffix}`, titleEn: 'Ranked Later C', titleAr: 'ج' },
+    ]);
+    const threeTitleIds = threeTitles.map((title) => title.id);
+
+    const token = await registerUser(app, 'ranked-later-check');
+    const profileId = await createProfile(app, token, 'Ranked later check');
+    await markWatched(app, token, profileId, threeTitleIds);
+
+    // Only one of the three was ever recommended -- the other two should
+    // write nothing (the common case: most triads are drawn from watched
+    // titles with no recommendation history at all).
+    const recommendationsRepository = app.get<Repository<Recommendation>>(getRepositoryToken(Recommendation));
+    const recommendation = await recommendationsRepository.save({
+      requestId: '33333333-3333-3333-3333-333333333333',
+      profileId,
+      titleId: threeTitleIds[0],
+      track: 'safe',
+      confidenceBand: 'strong',
+      reason: { features: [], evidenceSource: 'individual' },
+      evidenceSource: 'individual',
+      modelVersion: 'e2e-ranked-later-v1',
+      policyVersion: 'e2e-ranked-later-v1',
+      selectionPropensity: 1,
+      shownAt: new Date(),
+    });
+
+    const current = await request(app.getHttpServer())
+      .get(`/profiles/${profileId}/triads/current`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    // Ranked worst-first-to-best-last on purpose so the recommended title
+    // (index 0 of threeTitleIds) lands at a distinctive, checkable position
+    // rather than accidentally matching the triad's own draw order.
+    const ranking = [...(current.body.titleIds as string[])].sort(
+      (a, b) => (a === threeTitleIds[0] ? 1 : 0) - (b === threeTitleIds[0] ? 1 : 0),
+    );
+    const expectedRankPosition = ranking.indexOf(threeTitleIds[0]);
+
+    await request(app.getHttpServer())
+      .post(`/triads/${current.body.id}/rank`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ ranking })
+      .expect(201);
+
+    const outcomesRepository = app.get<Repository<Outcome>>(getRepositoryToken(Outcome));
+    const rows = await outcomesRepository.find({ where: { recommendationId: recommendation.id } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ type: 'ranked_later', triadId: current.body.id, rankPosition: expectedRankPosition });
+
+    // The other two titles were never recommended -- no outcomes for them.
+    const allOutcomesForTriad = await outcomesRepository.find({ where: { triadId: current.body.id } });
+    expect(allOutcomesForTriad).toHaveLength(1);
   });
 });

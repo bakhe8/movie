@@ -328,6 +328,80 @@ export function catalogEntryToTitle(entry: CatalogEntry): TitleSeedRow {
   } as TitleSeedRow;
 }
 
+// ---------------------------------------------------------------------------
+// Provenance rows (content_features, BP §13.3 / FINGERPRINT_SCHEMA.md §3)
+// ---------------------------------------------------------------------------
+
+export interface FeatureRow {
+  titleId: string;
+  featureKey: string;
+  value: number;
+  uncertainty: number | null;
+  sourceIds: string[];
+  extractorVersion: string;
+  licenseStatus: string;
+  reviewStatus: string;
+  validFrom: Date;
+}
+
+function parseWhen(value: unknown, fallback: Date): Date {
+  const parsed = typeof value === 'string' ? new Date(value) : null;
+  return parsed && !Number.isNaN(parsed.getTime()) ? parsed : fallback;
+}
+
+/**
+ * One row per known feature of a published snapshot: the 13 V1 keys that are
+ * present (a missing dimension gets no row — unknown is not a value) and the
+ * V2 block's namespaced keys. `uncertainty` is 1 − the extractor's confidence
+ * where it reported one, NULL otherwise. Provenance fields are copied from
+ * the block that produced the value, never invented here.
+ */
+export function featureRowsFor(entry: CatalogEntry, titleId: string, now: Date): FeatureRow[] {
+  const fingerprint = entry.fingerprint;
+  if (!fingerprint || typeof fingerprint !== 'object') {
+    return [];
+  }
+  const rows: FeatureRow[] = [];
+  const blocks: { keys: readonly string[]; values: Record<string, unknown>; confidence: Record<string, unknown>; meta: Record<string, unknown> }[] = [];
+  blocks.push({
+    keys: DIMENSIONS,
+    values: fingerprint as Record<string, unknown>,
+    confidence: ((fingerprint as Record<string, unknown>).confidence as Record<string, unknown>) ?? {},
+    meta: fingerprint as Record<string, unknown>,
+  });
+  const v2 = (fingerprint as Record<string, unknown>).v2;
+  if (v2 && typeof v2 === 'object') {
+    const block = v2 as Record<string, unknown>;
+    const features = (block.features as Record<string, unknown>) ?? {};
+    blocks.push({ keys: Object.keys(features), values: features, confidence: (block.confidence as Record<string, unknown>) ?? {}, meta: block });
+  }
+  for (const block of blocks) {
+    const extractorVersion = typeof block.meta.extractorVersion === 'string' ? block.meta.extractorVersion : null;
+    if (!extractorVersion) {
+      continue; // a snapshot without an extractor version has no provenance to record
+    }
+    for (const key of block.keys) {
+      const value = block.values[key];
+      if (typeof value !== 'number' || !Number.isFinite(value)) {
+        continue;
+      }
+      const confidence = block.confidence[key];
+      rows.push({
+        titleId,
+        featureKey: key,
+        value,
+        uncertainty: typeof confidence === 'number' && Number.isFinite(confidence) ? Math.round((1 - confidence) * 1000) / 1000 : null,
+        sourceIds: Array.isArray(block.meta.sourceIds) ? block.meta.sourceIds.filter((id): id is string => typeof id === 'string') : [],
+        extractorVersion,
+        licenseStatus: typeof block.meta.licenseStatus === 'string' ? block.meta.licenseStatus : 'unknown',
+        reviewStatus: typeof block.meta.reviewStatus === 'string' ? block.meta.reviewStatus : 'unreviewed',
+        validFrom: parseWhen(block.meta.generatedAt, now),
+      });
+    }
+  }
+  return rows;
+}
+
 export function validateCatalogEntry(entry: CatalogEntry): string[] {
   const problems: string[] = [];
   if (!/^DEMO\d{4}$/.test(entry.internalId ?? '')) {

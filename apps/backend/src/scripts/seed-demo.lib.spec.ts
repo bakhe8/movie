@@ -4,6 +4,7 @@ import {
   DIMENSIONS,
   catalogEntryToTitle,
   combinations,
+  featureRowsFor,
   fingerprintVector,
   hashSeed,
   mulberry32,
@@ -177,6 +178,57 @@ describe('time helpers', () => {
       }
       expect(stamps[index].answeredAt.getTime()).toBeLessThan(NOW.getTime());
     }
+  });
+});
+
+describe('featureRowsFor (content_features provenance)', () => {
+  const v1 = Object.fromEntries(DIMENSIONS.map((dimension) => [dimension, 0.5]));
+  const full = {
+    ...v1,
+    confidence: { pacing: 0.8 },
+    extractorVersion: 'enrichment-worker-v2',
+    sourceIds: ['wikidata:Q1', 'wikipedia:en:X'],
+    licenseStatus: 'unknown',
+    reviewStatus: 'unreviewed',
+    generatedAt: '2026-09-03T18:00:00Z',
+    v2: {
+      features: { 'tone.irony': 0.9, 'ending.optimism': 0.2 },
+      confidence: { 'tone.irony': 0.6 },
+      extractorVersion: 'enrichment-worker-v2-families-v1',
+      sourceIds: ['wikidata:Q1'],
+      licenseStatus: 'unknown',
+      reviewStatus: 'unreviewed',
+      generatedAt: '2026-09-04T09:00:00Z',
+    },
+  };
+
+  it('writes one row per known V1 and V2 feature with the block it came from', () => {
+    const rows = featureRowsFor({ ...entry(1, null), fingerprint: full }, 'title-uuid', NOW);
+    expect(rows).toHaveLength(13 + 2);
+    const pacing = rows.find((row: { featureKey: string }) => row.featureKey === 'pacing');
+    expect(pacing).toMatchObject({
+      titleId: 'title-uuid',
+      value: 0.5,
+      uncertainty: 0.2,
+      extractorVersion: 'enrichment-worker-v2',
+      sourceIds: ['wikidata:Q1', 'wikipedia:en:X'],
+      licenseStatus: 'unknown',
+      reviewStatus: 'unreviewed',
+    });
+    expect(pacing.validFrom.toISOString()).toBe('2026-09-03T18:00:00.000Z');
+    const irony = rows.find((row: { featureKey: string }) => row.featureKey === 'tone.irony');
+    expect(irony).toMatchObject({ value: 0.9, uncertainty: 0.4, extractorVersion: 'enrichment-worker-v2-families-v1', sourceIds: ['wikidata:Q1'] });
+    expect(irony.validFrom.toISOString()).toBe('2026-09-04T09:00:00.000Z');
+    // No confidence reported for this feature: uncertainty unknown, not 0.
+    expect(rows.find((row: { featureKey: string }) => row.featureKey === 'ending.optimism').uncertainty).toBeNull();
+  });
+
+  it('skips missing dimensions, snapshots without an extractor version, and null fingerprints', () => {
+    const partial = { ...full };
+    delete (partial as Record<string, unknown>).colorSaturation;
+    expect(featureRowsFor({ ...entry(1, null), fingerprint: partial }, 't', NOW).map((row: { featureKey: string }) => row.featureKey)).not.toContain('colorSaturation');
+    expect(featureRowsFor({ ...entry(1, null), fingerprint: { ...v1 } }, 't', NOW)).toEqual([]);
+    expect(featureRowsFor(entry(1, null), 't', NOW)).toEqual([]);
   });
 });
 
