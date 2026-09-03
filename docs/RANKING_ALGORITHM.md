@@ -124,7 +124,7 @@ Bands (`BP §9.3`): `initial` (3–5 triads or correlated evidence), `likely` (s
 ## 11. Shared latent space (`BP §7.5`)
 
 - One population factor model ($k \approx 15$–$30$) over all profiles' triads and fingerprints, retrained on a schedule (e.g. weekly) as a batch job inside the model service — not a separate service until `BP §12.3` triggers fire.
-- Seeding before internal data exists is allowed **only** from data licensed for this commercial use. MovieLens/Tag Genome require prior written GroupLens permission (confirmed in [DATA_LICENSING.md](DATA_LICENSING.md)); without it the space starts from Alpha-cohort data only. `shared_latent_space_versions.seedDataSources[].licenseStatus` must be `commercial_allowed` for a version to be activated.
+- Seeding before internal data exists is allowed from data whose terms cover the current stage: while the service earns nothing ([DATA_LICENSING.md](DATA_LICENSING.md) §0, owner decision 2026-09-04) MovieLens/Tag Genome's research terms apply and no GroupLens permission is requested; that permission is an input to the revenue-model study, and ADR-13's default stands anyway — the space starts from Alpha-cohort data, external seeding is optional. `shared_latent_space_versions.seedDataSources[].licenseStatus` may be `non_commercial_only` for activation during the free period and must be `commercial_allowed` once revenue starts.
 - Acceptance: the general `BP §16.5` gate applied to this component, at cohort level (`BP §17.3`), against an individual-only baseline.
 - Feedback-loop risk: retraining on triads shaped by earlier recommendations requires the same propensity logging and off-policy evaluation as individual evaluation (`BP §21.2`).
 

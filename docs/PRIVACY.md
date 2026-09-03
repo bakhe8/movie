@@ -1,8 +1,8 @@
 # Privacy, Data Protection and Security Controls
 
 **Status**: Derived from blueprint `§21.1` (privacy principles), `§21.3` (threat model), `§13.1` (`consents`, `privacy_requests`), `§14` (privacy endpoints), `§7.5` (pooled training as a distinct purpose), `§15.2`–`§15.3` (LLM data rules). Decisions: ADR-7, ADR-9, ADR-23, ADR-24, ADR-26.
-**Not legal advice.** The controlling law is the Saudi Personal Data Protection Law (PDPL) and its Implementing Regulations (`BP App. D` [م20], [م21]). Every "verify with counsel" note below is a real pre-launch task (`BP` Gate 4, `App. B`).
-**Version**: 2.0 — 2026-09-03.
+**Not legal advice.** The controlling law is the Saudi Personal Data Protection Law (PDPL) and its Implementing Regulations (`BP App. D` [م20], [م21]). Every "verify with counsel" note below is a question the team answers itself before the free launch; external counsel is engaged at the revenue-model study, not before (owner decision 2026-09-04, [DATA_LICENSING.md](DATA_LICENSING.md) §0).
+**Version**: 2.1 — 2026-09-04.
 
 ---
 
@@ -89,7 +89,7 @@ Provider data is content data, not personal data. Contracts are tracked in [DATA
 
 ### 6.3 Infrastructure
 
-Hosting is undecided (ADR-24). Requirements: DPA with the provider; encryption at rest; regional data residency (§8); access logging.
+Hosting is undecided (ADR-24). Requirements: the provider's standard data-processing terms accepted; encryption at rest; regional data residency (§8); access logging.
 
 ## 7. Security controls (`BP §21.3`)
 
@@ -105,7 +105,7 @@ Hosting is undecided (ADR-24). Requirements: DPA with the provider; encryption a
 
 ## 8. Data residency and transfers
 
-Preferred: store and process personal data in Saudi Arabia or the region. Any transfer outside the Kingdom (e.g. a cloud region abroad, or the LLM provider — which should receive no personal data) must satisfy the PDPL's cross-border transfer provisions and SDAIA's transfer regulations, with a DPA, encryption, audit rights, and disclosure in the privacy notice. **Verify with counsel** before choosing a region.
+Preferred: store and process personal data in Saudi Arabia or the region. Any transfer outside the Kingdom (e.g. a cloud region abroad, or the LLM provider — which should receive no personal data) must satisfy the PDPL's cross-border transfer provisions and SDAIA's transfer regulations, with the provider's standard data-processing terms, encryption, audit rights, and disclosure in the privacy notice. **Verify** (team) before choosing a region.
 
 ## 9. Retention schedule
 
@@ -143,16 +143,18 @@ request → identity re-verification → privacy_requests(scheduled, executeAfte
 
 Users see: which model version produced a recommendation, the top features that drove it (with `evidenceSource`), a verbal confidence band (never an uncalibrated percentage), and a "not relevant" control. No decision affecting access or eligibility is automated.
 
-## 13. Pre-launch privacy checklist (`BP App. B`, Gate 4)
+## 13. Pre-launch privacy checklist (`BP App. B`, Gate 4) — team-internal
 
-- [ ] Privacy notice, purposes, retention and consents reviewed by local counsel
-- [ ] Privacy impact assessment for the recommendation system and pooled training
-- [ ] Data Protection Officer or external consultant designated (`BP §19.1` legal/privacy role)
+No external counsel, DPO appointment or negotiated agreement is a gate here; those are inputs to the revenue-model study ([DATA_LICENSING.md](DATA_LICENSING.md) §0, §6.2). The team reviews everything below itself before the free launch.
+
+- [ ] Privacy notice, purposes, retention and consents reviewed by the team
+- [ ] Privacy impact assessment for the recommendation system and pooled training (team-written)
+- [ ] Privacy owner named from the team (`BP §19.1` legal/privacy role; a DPO or external consultant only if the revenue-model study calls for it)
 - [ ] Consent flow implemented and tested (all purposes in §3)
 - [ ] Export, delete, reset tested end-to-end (`BP §18.1`)
 - [ ] Audit logging enabled; admin access least-privilege
 - [ ] Encryption in transit and at rest verified; secrets manager in place
-- [ ] DPAs with hosting and LLM providers; region decided (§8)
+- [ ] Standard data-processing terms of the hosting and LLM providers read and accepted; region decided (§8)
 - [ ] Backup restore drill and incident response exercise documented
 - [ ] Sensitive-trait ban verified in explanation templates and theme vocabulary
 
@@ -163,4 +165,5 @@ Placeholders until appointed: privacy inquiries `privacy@<domain>`; DPO `dpo@<do
 ---
 
 **Changelog**
+- 2.1 (2026-09-04): owner decision — legal review before the free launch is done by the team; external counsel, DPO appointment and negotiated DPAs move to the revenue-model study (§13, §7, §8, header).
 - 2.0 (2026-09-03): rewritten. Removed a fabricated OpenAI header (`openai-internal-store`) and a hard-coded model name, the "30-day breach notification" contradiction, non-`/v1` endpoint paths, and the `not_remembered` title state; added the closed consent-purpose list with pooled training as its own purpose, restriction semantics, retention schedule and deletion flow aligned with [SCHEMA.md](SCHEMA.md) and [API.md](API.md).
