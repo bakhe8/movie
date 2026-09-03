@@ -24,36 +24,52 @@ FINGERPRINT_KWARGS = dict(
 
 @pytest.fixture
 def worker():
-    return FilmEnrichmentWorker()
+    # Explicit override so tests never depend on OPENAI_FINGERPRINT_MODEL /
+    # OPENAI_EXPLANATION_MODEL being set in the environment.
+    return FilmEnrichmentWorker(model="gpt-test")
 
 
 class TestGenerateFingerprint:
     def test_returns_the_parsed_fingerprint_on_success(self, worker, monkeypatch):
         fake_fingerprint = FilmFingerprintV1(**FINGERPRINT_KWARGS)
-        completion = MagicMock(choices=[MagicMock(message=MagicMock(parsed=fake_fingerprint, refusal=None))])
-        monkeypatch.setattr(
-            openai_client.beta.chat.completions, "parse", MagicMock(return_value=completion)
-        )
+        response = MagicMock(output_parsed=fake_fingerprint)
+        monkeypatch.setattr(openai_client.responses, "parse", MagicMock(return_value=response))
 
         result = worker.generate_fingerprint("Arrival", "desc", "plot")
 
         assert isinstance(result, FilmFingerprintV1)
         assert result.pacing == 0.5
 
+    def test_stamps_provenance_the_model_could_not_know_about_itself(self, worker, monkeypatch):
+        fake_fingerprint = FilmFingerprintV1(**FINGERPRINT_KWARGS)
+        response = MagicMock(output_parsed=fake_fingerprint)
+        monkeypatch.setattr(openai_client.responses, "parse", MagicMock(return_value=response))
+
+        result = worker.generate_fingerprint("Arrival", "desc", "plot", source_ids=["sr-1"])
+
+        assert result.generatedBy == "openai"
+        assert result.modelVersion == "gpt-test"
+        assert result.extractorVersion == "enrichment-worker-v1"
+        assert result.sourceIds == ["sr-1"]
+        # Neither knowable at this layer yet (no source_records/review queue) --
+        # honest "unknown", never a fabricated claim (FINGERPRINT_SCHEMA.md §8).
+        assert result.licenseStatus == "unknown"
+        assert result.reviewStatus == "unreviewed"
+        assert result.generatedAt is not None
+
     def test_raises_a_clear_error_when_the_model_refuses(self, worker, monkeypatch):
-        completion = MagicMock(
-            choices=[MagicMock(message=MagicMock(parsed=None, refusal="policy violation"))]
+        response = MagicMock(
+            output_parsed=None,
+            output=[MagicMock(type="message", content=[MagicMock(type="refusal", refusal="policy violation")])],
         )
-        monkeypatch.setattr(
-            openai_client.beta.chat.completions, "parse", MagicMock(return_value=completion)
-        )
+        monkeypatch.setattr(openai_client.responses, "parse", MagicMock(return_value=response))
 
         with pytest.raises(ValueError, match="policy violation"):
             worker.generate_fingerprint("Arrival", "desc", "plot")
 
     def test_wraps_openai_api_errors_in_a_value_error(self, worker, monkeypatch):
         monkeypatch.setattr(
-            openai_client.beta.chat.completions,
+            openai_client.responses,
             "parse",
             MagicMock(side_effect=openai.APIConnectionError(request=MagicMock())),
         )
@@ -61,11 +77,18 @@ class TestGenerateFingerprint:
         with pytest.raises(ValueError):
             worker.generate_fingerprint("Arrival", "desc", "plot")
 
+    def test_requires_a_configured_model_when_no_override_is_given(self, monkeypatch):
+        monkeypatch.delenv("OPENAI_FINGERPRINT_MODEL", raising=False)
+        unconfigured_worker = FilmEnrichmentWorker()
+
+        with pytest.raises(RuntimeError, match="OPENAI_FINGERPRINT_MODEL"):
+            unconfigured_worker.generate_fingerprint("Arrival", "desc", "plot")
+
 
 class TestGenerateRecommendationExplanation:
     def test_returns_the_model_generated_text(self, worker, monkeypatch):
-        response = MagicMock(choices=[MagicMock(message=MagicMock(content="Because it's moody and slow."))])
-        monkeypatch.setattr(openai_client.chat.completions, "create", MagicMock(return_value=response))
+        response = MagicMock(output_text="Because it's moody and slow.")
+        monkeypatch.setattr(openai_client.responses, "create", MagicMock(return_value=response))
 
         text = worker.generate_recommendation_explanation(
             {"pacing": 0.8}, "Arrival", {"pacing": 0.9, "warmth": 0.2}, ["Interstellar"]
@@ -75,7 +98,7 @@ class TestGenerateRecommendationExplanation:
 
     def test_wraps_openai_api_errors_in_a_value_error(self, worker, monkeypatch):
         monkeypatch.setattr(
-            openai_client.chat.completions,
+            openai_client.responses,
             "create",
             MagicMock(side_effect=openai.APIConnectionError(request=MagicMock())),
         )

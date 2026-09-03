@@ -1,7 +1,7 @@
 # Implementation Status — code versus blueprint
 
-> **Snapshot 2026-09-03, after the "close the six cheap gaps" change plus a security/code-quality audit, a NestJS 10→11 migration, and a dev-tooling security bump** (base `4f025ca` on `main`).
-> Verified for this revision: backend vitest suite (now on vitest **3.2.7**, up from 1.6.1) **48 tests / 6 files pass**; backend e2e suite **13 tests pass** over real HTTP against `postgres-test` with all five migrations applied; Python pytest **26 tests pass**; `tsc --noEmit` clean for `apps/backend`, `apps/frontend` and `packages/shared`; `eslint` clean for both `apps/frontend` and `apps/backend` (now on `@typescript-eslint` **8.69.0**, up from 6.21.0); the migrations applied to the local dev database; `npm audit` **clean — 0 vulnerabilities, including devDependencies** (down from 14 production + 10 dev-only earlier today). A real `node dist/main.js` production-mode boot (not just the Nest testing module) verified over actual HTTP, including CORS and rate-limit headers. The manual browser pass (register → Discover → Rank → My list → Profile → language toggle → logout) was verified in an earlier snapshot and is carried forward; nothing in today's work touched the frontend UI or its dependencies.
+> **Snapshot 2026-09-03, after the "close the six cheap gaps" change, a security/code-quality audit, a NestJS 10→11 migration, a dev-tooling security bump, a `SCHEMA.md` doc-sync fix, and closing blueprint gap 9** (base `4816691` on `main`).
+> Verified for this revision: backend vitest suite **48 tests / 6 files pass**; backend e2e suite **13 tests pass** over real HTTP against `postgres-test` with all five migrations applied; Python pytest **28 tests pass** (+2 with the enrichment-worker fix); `tsc --noEmit` clean for `apps/backend`, `apps/frontend` and `packages/shared`; `eslint` clean for both `apps/frontend` and `apps/backend`; `ruff` clean for `services/workers`; `npm audit` clean — 0 vulnerabilities, production and dev. `SCHEMA.md` §1 now lists all five migrations (it had drifted after the triad-constraint migration and, independently, already understated the count before that). The manual browser pass (register → Discover → Rank → My list → Profile → language toggle → logout) was verified in an earlier snapshot and is carried forward; nothing in today's work touched the frontend UI or its dependencies.
 >
 > Two verdicts per row, because "the code exists and runs" and "it does what the blueprint requires" are different claims:
 >
@@ -54,7 +54,14 @@ These run today and contradict or fall short of the blueprint; a green test suit
 6. **Fingerprints carry no provenance and cover part of `§6.1`** — the 15 seeded rows leave `confidence` empty; families characters/ending/people/cultural context are absent (V1 is frozen; V2 planned — [FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md)).
 7. **Onboarding collects no market, platforms, or consent** (`§4.1`, `§13.1`, `§2.4 #9`).
 8. **Not a PWA yet** — no web manifest or service worker (`§5.1`, ADR-5).
-9. **Enrichment worker diverges from `§15.3` / ADR-23** — Chat Completions instead of the Responses API, no `store=false`, hard-coded default model id, Pydantic field `schema_version` vs TypeScript `schemaVersion`, no provenance fields.
+
+## Closed on 2026-09-03 (gap 9 — enrichment worker)
+
+| Gap | What changed | Proof |
+|---|---|---|
+| Enrichment worker diverged from `§15.3`/ADR-23: Chat Completions instead of the Responses API, no `store=false`, hard-coded default model id, Pydantic field `schema_version` vs TypeScript `schemaVersion`, no provenance fields | `enrichment.py` rewritten onto `client.responses.parse()`/`.create()` with `store=False`; `FilmEnrichmentWorker` now requires `OPENAI_FINGERPRINT_MODEL`/`OPENAI_EXPLANATION_MODEL` (raises if unset, no hard-coded default — added to `.env.example`); Pydantic field renamed `schemaVersion`; `generate_fingerprint()` stamps `generatedBy`/`generatedAt`/`modelVersion`/`extractorVersion`/`sourceIds` after the call (the model can't know these about itself) and `licenseStatus: 'unknown'`/`reviewStatus: 'unreviewed'` (honest placeholders — no `source_records`/review queue exists yet, gap 1) | `services/workers/tests/test_enrichment.py` rewritten against the new API shape, 2 new tests (provenance stamping, missing-config error); 28 Python tests pass |
+
+Still open: `§15.4` acceptance tests, and the worker has still never run against the actual catalog (only unit-tested against a mocked client) — both need the rights registry from gap 1 first.
 
 ---
 
@@ -68,7 +75,7 @@ These run today and contradict or fall short of the blueprint; a green test suit
 | Environment template | ✅ | — | `FRONTEND_URL` and `OPENAI_FINGERPRINT_MODEL` not yet in `.env.example` |
 | Documentation set | ✅ | — | reorganized 2026-09-03; index in [README.md](README.md) |
 | Plackett–Luce ranker (Python) | ✅ | ✅ | `§7.2`: listwise event, not three pairwise comparisons; deterministic init; refuses undescribed titles |
-| Enrichment worker (Python) | ✅ | 🟡 | structured output ✅; gap 9 above; `§15.4` acceptance tests ❌; never run against the catalog |
+| Enrichment worker (Python) | ✅ | 🟡 | structured output via the Responses API ✅ (gap 9 closed above); `§15.4` acceptance tests ❌; never run against the actual catalog, only unit-tested |
 | Shared TypeScript types package | ✅ | ✅ | API-aligned types, compiles; not yet consumed by the apps (ADR-1) |
 | Makefile | ✅ | — | mirrors npm scripts; `poetry` assumed for Python |
 | CI | ❌ | ❌ | `§12.1` |
@@ -197,7 +204,7 @@ These run today and contradict or fall short of the blueprint; a green test suit
 | Backend e2e: auth guard + IDOR + rate limiting over real HTTP + `postgres-test` (13 tests) | ✅ | ✅ | `§21.3` object-level authorization; re-run 2026-09-03 with all five migrations; `test/throttling.e2e-spec.ts` added with the NestJS 11 migration (ADR-29); not functional coverage |
 | Functional API tests (titles, triads, recommendations) | ❌ | — | |
 | Frontend tests | ❌ | — | |
-| Python tests (26) | ✅ | — | re-run 2026-09-03 |
+| Python tests (28) | ✅ | — | re-run 2026-09-03; +2 with the gap-9 enrichment-worker fix |
 | Offline evaluation protocol (`§16.1`), metrics beyond in-sample pairwise (`§16.2`), baselines (`§16.3`), acceptance gate (`§16.5`) | ❌ | ❌ | |
 | Automated tests for triad, replacement, delete, export (`§18.1`) | 🟡 | ❌ | triad ranking only |
 | Performance with 100+ titles / 50+ triads | ❌ | — | |
@@ -232,6 +239,6 @@ These run today and contradict or fall short of the blueprint; a green test suit
 
 ---
 
-**Next milestone (in order):** migration M1 with `shownAt`/`answeredAt`/`modelVersion`/idempotency on triads (gap 3) and the replacement endpoint + two UI buttons (ADR-17); then temporal hold-out in training (gap 2) and a training trigger through the FastAPI service (ADR-25); then M5 + persisted recommendations and outcomes (gap 4) so the post-watch loop can close; then consent/onboarding (gap 7) and the admin board; the enrichment worker fixes (gap 9) can run in parallel.
+**Next milestone (in order):** migration M1 with `shownAt`/`answeredAt`/`modelVersion`/idempotency on triads (gap 3) and the replacement endpoint + two UI buttons (ADR-17); then temporal hold-out in training (gap 2) and a training trigger through the FastAPI service (ADR-25); then M5 + persisted recommendations and outcomes (gap 4) so the post-watch loop can close; then consent/onboarding (gap 7) and the admin board. Gap 9 (enrichment worker) is done.
 
-**Last updated**: 2026-09-03 · **Status**: core loop (auth → mark watched → rank → train by CLI → recommend) runs locally; six blueprint gaps, five security/code-quality audit findings, the NestJS 10→11 migration (ADR-29), and a dev-tooling security bump (`@typescript-eslint`, `vitest`; ADR-30) closed today; `npm audit` clean end to end (production and dev); nine blueprint-conformance pieces still fall short (list above).
+**Last updated**: 2026-09-03 · **Status**: core loop (auth → mark watched → rank → train by CLI → recommend) runs locally; six blueprint gaps, five security/code-quality audit findings, the NestJS 10→11 migration (ADR-29), a dev-tooling security bump (ADR-30), and blueprint gap 9 (enrichment worker) closed today; `npm audit` clean end to end; eight blueprint-conformance pieces still fall short (list above).

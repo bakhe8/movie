@@ -2,7 +2,7 @@
 
 **Status**: Derived from blueprint `§13` (entities and event shapes), `§11` (rights registry), `§7.5`–`§7.6`, `§21`. Two layers, kept apart on purpose:
 
-- **§1 Current physical schema** — exactly what the three TypeORM migrations in `apps/backend/src/migrations/` create (verified 2026-09-03). This is the truth for anyone writing SQL today.
+- **§1 Current physical schema** — exactly what the five TypeORM migrations in `apps/backend/src/migrations/` create (verified 2026-09-03). This is the truth for anyone writing SQL today.
 - **§2 Target schema** — the `BP §13.1` entity set expressed as tables, plus the migration plan from §1 to §2.
 
 Naming (ADR-16): tables `snake_case` plural; columns are TypeORM's default `camelCase` and therefore **quoted** in raw SQL (`"profileId"`); primary keys `uuid` via `uuid_generate_v4()`; timestamps `TIMESTAMP` (UTC by convention). One exception to plural naming exists today (`user_title_state`); it is renamed in step M1 below. Schema changes go through `npm run migration:generate` / `npm run db:migrate` only — `synchronize` is off in every environment.
@@ -11,7 +11,7 @@ Naming (ADR-16): tables `snake_case` plural; columns are TypeORM's default `came
 
 ## 1. Current physical schema (migrated)
 
-Migrations, in order: `1788410140231-InitialSchema`, `1788411790951-AddTriadEventFields`, `1788412500000-SplitImportedRatingFromInAppState`, `1788418200000-ArabicFirstProfileDefault`. Extension: `uuid-ossp`. The `ankane/pgvector` image is used but no column has the `vector` type yet.
+Migrations, in order: `1788410140231-InitialSchema`, `1788411790951-AddTriadEventFields`, `1788412500000-SplitImportedRatingFromInAppState`, `1788418200000-ArabicFirstProfileDefault`, `1788421102891-AddOneActiveTriadPerProfileConstraint`. Extension: `uuid-ossp`. The `ankane/pgvector` image is used but no column has the `vector` type yet.
 
 ```sql
 users (
@@ -58,20 +58,21 @@ triads (                                                         -- one listwise
   "policyVersion" varchar, "selectionPropensity" real, "experimentId" varchar,
   "sessionId" varchar, metadata json,                            -- { replacements?, reasonForSelection?, modelVersion? } — replacements never written yet
   status varchar NOT NULL DEFAULT 'active',                      -- 'active' | 'completed' | 'skipped'
-  "createdAt" timestamp                                          -- doubles as shownAt today; no answeredAt column
+  "createdAt" timestamp,                                         -- doubles as shownAt today; no answeredAt column
+  UNIQUE ("profileId") WHERE status = 'active'                   -- partial index; at most one active triad per profile (ADR-28)
 )
 
 user_model_snapshots (                                           -- one row per training run (BP §13.1 taste_profiles, partial)
   id uuid PK, "profileId" uuid NOT NULL FK profiles ON DELETE CASCADE,
   weights real[] NOT NULL,                                       -- θᵤ over FINGERPRINT_DIMENSIONS order (13 today)
-  "biasTerms" json,                                              -- { titleId: δ }
+  "biasTerms" json,                                              -- { titleId: δ }; PlackettLuceRanker.fit() never populates this yet, so it is always {} today
   "modelVersion" varchar NOT NULL, "trainingTriadCount" integer NOT NULL,
   "validationAccuracy" real, "pairwiseAccuracy" real,            -- pairwiseAccuracy is in-sample today
   "createdAt" timestamp
 )
 ```
 
-Indexes: primary keys and the unique constraints above only. Views: none.
+Indexes: primary keys and the unique constraints above, plus the partial unique index on `triads` noted above. Views: none.
 
 What is **not** in the database today (see §2 for the target): recommendations log, outcomes, watch events, triad replacements, consents/privacy requests, rights registry (`source_records`), per-feature content features, localized titles, model versions/experiments, shared latent space versions, audit log, admin roles.
 
@@ -306,5 +307,6 @@ Each step is one TypeORM migration; none require data backfill beyond defaults b
 ---
 
 **Changelog**
+- 2.2 (2026-09-03): fifth migration `AddOneActiveTriadPerProfileConstraint` (ADR-28) applied -- a partial unique index, not a new table; §1's migration count and `triads` DDL updated to match, and the pre-existing "three migrations" text (already stale before this fix -- the list below it named four) corrected. Also noted that `user_model_snapshots.biasTerms` is always `{}` today, since `PlackettLuceRanker.fit()` never populates it (found in the same audit pass).
 - 2.1 (2026-09-03): fourth migration `ArabicFirstProfileDefault` applied; `profiles.preferredLanguage` now defaults to `'ar'` in §1, removed from the M1 plan.
 - 2.0 (2026-09-03): rewritten. The previous version described an aspirational snake_case DDL that did not match the migrated schema, named a `db/migrations/001_init_schema.sql` that does not exist, and mixed `not_remembered` into the title-state enum; it is replaced by the current-vs-target split above.
