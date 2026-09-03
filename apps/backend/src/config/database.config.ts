@@ -4,10 +4,16 @@ import { config } from 'dotenv';
 import { resolve } from 'node:path';
 import { AuditLog } from '../entities/audit-log.entity';
 import { Consent } from '../entities/consent.entity';
+import { ContentFeature } from '../entities/content-feature.entity';
+import { Credit } from '../entities/credit.entity';
 import { Embedding } from '../entities/embedding.entity';
+import { LocalizedTitle } from '../entities/localized-title.entity';
+import { Person } from '../entities/person.entity';
 import { PrivacyRequest } from '../entities/privacy-request.entity';
 import { Profile } from '../entities/profile.entity';
+import { SourceRecord } from '../entities/source-record.entity';
 import { Title } from '../entities/title.entity';
+import { TitleEdition } from '../entities/title-edition.entity';
 import { Triad } from '../entities/triad.entity';
 import { TriadReplacement } from '../entities/triad-replacement.entity';
 import { User } from '../entities/user.entity';
@@ -56,6 +62,12 @@ export function getConnectionOptions(): ConnectionOptions {
       Consent,
       PrivacyRequest,
       AuditLog,
+      Person,
+      SourceRecord,
+      LocalizedTitle,
+      TitleEdition,
+      Credit,
+      ContentFeature,
     ],
   };
 }

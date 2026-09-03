@@ -2,7 +2,7 @@
 
 **Status**: Derived from blueprint `§13` (entities and event shapes), `§11` (rights registry), `§7.5`–`§7.6`, `§21`. Two layers, kept apart on purpose:
 
-- **§1 Current physical schema** — exactly what the eleven TypeORM migrations in `apps/backend/src/migrations/` create (verified 2026-09-03). This is the truth for anyone writing SQL today.
+- **§1 Current physical schema** — exactly what the twelve TypeORM migrations in `apps/backend/src/migrations/` create (verified 2026-09-03). This is the truth for anyone writing SQL today.
 - **§2 Target schema** — the `BP §13.1` entity set expressed as tables, plus the migration plan from §1 to §2.
 
 Naming (ADR-16): tables `snake_case` plural; columns are TypeORM's default `camelCase` and therefore **quoted** in raw SQL (`"profileId"`); primary keys `uuid` via `uuid_generate_v4()`; timestamps `TIMESTAMP` (UTC by convention). The one plural-naming exception (`user_title_state`) was renamed to `user_title_states` in M1. Schema changes go through `npm run migration:generate` / `npm run db:migrate` only — `synchronize` is off in every environment.
@@ -11,7 +11,7 @@ Naming (ADR-16): tables `snake_case` plural; columns are TypeORM's default `came
 
 ## 1. Current physical schema (migrated)
 
-Migrations, in order: `1788410140231-InitialSchema`, `1788411790951-AddTriadEventFields`, `1788412500000-SplitImportedRatingFromInAppState`, `1788418200000-ArabicFirstProfileDefault`, `1788421102891-AddOneActiveTriadPerProfileConstraint`, `1788424108820-AddHeldOutTrainingMetrics`, `1788425067800-AddTriadEventCompleteness`, `1788428400000-AddTriadReplacements`, `1788432000000-AddProfileMarketAndPlatforms`, `1788435000000-CompleteM1Plan`, `1788438000000-AddM2ConsentAndAuditTables`. Extension: `uuid-ossp`. The `ankane/pgvector` image is used but no column has the `vector` type yet.
+Migrations, in order: `1788410140231-InitialSchema`, `1788411790951-AddTriadEventFields`, `1788412500000-SplitImportedRatingFromInAppState`, `1788418200000-ArabicFirstProfileDefault`, `1788421102891-AddOneActiveTriadPerProfileConstraint`, `1788424108820-AddHeldOutTrainingMetrics`, `1788425067800-AddTriadEventCompleteness`, `1788428400000-AddTriadReplacements`, `1788432000000-AddProfileMarketAndPlatforms`, `1788435000000-CompleteM1Plan`, `1788438000000-AddM2ConsentAndAuditTables`, `1788440000000-AddM3RightsRegistryAndCatalogProvenance`. Extension: `uuid-ossp`. The `ankane/pgvector` image is used but no column has the `vector` type yet.
 
 ```sql
 users (
@@ -117,13 +117,59 @@ audit_log (                                                      -- append-only,
   "createdAt" timestamp NOT NULL DEFAULT now(),
   INDEX ("actorUserId"), INDEX (resource, "resourceId")
 )
+
+people (id uuid PK, name varchar NOT NULL, "externalIds" json)  -- BP §13.1
+
+source_records (                                                -- rights registry, BP §11.1/§11.3; never overwritten in place
+  id uuid PK, "titleId" uuid FK titles ON DELETE CASCADE,        -- nullable: a record need not describe one title
+  "fieldName" varchar NOT NULL, value text, source varchar NOT NULL,
+  license varchar, "licenseStatus" varchar NOT NULL,             -- 'commercial_allowed' | 'non_commercial_only' | 'pending_review' | 'unknown'
+  "allowsStorage" boolean, "allowsDerivation" boolean, "allowsTraining" boolean, "attributionRequired" boolean,
+  "retentionUntil" timestamp, "fallbackPlan" varchar,
+  confidence real, "extractorVersion" varchar, "reviewStatus" varchar,  -- 'unreviewed' | 'sampled' | 'human_verified'
+  "supersededBy" uuid FK source_records(id),                     -- self-reference; a correction points the old row here instead of overwriting it
+  "retrievedAt" timestamp, "validFrom" timestamp, "createdAt" timestamp NOT NULL DEFAULT now(),
+  INDEX ("titleId")
+)
+
+localized_titles (                                               -- BP §11.3, §13.1
+  id uuid PK, "titleId" uuid NOT NULL FK titles ON DELETE CASCADE,
+  title varchar NOT NULL, language varchar(5) NOT NULL, region varchar(2),
+  kind varchar NOT NULL,                                         -- 'original' | 'official' | 'alternate' | 'transliteration'
+  "displayPriority" integer NOT NULL DEFAULT 0, "sourceRecordId" uuid FK source_records,
+  INDEX ("titleId"), INDEX USING GIN (to_tsvector('simple', title))
+)
+
+title_editions (                                                 -- BP §6.2 (work vs. edition)
+  id uuid PK, "titleId" uuid NOT NULL FK titles ON DELETE CASCADE,
+  kind varchar NOT NULL,                                         -- 'theatrical' | 'directors_cut' | 'dub' | 'subtitled' | 'other'
+  "audioLanguage" varchar(5), "subtitleLanguage" varchar(5), notes text,
+  INDEX ("titleId")
+)
+
+credits (
+  id uuid PK, "titleId" uuid NOT NULL FK titles ON DELETE CASCADE, "personId" uuid NOT NULL FK people,
+  role varchar NOT NULL, "creditOrder" integer, "sourceRecordId" uuid FK source_records,
+  INDEX ("titleId"), INDEX ("personId")
+)
+
+content_features (                                               -- BP §13.3, provenance behind titles.fingerprint
+  id uuid PK, "titleId" uuid NOT NULL FK titles ON DELETE CASCADE,
+  "featureKey" varchar NOT NULL, value real, distribution json,  -- value NULL = unknown, never 0 (BP §11.3)
+  uncertainty real, "sourceIds" text[] NOT NULL DEFAULT '{}',
+  "extractorVersion" varchar NOT NULL, "licenseStatus" varchar NOT NULL, "reviewStatus" varchar NOT NULL,
+  "validFrom" timestamp NOT NULL, "supersededBy" uuid FK content_features(id),
+  UNIQUE ("titleId", "featureKey", "extractorVersion")
+)
 ```
 
-Indexes: primary keys and the unique constraints above, the partial unique index on `triads` noted above, `IDX_triad_replacements_triadId`, and the M2 indexes noted inline above. Views: none.
+Indexes: primary keys and the unique constraints above, the partial unique index on `triads` noted above, `IDX_triad_replacements_triadId`, and the M2/M3 indexes noted inline above. Views: none.
 
 `privacy_requests.userId` has no `ON DELETE` action and `audit_log.actorUserId` has no FK at all, on purpose: PRIVACY.md §5 requires both to survive as a tombstone after the user they name is deleted, which is in tension with a NOT NULL FK to a row a delete flow would remove. No delete flow exists yet (blueprint gap 7) — this is deliberately left for whoever builds it to resolve (`SET NULL` vs. a denormalized snapshot of the deleted user), not decided silently here.
 
-What is **not** in the database today (see §2 for the target): recommendations log, outcomes, watch events, rights registry (`source_records`), per-feature content features, localized titles, model versions/experiments, shared latent space versions. (`users.role` exists since M1 but no admin board reads it yet; `consents`/`privacy_requests`/`audit_log` exist since M2 but nothing writes to them yet — that's blueprint gap 7 and PRIVACY.md §5's rights endpoints.)
+`source_records.titleId` and `content_features.supersededBy` follow the DDL literally too: `source_records` is nullable on `titleId` (a record can describe something other than one title) and both `source_records.supersededBy`/`content_features.supersededBy` are self-referencing FKs with no `ON DELETE` action — a correction is a new row, the old one is never deleted, so there is nothing for a cascade to do.
+
+What is **not** in the database today (see §2 for the target): recommendations log, outcomes, watch events, model versions/experiments, shared latent space versions. (`users.role` exists since M1 but no admin board reads it yet; `consents`/`privacy_requests`/`audit_log` exist since M2 but nothing writes to them yet — that's blueprint gap 7 and PRIVACY.md §5's rights endpoints; `source_records`/`content_features`/`localized_titles`/`title_editions`/`people`/`credits` exist since M3 but nothing populates them yet — that needs licensed sources and a real ingestion pass, blueprint gap 6/9.)
 
 ---
 
@@ -134,10 +180,10 @@ What is **not** in the database today (see §2 for the target): recommendations 
 | Blueprint entity (`§13.1`) | Target table(s) | Status today |
 |---|---|---|
 | users / identities | `users` (+ `role`, since M1), `profiles` (+ `market`/`platforms` since `AddProfileMarketAndPlatforms`, `pausedAt` since M1) | partial — no admin board or `pause_all` flow reads these columns yet |
-| content_items / editions | `titles`, `title_editions` | `titles` only |
-| localized_titles | `localized_titles` | missing (search is ILIKE on two columns) |
-| credits / people | `people`, `credits` | missing |
-| content_features | `content_features` (per-feature rows) + `titles.fingerprint` (published snapshot) | fingerprint JSON only, no provenance rows |
+| content_items / editions | `titles`, `title_editions` | `title_editions` present since M3, empty; search is still ILIKE on `titles` |
+| localized_titles | `localized_titles` | present since M3, empty — search is still ILIKE on two `titles` columns, not yet switched to the GIN index on `localized_titles.title` |
+| credits / people | `people`, `credits` | present since M3, empty |
+| content_features | `content_features` (per-feature rows) + `titles.fingerprint` (published snapshot) | `content_features` present since M3, empty; `titles.fingerprint` still the only populated provenance |
 | watch_events | `watch_events` | folded into `user_title_state.watchedAt` |
 | triad_events | `triads` | present; `shownAt`/`answeredAt`/`modelVersion`/`idempotencyKey` exist (ADR-32), `holdout`/`correctsTriadId` since M1 — both always their default today, no policy sets `holdout` and no correction flow exists |
 | triad_replacements | `triad_replacements` | present (ADR-17, migration `AddTriadReplacements`) |
@@ -146,7 +192,7 @@ What is **not** in the database today (see §2 for the target): recommendations 
 | outcomes | `outcomes` | missing |
 | model_versions / experiments | `model_versions`, `experiments`, `experiment_assignments` | missing |
 | consents / privacy_requests | `consents`, `privacy_requests` | present since M2 — no route reads/writes them yet (blueprint gap 7, PRIVACY.md §5) |
-| (rights registry, `§11.1`) | `source_records` | missing |
+| (rights registry, `§11.1`) | `source_records` | present since M3, empty |
 | (shared latent space, `§7.5`) | `shared_latent_space_versions` | missing |
 | (audit, `§21.3`) | `audit_log` | present since M2 — nothing writes to it yet |
 
@@ -339,7 +385,7 @@ Each step is one TypeORM migration; none require data backfill beyond defaults b
 |---|---|---|
 | M1 ✅ | rename `user_title_state` → `user_title_states`; `profiles.pausedAt`; `users.role`; `triads.holdout`/`correctsTriadId` + two indexes — all applied by `CompleteM1Plan` (`market`/`platforms` were already done by `AddProfileMarketAndPlatforms`; `shownAt`/`answeredAt`/`modelVersion`/`idempotencyKey` by `AddTriadEventCompleteness`, ADR-32; `triad_replacements`/`triadEligible` by `AddTriadReplacements`, ADR-17) | event completeness (`BP §13.2`, `§14`) — closed. No application logic reads `role`/`pausedAt`/`holdout`/`correctsTriadId` yet; that's the admin board, `pause_all`, and a future correction flow respectively, none built |
 | M2 ✅ | `consents`, `privacy_requests`, `audit_log` — all applied by `AddM2ConsentAndAuditTables` | onboarding consent, export/delete/reset — schema only; no application logic writes to these tables yet |
-| M3 | `source_records`, `content_features`, `localized_titles`, `people`, `credits`, `title_editions` | rights registry, FTS search, provenance |
+| M3 ✅ | `source_records`, `content_features`, `localized_titles`, `people`, `credits`, `title_editions` — all applied by `AddM3RightsRegistryAndCatalogProvenance` | rights registry, FTS search, provenance — schema only; nothing populates these tables yet, and search hasn't switched off ILIKE |
 | M4 | `model_versions`, `experiments`, `experiment_assignments`; `user_model_snapshots` additions (`posterior`, `recentWeights`, `exceptions`, `calibratedAgainst` — held-out metrics already exist, ADR-31) | reproducibility, calibration |
 | M5 | `recommendations`, `outcomes`, `watch_events`, `library_imports` | persisted recommendations, post-watch loop, imports |
 | M6 | `public_quality_sources`, `availability_snapshots` | Public Quality and Watchability layers (need licensed sources first) |
@@ -348,6 +394,7 @@ Each step is one TypeORM migration; none require data backfill beyond defaults b
 ---
 
 **Changelog**
+- 2.9 (2026-09-03): twelfth migration `AddM3RightsRegistryAndCatalogProvenance` applied -- closes the M3 step in full: `people`, `source_records` (self-referencing `supersededBy`, nullable `titleId`), `localized_titles` (with the `to_tsvector('simple', title)` GIN index the DDL specifies), `title_editions`, `credits`, `content_features` (unique on `titleId`/`featureKey`/`extractorVersion`, self-referencing `supersededBy`) all created, schema only -- no ingestion pass populates them yet, and full-text search hasn't switched off `titles`' ILIKE. §1 DDL, the entity map and the M3 plan row updated to match; verified with a real `up()`/`down()`/`up()` round trip against `postgres-test` and the full e2e suite (41/41) passing after.
 - 2.8 (2026-09-03): eleventh migration `AddM2ConsentAndAuditTables` applied -- closes the M2 step in full: `consents` (unique on `userId`/purpose/version, `ON DELETE CASCADE`), `privacy_requests` and `audit_log` (no cascade/no FK -- deliberate, see the tombstone note in §1) all created, schema only. §1 DDL, the entity map and the M2 plan row updated to match; verified with a real `up()`/`down()`/`up()` round trip against `postgres-test` and the full e2e suite (41/41) passing after.
 - 2.7 (2026-09-03): tenth migration `CompleteM1Plan` applied -- closes the M1 step in full: `user_title_state` renamed to `user_title_states` (ADR-16 plural naming), `users.role` (`BP §5.1`), `profiles.pausedAt` (PRIVACY.md §4), `triads.holdout`/`correctsTriadId` (`BP §8.3`/`§13.2`) with two new indexes on `("profileId", "createdAt")` and `("profileId", status)`. §1 DDL, the entity map, and the M1 plan row updated to match; verified with a real `up()`/`down()`/`up()` round trip against `postgres-test` and the full e2e suite (41/41) passing after.
 - 2.6 (2026-09-03): ninth migration `AddProfileMarketAndPlatforms` (onboarding, `BP §4.1`) applied -- `profiles.market` (nullable ISO 3166-1 alpha-2) and `profiles.platforms` (text[] default '{}'); §1, the entity map, the target ALTER and the M1 plan updated to match.

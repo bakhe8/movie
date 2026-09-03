@@ -46,10 +46,10 @@ Nothing left open from this line of audit.
 
 These run today and contradict or fall short of the blueprint; a green test suite makes them invisible.
 
-1. **Schema covers 11 of the target tables** — `recommendations`, `outcomes`, `watch_events`, `source_records`, `content_features`, `localized_titles`, `model_versions`, `experiments`, `shared_latent_space_versions` are still missing (`§13.1`, `§11.1`; [SCHEMA.md](SCHEMA.md) §2.4 migration plan M1–M7). Steps 1–2/7 of that plan (M1, M2) are closed today — see the tables below; M2 added `consents`/`privacy_requests`/`audit_log` but no application logic reads or writes them yet.
+1. **Schema covers 17 of the target tables** — `recommendations`, `outcomes`, `watch_events`, `model_versions`, `experiments`, `shared_latent_space_versions` are still missing (`§13.1`, `§11.1`; [SCHEMA.md](SCHEMA.md) §2.4 migration plan M1–M7). Steps 1–3/7 of that plan (M1, M2, M3) are closed today — see the tables below; none of M1–M3's new tables/columns have any application logic reading or writing them yet.
 4. **Recommendations are never persisted** — no reason, no display propensity, no `experimentId`/`requestId` (`§13.1`, `§14`, `§14.1`). Without the log the post-watch loop (`§4.5`) cannot close and `§16` has nothing to read.
 5. **Confidence band is a triad-count heuristic** — `§9.2`/`§9.3` require evidence diversity, held-out prediction success and fingerprint quality (ADR-21). The fingerprint-quality and held-out-prediction inputs now exist (gaps 6's one-band demotion, gap 2); the rest does not.
-6. **Fingerprints carry no provenance and cover part of `§6.1`** — the 15 seeded rows leave `confidence` empty; families characters/ending/people/cultural context are absent (V1 is frozen; V2 planned — [FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md)).
+6. **Fingerprints carry no provenance and cover part of `§6.1`** — the 15 seeded rows leave `confidence` empty; families characters/ending/people/cultural context are absent (V1 is frozen; V2 planned — [FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md)). `source_records`/`content_features` — the tables that would actually hold that provenance — exist since M3 but no ingestion pass has ever written a row to either.
 7. **Onboarding records no consent** (`§4.1`, `§13.1`, `§2.4 #9`) — market and platforms are collected since 2026-09-03 (onboarding section below); the `consents` table exists since M2 but no screen or endpoint writes a row to it yet.
 8. **Not a PWA yet** — no web manifest or service worker (`§5.1`, ADR-5).
 
@@ -73,7 +73,17 @@ Not itself the close of gap 1, and not gap 7 (onboarding consent) either — sch
 |---|---|---|
 | Three of the twelve tables blueprint gap 1 needs were missing: `consents` (PRIVACY.md §3 purposes), `privacy_requests` and `audit_log` (PRIVACY.md §5 export/delete/reset lifecycle and the audit trail) | One migration, `AddM2ConsentAndAuditTables`, plus three new entities (`Consent`, `PrivacyRequest`, `AuditLog`), implementing SCHEMA.md §2.2's target DDL verbatim — schema only, nothing reads or writes these tables yet. `privacy_requests.userId`/`audit_log.actorUserId` deliberately carry no cascade/no FK, matching the DDL exactly, even though this is in real tension with PRIVACY.md §5's tombstone requirement — flagged, not silently resolved (ADR-52) | Verified with a real `up()` → `down()` → `up()` round trip against `postgres-test` (all three tables, FKs and indexes both directions), then the full e2e suite (41/41) on the final state; `tsc`, the full unit suite (98 tests) and `eslint` all clean |
 
-None of the three new tables are read or written by anything yet — no onboarding screen records a grant, no settings page revokes one, no export/delete endpoint exists. Next: M3 (`source_records`, `content_features`, `localized_titles`, `people`, `credits`, `title_editions`) — the rights registry and provenance step.
+None of the three new tables are read or written by anything yet — no onboarding screen records a grant, no settings page revokes one, no export/delete endpoint exists.
+
+## Closed on 2026-09-03 (M3 migration plan step, 3 of 7 toward gap 1)
+
+Not itself the close of gap 1 — schema only, the third step of [SCHEMA.md](SCHEMA.md) §2.4's plan and the largest by table count. Unblocks gap 6 (fingerprint provenance) and gap 9's still-open acceptance tests, though neither closes on schema alone — both also need a real ingestion pass against licensed sources.
+
+| Gap | What changed | Proof |
+|---|---|---|
+| Six of the remaining tables blueprint gap 1 needs were missing: the rights registry `source_records` (`§11.1`/`§11.3`) and the catalog-provenance tables that depend on it — `localized_titles`, `title_editions`, `people`, `credits`, `content_features` | One migration, `AddM3RightsRegistryAndCatalogProvenance`, plus six new entities, implementing SCHEMA.md §2.2's target DDL verbatim — schema only, no ingestion or search-layer code changed. `source_records.supersededBy`/`content_features.supersededBy` are self-referencing FKs with no `ON DELETE` action, matching the correction-not-overwrite rule already used for `triads.correctsTriadId` (M1): a correction is a new row, the old one is never deleted, so there is nothing to cascade (ADR-53) | Verified with a real `up()` → `down()` → `up()` round trip against `postgres-test` (all six tables, every FK/index/self-reference both directions), then the full e2e suite (41/41) on the final state; `tsc`, the full unit suite (98 tests) and `eslint` all clean |
+
+All six new tables are empty and unread — no ingestion pipeline writes a `source_records` row, catalog search still runs `ILIKE` against `titles.titleEn`/`titleAr` rather than the new `localized_titles` GIN index, no credits/editions data exists. Next: M4 (`model_versions`, `experiments`, `experiment_assignments`; `user_model_snapshots` additions) — reproducibility and calibration.
 
 ---
 
@@ -325,9 +335,9 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 
 | Item | Built | Blueprint | Evidence / gap |
 |---|---|---|---|
-| `TitlesService` list/search/get/starter | ✅ | 🟡 | ILIKE on `titleEn`/`titleAr` **with Arabic folding on both sides** since 2026-09-03 (hamza forms of alef → ا, ة → ه, ى → ي, tashkeel/tatweel ignored; `translate()` in SQL, `foldArabic` in code) so «احلام» finds «أحلام»; `GET /titles/starter` — the `§4.2` diverse starter list, a deterministic round-robin across primary genres (`diversify()`); still missing: `§5.1` alternate titles / `§13.1` `localized_titles` / `§12.1` FTS (M3) |
+| `TitlesService` list/search/get/starter | ✅ | 🟡 | ILIKE on `titleEn`/`titleAr` **with Arabic folding on both sides** since 2026-09-03 (hamza forms of alef → ا, ة → ه, ى → ي, tashkeel/tatweel ignored; `translate()` in SQL, `foldArabic` in code) so «احلام» finds «أحلام»; `GET /titles/starter` — the `§4.2` diverse starter list, a deterministic round-robin across primary genres (`diversify()`); still missing: `§5.1` alternate titles / `§12.1` FTS — `localized_titles` (with its GIN index) exists since M3 but search hasn't switched over to it yet |
 | Fingerprint field (`FilmFingerprintV1`, 13 dims) | ✅ | 🟡 | V1 frozen (ADR-19); provenance empty; gap 6 |
-| Rights registry (`source_records`) | ❌ | ❌ | `§11.1` — seeded rows carry `licenseStatus: 'unknown'` |
+| Rights registry (`source_records`) | ❌ | ❌ | `§11.1` — table exists since M3, empty; seeded rows still carry `licenseStatus: 'unknown'` |
 | Admin write endpoints | ❌ | — | no admin role |
 | Seed script (15 dev titles) | ✅ | ❌ | `§17.1`: 300–500-film balanced research catalog with rights |
 | Fingerprint batch generation | ❌ | ❌ | `§15.3` |
