@@ -62,6 +62,8 @@ npm run docker:up
 
 Starts `movie-postgres` (host port 5433), `movie-redis` (6379) and `movie-postgres-test` (5544, disposable, for e2e tests). Check with `docker ps`.
 
+The compose project name is pinned to `movie` in `docker/docker-compose.yml`, so every invocation (root scripts, `apps/backend` e2e, the Makefile) lands in one project and volumes are named `movie_postgres_data` / `movie_redis_data`. Containers created before that line existed show under a `docker` group in Docker Desktop and need a one-time recreate that keeps their data; the steps are in the comment at the top of `docker/docker-compose.yml`.
+
 ## 4. Database
 
 ```bash
