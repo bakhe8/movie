@@ -30,8 +30,15 @@ export class UserTitleState {
   @Column({ type: 'timestamp', nullable: true })
   watchedAt: Date | null;
 
+  // Never written by the general in-app state-update endpoint — see UpdateTitleStateDto.
+  // The only legitimate writer is a future import pipeline (e.g. a user-provided CSV list),
+  // which must also set ratingSource: 'import'. This is a low-confidence auxiliary signal,
+  // never a substitute for a triad ranking (blueprint §2.4 principle #2, §4.2, §4.5).
   @Column('real', { nullable: true })
-  rating: number | null;
+  importedRating: number | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  ratingSource: 'import' | null;
 
   @Column({ type: 'text', nullable: true })
   notes: string | null;

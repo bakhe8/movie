@@ -22,10 +22,25 @@ const FINGERPRINT_DIMENSIONS = [
   'colorSaturation',
 ] as const;
 
+export type ConfidenceBand = 'initial' | 'likely' | 'strong' | 'inconclusive';
+export type RecommendationTrack = 'safe' | 'discovery' | 'outside_usual';
+
+// Personal Fit, Public Quality, and Watchability are always three separate values,
+// never merged into one number, and confidence is a verbal band rather than a raw
+// percentage until it has been calibrated against confirmed post-watch outcomes
+// (blueprint §4.4, §7.2, §9.3; docs/schema.md's `recommendations` table).
 export interface RecommendationResult {
   title: Title;
-  score: number;
-  confidence: number;
+  personalFitScore: number;
+  // Neither has a data source yet (no critic/audience-prior ingestion, no
+  // availability/JustWatch integration) -- explicitly null, never a fabricated
+  // number, per the "missing is NULL/unknown, never false or 0" rule (blueprint §11.3).
+  publicQualityScore: number | null;
+  watchabilityScore: number | null;
+  confidenceBand: ConfidenceBand;
+  // Every result is 'safe' today -- there is no discovery/outside-usual selection
+  // policy implemented yet (blueprint §4.4, §8). Not fabricated, just not built.
+  track: RecommendationTrack;
   modelVersion: string;
 }
 
@@ -70,23 +85,48 @@ export class RecommendationsService {
     }
     const titles = await queryBuilder.getMany();
 
+    const confidenceBand = this.confidenceBand(snapshot);
+
     return titles
       .map((title) => ({
         title,
-        score: this.score(title, snapshot),
-        confidence: snapshot.pairwiseAccuracy ?? 0,
+        personalFitScore: this.personalFitScore(title, snapshot),
+        publicQualityScore: null,
+        watchabilityScore: null,
+        confidenceBand,
+        track: 'safe' as const,
         modelVersion: snapshot.modelVersion,
       }))
-      .sort((left, right) => right.score - left.score)
+      .sort((left, right) => right.personalFitScore - left.personalFitScore)
       .slice(0, limit);
   }
 
-  private score(title: Title, snapshot: UserModelSnapshot): number {
+  private personalFitScore(title: Title, snapshot: UserModelSnapshot): number {
     const fingerprint = title.fingerprint;
     const weightedScore = FINGERPRINT_DIMENSIONS.reduce(
       (total, dimension, index) => total + (Number(fingerprint?.[dimension]) || 0) * snapshot.weights[index],
       0,
     );
     return weightedScore + (snapshot.biasTerms?.[title.id] ?? 0);
+  }
+
+  // Provisional heuristic banding by evidence quantity (blueprint §9.2's first
+  // criterion: "عدد أدلة فعال كافٍ"). This is NOT the calibrated confidence system
+  // blueprint §9.3/§16.2 describes (which also requires context diversity and
+  // successful prediction of held-out comparisons, validated via Brier score/ECE)
+  // -- that calibration work hasn't been done yet. Until it has, this thresholding
+  // is deliberately conservative and must never be presented to the user as a
+  // precise probability; it only decides which verbal band copy to show.
+  private confidenceBand(snapshot: UserModelSnapshot): ConfidenceBand {
+    if (snapshot.trainingTriadCount < 3) {
+      return 'inconclusive';
+    }
+    if (snapshot.trainingTriadCount < 10) {
+      return 'initial';
+    }
+    if (snapshot.trainingTriadCount < 20) {
+      return 'likely';
+    }
+    return 'strong';
   }
 }

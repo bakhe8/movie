@@ -69,7 +69,11 @@ def train_profile(profile_id: str) -> int:
             raise ValueError("Completed triads need fingerprints before model training")
 
         ranker = PlackettLuceRanker(len(FINGERPRINT_DIMENSIONS))
-        ranker.fit(complete_triads, fingerprints)
+        # No population_priors source exists yet (no shared/cross-user popularity or
+        # critic-prior model in this codebase) -- explicit None rather than omitting
+        # the argument, so this gap stays visible instead of silently defaulting away.
+        # See PlackettLuceRanker.population_priors and blueprint §7.1 (b(m) term).
+        ranker.fit(complete_triads, fingerprints, population_priors=None)
         pairwise_accuracy = compute_pairwise_accuracy(complete_triads, fingerprints, ranker)
         cursor.execute(
             '''

@@ -16,18 +16,22 @@ class PlackettLuceRanker:
     Plackett-Luce model for learning user taste weights from triadic rankings.
     
     The model assumes that given a set of items with associated features (fingerprints),
-    a user's preference score for an item is: U_ui = w_u^T * x_i + delta_ui
-    
+    a user's preference score for an item is: U_ui = b_i + w_u^T * x_i + delta_ui
+
     Where:
+    - b_i: weak, heavily-shrunk population prior for item i (cold-start smoothing;
+      shared across users, never learned by this per-user model — see population_priors
+      below). Defaults to 0 for any title without one. Must never be surfaced to the
+      user merged with the personal-fit term (blueprint §7.1, §4.4).
     - w_u: user's taste weights
     - x_i: film's fingerprint (feature vector)
     - delta_ui: per-item bias term
     """
-    
+
     def __init__(self, fingerprint_dim: int, learning_rate: float = 0.01, regularization: float = 0.01):
         """
         Initialize the Plackett-Luce ranker.
-        
+
         Args:
             fingerprint_dim: Dimensionality of film fingerprints
             learning_rate: Step size for optimization
@@ -38,60 +42,86 @@ class PlackettLuceRanker:
         self.regularization = regularization
         self.weights: Optional[np.ndarray] = None
         self.bias_terms: Dict[str, float] = {}
-        
-    def fit(self, triads: List[Tuple[Tuple[str, str, str], List[int]]], fingerprints: Dict[str, np.ndarray]) -> None:
+        # b_i in the utility formula above. Not fit by this class — it comes from a
+        # population-level model shared across users (e.g. a shrunk popularity/critic
+        # prior), which doesn't exist yet in this codebase. Defaults to {} (all zero)
+        # until that population model is built, per RANKING_ALGORITHM.md: the term
+        # stays part of the code/signature from the start rather than being bolted on
+        # later, even while it contributes nothing.
+        self.population_priors: Dict[str, float] = {}
+
+    def fit(
+        self,
+        triads: List[Tuple[Tuple[str, str, str], List[int]]],
+        fingerprints: Dict[str, np.ndarray],
+        population_priors: Optional[Dict[str, float]] = None,
+    ) -> None:
         """
         Fit the model to observed triadic rankings.
-        
+
         Args:
             triads: List of (title_id_1, title_id_2, title_id_3, ranking) tuples
                    where ranking is [0, 1, 2] indicating the preference order
             fingerprints: Dictionary mapping title_id to fingerprint vector
+            population_priors: Optional mapping of title_id to b_i, the shrunk
+                population-level prior (see class docstring). Titles missing from
+                this mapping are treated as b_i = 0. Stored on the instance so
+                later predict_score/predict_ranking calls use the same priors
+                without having to pass them again.
         """
+        self.population_priors = dict(population_priors) if population_priors else {}
+
         # Initialize weights if needed
         if self.weights is None:
             self.weights = np.random.randn(self.fingerprint_dim) * 0.01
-        
+
         # Extract features for all triads
         X_list = []
         y_list = []
-        
+        prior_list = []
+
         for triad_ids, ranking in triads:
             # Create feature matrix for this triad
             X_triad = np.array([fingerprints.get(tid, np.zeros(self.fingerprint_dim)) for tid in triad_ids])
             X_list.append(X_triad)
-            
+
             # Ranking: which index is 1st, 2nd, 3rd
             y_list.append(np.array(ranking, dtype=int))
-        
+
+            # b_i per item in this triad, aligned with X_triad's row order
+            prior_list.append(np.array([self.population_priors.get(tid, 0.0) for tid in triad_ids]))
+
         # Optimize weights using MLE
         def negative_log_likelihood(w: np.ndarray) -> float:
             """Negative log likelihood of observed rankings under Plackett-Luce model."""
             nll = 0.0
-            
-            for X_triad, ranking in zip(X_list, y_list):
-                # Compute scores for all items in this triad
-                scores = X_triad @ w
-                
-                # Plackett-Luce probability: P(ranking) = 
+
+            for X_triad, ranking, priors in zip(X_list, y_list, prior_list):
+                # Compute scores for all items in this triad: b_i + w^T x_i.
+                # b_i is fixed (not optimized over) — it doesn't depend on w, so it
+                # doesn't need its own gradient term, but it does shift which items
+                # look preferable during optimization, same as it will at serving time.
+                scores = priors + X_triad @ w
+
+                # Plackett-Luce probability: P(ranking) =
                 # exp(score[1st]) / (exp(score[1st]) + exp(score[2nd]) + exp(score[3rd])) *
                 # exp(score[2nd]) / (exp(score[2nd]) + exp(score[3rd])) *
                 # exp(score[3rd]) / exp(score[3rd])
-                
+
                 # Log-likelihood
                 for pos in range(2):
                     idx = ranking[pos]
                     remaining_indices = ranking[pos:]
                     remaining_scores = scores[remaining_indices]
-                    
+
                     # Log probability for this position
                     log_prob = scores[idx] - logsumexp(remaining_scores)
                     nll -= log_prob
-            
+
             # Add L2 regularization
             nll += self.regularization * np.sum(w ** 2)
             return nll
-        
+
         # Optimize
         result = minimize(
             negative_log_likelihood,
@@ -99,25 +129,24 @@ class PlackettLuceRanker:
             method='BFGS',
             options={'gtol': 1e-4}
         )
-        
+
         self.weights = result.x
-    
-    def predict_score(self, title_id: str, fingerprint: np.ndarray, bias: float = 0.0) -> float:
+
+    def predict_score(self, title_id: str, fingerprint: np.ndarray) -> float:
         """
-        Predict preference score for a film given its fingerprint.
-        
+        Predict preference score for a film given its fingerprint: b_i + w^T x_i + delta_i.
+
         Args:
-            title_id: ID of the title (for bias lookup)
+            title_id: ID of the title (for population-prior and bias lookup)
             fingerprint: Feature vector of the film
-            bias: Optional bias term
-            
+
         Returns:
             Predicted preference score
         """
         if self.weights is None:
             raise ValueError("Model has not been fitted yet")
-        
-        score = float(fingerprint @ self.weights)
+
+        score = self.population_priors.get(title_id, 0.0) + float(fingerprint @ self.weights)
         if title_id in self.bias_terms:
             score += self.bias_terms[title_id]
         return score

@@ -1,6 +1,11 @@
-import { IsDateString, IsIn, IsNumber, IsOptional, Max, MaxLength, Min } from 'class-validator';
+import { IsDateString, IsIn, IsOptional, MaxLength } from 'class-validator';
 import { TitleState } from '../../../entities/user-title-state.entity';
 
+// No `rating` field here on purpose. Per the blueprint (§2.4 principle #2, §4.5), the only
+// explicit preference signal the product ever collects is a triad ranking — this endpoint
+// must never double as an in-app star-rating prompt. An imported rating (from a future
+// list-import feature) is written through its own path directly onto UserTitleState.importedRating
+// with ratingSource: 'import', never through this general state-update DTO.
 export class UpdateTitleStateDto {
   @IsIn(['watched', 'not_watched', 'watchlist', 'interested'])
   state: TitleState;
@@ -8,12 +13,6 @@ export class UpdateTitleStateDto {
   @IsOptional()
   @IsDateString()
   watchedAt?: string;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(1)
-  @Max(10)
-  rating?: number;
 
   @IsOptional()
   @MaxLength(1000)

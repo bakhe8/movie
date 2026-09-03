@@ -37,7 +37,8 @@ export class UserTitleStateService {
       : updateTitleStateDto.state === 'watched'
         ? state.watchedAt ?? new Date()
         : null;
-    state.rating = updateTitleStateDto.rating ?? null;
+    // importedRating/ratingSource are intentionally untouched here — this endpoint never
+    // writes a rating (see UpdateTitleStateDto). Only a future import path may set them.
     state.notes = updateTitleStateDto.notes ?? null;
     return this.statesRepository.save(state);
   }

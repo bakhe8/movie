@@ -96,7 +96,7 @@ describe('RecommendationsService', () => {
       weights,
       biasTerms: {},
       modelVersion: 'test-v1',
-      pairwiseAccuracy: 0.8,
+      trainingTriadCount: 25,
     });
     statesRepository.find.mockResolvedValue([]);
 
@@ -112,9 +112,37 @@ describe('RecommendationsService', () => {
     expect(result).toHaveLength(2);
     expect(result[0].title.id).toBe('high-warmth');
     expect(result[1].title.id).toBe('mid-warmth');
-    expect(result[0].score).toBeCloseTo(0.9);
-    expect(result[0].confidence).toBe(0.8);
+    expect(result[0].personalFitScore).toBeCloseTo(0.9);
+    // Personal Fit, Public Quality, and Watchability must stay separate -- never merged
+    // into one score (blueprint §4.4).
+    expect(result[0].publicQualityScore).toBeNull();
+    expect(result[0].watchabilityScore).toBeNull();
+    // A verbal band, not a raw percentage, until calibrated (blueprint §7.2/§9.3).
+    expect(result[0].confidenceBand).toBe('strong');
+    expect(result[0].track).toBe('safe');
     expect(result[0].modelVersion).toBe('test-v1');
+  });
+
+  it.each([
+    [2, 'inconclusive'],
+    [5, 'initial'],
+    [15, 'likely'],
+    [30, 'strong'],
+  ] as const)('bands confidence by evidence quantity: %i triads -> %s', async (trainingTriadCount, expectedBand) => {
+    profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+    snapshotsRepository.findOne.mockResolvedValue({
+      weights: FINGERPRINT_DIMENSIONS.map(() => 0),
+      biasTerms: {},
+      modelVersion: 'test-v1',
+      trainingTriadCount,
+    });
+    statesRepository.find.mockResolvedValue([]);
+    const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
+    titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+    const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+    expect(result[0].confidenceBand).toBe(expectedBand);
   });
 
   it('excludes titles the profile has already watched or marked not-watched', async () => {
@@ -123,7 +151,7 @@ describe('RecommendationsService', () => {
       weights: FINGERPRINT_DIMENSIONS.map(() => 0),
       biasTerms: {},
       modelVersion: 'test-v1',
-      pairwiseAccuracy: 0.5,
+      trainingTriadCount: 10,
     });
     statesRepository.find.mockResolvedValue([{ titleId: 'already-watched' }]);
 

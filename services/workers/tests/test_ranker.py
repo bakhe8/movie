@@ -59,6 +59,20 @@ class TestPlackettLuceRankerPredictScore:
         assert ranker.predict_score("A", np.array([1.0])) == 2.5
         assert ranker.predict_score("B", np.array([1.0])) == 0.0
 
+    def test_applies_the_population_prior_b_i_on_top_of_the_weighted_score(self):
+        ranker = PlackettLuceRanker(fingerprint_dim=1)
+        ranker.weights = np.array([0.0])
+        ranker.population_priors["A"] = 1.5
+
+        assert ranker.predict_score("A", np.array([1.0])) == 1.5
+        assert ranker.predict_score("B", np.array([1.0])) == 0.0
+
+    def test_population_prior_defaults_to_zero_for_an_unlisted_title(self):
+        ranker = PlackettLuceRanker(fingerprint_dim=1)
+        ranker.weights = np.array([2.0])
+
+        assert ranker.predict_score("unlisted", np.array([1.0])) == 2.0
+
     def test_missing_fingerprint_falls_back_to_zero_vector_not_a_crash(self):
         ranker = PlackettLuceRanker(fingerprint_dim=1)
         ranker.weights = np.array([1.0])
@@ -66,6 +80,30 @@ class TestPlackettLuceRankerPredictScore:
         order = ranker.predict_ranking(["unknown-title"], {})
 
         assert order == [0]
+
+
+class TestPlackettLuceRankerPopulationPriorInFit:
+    def test_fit_stores_population_priors_for_later_predict_score_calls(self):
+        triads, fingerprints = make_triad_dataset()
+        ranker = PlackettLuceRanker(fingerprint_dim=1, regularization=0.001)
+
+        ranker.fit(triads, fingerprints, population_priors={"A": 0.42})
+
+        assert ranker.population_priors == {"A": 0.42}
+        assert ranker.predict_score("A", np.array([0.0])) == pytest.approx(0.42)
+
+    def test_a_strong_prior_can_flip_the_predicted_ranking_even_with_near_zero_weights(self):
+        # With weights pinned near zero (regularization dominates in one BFGS step's
+        # neighborhood isn't guaranteed, so we set weights directly after fitting to
+        # isolate the prior's effect deterministically).
+        triads, fingerprints = make_triad_dataset()
+        ranker = PlackettLuceRanker(fingerprint_dim=1)
+        ranker.weights = np.array([0.0])
+        ranker.population_priors = {"A": 10.0, "B": 0.0, "C": 0.0}
+
+        order = ranker.predict_ranking(["A", "B", "C"], fingerprints)
+
+        assert order[0] == 0  # "A" wins on prior alone despite the lowest fingerprint value
 
 
 class TestComputePairwiseAccuracy:
