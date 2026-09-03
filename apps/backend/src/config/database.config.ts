@@ -19,6 +19,7 @@ import { PrivacyRequest } from '../entities/privacy-request.entity';
 import { Profile } from '../entities/profile.entity';
 import { PublicQualitySource } from '../entities/public-quality-source.entity';
 import { Recommendation } from '../entities/recommendation.entity';
+import { SharedLatentSpaceVersion } from '../entities/shared-latent-space-version.entity';
 import { SourceRecord } from '../entities/source-record.entity';
 import { Title } from '../entities/title.entity';
 import { TitleEdition } from '../entities/title-edition.entity';
@@ -86,6 +87,7 @@ export function getConnectionOptions(): ConnectionOptions {
       WatchEvent,
       PublicQualitySource,
       AvailabilitySnapshot,
+      SharedLatentSpaceVersion,
     ],
   };
 }

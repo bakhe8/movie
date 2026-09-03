@@ -1,5 +1,6 @@
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { Profile } from './profile.entity';
+import { SharedLatentSpaceVersion } from './shared-latent-space-version.entity';
 
 @Index('IDX_user_model_snapshots_profileId_createdAt', ['profileId', 'createdAt'])
 @Entity('user_model_snapshots')
@@ -60,11 +61,15 @@ export class UserModelSnapshot {
   @Column({ type: 'json', nullable: true })
   exceptions: Record<string, unknown> | null;
 
-  // FK to shared_latent_space_versions(version) per SCHEMA.md §2.2 -- that
-  // table doesn't exist until M7, so the constraint itself is deferred to
-  // that migration (see AddM4ModelVersioningAndExperiments). Plain nullable
-  // column until then; nothing writes it either way (no shared latent space
-  // version exists to calibrate against).
+  // FK to shared_latent_space_versions(version), added in M7
+  // (AddM7SharedLatentSpaceVersions) once that table existed -- M4 added
+  // the column itself first (ADR-54) since it predates the table by three
+  // steps. Nothing writes this yet; no shared latent space version exists
+  // to calibrate against.
+  @ManyToOne(() => SharedLatentSpaceVersion, { nullable: true })
+  @JoinColumn({ name: 'calibratedAgainst' })
+  calibratedAgainstVersion: SharedLatentSpaceVersion | null;
+
   @Column({ type: 'varchar', nullable: true })
   calibratedAgainst: string | null;
 

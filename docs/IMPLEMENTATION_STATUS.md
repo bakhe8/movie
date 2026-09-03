@@ -46,7 +46,7 @@ Nothing left open from this line of audit.
 
 These run today and contradict or fall short of the blueprint; a green test suite makes them invisible.
 
-1. **Schema covers 26 of the target tables** — only `shared_latent_space_versions` (M7) is still missing (`§13.1`, `§11.1`; [SCHEMA.md](SCHEMA.md) §2.4 migration plan M1–M7). Steps 1–6/7 of that plan (M1–M6) are closed today — see the tables below; none of M1–M6's new tables/columns have any application logic reading or writing them yet, and M6's two tables (`public_quality_sources`, `availability_snapshots`) are further behind than the rest — they also need a licensed data source that doesn't exist. One design tension found while implementing M4: `user_model_snapshots.calibratedAgainst`'s FK target (`shared_latent_space_versions`) doesn't exist until M7, three steps later — the column exists unconstrained until then (ADR-54).
+1. **Schema now has all 27 target tables** — every table across [SCHEMA.md](SCHEMA.md) §2.4's seven-step migration plan (M1–M7) exists as of today; see the tables below. This does not mean the tables are used: none of M2–M7's new tables/columns have any application logic reading or writing them yet, M6's two tables (`public_quality_sources`, `availability_snapshots`) additionally need a licensed data source that doesn't exist, and one item from M7 was deliberately deferred rather than guessed — converting `embeddings.vector` from `real[]` to pgvector's `vector(n)` type, since no document or code in this repository specifies an embedding dimension (asked the user directly, 2026-09-03; deferred, ADR-57). That is the only piece of the entire seven-step plan still open.
 4. **Recommendations are never persisted** — no reason, no display propensity, no `experimentId`/`requestId` (`§13.1`, `§14`, `§14.1`). Without the log the post-watch loop (`§4.5`) cannot close and `§16` has nothing to read. The `recommendations`/`outcomes`/`watch_events`/`library_imports` tables exist since M5, but `RecommendationsService` still computes scores per-request without writing a row to any of them — this gap is now purely an application-layer one, not a schema one.
 5. **Confidence band is a triad-count heuristic** — `§9.2`/`§9.3` require evidence diversity, held-out prediction success and fingerprint quality (ADR-21). The fingerprint-quality and held-out-prediction inputs now exist (gaps 6's one-band demotion, gap 2); the rest does not.
 6. **Fingerprints carry no provenance and cover part of `§6.1`** — the 15 seeded rows leave `confidence` empty; families characters/ending/people/cultural context are absent (V1 is frozen; V2 planned — [FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md)). `source_records`/`content_features` — the tables that would actually hold that provenance — exist since M3 but no ingestion pass has ever written a row to either.
@@ -113,7 +113,17 @@ Not itself the close of gap 1 — schema only, the sixth step of [SCHEMA.md](SCH
 |---|---|---|
 | The Public Quality and Watchability layers had no tables — `public_quality_sources` (`§10.3`, per-source, never averaged) and `availability_snapshots` (`§6`, dated snapshots from a licensed partner) | One migration, `AddM6PublicQualityAndAvailability`, plus two new entities, implementing SCHEMA.md §2.2's target DDL verbatim — schema only. Both tables cascade `titleId` with their title and require a `sourceRecordId` pointing at M3's rights registry (ADR-56) | Verified with a real `up()` → `down()` → `up()` round trip against `postgres-test` (both tables, every FK/index both directions), then the full e2e suite (41/41) on the final state; `tsc`, the full unit suite (98 tests) and `eslint` all clean |
 
-Both tables exist but are unreachable in practice, not just unread — no public-quality or availability partner is integrated, so there is nothing to write even if the application code existed. Only one schema step of the original plan remains: M7 (`shared_latent_space_versions`, pgvector conversion, and the `calibratedAgainst` FK deferred from M4 per ADR-54).
+Both tables exist but are unreachable in practice, not just unread — no public-quality or availability partner is integrated, so there is nothing to write even if the application code existed.
+
+## Closed on 2026-09-03 (M7 migration plan step, 7 of 7 toward gap 1 — table half only)
+
+The last step of [SCHEMA.md](SCHEMA.md) §2.4's plan, and the first one where the target DDL itself was incomplete: `shared_latent_space_versions` had a full spec, but converting `embeddings.vector` to pgvector's `vector(n)` never had a literal dimension `n` anywhere in this repository. Checked before writing anything: no embedding-generation code exists in `services/workers` or anywhere else, no document commits to a model or dimension, and `embeddings` is empty in every environment — inventing a number would have meant fabricating a real product/vendor decision. Asked the user directly rather than guessing; they chose to defer that part of M7 rather than commit to a value now.
+
+| Gap | What changed | Proof |
+|---|---|---|
+| `shared_latent_space_versions` (`§7.5`) was the last missing table across the whole seven-step plan; separately, `user_model_snapshots.calibratedAgainst` had existed since M4 as a plain `varchar` with its FK deferred (ADR-54) because the target table didn't exist yet | One migration, `AddM7SharedLatentSpaceVersions`, plus a new entity, creating the table per SCHEMA.md §2.2's target DDL and adding the deferred `FK_user_model_snapshots_calibratedAgainst` constraint now that the target exists | Verified with a real `up()` → `down()` → `up()` round trip against `postgres-test` (the table and the new FK both directions), then the full e2e suite (41/41) on the final state; `tsc`, the full unit suite (98 tests) and `eslint` all clean |
+
+**Not done, deliberately**: `embeddings.vector` stays `real[]`, not pgvector's `vector(n)`. This is the only item left open across the entire seven-step migration plan — everything else in gap 1's schema is now in place. Semantic candidate retrieval (`RANKING_ALGORITHM.md §12`'s "content-similarity candidates" pipeline stage) still has no vector-search path, but it had none before this step either; nothing regressed. Revisit once an embedding model is actually chosen for that pipeline stage (ADR-57).
 
 ---
 
@@ -405,7 +415,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | BFGS listwise MLE with L2 | ✅ | ✅ | `§7.2` |
 | Snapshot persistence (`user_model_snapshots`) | ✅ | 🟡 | `§13.1 taste_profiles`: no posterior, time layers, exceptions, held-out metrics, `calibratedAgainst` |
 | Population prior source (Public Quality) | ❌ | ❌ | needs a licensed source ([DATA_LICENSING.md](DATA_LICENSING.md)); `public_quality_sources` table exists since M6, empty |
-| Shared latent space (`§7.5`) | ❌ | ❌ | ADR-13; external seed license-blocked without GroupLens permission |
+| Shared latent space (`§7.5`) | ❌ | ❌ | ADR-13; external seed license-blocked without GroupLens permission; `shared_latent_space_versions` table exists since M7, empty — `calibratedAgainst`'s FK now points here, but nothing writes a version to calibrate against |
 | FastAPI model service (`train`, `triads/select`, `score`, `taste-profile`) | ❌ | ❌ | ADR-25 |
 | Python tests | ✅ | — | 26 tests (`test_ranker.py`, `test_training.py`, `test_enrichment.py`) |
 
