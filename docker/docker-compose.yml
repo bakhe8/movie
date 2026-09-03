@@ -1,4 +1,19 @@
-version: '3.8'
+# Project name is pinned so every invocation (root `docker:up`/`docker:down`,
+# `apps/backend` `test:e2e:up`, the Makefile) lands in ONE compose project,
+# whatever directory it is run from. Without it compose derives the name from
+# `--project-directory` (repo root -> `movie`) or, before ADR-38, from this
+# file's directory (-> `docker`), which split the stack across two projects in
+# Docker Desktop and left `docker:down` / `make db-reset` unable to reach the
+# dev database. Volumes and network are prefixed with this name
+# (`movie_postgres_data`, `movie_redis_data`, `movie_movie-network`).
+#
+# One-time recreate for containers created before this line existed (they show
+# under a `docker` group in Docker Desktop; data lives in `docker_postgres_data`
+# / `docker_redis_data`): stop and remove the old containers, `up --no-start`
+# to create the new empty volumes, copy each old volume into its new one with
+# `docker run --rm -v docker_X:/from:ro -v movie_X:/to alpine cp -a /from/. /to/`,
+# then `npm run docker:up`. Done 2026-09-03; old volumes kept as a backup.
+name: movie
 
 services:
   postgres:
