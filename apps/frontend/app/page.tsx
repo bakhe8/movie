@@ -29,6 +29,18 @@ export default function Home() {
     document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
   }, [lang]);
 
+  // The profile's saved language preference (profile screen) is the default
+  // UI language; the header toggle stays a per-session override on top of
+  // it. Keyed on the preference value alone, so a profile refresh that does
+  // not change the preference never undoes the toggle.
+  const preferredLanguage = profile?.preferredLanguage;
+  useEffect(() => {
+    if (preferredLanguage) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLang(preferredLanguage);
+    }
+  }, [preferredLanguage]);
+
   if (!ready) {
     return null;
   }
@@ -62,7 +74,7 @@ export default function Home() {
           <DiscoverScreen lang={lang} profileId={profile.id} onGoToRank={() => setView('rank')} />
         )}
         {view === 'list' && <ListScreen lang={lang} profileId={profile.id} />}
-        {view === 'profile' && <ProfileScreen lang={lang} />}
+        {view === 'profile' && <ProfileScreen lang={lang} onLanguageChange={setLang} />}
       </section>
       <nav>
         {(['home', 'rank', 'discover', 'list', 'profile'] as View[]).map((item) => (

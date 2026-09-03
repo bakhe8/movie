@@ -156,6 +156,15 @@ export const api = {
   createProfile: (data: { name: string; preferredLanguage?: PreferredLanguage }) =>
     request<Profile>('/profiles', { method: 'POST', body: JSON.stringify(data) }),
 
+  updateProfile: (profileId: string, data: { name?: string; preferredLanguage?: PreferredLanguage }) =>
+    request<Profile>(`/profiles/${profileId}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  // Cascades every event, mark and model snapshot of that profile (and only
+  // that profile); the account stays.
+  deleteProfile: (profileId: string) => request<void>(`/profiles/${profileId}`, { method: 'DELETE' }),
+
+  getCompletedTriads: (profileId: string) => request<Triad[]>(`/profiles/${profileId}/triads`),
+
   listTitles: (query: string, page = 1, limit = 20) =>
     request<PaginatedTitles>(
       `/titles?${new URLSearchParams({ query, page: String(page), limit: String(limit) })}`,

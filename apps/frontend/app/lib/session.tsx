@@ -20,6 +20,9 @@ interface SessionState {
   register: (data: { email: string; password: string; firstName: string; lastName: string }) => Promise<void>;
   logout: () => void;
   clearError: () => void;
+  // Re-resolve the taste profile from the server: after a rename, a language
+  // change, or a reset (delete + auto-create) on the profile screen.
+  refreshProfile: () => Promise<void>;
 }
 
 const SessionContext = createContext<SessionState | null>(null);
@@ -134,6 +137,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   const clearError = useCallback(() => setError(null), []);
 
+  const refreshProfile = useCallback(async () => {
+    setProfile(await ensureProfile());
+  }, []);
+
   return (
     <SessionContext.Provider
       value={{
@@ -146,6 +153,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         register,
         logout,
         clearError,
+        refreshProfile,
       }}
     >
       {children}
