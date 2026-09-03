@@ -7,7 +7,10 @@ import { Consent } from '../entities/consent.entity';
 import { ContentFeature } from '../entities/content-feature.entity';
 import { Credit } from '../entities/credit.entity';
 import { Embedding } from '../entities/embedding.entity';
+import { ExperimentAssignment } from '../entities/experiment-assignment.entity';
+import { Experiment } from '../entities/experiment.entity';
 import { LocalizedTitle } from '../entities/localized-title.entity';
+import { ModelVersion } from '../entities/model-version.entity';
 import { Person } from '../entities/person.entity';
 import { PrivacyRequest } from '../entities/privacy-request.entity';
 import { Profile } from '../entities/profile.entity';
@@ -68,6 +71,9 @@ export function getConnectionOptions(): ConnectionOptions {
       TitleEdition,
       Credit,
       ContentFeature,
+      ModelVersion,
+      Experiment,
+      ExperimentAssignment,
     ],
   };
 }

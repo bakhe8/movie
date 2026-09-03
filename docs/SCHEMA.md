@@ -2,7 +2,7 @@
 
 **Status**: Derived from blueprint `§13` (entities and event shapes), `§11` (rights registry), `§7.5`–`§7.6`, `§21`. Two layers, kept apart on purpose:
 
-- **§1 Current physical schema** — exactly what the twelve TypeORM migrations in `apps/backend/src/migrations/` create (verified 2026-09-03). This is the truth for anyone writing SQL today.
+- **§1 Current physical schema** — exactly what the thirteen TypeORM migrations in `apps/backend/src/migrations/` create (verified 2026-09-03). This is the truth for anyone writing SQL today.
 - **§2 Target schema** — the `BP §13.1` entity set expressed as tables, plus the migration plan from §1 to §2.
 
 Naming (ADR-16): tables `snake_case` plural; columns are TypeORM's default `camelCase` and therefore **quoted** in raw SQL (`"profileId"`); primary keys `uuid` via `uuid_generate_v4()`; timestamps `TIMESTAMP` (UTC by convention). The one plural-naming exception (`user_title_state`) was renamed to `user_title_states` in M1. Schema changes go through `npm run migration:generate` / `npm run db:migrate` only — `synchronize` is off in every environment.
@@ -11,7 +11,7 @@ Naming (ADR-16): tables `snake_case` plural; columns are TypeORM's default `came
 
 ## 1. Current physical schema (migrated)
 
-Migrations, in order: `1788410140231-InitialSchema`, `1788411790951-AddTriadEventFields`, `1788412500000-SplitImportedRatingFromInAppState`, `1788418200000-ArabicFirstProfileDefault`, `1788421102891-AddOneActiveTriadPerProfileConstraint`, `1788424108820-AddHeldOutTrainingMetrics`, `1788425067800-AddTriadEventCompleteness`, `1788428400000-AddTriadReplacements`, `1788432000000-AddProfileMarketAndPlatforms`, `1788435000000-CompleteM1Plan`, `1788438000000-AddM2ConsentAndAuditTables`, `1788440000000-AddM3RightsRegistryAndCatalogProvenance`. Extension: `uuid-ossp`. The `ankane/pgvector` image is used but no column has the `vector` type yet.
+Migrations, in order: `1788410140231-InitialSchema`, `1788411790951-AddTriadEventFields`, `1788412500000-SplitImportedRatingFromInAppState`, `1788418200000-ArabicFirstProfileDefault`, `1788421102891-AddOneActiveTriadPerProfileConstraint`, `1788424108820-AddHeldOutTrainingMetrics`, `1788425067800-AddTriadEventCompleteness`, `1788428400000-AddTriadReplacements`, `1788432000000-AddProfileMarketAndPlatforms`, `1788435000000-CompleteM1Plan`, `1788438000000-AddM2ConsentAndAuditTables`, `1788440000000-AddM3RightsRegistryAndCatalogProvenance`, `1788442000000-AddM4ModelVersioningAndExperiments`. Extension: `uuid-ossp`. The `ankane/pgvector` image is used but no column has the `vector` type yet.
 
 ```sql
 users (
@@ -89,7 +89,12 @@ user_model_snapshots (                                           -- one row per 
   "modelVersion" varchar NOT NULL, "trainingTriadCount" integer NOT NULL,
   "validationAccuracy" real, "pairwiseAccuracy" real,            -- pairwiseAccuracy is in-sample today
   "heldOutTriadCount" integer, "heldOutNll" real, "heldOutPairwiseAccuracy" real,  -- NULL below the 5-triad floor (ADR-31); heldOutPairwiseAccuracy is the out-of-sample counterpart to pairwiseAccuracy above
-  "createdAt" timestamp
+  posterior json,                                                -- per-weight uncertainty (BP §13.1); never populated -- fit() doesn't compute one
+  "recentWeights" real[],                                        -- recent-window layer (BP §7.3); NULL in MVP
+  exceptions json,                                                -- [{ titleId, delta, tagged }] (BP §7.4); never populated
+  "calibratedAgainst" varchar,                                   -- FK shared_latent_space_versions(version) once M7 creates that table (M4, ADR-54); plain column until then
+  "createdAt" timestamp,
+  INDEX ("profileId", "createdAt" DESC)                          -- M4
 )
 
 consents (                                                       -- one grant/revoke record per (user, purpose, policy version) (BP §13.1)
@@ -161,15 +166,34 @@ content_features (                                               -- BP §13.3, p
   "validFrom" timestamp NOT NULL, "supersededBy" uuid FK content_features(id),
   UNIQUE ("titleId", "featureKey", "extractorVersion")
 )
+
+model_versions (                                                 -- BP §13.1
+  version varchar PK, "rankerType" varchar NOT NULL, "fingerprintSchemaVersion" varchar NOT NULL,
+  "codeRef" varchar, "dataCutoff" timestamp, features json, thresholds json,
+  "evalReport" json,                                             -- BP §16.2 metrics incl. slices and baselines
+  active boolean NOT NULL DEFAULT false, "createdAt" timestamp NOT NULL DEFAULT now()
+)
+
+experiments (
+  id varchar PK, hypothesis text NOT NULL, status varchar NOT NULL, "startedAt" timestamp, "endedAt" timestamp, config json
+)
+
+experiment_assignments (
+  "experimentId" varchar NOT NULL FK experiments, "profileId" uuid NOT NULL FK profiles ON DELETE CASCADE,
+  arm varchar NOT NULL, "assignedAt" timestamp,
+  PRIMARY KEY ("experimentId", "profileId")
+)
 ```
 
-Indexes: primary keys and the unique constraints above, the partial unique index on `triads` noted above, `IDX_triad_replacements_triadId`, and the M2/M3 indexes noted inline above. Views: none.
+Indexes: primary keys and the unique constraints above, the partial unique index on `triads` noted above, `IDX_triad_replacements_triadId`, and the M2/M3/M4 indexes noted inline above. Views: none.
 
 `privacy_requests.userId` has no `ON DELETE` action and `audit_log.actorUserId` has no FK at all, on purpose: PRIVACY.md §5 requires both to survive as a tombstone after the user they name is deleted, which is in tension with a NOT NULL FK to a row a delete flow would remove. No delete flow exists yet (blueprint gap 7) — this is deliberately left for whoever builds it to resolve (`SET NULL` vs. a denormalized snapshot of the deleted user), not decided silently here.
 
 `source_records.titleId` and `content_features.supersededBy` follow the DDL literally too: `source_records` is nullable on `titleId` (a record can describe something other than one title) and both `source_records.supersededBy`/`content_features.supersededBy` are self-referencing FKs with no `ON DELETE` action — a correction is a new row, the old one is never deleted, so there is nothing for a cascade to do.
 
-What is **not** in the database today (see §2 for the target): recommendations log, outcomes, watch events, model versions/experiments, shared latent space versions. (`users.role` exists since M1 but no admin board reads it yet; `consents`/`privacy_requests`/`audit_log` exist since M2 but nothing writes to them yet — that's blueprint gap 7 and PRIVACY.md §5's rights endpoints; `source_records`/`content_features`/`localized_titles`/`title_editions`/`people`/`credits` exist since M3 but nothing populates them yet — that needs licensed sources and a real ingestion pass, blueprint gap 6/9.)
+`user_model_snapshots.calibratedAgainst` is a plain `varchar` today, not yet the FK to `shared_latent_space_versions(version)` that §2.2's target DDL specifies: that table is M7's, three steps after M4, so the target DDL itself describes a column referencing a table that doesn't exist yet at the point it's added. The constraint is deferred to M7's migration, once the target table exists (ADR-54); every intermediate migration state stays valid this way, and nothing writes the column either way today.
+
+What is **not** in the database today (see §2 for the target): recommendations log, outcomes, watch events, shared latent space versions. (`users.role` exists since M1 but no admin board reads it yet; `consents`/`privacy_requests`/`audit_log` exist since M2 but nothing writes to them yet — that's blueprint gap 7 and PRIVACY.md §5's rights endpoints; `source_records`/`content_features`/`localized_titles`/`title_editions`/`people`/`credits` exist since M3 but nothing populates them yet — that needs licensed sources and a real ingestion pass, blueprint gap 6/9; `model_versions`/`experiments`/`experiment_assignments` exist since M4 but nothing writes to them yet — random-v1 runs no experiments and `training.py` doesn't stamp a model-version row.)
 
 ---
 
@@ -187,10 +211,10 @@ What is **not** in the database today (see §2 for the target): recommendations 
 | watch_events | `watch_events` | folded into `user_title_state.watchedAt` |
 | triad_events | `triads` | present; `shownAt`/`answeredAt`/`modelVersion`/`idempotencyKey` exist (ADR-32), `holdout`/`correctsTriadId` since M1 — both always their default today, no policy sets `holdout` and no correction flow exists |
 | triad_replacements | `triad_replacements` | present (ADR-17, migration `AddTriadReplacements`) |
-| taste_profiles | `user_model_snapshots` (+ posterior, time layers, exceptions) | partial |
+| taste_profiles | `user_model_snapshots` (+ posterior, time layers, exceptions since M4) | partial — the M4 columns exist but `PlackettLuceRanker.fit()` never populates them |
 | recommendations | `recommendations` | missing |
 | outcomes | `outcomes` | missing |
-| model_versions / experiments | `model_versions`, `experiments`, `experiment_assignments` | missing |
+| model_versions / experiments | `model_versions`, `experiments`, `experiment_assignments` | present since M4, empty — random-v1 runs no experiments, `training.py` stamps no model-version row |
 | consents / privacy_requests | `consents`, `privacy_requests` | present since M2 — no route reads/writes them yet (blueprint gap 7, PRIVACY.md §5) |
 | (rights registry, `§11.1`) | `source_records` | present since M3, empty |
 | (shared latent space, `§7.5`) | `shared_latent_space_versions` | missing |
@@ -386,7 +410,7 @@ Each step is one TypeORM migration; none require data backfill beyond defaults b
 | M1 ✅ | rename `user_title_state` → `user_title_states`; `profiles.pausedAt`; `users.role`; `triads.holdout`/`correctsTriadId` + two indexes — all applied by `CompleteM1Plan` (`market`/`platforms` were already done by `AddProfileMarketAndPlatforms`; `shownAt`/`answeredAt`/`modelVersion`/`idempotencyKey` by `AddTriadEventCompleteness`, ADR-32; `triad_replacements`/`triadEligible` by `AddTriadReplacements`, ADR-17) | event completeness (`BP §13.2`, `§14`) — closed. No application logic reads `role`/`pausedAt`/`holdout`/`correctsTriadId` yet; that's the admin board, `pause_all`, and a future correction flow respectively, none built |
 | M2 ✅ | `consents`, `privacy_requests`, `audit_log` — all applied by `AddM2ConsentAndAuditTables` | onboarding consent, export/delete/reset — schema only; no application logic writes to these tables yet |
 | M3 ✅ | `source_records`, `content_features`, `localized_titles`, `people`, `credits`, `title_editions` — all applied by `AddM3RightsRegistryAndCatalogProvenance` | rights registry, FTS search, provenance — schema only; nothing populates these tables yet, and search hasn't switched off ILIKE |
-| M4 | `model_versions`, `experiments`, `experiment_assignments`; `user_model_snapshots` additions (`posterior`, `recentWeights`, `exceptions`, `calibratedAgainst` — held-out metrics already exist, ADR-31) | reproducibility, calibration |
+| M4 ✅ | `model_versions`, `experiments`, `experiment_assignments`; `user_model_snapshots` additions (`posterior`, `recentWeights`, `exceptions`, `calibratedAgainst` — held-out metrics already exist, ADR-31) — all applied by `AddM4ModelVersioningAndExperiments` | reproducibility, calibration — schema only; `calibratedAgainst`'s FK to `shared_latent_space_versions` is deferred to M7 (that table doesn't exist yet, ADR-54) |
 | M5 | `recommendations`, `outcomes`, `watch_events`, `library_imports` | persisted recommendations, post-watch loop, imports |
 | M6 | `public_quality_sources`, `availability_snapshots` | Public Quality and Watchability layers (need licensed sources first) |
 | M7 | `shared_latent_space_versions`; `embeddings.vector` → pgvector `vector(n)` + IVFFLAT index | `BP §7.5`; semantic candidate retrieval |
@@ -394,6 +418,7 @@ Each step is one TypeORM migration; none require data backfill beyond defaults b
 ---
 
 **Changelog**
+- 2.10 (2026-09-03): thirteenth migration `AddM4ModelVersioningAndExperiments` applied -- closes the M4 step in full: `model_versions`, `experiments`, `experiment_assignments` (composite PK, `FK ... profileId ON DELETE CASCADE`) all created; `user_model_snapshots` gains `posterior`/`recentWeights`/`exceptions`/`calibratedAgainst` plus an index on `("profileId", "createdAt" DESC)`. `calibratedAgainst` is added as a plain `varchar`, not the FK to `shared_latent_space_versions(version)` the target DDL names -- that table is M7's; the constraint itself is deferred to M7 (ADR-54). Schema only. §1 DDL, the entity map and the M4 plan row updated to match; verified with a real `up()`/`down()`/`up()` round trip against `postgres-test` and the full e2e suite (41/41) passing after.
 - 2.9 (2026-09-03): twelfth migration `AddM3RightsRegistryAndCatalogProvenance` applied -- closes the M3 step in full: `people`, `source_records` (self-referencing `supersededBy`, nullable `titleId`), `localized_titles` (with the `to_tsvector('simple', title)` GIN index the DDL specifies), `title_editions`, `credits`, `content_features` (unique on `titleId`/`featureKey`/`extractorVersion`, self-referencing `supersededBy`) all created, schema only -- no ingestion pass populates them yet, and full-text search hasn't switched off `titles`' ILIKE. §1 DDL, the entity map and the M3 plan row updated to match; verified with a real `up()`/`down()`/`up()` round trip against `postgres-test` and the full e2e suite (41/41) passing after.
 - 2.8 (2026-09-03): eleventh migration `AddM2ConsentAndAuditTables` applied -- closes the M2 step in full: `consents` (unique on `userId`/purpose/version, `ON DELETE CASCADE`), `privacy_requests` and `audit_log` (no cascade/no FK -- deliberate, see the tombstone note in §1) all created, schema only. §1 DDL, the entity map and the M2 plan row updated to match; verified with a real `up()`/`down()`/`up()` round trip against `postgres-test` and the full e2e suite (41/41) passing after.
 - 2.7 (2026-09-03): tenth migration `CompleteM1Plan` applied -- closes the M1 step in full: `user_title_state` renamed to `user_title_states` (ADR-16 plural naming), `users.role` (`BP §5.1`), `profiles.pausedAt` (PRIVACY.md §4), `triads.holdout`/`correctsTriadId` (`BP §8.3`/`§13.2`) with two new indexes on `("profileId", "createdAt")` and `("profileId", status)`. §1 DDL, the entity map, and the M1 plan row updated to match; verified with a real `up()`/`down()`/`up()` round trip against `postgres-test` and the full e2e suite (41/41) passing after.

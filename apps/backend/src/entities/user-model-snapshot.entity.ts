@@ -1,6 +1,7 @@
-import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { Profile } from './profile.entity';
 
+@Index('IDX_user_model_snapshots_profileId_createdAt', ['profileId', 'createdAt'])
 @Entity('user_model_snapshots')
 export class UserModelSnapshot {
   @PrimaryGeneratedColumn('uuid')
@@ -45,6 +46,27 @@ export class UserModelSnapshot {
 
   @Column('real', { nullable: true })
   heldOutPairwiseAccuracy: number | null;
+
+  // Per-weight uncertainty (BP §13.1); PlackettLuceRanker.fit() never
+  // populates this yet, so it is always NULL today.
+  @Column({ type: 'json', nullable: true })
+  posterior: Record<string, unknown> | null;
+
+  // Recent-window layer (BP §7.3); NULL in MVP -- no recency weighting exists.
+  @Column('real', { array: true, nullable: true })
+  recentWeights: number[] | null;
+
+  // [{ titleId, delta, tagged }] (BP §7.4); nothing writes this yet.
+  @Column({ type: 'json', nullable: true })
+  exceptions: Record<string, unknown> | null;
+
+  // FK to shared_latent_space_versions(version) per SCHEMA.md §2.2 -- that
+  // table doesn't exist until M7, so the constraint itself is deferred to
+  // that migration (see AddM4ModelVersioningAndExperiments). Plain nullable
+  // column until then; nothing writes it either way (no shared latent space
+  // version exists to calibrate against).
+  @Column({ type: 'varchar', nullable: true })
+  calibratedAgainst: string | null;
 
   @CreateDateColumn()
   createdAt: Date;
