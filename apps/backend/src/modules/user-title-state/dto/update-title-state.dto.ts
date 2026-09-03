@@ -14,7 +14,9 @@ export class UpdateTitleStateDto {
   @IsDateString()
   watchedAt?: string;
 
+  // Omitted entirely -> existing notes are left alone (PATCH semantics, M1).
+  // Sent as `null` -> notes are explicitly cleared.
   @IsOptional()
   @MaxLength(1000)
-  notes?: string;
+  notes?: string | null;
 }

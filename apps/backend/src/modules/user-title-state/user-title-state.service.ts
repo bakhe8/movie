@@ -32,14 +32,29 @@ export class UserTitleStateService {
     const existing = await this.statesRepository.findOne({ where: { profileId, titleId } });
     const state = existing ?? this.statesRepository.create({ profileId, titleId });
     state.state = updateTitleStateDto.state;
-    state.watchedAt = updateTitleStateDto.watchedAt
-      ? new Date(updateTitleStateDto.watchedAt)
-      : updateTitleStateDto.state === 'watched'
-        ? state.watchedAt ?? new Date()
+
+    // watchedAt only means anything for state 'watched' (M1): a caller-
+    // supplied value is ignored for any other state instead of being stored
+    // alongside it, and it's cleared on any transition away from 'watched' —
+    // consistent with TriadsService.replace()'s not_watched path, which
+    // already nulls it the same way for the same reason.
+    state.watchedAt =
+      updateTitleStateDto.state === 'watched'
+        ? updateTitleStateDto.watchedAt
+          ? new Date(updateTitleStateDto.watchedAt)
+          : (state.watchedAt ?? new Date())
         : null;
+
+    // PATCH semantics (M1): notes is only touched when the caller actually
+    // sends the field. Omitting it from the body must not silently wipe
+    // existing notes — `undefined` means "leave alone", not "clear" (a
+    // caller can still clear it explicitly with `notes: null`).
+    if (updateTitleStateDto.notes !== undefined) {
+      state.notes = updateTitleStateDto.notes;
+    }
+
     // importedRating/ratingSource are intentionally untouched here — this endpoint never
     // writes a rating (see UpdateTitleStateDto). Only a future import path may set them.
-    state.notes = updateTitleStateDto.notes ?? null;
     return this.statesRepository.save(state);
   }
 

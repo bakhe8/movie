@@ -78,6 +78,68 @@ describe('UserTitleStateService', () => {
       expect(result.watchedAt).toBeNull();
       expect(result.state).toBe('watchlist');
     });
+
+    // M1: watchedAt only means anything for state 'watched' -- a caller
+    // supplying it alongside any other state must not have it stored.
+    it('ignores a supplied watchedAt when the state is not watched', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      titlesRepository.findOne.mockResolvedValue({ id: 'title-1' });
+      statesRepository.findOne.mockResolvedValue(null);
+
+      const result = await service.upsert('user-1', 'profile-1', 'title-1', {
+        state: 'watchlist',
+        watchedAt: '2020-01-01T00:00:00.000Z',
+      });
+
+      expect(result.watchedAt).toBeNull();
+    });
+
+    // M1: PATCH semantics -- omitting `notes` must leave an existing value
+    // alone, not silently wipe it.
+    it('leaves existing notes untouched when the PATCH omits the field', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      titlesRepository.findOne.mockResolvedValue({ id: 'title-1' });
+      statesRepository.findOne.mockResolvedValue({
+        profileId: 'profile-1',
+        titleId: 'title-1',
+        state: 'watched',
+        watchedAt: new Date('2026-01-01'),
+        notes: 'loved the score',
+      });
+
+      const result = await service.upsert('user-1', 'profile-1', 'title-1', { state: 'watched' });
+
+      expect(result.notes).toBe('loved the score');
+    });
+
+    it('writes notes when the PATCH includes the field', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      titlesRepository.findOne.mockResolvedValue({ id: 'title-1' });
+      statesRepository.findOne.mockResolvedValue(null);
+
+      const result = await service.upsert('user-1', 'profile-1', 'title-1', {
+        state: 'watched',
+        notes: 'rewatch candidate',
+      });
+
+      expect(result.notes).toBe('rewatch candidate');
+    });
+
+    it('clears notes when the PATCH explicitly sends null', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      titlesRepository.findOne.mockResolvedValue({ id: 'title-1' });
+      statesRepository.findOne.mockResolvedValue({
+        profileId: 'profile-1',
+        titleId: 'title-1',
+        state: 'watched',
+        watchedAt: new Date('2026-01-01'),
+        notes: 'loved the score',
+      });
+
+      const result = await service.upsert('user-1', 'profile-1', 'title-1', { state: 'watched', notes: null });
+
+      expect(result.notes).toBeNull();
+    });
   });
 
   describe('findByState', () => {
