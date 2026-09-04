@@ -15,6 +15,7 @@
     "seed": "npm run build && node dist/scripts/seed.js",
     "seed:demo": "npm run build && node dist/scripts/seed-demo.js",
     "fingerprint:republish": "npm run build && node dist/scripts/republish-fingerprint.js",
+    "acceptance:review-agreement": "npm run build && node dist/scripts/measure-review-agreement.js",
     "seed:demo:clean": "npm run build && node dist/scripts/seed-demo.js --clean",
     "catalog:fetch": "tsx src/scripts/fetch-catalog.ts",
     "catalog:cultural": "tsx src/scripts/fetch-cultural.ts",
