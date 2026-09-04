@@ -253,8 +253,8 @@ describe('Privacy rights: export, reset, delete (real HTTP, real DB)', () => {
       await request(app.getHttpServer())
         .get(`/profiles/${ownerProfileId}/recommendations`)
         .set('Authorization', `Bearer ${owner.token}`)
-        .expect(409)
-        .expect((response) => expect(response.body.reason).toBe('profile_paused'));
+        .expect(200)
+        .expect((response) => expect(response.body.state).toBe('paused'));
 
       const resumed = await request(app.getHttpServer())
         .post('/privacy/resume')

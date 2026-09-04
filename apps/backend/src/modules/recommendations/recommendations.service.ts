@@ -6,7 +6,9 @@ import { ModelVersion } from '../../entities/model-version.entity';
 import { Profile } from '../../entities/profile.entity';
 import { Recommendation } from '../../entities/recommendation.entity';
 import { Title } from '../../entities/title.entity';
+import { Triad } from '../../entities/triad.entity';
 import { PublicQuality, PublicQualityService } from '../public-quality/public-quality.service';
+import { TrainingService } from '../training/training.service';
 import { FINGERPRINT_V2_DIMENSIONS, FINGERPRINT_V3_DIMENSIONS } from '../../entities/title-fingerprint.type';
 import { UserModelSnapshot } from '../../entities/user-model-snapshot.entity';
 import { UserTitleState } from '../../entities/user-title-state.entity';
@@ -140,6 +142,21 @@ export interface RecommendationResult {
   reason: RecommendationReason;
 }
 
+// Every designed state of GET .../recommendations is a 200 with a
+// discriminator, not a 4xx (board B→A): "no model yet" and "paused" are
+// product states the screen renders, and a browser logs every 4xx as a
+// failed request, so an error status made a clean console impossible.
+// 4xx stays for real errors: 401, and 404 for a profile that is not yours.
+export type RecommendationsResponse =
+  | { state: 'ready'; items: RecommendationResult[] }
+  // `needed` counts the rounds still missing before the first training run;
+  // 0 means enough rounds were answered and training is on its way.
+  | { state: 'pending'; needed: number }
+  | { state: 'paused' }
+  // A snapshot from before a fingerprint-dimension change (ADR-69/75): it
+  // cannot be scored against, and the next training run replaces it.
+  | { state: 'model_outdated' };
+
 // The library's personal ranking (blueprint §5.3 "ترتيب شخصي", SPECIFICATION
 // §5.4): the profile's watched, fingerprinted titles ordered by the same
 // snapshot that ranks recommendations. Positions only -- the score is
@@ -183,10 +200,21 @@ export class RecommendationsService {
     @InjectRepository(ModelVersion)
     private readonly modelVersionsRepository: Repository<ModelVersion>,
     private readonly publicQualityService: PublicQualityService,
+    @InjectRepository(Triad)
+    private readonly triadsRepository: Repository<Triad>,
+    private readonly trainingService: TrainingService,
   ) {}
 
-  async findForProfile(userId: string, profileId: string, limit: number): Promise<RecommendationResult[]> {
-    const snapshot = await this.loadSnapshot(userId, profileId);
+  async findForProfile(userId: string, profileId: string, limit: number): Promise<RecommendationsResponse> {
+    const outcome = await this.resolveSnapshot(userId, profileId);
+    if (outcome.state === 'pending') {
+      const completed = await this.triadsRepository.count({ where: { profileId, status: 'completed' } });
+      return { state: 'pending', needed: Math.max(0, this.trainingService.firstTriadCount - completed) };
+    }
+    if (outcome.state !== 'ready') {
+      return outcome;
+    }
+    const snapshot = outcome.snapshot;
 
     // Only titles the profile has actually watched leave the candidate pool. A
     // `not_watched` mark means unknown exposure, not a negative signal, so those
@@ -220,7 +248,7 @@ export class RecommendationsService {
     });
 
     await this.persistShown(profileId, snapshot.modelVersion, results);
-    return results;
+    return { state: 'ready', items: results };
   }
 
   // One row per recommendation actually shown (blueprint §13.1, §14, §14.1) --
@@ -305,6 +333,25 @@ export class RecommendationsService {
   // which snapshot is preferred, it never turns a servable profile into an
   // unservable one.
   private async loadSnapshot(userId: string, profileId: string): Promise<UserModelSnapshot> {
+    const outcome = await this.resolveSnapshot(userId, profileId);
+    if (outcome.state === 'ready') {
+      return outcome.snapshot;
+    }
+    // rankLibrary() keeps the older error contract; only the recommendations
+    // route was asked to move to states (board B→A).
+    if (outcome.state === 'paused') {
+      throw new ConflictException({ statusCode: 409, message: 'This profile is paused', error: 'Conflict', reason: 'profile_paused' });
+    }
+    if (outcome.state === 'model_outdated') {
+      throw new ConflictException('The latest preference model has an incompatible fingerprint dimension');
+    }
+    throw new ConflictException('Recommendations are unavailable until the preference model is trained');
+  }
+
+  private async resolveSnapshot(
+    userId: string,
+    profileId: string,
+  ): Promise<{ state: 'ready'; snapshot: UserModelSnapshot } | { state: 'pending' } | { state: 'paused' } | { state: 'model_outdated' }> {
     const profile = await this.profilesRepository.findOne({ where: { id: profileId, userId } });
     if (!profile) {
       throw new NotFoundException('Profile not found');
@@ -314,12 +361,7 @@ export class RecommendationsService {
     // updating is the other half of "training and recommendations stop".
     // Nothing is deleted, so this is reversible by resuming.
     if (profile.pausedAt) {
-      throw new ConflictException({
-        statusCode: 409,
-        message: 'This profile is paused',
-        error: 'Conflict',
-        reason: 'profile_paused',
-      });
+      return { state: 'paused' };
     }
 
     const activeVersion = await this.modelVersionsRepository.findOne({ where: { active: true } });
@@ -337,12 +379,12 @@ export class RecommendationsService {
       });
     }
     if (!snapshot) {
-      throw new ConflictException('Recommendations are unavailable until the preference model is trained');
+      return { state: 'pending' };
     }
     if (snapshot.weights.length !== FINGERPRINT_DIMENSIONS.length) {
-      throw new ConflictException('The latest preference model has an incompatible fingerprint dimension');
+      return { state: 'model_outdated' };
     }
-    return snapshot;
+    return { state: 'ready', snapshot };
   }
 
   private async watchedTitleIds(profileId: string): Promise<string[]> {

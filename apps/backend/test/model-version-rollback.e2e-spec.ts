@@ -200,8 +200,8 @@ describe('Recommendation serving honors the model_versions.active pin (F10, BP Â
       .query({ limit: 1 })
       .expect(200);
 
-    expect(response.body[0].title.id).toBe(titleId);
-    expect(response.body[0].modelVersion).toBe(newerVersion);
+    expect(response.body.items[0].title.id).toBe(titleId);
+    expect(response.body.items[0].modelVersion).toBe(newerVersion);
   });
 
   it('serves the snapshot trained under the pinned version once an admin activates it -- the rollback actually takes effect', async () => {
@@ -217,7 +217,7 @@ describe('Recommendation serving honors the model_versions.active pin (F10, BP Â
       .query({ limit: 1 })
       .expect(200);
 
-    expect(response.body[0].modelVersion).toBe(olderVersion);
+    expect(response.body.items[0].modelVersion).toBe(olderVersion);
   });
 
   it('falls back to the newest snapshot again once the pin is cleared', async () => {
@@ -233,6 +233,6 @@ describe('Recommendation serving honors the model_versions.active pin (F10, BP Â
       .query({ limit: 1 })
       .expect(200);
 
-    expect(response.body[0].modelVersion).toBe(newerVersion);
+    expect(response.body.items[0].modelVersion).toBe(newerVersion);
   });
 });

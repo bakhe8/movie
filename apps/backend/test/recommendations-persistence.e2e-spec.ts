@@ -176,8 +176,9 @@ describe('Recommendation persistence (real HTTP, real DB, blueprint gap 4)', () 
       .set('Authorization', `Bearer ${token}`)
       .query({ limit: 2 })
       .expect(200);
-    expect(response.body).toHaveLength(2);
-    const shownTitleIds = (response.body as Array<{ title: { id: string } }>).map((item) => item.title.id);
+    expect(response.body.state).toBe('ready');
+    expect(response.body.items).toHaveLength(2);
+    const shownTitleIds = (response.body.items as Array<{ title: { id: string } }>).map((item) => item.title.id);
     expect(new Set(shownTitleIds)).toEqual(new Set(titleIds));
 
     const recommendationsRepository = app.get<Repository<Recommendation>>(getRepositoryToken(Recommendation));

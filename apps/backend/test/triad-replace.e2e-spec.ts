@@ -145,8 +145,8 @@ describe('Triad replacement (real HTTP, real DB)', () => {
     const next = await request(app.getHttpServer())
       .get(`/profiles/${profileId}/triads/current`)
       .set('Authorization', `Bearer ${token}`)
-      .expect(400);
-    expect(next.body.reason).toBe('need_more_watched');
+      .expect(200);
+    expect(next.body.state).toBe('need_more_watched');
     expect(next.body.needed).toBe(1);
   });
 

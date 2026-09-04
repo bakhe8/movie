@@ -355,9 +355,11 @@ describe('TriadsService', () => {
         .mockResolvedValueOnce(null); // no previous completed triad
       statesRepository.find.mockResolvedValue([{ titleId: 't1' }, { titleId: 't2' }]); // only 2 watched
 
-      await expect(service.getCurrent('user-1', 'profile-1')).rejects.toThrow(
-        'Mark at least three films as watched before starting a ranking round',
-      );
+      expect(await service.getCurrent('user-1', 'profile-1')).toMatchObject({
+        state: 'need_more_watched',
+        needed: 1,
+        message: 'Mark at least three films as watched before starting a ranking round',
+      });
       expect(titlesRepository.createQueryBuilder).not.toHaveBeenCalled();
     });
 
@@ -413,9 +415,10 @@ describe('TriadsService', () => {
         statesRepository.find.mockResolvedValue([{ titleId: 't1' }, { titleId: 't2' }, { titleId: 't3' }]);
         titlesRepository.createQueryBuilder.mockReturnValue(titlesQueryBuilderMock([], 0));
 
-        await expect(service.getCurrent('user-1', 'profile-1')).rejects.toThrow(
-          'Mark another film as watched to start a new ranking round',
-        );
+        expect(await service.getCurrent('user-1', 'profile-1')).toMatchObject({
+          state: 'need_more_watched',
+          message: 'Mark another film as watched to start a new ranking round',
+        });
       });
     });
 
@@ -457,14 +460,11 @@ describe('TriadsService', () => {
       triadsRepository.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
       statesRepository.find.mockResolvedValue([{ titleId: 't1' }]); // only 1 watched
 
-      const error = await service.getCurrent('user-1', 'profile-1').catch((caught: unknown) => caught);
-
-      expect(error).toBeInstanceOf(BadRequestException);
-      // Target contract shape (API.md §2.2) alongside Nest's default fields,
-      // so the UI can say "mark two more" instead of parsing English prose.
-      expect((error as BadRequestException).getResponse()).toMatchObject({
-        statusCode: 400,
-        reason: 'need_more_watched',
+      // A designed state, not an error (board B→A): 200 with a
+      // discriminator, so the UI can say "mark two more" and the console
+      // stays clean.
+      expect(await service.getCurrent('user-1', 'profile-1')).toMatchObject({
+        state: 'need_more_watched',
         needed: 2,
       });
     });

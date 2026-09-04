@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NotFoundException } from '@nestjs/common';
 import type { Repository } from 'typeorm';
+import { ContentFeature } from '../../entities/content-feature.entity';
 import { Title } from '../../entities/title.entity';
 import { ListTitlesQueryDto } from './dto/list-titles-query.dto';
 import { AttributionService } from '../public-quality/attribution.service';
@@ -28,16 +29,19 @@ describe('TitlesService', () => {
   let titlesRepository: { findOne: ReturnType<typeof vi.fn>; createQueryBuilder: ReturnType<typeof vi.fn> };
   let publicQualityService: { forTitle: ReturnType<typeof vi.fn> };
   let attributionService: { descriptionSource: ReturnType<typeof vi.fn> };
+  let contentFeaturesRepository: { find: ReturnType<typeof vi.fn> };
   let service: TitlesService;
 
   beforeEach(() => {
     titlesRepository = { findOne: vi.fn(), createQueryBuilder: vi.fn() };
     publicQualityService = { forTitle: vi.fn().mockResolvedValue(null) };
     attributionService = { descriptionSource: vi.fn().mockResolvedValue(null) };
+    contentFeaturesRepository = { find: vi.fn().mockResolvedValue([]) };
     service = new TitlesService(
       titlesRepository as unknown as Repository<Title>,
       publicQualityService as unknown as PublicQualityService,
       attributionService as unknown as AttributionService,
+      contentFeaturesRepository as unknown as Repository<ContentFeature>,
     );
   });
 
@@ -87,6 +91,34 @@ describe('TitlesService', () => {
 
     // ALPHA_PLAN 5.3 / BP §5.3: the work page carries Public Quality as its
     // own value from PublicQualityService -- null when there is none, never 0.
+    // Board B2: the work page shows reviewed dimensions as a level, never
+    // the raw number, and never the unreviewed ones.
+    it('summarises only human-reviewed dimensions, as levels, and skips unknown values', async () => {
+      titlesRepository.findOne.mockResolvedValue({ id: 't-1', description: null } as unknown as Title);
+      contentFeaturesRepository.find.mockResolvedValue([
+        { featureKey: 'pacing', value: 0.1, reviewStatus: 'human_reviewed' },
+        { featureKey: 'warmth', value: 0.5, reviewStatus: 'human_reviewed' },
+        { featureKey: 'darkness', value: 0.9, reviewStatus: 'human_reviewed' },
+        { featureKey: 'ambiguity', value: null, reviewStatus: 'human_reviewed' },
+      ]);
+
+      expect((await service.findOne('t-1')).fingerprintSummary).toEqual([
+        { key: 'pacing', level: 'low' },
+        { key: 'warmth', level: 'mid' },
+        { key: 'darkness', level: 'high' },
+      ]);
+      expect(contentFeaturesRepository.find).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { titleId: 't-1', reviewStatus: 'human_reviewed' } }),
+      );
+    });
+
+    it('reports no fingerprint summary at all when nothing has been reviewed', async () => {
+      titlesRepository.findOne.mockResolvedValue({ id: 't-1', description: null } as unknown as Title);
+      contentFeaturesRepository.find.mockResolvedValue([]);
+
+      expect((await service.findOne('t-1')).fingerprintSummary).toBeNull();
+    });
+
     it('attaches publicQuality from PublicQualityService, null when no displayable source exists', async () => {
       titlesRepository.findOne.mockResolvedValue({ id: 't-1', titleEn: 'Arrival' });
       const quality = { value: 7.8, votes: 1200, sources: [{ source: 'imdb', value: 7.8, scale: '0-10', votes: 1200, capturedAt: '2026-09-04T00:00:00.000Z', attribution: 'x' }] };

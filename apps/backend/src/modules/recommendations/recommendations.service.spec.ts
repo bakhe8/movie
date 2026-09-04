@@ -5,9 +5,11 @@ import { ModelVersion } from '../../entities/model-version.entity';
 import { Profile } from '../../entities/profile.entity';
 import { Recommendation } from '../../entities/recommendation.entity';
 import { Title } from '../../entities/title.entity';
+import { Triad } from '../../entities/triad.entity';
 import { UserModelSnapshot } from '../../entities/user-model-snapshot.entity';
 import { UserTitleState } from '../../entities/user-title-state.entity';
 import type { PublicQuality, PublicQualityService } from '../public-quality/public-quality.service';
+import type { TrainingService } from '../training/training.service';
 import { RecommendationsService } from './recommendations.service';
 
 const FINGERPRINT_V1_DIMENSIONS = [
@@ -144,7 +146,18 @@ describe('RecommendationsService', () => {
   let recommendationsRepository: { insert: ReturnType<typeof vi.fn> };
   let modelVersionsRepository: ReturnType<typeof repoMock>;
   let publicQualityService: { forTitles: ReturnType<typeof vi.fn> };
+  let triadsRepository: { count: ReturnType<typeof vi.fn> };
   let service: RecommendationsService;
+
+  // Every 'ready' assertion below works on the items; the states have their
+  // own tests above.
+  async function recommendItems(userId: string, profileId: string, limit: number) {
+    const response = await service.findForProfile(userId, profileId, limit);
+    if (response.state !== 'ready') {
+      throw new Error(`expected a ready response, got ${response.state}`);
+    }
+    return response.items;
+  }
 
   beforeEach(() => {
     profilesRepository = repoMock();
@@ -157,6 +170,7 @@ describe('RecommendationsService', () => {
     // profile's own latest snapshot regardless of modelVersion, unchanged.
     modelVersionsRepository.findOne.mockResolvedValue(null);
     publicQualityService = { forTitles: vi.fn().mockResolvedValue(new Map()) };
+    triadsRepository = { count: vi.fn().mockResolvedValue(0) };
     service = new RecommendationsService(
       profilesRepository as unknown as Repository<Profile>,
       titlesRepository as unknown as Repository<Title>,
@@ -165,6 +179,8 @@ describe('RecommendationsService', () => {
       recommendationsRepository as unknown as Repository<Recommendation>,
       modelVersionsRepository as unknown as Repository<ModelVersion>,
       publicQualityService as unknown as PublicQualityService,
+      triadsRepository as unknown as Repository<Triad>,
+      { firstTriadCount: 3 } as unknown as TrainingService,
     );
   });
 
@@ -196,7 +212,7 @@ describe('RecommendationsService', () => {
       ] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const [top, bottom] = await service.findForProfile('user-1', 'profile-1', 10);
+      const [top, bottom] = await recommendItems('user-1', 'profile-1', 10);
 
       expect(top.title.id).toBe('warm-and-bright');
       // Warmth above the pool mean with a positive weight, darkness below it
@@ -223,7 +239,7 @@ describe('RecommendationsService', () => {
       ] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       const unknown = result.find((item) => item.title.id === 'unknown-warmth');
       expect(unknown?.reason.features).toEqual([]);
@@ -308,18 +324,26 @@ describe('RecommendationsService', () => {
     });
   });
 
-  it('refuses to recommend before the preference model has been trained', async () => {
+  // Designed states are 200s with a discriminator, not 4xx (board B→A).
+  it('reports pending, with the rounds still needed, before the model is trained', async () => {
     profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
     snapshotsRepository.findOne.mockResolvedValue(null);
+    triadsRepository.count.mockResolvedValue(1);
 
-    await expect(service.findForProfile('user-1', 'profile-1', 10)).rejects.toBeInstanceOf(ConflictException);
+    expect(await service.findForProfile('user-1', 'profile-1', 10)).toEqual({ state: 'pending', needed: 2 });
   });
 
-  it('refuses to score against a snapshot whose weight vector does not match the fingerprint schema', async () => {
+  it('reports paused rather than serving a paused profile (PRIVACY.md §4)', async () => {
+    profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1', pausedAt: new Date() });
+
+    expect(await service.findForProfile('user-1', 'profile-1', 10)).toEqual({ state: 'paused' });
+  });
+
+  it('reports model_outdated for a snapshot whose weight vector predates a fingerprint change', async () => {
     profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
     snapshotsRepository.findOne.mockResolvedValue({ weights: [0.1, 0.2], pairwiseAccuracy: 0.5 });
 
-    await expect(service.findForProfile('user-1', 'profile-1', 10)).rejects.toBeInstanceOf(ConflictException);
+    expect(await service.findForProfile('user-1', 'profile-1', 10)).toEqual({ state: 'model_outdated' });
   });
 
   it('scores, ranks descending, and truncates to the requested limit', async () => {
@@ -334,7 +358,7 @@ describe('RecommendationsService', () => {
     ] as unknown as Title[];
     titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-    const result = await service.findForProfile('user-1', 'profile-1', 2);
+    const result = await recommendItems('user-1', 'profile-1', 2);
 
     expect(result).toHaveLength(2);
     expect(result[0].title.id).toBe('high-warmth');
@@ -364,7 +388,7 @@ describe('RecommendationsService', () => {
       ] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(recommendationsRepository.insert).toHaveBeenCalledTimes(1);
       const rows = recommendationsRepository.insert.mock.calls[0][0] as Array<Record<string, unknown>>;
@@ -393,7 +417,7 @@ describe('RecommendationsService', () => {
       statesRepository.find.mockResolvedValue([]);
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock([]));
 
-      await service.findForProfile('user-1', 'profile-1', 10);
+      await recommendItems('user-1', 'profile-1', 10);
 
       expect(recommendationsRepository.insert).not.toHaveBeenCalled();
     });
@@ -416,7 +440,7 @@ describe('RecommendationsService', () => {
     const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
     titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-    const result = await service.findForProfile('user-1', 'profile-1', 10);
+    const result = await recommendItems('user-1', 'profile-1', 10);
 
     expect(result[0].confidenceBand).toBe(expectedBand);
   });
@@ -433,7 +457,7 @@ describe('RecommendationsService', () => {
       const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(result[0].confidenceBand).toBe('inconclusive');
     });
@@ -445,7 +469,7 @@ describe('RecommendationsService', () => {
       const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(result[0].confidenceBand).toBe('inconclusive');
     });
@@ -457,7 +481,7 @@ describe('RecommendationsService', () => {
       const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(result[0].confidenceBand).toBe('strong');
     });
@@ -475,7 +499,7 @@ describe('RecommendationsService', () => {
       const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(result[0].confidenceBand).toBe(expected);
     });
@@ -487,7 +511,7 @@ describe('RecommendationsService', () => {
       const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(result[0].confidenceBand).toBe('initial');
     });
@@ -499,7 +523,7 @@ describe('RecommendationsService', () => {
       const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       // Unknown is not treated as failing -- 30 triads still bands 'strong'.
       expect(result[0].confidenceBand).toBe('strong');
@@ -523,7 +547,7 @@ describe('RecommendationsService', () => {
       const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(result[0].confidenceBand).toBe('inconclusive');
     });
@@ -537,7 +561,7 @@ describe('RecommendationsService', () => {
       const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(result[0].confidenceBand).toBe('strong');
     });
@@ -549,7 +573,7 @@ describe('RecommendationsService', () => {
       const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(result[0].confidenceBand).toBe('strong');
     });
@@ -565,7 +589,7 @@ describe('RecommendationsService', () => {
       const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(result[0].confidenceBand).toBe('inconclusive');
     });
@@ -577,7 +601,7 @@ describe('RecommendationsService', () => {
       const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(result[0].confidenceBand).toBe('inconclusive');
     });
@@ -589,7 +613,7 @@ describe('RecommendationsService', () => {
       const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(result[0].confidenceBand).toBe('strong');
     });
@@ -601,7 +625,7 @@ describe('RecommendationsService', () => {
       const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(result[0].confidenceBand).toBe('strong');
     });
@@ -618,7 +642,7 @@ describe('RecommendationsService', () => {
       const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(result[0].confidenceBand).toBe('inconclusive');
     });
@@ -630,7 +654,7 @@ describe('RecommendationsService', () => {
       const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(result[0].confidenceBand).toBe('inconclusive');
     });
@@ -642,7 +666,7 @@ describe('RecommendationsService', () => {
       const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(result[0].confidenceBand).toBe('strong');
     });
@@ -654,7 +678,7 @@ describe('RecommendationsService', () => {
       const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(result[0].confidenceBand).toBe('strong');
     });
@@ -671,7 +695,7 @@ describe('RecommendationsService', () => {
       const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(result[0].confidenceBand).toBe('inconclusive');
     });
@@ -683,7 +707,7 @@ describe('RecommendationsService', () => {
       const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(result[0].confidenceBand).toBe('inconclusive');
     });
@@ -695,7 +719,7 @@ describe('RecommendationsService', () => {
       const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(result[0].confidenceBand).toBe('strong');
     });
@@ -707,7 +731,7 @@ describe('RecommendationsService', () => {
       const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(result[0].confidenceBand).toBe('strong');
     });
@@ -721,7 +745,7 @@ describe('RecommendationsService', () => {
     const builder = queryBuilderMock([]);
     titlesRepository.createQueryBuilder.mockReturnValue(builder);
 
-    await service.findForProfile('user-1', 'profile-1', 10);
+    await recommendItems('user-1', 'profile-1', 10);
 
     expect(statesRepository.find).toHaveBeenCalledWith({
       where: { profileId: 'profile-1', state: 'watched' },
@@ -744,7 +768,7 @@ describe('RecommendationsService', () => {
     ] as unknown as Title[];
     titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-    const result = await service.findForProfile('user-1', 'profile-1', 10);
+    const result = await recommendItems('user-1', 'profile-1', 10);
 
     // Pool mean of the known warmth values is 0.5, so the unknown title lands in the
     // middle -- had it been zero-filled it would have come last with score 0.
@@ -764,7 +788,7 @@ describe('RecommendationsService', () => {
     ] as unknown as Title[];
     titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-    const result = await service.findForProfile('user-1', 'profile-1', 10);
+    const result = await recommendItems('user-1', 'profile-1', 10);
 
     expect(result.find((item) => item.title.id === 'complete')?.confidenceBand).toBe('strong');
     expect(result.find((item) => item.title.id === 'partial')?.confidenceBand).toBe('likely');
@@ -781,7 +805,7 @@ describe('RecommendationsService', () => {
     ] as unknown as Title[];
     titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-    const result = await service.findForProfile('user-1', 'profile-1', 10);
+    const result = await recommendItems('user-1', 'profile-1', 10);
 
     expect(result.map((item) => item.title.id)).toEqual(['described']);
   });
@@ -804,7 +828,7 @@ describe('RecommendationsService', () => {
       ] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(result.map((item) => item.title.id)).toEqual(['ironic', 'earnest']);
     });
@@ -820,7 +844,7 @@ describe('RecommendationsService', () => {
       ] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       // A title with no "v2" block at all (true of the original 15 seed
       // titles today) is still scored -- it is not dropped the way a
@@ -845,7 +869,7 @@ describe('RecommendationsService', () => {
       ] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(result[0].reason.features).toEqual([{ key: 'ending.optimism', direction: 'higher' }]);
     });
@@ -867,7 +891,7 @@ describe('RecommendationsService', () => {
       ] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(result.map((item) => item.title.id)).toEqual(['playful', 'serious']);
     });
@@ -884,7 +908,7 @@ describe('RecommendationsService', () => {
       ] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       // A title with no "v3" block at all (true of every title neither
       // enrichment pass has touched yet) is still scored -- not dropped.
@@ -906,7 +930,7 @@ describe('RecommendationsService', () => {
       const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      await service.findForProfile('user-1', 'profile-1', 10);
+      await recommendItems('user-1', 'profile-1', 10);
 
       expect(modelVersionsRepository.findOne).toHaveBeenCalledWith({ where: { active: true } });
     });
@@ -922,7 +946,7 @@ describe('RecommendationsService', () => {
       const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(result[0].modelVersion).toBe('pinned-version');
     });
@@ -938,7 +962,7 @@ describe('RecommendationsService', () => {
       const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(result[0].modelVersion).toBe('this-profile-never-reached-the-pin');
     });
@@ -960,7 +984,7 @@ describe('RecommendationsService', () => {
       ] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
 
-      await service.findForProfile('user-1', 'profile-1', 1);
+      await recommendItems('user-1', 'profile-1', 1);
 
       expect(publicQualityService.forTitles).toHaveBeenCalledWith(['a']);
     });
@@ -978,7 +1002,7 @@ describe('RecommendationsService', () => {
       };
       publicQualityService.forTitles.mockResolvedValue(new Map([['title-1', quality]]));
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(result[0].publicQuality).toEqual(quality);
       expect(result[0].publicQualityScore).toBe(7.8);
@@ -992,7 +1016,7 @@ describe('RecommendationsService', () => {
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
       publicQualityService.forTitles.mockResolvedValue(new Map());
 
-      const result = await service.findForProfile('user-1', 'profile-1', 10);
+      const result = await recommendItems('user-1', 'profile-1', 10);
 
       expect(result[0].publicQuality).toBeNull();
       expect(result[0].publicQualityScore).toBeNull();
@@ -1007,7 +1031,7 @@ describe('RecommendationsService', () => {
       const quality: PublicQuality = { value: 6.2, votes: 500, sources: [] };
       publicQualityService.forTitles.mockResolvedValue(new Map([['title-1', quality]]));
 
-      await service.findForProfile('user-1', 'profile-1', 10);
+      await recommendItems('user-1', 'profile-1', 10);
 
       expect(recommendationsRepository.insert).toHaveBeenCalledWith([expect.objectContaining({ publicQuality: 6.2 })]);
     });

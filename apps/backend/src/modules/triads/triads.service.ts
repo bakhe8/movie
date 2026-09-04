@@ -40,6 +40,13 @@ export type TriadItem = Pick<
 // call per title (target contract API.md §2.3 `items`).
 export type TriadWithItems = Triad & { items: TriadItem[] };
 
+// GET .../triads/current answers with a round or with why there isn't one.
+// `state: 'ready'` rides along on the triad object so an existing reader of
+// the triad fields keeps working (board B→A).
+export type CurrentTriadResponse =
+  | (TriadWithItems & { state: 'ready' })
+  | { state: 'need_more_watched'; needed: number; message: string };
+
 @Injectable()
 export class TriadsService {
   constructor(
@@ -59,7 +66,7 @@ export class TriadsService {
     private readonly outcomesRepository: Repository<Outcome>,
   ) {}
 
-  async getCurrent(userId: string, profileId: string): Promise<TriadWithItems> {
+  async getCurrent(userId: string, profileId: string): Promise<CurrentTriadResponse> {
     await this.assertProfileOwnership(userId, profileId);
 
     const activeTriad = await this.triadsRepository.findOne({
@@ -67,7 +74,7 @@ export class TriadsService {
       order: { createdAt: 'ASC' },
     });
     if (activeTriad) {
-      return this.withItems(activeTriad);
+      return { ...(await this.withItems(activeTriad)), state: 'ready' };
     }
 
     // Only the most recently completed triad's titles are excluded, not
@@ -97,17 +104,11 @@ export class TriadsService {
         watchedTitleIds.length < 3
           ? 'Mark at least three films as watched before starting a ranking round'
           : 'Mark another film as watched to start a new ranking round';
-      // NestJS's default error shape plus the structured fields of the target
-      // contract (API.md §2.2: `{ reason: 'need_more_watched', needed }`), so
-      // the client can say exactly how many more films to mark instead of
-      // parsing English prose.
-      throw new BadRequestException({
-        statusCode: 400,
-        error: 'Bad Request',
-        message,
-        reason: 'need_more_watched',
-        needed,
-      });
+      // A designed product state, not an error: 200 with a discriminator so
+      // the screen can say exactly how many more films to mark, and the
+      // browser console stays clean (board B→A; API.md §2.2). 4xx here is
+      // reserved for real errors -- 401, or 404 for someone else's profile.
+      return { state: 'need_more_watched', needed, message };
     }
 
     const titleIds = titles.map((title) => title.id);
@@ -129,7 +130,7 @@ export class TriadsService {
           metadata: { reasonForSelection: 'random-watched-unranked' },
         }),
       );
-      return this.withItems(created);
+      return { ...(await this.withItems(created)), state: 'ready' };
     } catch (error) {
       if (!this.isUniqueConstraintError(error)) {
         throw error;
@@ -142,7 +143,7 @@ export class TriadsService {
       if (!winner) {
         throw error;
       }
-      return this.withItems(winner);
+      return { ...(await this.withItems(winner)), state: 'ready' };
     }
   }
 
