@@ -37,6 +37,10 @@ const labels = {
     watched: 'أفلام مسجّلة كمُشاهَدة',
     model: 'نموذجك',
     modelNone: 'لم يُدرَّب نموذجك بعد. يُبنى من جولات الترتيب، لا من أي تقييم.',
+    modelBuilding: 'جارٍ بناء ملفك…',
+    modelBuildingNote: 'يستغرق عادةً بضع دقائق. ستظهر المقترحات عند الانتهاء.',
+    modelRetrain: 'حدّث نموذجي',
+    modelRetraining: 'جارٍ الطلب…',
     modelVersion: 'إصدار النموذج',
     confidence: 'الثقة',
     // Blueprint §5.3 "ملف الذوق": core tendencies, conditional tendencies,
@@ -83,6 +87,10 @@ const labels = {
     watched: 'Films marked watched',
     model: 'Your model',
     modelNone: 'Your model has not been trained yet. It is built from ranking rounds, never from a rating.',
+    modelBuilding: 'Building your profile…',
+    modelBuildingNote: 'Usually takes a few minutes. Recommendations will appear once it is done.',
+    modelRetrain: 'Update my model',
+    modelRetraining: 'Requesting…',
     modelVersion: 'Model version',
     confidence: 'Confidence',
     detailPending: 'Stable tendencies, unknown areas and exceptions will appear here once the detailed taste profile is built.',
@@ -105,7 +113,12 @@ const labels = {
   },
 };
 
-type ModelStatus = { kind: 'loading' } | { kind: 'none' } | { kind: 'trained'; version: string; band: ConfidenceBand } | { kind: 'unknown' };
+type ModelStatus =
+  | { kind: 'loading' }
+  | { kind: 'none' }
+  | { kind: 'building' }
+  | { kind: 'trained'; version: string; band: ConfidenceBand }
+  | { kind: 'unknown' };
 
 export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLanguageChange?: (lang: Lang) => void }) {
   const { user, profile, logout, refreshProfile } = useSession();
@@ -121,6 +134,7 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
   const [rounds, setRounds] = useState<number | null>(null);
   const [watched, setWatched] = useState<number | null>(null);
   const [model, setModel] = useState<ModelStatus>({ kind: 'loading' });
+  const [retraining, setRetraining] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [resetting, setResetting] = useState(false);
 
@@ -150,13 +164,26 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
     setRounds(triads ? triads.length : null);
     setWatched(watchedTitles ? watchedTitles.length : null);
     try {
-      // The recommendation call is the only surface that reports which model
-      // snapshot serves this profile and its confidence band (PRIVACY §12).
-      const [first] = await api.getRecommendations(profileId, 1);
-      setModel(first ? { kind: 'trained', version: first.modelVersion, band: first.confidenceBand } : { kind: 'unknown' });
-    } catch (err) {
-      // 409 = no trained snapshot yet (RecommendationsService).
-      setModel(err instanceof ApiError && err.status === 409 ? { kind: 'none' } : { kind: 'unknown' });
+      const status = await api.getTrainingStatus(profileId);
+      if (status.state === 'queued' || status.state === 'running') {
+        setModel({ kind: 'building' });
+      } else if (status.latestSnapshot) {
+        // We have a trained snapshot; fetch the confidence band from recs.
+        try {
+          const [first] = await api.getRecommendations(profileId, 1);
+          setModel(
+            first
+              ? { kind: 'trained', version: first.modelVersion, band: first.confidenceBand }
+              : { kind: 'trained', version: status.latestSnapshot.modelVersion, band: 'initial' },
+          );
+        } catch {
+          setModel({ kind: 'trained', version: status.latestSnapshot.modelVersion, band: 'initial' });
+        }
+      } else {
+        setModel({ kind: 'none' });
+      }
+    } catch {
+      setModel({ kind: 'unknown' });
     }
   }, [profileId]);
 
@@ -165,6 +192,20 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadStats();
   }, [loadStats]);
+
+  // Poll training status while a job is in progress.
+  useEffect(() => {
+    if (model.kind !== 'building' || !profileId) return;
+    const id = window.setInterval(() => {
+      void api.getTrainingStatus(profileId).then((status) => {
+        if (status.state !== 'queued' && status.state !== 'running') {
+          // Job finished (or failed); reload everything.
+          void loadStats();
+        }
+      }).catch(() => {});
+    }, 5000);
+    return () => window.clearInterval(id);
+  }, [model.kind, profileId, loadStats]);
 
   useEffect(() => {
     if (!notice) return;
@@ -188,6 +229,19 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
       else next.add(id);
       return next;
     });
+  }
+
+  async function retrain() {
+    if (!profileId || retraining || model.kind === 'building') return;
+    setRetraining(true);
+    try {
+      await api.requestTraining(profileId);
+      setModel({ kind: 'building' });
+    } catch {
+      // A failed request leaves the current state in place; the user can retry.
+    } finally {
+      setRetraining(false);
+    }
   }
 
   async function save() {
@@ -340,7 +394,21 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
 
         <h3>{t.model}</h3>
         {model.kind === 'loading' && <p>{t.loading}</p>}
-        {model.kind === 'none' && <p>{t.modelNone}</p>}
+        {model.kind === 'none' && (
+          <>
+            <p>{t.modelNone}</p>
+            <button type="button" className={styles.secondary} onClick={retrain} disabled={retraining}>
+              {retraining ? t.modelRetraining : t.modelRetrain}
+            </button>
+          </>
+        )}
+        {model.kind === 'building' && (
+          <p className={styles.buildingNote}>
+            <span className={styles.spinner} aria-hidden="true" />
+            {t.modelBuilding}
+            <span className={styles.buildingHint}>{t.modelBuildingNote}</span>
+          </p>
+        )}
         {model.kind === 'unknown' && <p>{t.failed}</p>}
         {model.kind === 'trained' && (
           <dl className={styles.stats}>
@@ -356,6 +424,11 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
               </dd>
             </div>
           </dl>
+        )}
+        {(model.kind === 'trained') && (
+          <button type="button" className={styles.secondary} onClick={retrain} disabled={retraining}>
+            {retraining ? t.modelRetraining : t.modelRetrain}
+          </button>
         )}
         <p>{t.detailPending}</p>
       </section>

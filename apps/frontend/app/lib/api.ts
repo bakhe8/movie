@@ -404,6 +404,19 @@ export const api = {
   getRecommendations: (profileId: string, limit = 10) =>
     request<Recommendation[]>(`/profiles/${profileId}/recommendations?limit=${limit}`),
 
+  getTrainingStatus: (profileId: string) =>
+    request<{
+      state: 'idle' | 'queued' | 'running' | 'succeeded' | 'failed';
+      completedTriads: number;
+      nextTrainingAt: number | null;
+      latestSnapshot: { modelVersion: string; trainingTriadCount: number; createdAt: string } | null;
+    }>(`/profiles/${profileId}/training`),
+
+  requestTraining: (profileId: string) =>
+    request<{ jobId: string; status: string; created: boolean }>(`/profiles/${profileId}/train`, {
+      method: 'POST',
+    }),
+
   getConsents: () => request<Consent[]>('/consents'),
 
   // User-scoped, not profile-scoped (blueprint gap 7): terms_privacy is
