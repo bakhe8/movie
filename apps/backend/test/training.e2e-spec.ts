@@ -77,11 +77,18 @@ function job(base: { id: string; profileId: string; status: string }) {
   };
 }
 
-async function waitFor(predicate: () => boolean, timeoutMs = 3000): Promise<void> {
+// The training request is fired by a TypeORM subscriber after the ranking
+// response is already on its way back, so the test has to wait for it. The
+// budget is generous because a loaded CI runner is the case that matters:
+// at 3s this timed out on GitHub Actions (both the run and its retry) while
+// passing locally every time, and because the helper used to return quietly
+// on timeout, the failure surfaced as "expected [] to have length 1" with no
+// hint that it was a timeout at all. It now says so.
+async function waitFor(predicate: () => boolean, what = 'condition', timeoutMs = 15_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (!predicate()) {
     if (Date.now() > deadline) {
-      return;
+      throw new Error(`timed out after ${timeoutMs}ms waiting for ${what}`);
     }
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
@@ -198,7 +205,7 @@ describe('Training trigger and status (ADR-25, real HTTP, real DB, fake model se
     expect(trainRequests()).toHaveLength(0);
 
     await completeOneRound(app, ownerToken, ownerProfileId);
-    await waitFor(() => trainRequests().length >= 1);
+    await waitFor(() => trainRequests().length >= 1, 'the third round to trigger a training request');
     const [first] = trainRequests();
     expect(trainRequests()).toHaveLength(1);
     expect(JSON.parse(first.body)).toEqual({ profileId: ownerProfileId });
