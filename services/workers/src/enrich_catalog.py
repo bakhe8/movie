@@ -347,15 +347,22 @@ def write_fingerprints_to_db(entries: List[Dict[str, Any]]) -> int:
     if not database_url:
         raise RuntimeError("DATABASE_URL is required for --write-db")
     updated = 0
-    with psycopg2.connect(database_url) as connection, connection.cursor() as cursor:
-        for entry in entries:
-            if not isinstance(entry.get("fingerprint"), dict):
-                continue
-            cursor.execute(
-                'UPDATE titles SET fingerprint = %s::json, "updatedAt" = now() WHERE "internalId" = %s',
-                (json.dumps(entry["fingerprint"]), entry["internalId"]),
-            )
-            updated += cursor.rowcount
+    # Explicit close: psycopg2's connection context manager only commits/rolls
+    # back, it never closes (AUDIT_2026-09-05 C2). Harmless for this one-shot
+    # CLI, but kept consistent with training.py's long-running-process fix.
+    connection = psycopg2.connect(database_url)
+    try:
+        with connection, connection.cursor() as cursor:
+            for entry in entries:
+                if not isinstance(entry.get("fingerprint"), dict):
+                    continue
+                cursor.execute(
+                    'UPDATE titles SET fingerprint = %s::json, "updatedAt" = now() WHERE "internalId" = %s',
+                    (json.dumps(entry["fingerprint"]), entry["internalId"]),
+                )
+                updated += cursor.rowcount
+    finally:
+        connection.close()
     return updated
 
 

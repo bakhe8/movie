@@ -204,24 +204,31 @@ def main(argv: Optional[List[str]] = None) -> int:
         order_internal = json.loads(args.order.read_text(encoding="utf-8"))["watched"]
 
     emails = list(args.email)
-    with psycopg2.connect(database_url) as connection, connection.cursor() as cursor:
-        if args.all_demo:
-            cursor.execute("SELECT email FROM users WHERE email LIKE %s ORDER BY email", ("%@demo.local",))
-            emails += [r[0] for r in cursor.fetchall()]
-        if not emails:
-            print("give --email or --all-demo", file=sys.stderr)
-            return 2
-        exit_code = 0
-        for email in emails:
-            profile_id, triads, fingerprints, watched, internal_ids = load_profile(cursor, email)
-            if not profile_id:
-                print(f"{email}: no profile")
-                exit_code = 1
-                continue
-            judge_order = [internal_ids[i] for i in order_internal if i in internal_ids] if order_internal and email == args.email[0] else None
-            results = evaluate_profile(triads, fingerprints, args.regularization, judge_order, watched if judge_order else None)
-            print(format_rows(email, results))
-        return exit_code
+    # Explicit close: psycopg2's connection context manager only commits/rolls
+    # back, it never closes (AUDIT_2026-09-05 C2). Harmless for this one-shot
+    # CLI, but kept consistent with training.py's long-running-process fix.
+    connection = psycopg2.connect(database_url)
+    try:
+        with connection, connection.cursor() as cursor:
+            if args.all_demo:
+                cursor.execute("SELECT email FROM users WHERE email LIKE %s ORDER BY email", ("%@demo.local",))
+                emails += [r[0] for r in cursor.fetchall()]
+            if not emails:
+                print("give --email or --all-demo", file=sys.stderr)
+                return 2
+            exit_code = 0
+            for email in emails:
+                profile_id, triads, fingerprints, watched, internal_ids = load_profile(cursor, email)
+                if not profile_id:
+                    print(f"{email}: no profile")
+                    exit_code = 1
+                    continue
+                judge_order = [internal_ids[i] for i in order_internal if i in internal_ids] if order_internal and email == args.email[0] else None
+                results = evaluate_profile(triads, fingerprints, args.regularization, judge_order, watched if judge_order else None)
+                print(format_rows(email, results))
+            return exit_code
+    finally:
+        connection.close()
 
 
 if __name__ == "__main__":

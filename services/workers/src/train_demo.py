@@ -124,17 +124,24 @@ def load_personas(path: Path) -> Dict[str, Any]:
 
 
 def list_demo_profiles(database_url: str, email_domain: str) -> List[DemoProfile]:
-    with psycopg2.connect(database_url) as connection, connection.cursor() as cursor:
-        cursor.execute(
-            '''
-            SELECT u.email, p.id
-            FROM profiles p JOIN users u ON u.id = p."userId"
-            WHERE u.email LIKE %s
-            ORDER BY u.email
-            ''',
-            (f"%@{email_domain}",),
-        )
-        return [DemoProfile(slug=email.split("@", 1)[0], email=email, profile_id=str(profile_id)) for email, profile_id in cursor.fetchall()]
+    # Explicit close: psycopg2's connection context manager only commits/rolls
+    # back, it never closes (AUDIT_2026-09-05 C2). Harmless for this one-shot
+    # CLI, but kept consistent with training.py's long-running-process fix.
+    connection = psycopg2.connect(database_url)
+    try:
+        with connection, connection.cursor() as cursor:
+            cursor.execute(
+                '''
+                SELECT u.email, p.id
+                FROM profiles p JOIN users u ON u.id = p."userId"
+                WHERE u.email LIKE %s
+                ORDER BY u.email
+                ''',
+                (f"%@{email_domain}",),
+            )
+            return [DemoProfile(slug=email.split("@", 1)[0], email=email, profile_id=str(profile_id)) for email, profile_id in cursor.fetchall()]
+    finally:
+        connection.close()
 
 
 def train_demo_profiles(profiles: List[DemoProfile], fixture: Dict[str, Any], trainer=train_profile) -> List[DemoRow]:

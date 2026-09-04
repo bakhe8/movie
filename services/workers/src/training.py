@@ -296,116 +296,127 @@ def train_profile(profile_id: str) -> TrainingResult:
     if not database_url:
         raise RuntimeError("DATABASE_URL is required")
 
-    with psycopg2.connect(database_url) as connection, connection.cursor() as cursor:
-        cursor.execute(
-            '''
-            SELECT "titleIds", ranking
-            FROM triads
-            WHERE "profileId" = %s AND status = 'completed' AND ranking IS NOT NULL
-            ORDER BY COALESCE("answeredAt", "createdAt") ASC
-            ''',
-            (profile_id,),
-        )
-        # "ranking" is title ids in ranked order (ADR-15), but the model math
-        # below (ranker.py) works with positional indices into titleIds --
-        # convert once here, at the DB boundary, so ranker.py never has to
-        # know about the storage/API representation.
-        # COALESCE("answeredAt", "createdAt"): triads completed before the
-        # answeredAt column existed (gap 3) have no recorded answer time --
-        # createdAt is still a fair temporal proxy for those legacy rows only.
-        triads = [
-            (
-                tuple(str(title_id) for title_id in title_ids),
-                ranking_to_indices(tuple(str(title_id) for title_id in title_ids), ranking),
+    # psycopg2's connection context manager only commits/rolls back the
+    # transaction on exit -- it never closes the connection (AUDIT_2026-09-05
+    # C2). Fine for the one-shot CLI scripts, but this function also runs
+    # inside model_service.py's long-running worker, once per training job,
+    # so an unclosed connection here leaks until Postgres's max_connections
+    # is exhausted. The try/finally guarantees the close on every exit path,
+    # including the ValueError raises below.
+    connection = psycopg2.connect(database_url)
+    try:
+        with connection, connection.cursor() as cursor:
+            cursor.execute(
+                '''
+                SELECT "titleIds", ranking
+                FROM triads
+                WHERE "profileId" = %s AND status = 'completed' AND ranking IS NOT NULL
+                ORDER BY COALESCE("answeredAt", "createdAt") ASC
+                ''',
+                (profile_id,),
             )
-            for title_ids, ranking in cursor.fetchall()
-        ]
-        if not triads:
-            raise ValueError("No completed triads exist for this profile")
+            # "ranking" is title ids in ranked order (ADR-15), but the model math
+            # below (ranker.py) works with positional indices into titleIds --
+            # convert once here, at the DB boundary, so ranker.py never has to
+            # know about the storage/API representation.
+            # COALESCE("answeredAt", "createdAt"): triads completed before the
+            # answeredAt column existed (gap 3) have no recorded answer time --
+            # createdAt is still a fair temporal proxy for those legacy rows only.
+            triads = [
+                (
+                    tuple(str(title_id) for title_id in title_ids),
+                    ranking_to_indices(tuple(str(title_id) for title_id in title_ids), ranking),
+                )
+                for title_ids, ranking in cursor.fetchall()
+            ]
+            if not triads:
+                raise ValueError("No completed triads exist for this profile")
 
-        title_ids = sorted({title_id for triad_ids, _ in triads for title_id in triad_ids})
-        # Explicit cast: psycopg2 sends a Python list of str as text[] by
-        # default, and Postgres has no text = uuid comparison operator, so
-        # this raised UndefinedFunction on every real invocation -- caught
-        # only by actually running train_profile() against a live database,
-        # something no existing test does (found while verifying gap 2).
-        cursor.execute('SELECT id, fingerprint, genres, "originalLanguage" FROM titles WHERE id = ANY(%s::uuid[])', (title_ids,))
-        rows = cursor.fetchall()
-        vectors = {
-            str(title_id): fingerprint_vector(json.loads(fingerprint) if isinstance(fingerprint, str) else fingerprint)
-            for title_id, fingerprint, _genres, _language in rows
-            if fingerprint is not None
-        }
-        # Only fully described titles enter training; a partial fingerprint is unknown,
-        # not zero (ADR-19), so the whole triad is left out rather than distorted.
-        fingerprints = {title_id: vector for title_id, vector in vectors.items() if vector is not None}
-        # "genres" is TypeORM's simple-array: a comma-joined text column, not
-        # a Postgres array -- no title has ever had a genre with a comma in
-        # it, so a plain split is exact. A NULL/empty column means no known
-        # genres, not zero diversity contributed (compute_genre_diversity
-        # treats a missing entry the same way).
-        genres = {
-            str(title_id): [genre for genre in genre_text.split(',') if genre]
-            for title_id, _fingerprint, genre_text, _language in rows
-            if genre_text
-        }
-        # originalLanguage is a single varchar column (unlike genres) --
-        # missing means no known language, same "not evidence either way"
-        # treatment (compute_language_diversity).
-        languages = {
-            str(title_id): language
-            for title_id, _fingerprint, _genres, language in rows
-            if language
-        }
-        # Director data lives relationally (credits/people, blueprint gap 6,
-        # ADR-70), not as a titles column like genre/language -- a separate
-        # query, one row per (title, director) credit. A title with no
-        # 'director'-role credit contributes no entry, same "unknown, not
-        # evidence against diversity" treatment as a missing genre/language.
-        cursor.execute(
-            'SELECT "titleId", "personId" FROM credits WHERE role = \'director\' AND "titleId" = ANY(%s::uuid[])',
-            (title_ids,),
-        )
-        directors: Dict[str, List[str]] = {}
-        for title_id, person_id in cursor.fetchall():
-            directors.setdefault(str(title_id), []).append(str(person_id))
-        # Order is preserved from the ORDER BY above -- list comprehensions don't reshuffle.
-        complete_triads = [
-            (triad_ids, ranking)
-            for triad_ids, ranking in triads
-            if all(title_id in fingerprints for title_id in triad_ids)
-        ]
-        if not complete_triads:
-            raise ValueError("Completed triads need complete fingerprints on all three titles before model training")
+            title_ids = sorted({title_id for triad_ids, _ in triads for title_id in triad_ids})
+            # Explicit cast: psycopg2 sends a Python list of str as text[] by
+            # default, and Postgres has no text = uuid comparison operator, so
+            # this raised UndefinedFunction on every real invocation -- caught
+            # only by actually running train_profile() against a live database,
+            # something no existing test does (found while verifying gap 2).
+            cursor.execute('SELECT id, fingerprint, genres, "originalLanguage" FROM titles WHERE id = ANY(%s::uuid[])', (title_ids,))
+            rows = cursor.fetchall()
+            vectors = {
+                str(title_id): fingerprint_vector(json.loads(fingerprint) if isinstance(fingerprint, str) else fingerprint)
+                for title_id, fingerprint, _genres, _language in rows
+                if fingerprint is not None
+            }
+            # Only fully described titles enter training; a partial fingerprint is unknown,
+            # not zero (ADR-19), so the whole triad is left out rather than distorted.
+            fingerprints = {title_id: vector for title_id, vector in vectors.items() if vector is not None}
+            # "genres" is TypeORM's simple-array: a comma-joined text column, not
+            # a Postgres array -- no title has ever had a genre with a comma in
+            # it, so a plain split is exact. A NULL/empty column means no known
+            # genres, not zero diversity contributed (compute_genre_diversity
+            # treats a missing entry the same way).
+            genres = {
+                str(title_id): [genre for genre in genre_text.split(',') if genre]
+                for title_id, _fingerprint, genre_text, _language in rows
+                if genre_text
+            }
+            # originalLanguage is a single varchar column (unlike genres) --
+            # missing means no known language, same "not evidence either way"
+            # treatment (compute_language_diversity).
+            languages = {
+                str(title_id): language
+                for title_id, _fingerprint, _genres, language in rows
+                if language
+            }
+            # Director data lives relationally (credits/people, blueprint gap 6,
+            # ADR-70), not as a titles column like genre/language -- a separate
+            # query, one row per (title, director) credit. A title with no
+            # 'director'-role credit contributes no entry, same "unknown, not
+            # evidence against diversity" treatment as a missing genre/language.
+            cursor.execute(
+                'SELECT "titleId", "personId" FROM credits WHERE role = \'director\' AND "titleId" = ANY(%s::uuid[])',
+                (title_ids,),
+            )
+            directors: Dict[str, List[str]] = {}
+            for title_id, person_id in cursor.fetchall():
+                directors.setdefault(str(title_id), []).append(str(person_id))
+            # Order is preserved from the ORDER BY above -- list comprehensions don't reshuffle.
+            complete_triads = [
+                (triad_ids, ranking)
+                for triad_ids, ranking in triads
+                if all(title_id in fingerprints for title_id in triad_ids)
+            ]
+            if not complete_triads:
+                raise ValueError("Completed triads need complete fingerprints on all three titles before model training")
 
-        result = train_and_evaluate(complete_triads, fingerprints, genres, languages, directors)
-        # posterior holds UserModelSnapshotPosterior's shape (apps/backend's
-        # user-model-snapshot.entity.ts) -- keep the two in sync by hand.
-        posterior = json.dumps({"standardErrors": result.standard_errors.tolist()}) if result.standard_errors is not None else None
-        cursor.execute(
-            '''
-            INSERT INTO user_model_snapshots
-              ("profileId", weights, "biasTerms", "modelVersion", "trainingTriadCount", "pairwiseAccuracy",
-               "heldOutTriadCount", "heldOutNll", "heldOutPairwiseAccuracy", posterior, "trainingGenreDiversity",
-               "trainingLanguageDiversity", "trainingDirectorDiversity")
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ''',
-            (
-                profile_id,
-                result.weights.tolist(),
-                json.dumps(result.bias_terms),
-                MODEL_VERSION,
-                result.training_triad_count,
-                result.pairwise_accuracy,
-                result.held_out_triad_count,
-                result.held_out_nll,
-                result.held_out_pairwise_accuracy,
-                posterior,
-                result.training_genre_diversity,
-                result.training_language_diversity,
-                result.training_director_diversity,
-            ),
-        )
+            result = train_and_evaluate(complete_triads, fingerprints, genres, languages, directors)
+            # posterior holds UserModelSnapshotPosterior's shape (apps/backend's
+            # user-model-snapshot.entity.ts) -- keep the two in sync by hand.
+            posterior = json.dumps({"standardErrors": result.standard_errors.tolist()}) if result.standard_errors is not None else None
+            cursor.execute(
+                '''
+                INSERT INTO user_model_snapshots
+                  ("profileId", weights, "biasTerms", "modelVersion", "trainingTriadCount", "pairwiseAccuracy",
+                   "heldOutTriadCount", "heldOutNll", "heldOutPairwiseAccuracy", posterior, "trainingGenreDiversity",
+                   "trainingLanguageDiversity", "trainingDirectorDiversity")
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ''',
+                (
+                    profile_id,
+                    result.weights.tolist(),
+                    json.dumps(result.bias_terms),
+                    MODEL_VERSION,
+                    result.training_triad_count,
+                    result.pairwise_accuracy,
+                    result.held_out_triad_count,
+                    result.held_out_nll,
+                    result.held_out_pairwise_accuracy,
+                    posterior,
+                    result.training_genre_diversity,
+                    result.training_language_diversity,
+                    result.training_director_diversity,
+                ),
+            )
+    finally:
+        connection.close()
 
     return result
 

@@ -506,8 +506,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         bootstrap=args.bootstrap,
         seed=args.seed,
     )
-    with psycopg2.connect(database_url) as connection, connection.cursor() as cursor:
-        profiles, popularity = load_profiles(cursor, args.exclude_domain)
+    # Explicit close: psycopg2's connection context manager only commits/rolls
+    # back, it never closes (AUDIT_2026-09-05 C2). Harmless for this one-shot
+    # CLI, but kept consistent with training.py's long-running-process fix.
+    connection = psycopg2.connect(database_url)
+    try:
+        with connection, connection.cursor() as cursor:
+            profiles, popularity = load_profiles(cursor, args.exclude_domain)
+    finally:
+        connection.close()
     report = run(profiles, popularity, thresholds, args.label)
     report["excludedDomains"] = list(args.exclude_domain)
     print(format_summary(report))
