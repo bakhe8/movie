@@ -47,3 +47,6 @@ docker-compose.override.yml
 .claude/SESSIONS.md
 
 .claude/SESSIONS_ARCHIVE*.md
+docker/secrets/*
+!docker/secrets/*.example
+!docker/secrets/README*
