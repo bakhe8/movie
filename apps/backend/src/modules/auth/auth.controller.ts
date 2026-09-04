@@ -1,6 +1,8 @@
 import { Controller, Post, Get, Body, HttpCode, UseGuards, Request } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Throttle } from '@nestjs/throttler';
+import { ConfirmPasswordResetDto, RequestPasswordResetDto } from './dto/password-reset.dto';
+import { PasswordResetService } from './password-reset.service';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -18,7 +20,10 @@ type Req = { user: { id: string }; ip?: string };
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private passwordResetService: PasswordResetService,
+  ) {}
 
   @Throttle(AUTH_THROTTLE)
   @Post('register')
@@ -30,6 +35,26 @@ export class AuthController {
   @Post('login')
   async login(@Request() req: { ip?: string }, @Body() loginDto: LoginDto) {
     return this.authService.login(loginDto, req.ip ?? null);
+  }
+
+  // ALPHA_PLAN 3.2 (ADR-85). Both are unauthenticated by necessity -- the
+  // caller is someone who cannot sign in -- and both sit behind the auth
+  // throttler like login and register. The request route answers 202
+  // whatever the address is, so it can never confirm who has an account.
+  @Throttle(AUTH_THROTTLE)
+  @Post('password-reset/request')
+  @HttpCode(202)
+  async requestPasswordReset(@Request() req: { ip?: string }, @Body() dto: RequestPasswordResetDto) {
+    await this.passwordResetService.request(dto.email, req.ip ?? null);
+    return { accepted: true };
+  }
+
+  @Throttle(AUTH_THROTTLE)
+  @Post('password-reset/confirm')
+  @HttpCode(200)
+  async confirmPasswordReset(@Request() req: { ip?: string }, @Body() dto: ConfirmPasswordResetDto) {
+    await this.passwordResetService.confirm(dto.token, dto.password, req.ip ?? null);
+    return { reset: true };
   }
 
   // Rotates the refresh token and issues a new access token (ADR-26). No

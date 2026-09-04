@@ -2,7 +2,7 @@
 
 **Status**: Derived from blueprint `§13` (entities and event shapes), `§11` (rights registry), `§7.5`–`§7.6`, `§21`. Two layers, kept apart on purpose:
 
-- **§1 Current physical schema** — exactly what the twenty-two TypeORM migrations in `apps/backend/src/migrations/` create (verified 2026-09-04). This is the truth for anyone writing SQL today.
+- **§1 Current physical schema** — exactly what the twenty-three TypeORM migrations in `apps/backend/src/migrations/` create (verified 2026-09-04). This is the truth for anyone writing SQL today.
 - **§2 Target schema** — the `BP §13.1` entity set expressed as tables, plus the migration plan from §1 to §2.
 
 Naming (ADR-16): tables `snake_case` plural; columns are TypeORM's default `camelCase` and therefore **quoted** in raw SQL (`"profileId"`); primary keys `uuid` via `uuid_generate_v4()`; timestamps `TIMESTAMP` (UTC by convention). The one plural-naming exception (`user_title_state`) was renamed to `user_title_states` in M1. Schema changes go through `npm run migration:generate` / `npm run db:migrate` only — `synchronize` is off in every environment.
@@ -11,7 +11,7 @@ Naming (ADR-16): tables `snake_case` plural; columns are TypeORM's default `came
 
 ## 1. Current physical schema (migrated)
 
-Migrations, in order: `1788410140231-InitialSchema`, `1788411790951-AddTriadEventFields`, `1788412500000-SplitImportedRatingFromInAppState`, `1788418200000-ArabicFirstProfileDefault`, `1788421102891-AddOneActiveTriadPerProfileConstraint`, `1788424108820-AddHeldOutTrainingMetrics`, `1788425067800-AddTriadEventCompleteness`, `1788428400000-AddTriadReplacements`, `1788432000000-AddProfileMarketAndPlatforms`, `1788435000000-CompleteM1Plan`, `1788438000000-AddM2ConsentAndAuditTables`, `1788440000000-AddM3RightsRegistryAndCatalogProvenance`, `1788442000000-AddM4ModelVersioningAndExperiments`, `1788444000000-AddM5RecommendationsAndWatchEvents`, `1788446000000-AddM6PublicQualityAndAvailability`, `1788448000000-AddM7SharedLatentSpaceVersions`, `1788450000000-AddTrainingGenreDiversity`, `1788452000000-AddTrainingLanguageDiversity`, `1788454000000-PrivacyRequestsTombstone`, `1788456000000-AddTrainingDirectorDiversity`, `1788458000000-AddRefreshTokens`, `1788460000000-ConsentsTombstone`. Extension: `uuid-ossp`. The `ankane/pgvector` image is used but no column has the `vector` type yet — `embeddings.vector` is still `real[]`, deliberately unconverted (see the note below §1's DDL block).
+Migrations, in order: `1788410140231-InitialSchema`, `1788411790951-AddTriadEventFields`, `1788412500000-SplitImportedRatingFromInAppState`, `1788418200000-ArabicFirstProfileDefault`, `1788421102891-AddOneActiveTriadPerProfileConstraint`, `1788424108820-AddHeldOutTrainingMetrics`, `1788425067800-AddTriadEventCompleteness`, `1788428400000-AddTriadReplacements`, `1788432000000-AddProfileMarketAndPlatforms`, `1788435000000-CompleteM1Plan`, `1788438000000-AddM2ConsentAndAuditTables`, `1788440000000-AddM3RightsRegistryAndCatalogProvenance`, `1788442000000-AddM4ModelVersioningAndExperiments`, `1788444000000-AddM5RecommendationsAndWatchEvents`, `1788446000000-AddM6PublicQualityAndAvailability`, `1788448000000-AddM7SharedLatentSpaceVersions`, `1788450000000-AddTrainingGenreDiversity`, `1788452000000-AddTrainingLanguageDiversity`, `1788454000000-PrivacyRequestsTombstone`, `1788456000000-AddTrainingDirectorDiversity`, `1788458000000-AddRefreshTokens`, `1788460000000-ConsentsTombstone`, `1788462000000-AddTitlePosterPath`, `1788464000000-AddPasswordResets`. Extension: `uuid-ossp`. The `ankane/pgvector` image is used but no column has the `vector` type yet — `embeddings.vector` is still `real[]`, deliberately unconverted (see the note below §1's DDL block).
 
 ```sql
 users (
@@ -121,6 +121,14 @@ privacy_requests (                                               -- export/delet
   "requestedAt" timestamp NOT NULL, "executeAfter" timestamp, "completedAt" timestamp,
   "artifactUrl" varchar, "executionLog" json,
   INDEX ("userId"), INDEX ("subjectKey")
+)
+
+password_resets (                                                -- ALPHA_PLAN 3.2 / ADR-85: single-use, time-limited reset link
+  id uuid PK, "userId" uuid NOT NULL FK users ON DELETE CASCADE,
+  "tokenHash" varchar(64) UNIQUE NOT NULL,                       -- sha256 of the opaque token; the raw value only ever exists in the mail
+  "expiresAt" timestamp NOT NULL, "usedAt" timestamp, "revokedAt" timestamp,  -- a new request revokes the previous unused link
+  "ipHash" varchar, "createdAt" timestamp NOT NULL DEFAULT now(),
+  INDEX ("userId")
 )
 
 refresh_tokens (                                                 -- ADR-26: rotated refresh tokens with family-level reuse detection
@@ -499,6 +507,7 @@ Each step is one TypeORM migration; none require data backfill beyond defaults b
 ---
 
 **Changelog**
+- 2.28 (2026-09-04): twenty-third migration `AddPasswordResets` -- `password_resets` (ADR-85, ALPHA_PLAN 3.2). Hash-only like `refresh_tokens`, cascading with the account; single use via `usedAt`, and a new request revokes the previous unused row.
 - 2.27 (2026-09-04): twenty-second migration `AddTitlePosterPath` -- `titles.posterPath` (ADR-82, owner decision on posters). Path only; `PosterService` composes the URL per read and withholds it unless the image's `source_records` row is displayable at this stage. NULL on `movie-postgres` until `seed-demo.lib.ts` (session C's) maps the fixture's `posterPath` the way it already maps `originalLanguage`.
 - 2.26 (2026-09-04): twenty-first migration `ConsentsTombstone` applied -- `consents.userId` nullable with `ON DELETE SET NULL` plus an indexed `subjectKey` (ADR-80, board F5). Consents now survive a purge as a personal-data-free record, the treatment `privacy_requests` got in `PrivacyRequestsTombstone`; rows predating this migration keep `subjectKey` NULL (no backfill, same as the sibling). `POST /privacy/{pause,resume}` write `profiles.pausedAt`, which recommendations now refuse to serve against.
 - 2.25 (2026-09-04): no migration -- application code, `RecommendationsService.findForProfile()` (ADR-78, G4). `PublicQualityService.forTitles()` (ADR-77's read side) is now batched over the shown results and attached as `publicQuality`/`publicQualityScore` on every `RecommendationResult`, which `persistShown()` already wrote into `recommendations.publicQuality` unmodified -- that column has existed since M5 but was hardcoded `null` (no source existed) since ADR-58. Verified: 4 new unit tests; backend suite green (278 unit, 100 e2e).

@@ -19,6 +19,7 @@ import { PrivacyRequest } from '../entities/privacy-request.entity';
 import { Profile } from '../entities/profile.entity';
 import { PublicQualitySource } from '../entities/public-quality-source.entity';
 import { Recommendation } from '../entities/recommendation.entity';
+import { PasswordReset } from '../entities/password-reset.entity';
 import { RefreshToken } from '../entities/refresh-token.entity';
 import { SharedLatentSpaceVersion } from '../entities/shared-latent-space-version.entity';
 import { SourceRecord } from '../entities/source-record.entity';
@@ -63,6 +64,7 @@ export function getConnectionOptions(): ConnectionOptions {
     database: process.env.POSTGRES_DB || 'moviedb',
     entities: [
       User,
+      PasswordReset,
       RefreshToken,
       Profile,
       Title,

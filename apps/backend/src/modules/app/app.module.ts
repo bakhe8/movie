@@ -8,6 +8,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseConfig } from '../../config/database.config';
 import { AuthModule } from '../auth/auth.module';
+import { MailModule } from '../mail/mail.module';
 import { ConsentsModule } from '../consents/consents.module';
 import { ProfilesModule } from '../profiles/profiles.module';
 import { TitlesModule } from '../titles/titles.module';
@@ -30,6 +31,7 @@ import { AdminModule } from '../admin/admin.module';
       throttlers: [{ ttl: 60_000, limit: 60 }],
     }),
     TypeOrmModule.forRoot(DatabaseConfig()),
+    MailModule,
     AuthModule,
     ProfilesModule,
     TitlesModule,
