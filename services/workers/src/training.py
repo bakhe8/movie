@@ -286,6 +286,45 @@ def train_and_evaluate(
     )
 
 
+# The one definition of a triad the model may learn from (RANKING_ALGORITHM.md
+# §6): answered, and not reserved as a holdout validation triad (BP §8.3).
+# holdout is always false today (triad.entity.ts) -- the exclusion lives here
+# so that the day a policy starts reserving rows, nothing trains on them
+# (AUDIT_2026-09-05 H4). evaluation.py counts and loads through the same
+# predicate, so the gate sees exactly what training would.
+TRAINABLE_TRIAD_PREDICATE = "status = 'completed' AND ranking IS NOT NULL AND NOT holdout"
+
+
+def load_trainable_triads(cursor: Any, profile_id: str) -> List[Tuple[Tuple[str, ...], List[int]]]:
+    """
+    A profile's trainable triads, oldest answer first, as (title ids, ranking
+    as positions into those ids).
+    """
+    cursor.execute(
+        f'''
+        SELECT "titleIds", ranking
+        FROM triads
+        WHERE "profileId" = %s AND {TRAINABLE_TRIAD_PREDICATE}
+        ORDER BY COALESCE("answeredAt", "createdAt") ASC
+        ''',
+        (profile_id,),
+    )
+    # "ranking" is title ids in ranked order (ADR-15), but the model math
+    # (ranker.py) works with positional indices into titleIds -- convert once
+    # here, at the DB boundary, so ranker.py never has to know about the
+    # storage/API representation.
+    # COALESCE("answeredAt", "createdAt"): triads completed before the
+    # answeredAt column existed (gap 3) have no recorded answer time --
+    # createdAt is still a fair temporal proxy for those legacy rows only.
+    return [
+        (
+            tuple(str(title_id) for title_id in title_ids),
+            ranking_to_indices(tuple(str(title_id) for title_id in title_ids), ranking),
+        )
+        for title_ids, ranking in cursor.fetchall()
+    ]
+
+
 def train_profile(profile_id: str) -> TrainingResult:
     # override=False: a DATABASE_URL already set in the process environment
     # (e2e spawns the real model service against postgres-test this way)
@@ -306,29 +345,7 @@ def train_profile(profile_id: str) -> TrainingResult:
     connection = psycopg2.connect(database_url)
     try:
         with connection, connection.cursor() as cursor:
-            cursor.execute(
-                '''
-                SELECT "titleIds", ranking
-                FROM triads
-                WHERE "profileId" = %s AND status = 'completed' AND ranking IS NOT NULL
-                ORDER BY COALESCE("answeredAt", "createdAt") ASC
-                ''',
-                (profile_id,),
-            )
-            # "ranking" is title ids in ranked order (ADR-15), but the model math
-            # below (ranker.py) works with positional indices into titleIds --
-            # convert once here, at the DB boundary, so ranker.py never has to
-            # know about the storage/API representation.
-            # COALESCE("answeredAt", "createdAt"): triads completed before the
-            # answeredAt column existed (gap 3) have no recorded answer time --
-            # createdAt is still a fair temporal proxy for those legacy rows only.
-            triads = [
-                (
-                    tuple(str(title_id) for title_id in title_ids),
-                    ranking_to_indices(tuple(str(title_id) for title_id in title_ids), ranking),
-                )
-                for title_ids, ranking in cursor.fetchall()
-            ]
+            triads = load_trainable_triads(cursor, profile_id)
             if not triads:
                 raise ValueError("No completed triads exist for this profile")
 

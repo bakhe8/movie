@@ -29,6 +29,7 @@ export class Recommendation {
   @JoinColumn({ name: 'titleId' })
   title: Title;
 
+  @Index('IDX_recommendations_titleId')
   @Column({ type: 'uuid' })
   titleId: string;
 

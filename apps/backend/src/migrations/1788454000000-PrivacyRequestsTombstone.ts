@@ -29,14 +29,28 @@ export class PrivacyRequestsTombstone1788454000000 implements MigrationInterface
     }
 
     public async down(queryRunner: QueryRunner): Promise<void> {
+        await this.assertNoTombstones(queryRunner);
         await queryRunner.query(`DROP INDEX "IDX_privacy_requests_subjectKey"`);
         await queryRunner.query(`ALTER TABLE "privacy_requests" DROP COLUMN "profileId"`);
         await queryRunner.query(`ALTER TABLE "privacy_requests" DROP COLUMN "subjectKey"`);
         await queryRunner.query(`ALTER TABLE "privacy_requests" DROP CONSTRAINT "FK_privacy_requests_userId"`);
-        // Tombstones (userId NULL) cannot go back under NOT NULL; drop them first.
-        await queryRunner.query(`DELETE FROM "privacy_requests" WHERE "userId" IS NULL`);
         await queryRunner.query(`ALTER TABLE "privacy_requests" ALTER COLUMN "userId" SET NOT NULL`);
         await queryRunner.query(`ALTER TABLE "privacy_requests" ADD CONSTRAINT "FK_privacy_requests_userId" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
+    }
+
+    // The rows PRIVACY.md §9 requires to outlive a deletion. Refuse, rather
+    // than delete them silently as this rollback used to (AUDIT_2026-09-05
+    // H6): an operator who really means to discard them does it explicitly,
+    // on the record, before reverting.
+    private async assertNoTombstones(queryRunner: QueryRunner): Promise<void> {
+        const [{ count }] = (await queryRunner.query(
+            `SELECT COUNT(*)::int AS count FROM "privacy_requests" WHERE "userId" IS NULL`,
+        )) as [{ count: number }];
+        if (count > 0) {
+            throw new Error(
+                `${this.name}.down(): ${count} tombstone row(s) in privacy_requests ("userId" IS NULL) would be destroyed by restoring NOT NULL; export or delete them explicitly before reverting.`,
+            );
+        }
     }
 
 }

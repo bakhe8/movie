@@ -26,6 +26,7 @@ export class WatchEvent {
   @JoinColumn({ name: 'titleId' })
   title: Title;
 
+  @Index('IDX_watch_events_titleId')
   @Column({ type: 'uuid' })
   titleId: string;
 

@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, Index } from 'typeorm';
 import { Title } from './title.entity';
 
 @Entity('embeddings')
@@ -10,6 +10,7 @@ export class Embedding {
   @JoinColumn({ name: 'titleId' })
   title: Title;
 
+  @Index('IDX_embeddings_titleId')
   @Column()
   titleId: string;
 

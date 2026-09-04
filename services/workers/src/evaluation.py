@@ -51,7 +51,14 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tupl
 import numpy as np
 
 from .ranker import PlackettLuceRanker
-from .training import FINGERPRINT_V1_DIMENSIONS, REGULARIZATION_GRID, TriadEvent, fingerprint_vector, ranking_to_indices
+from .training import (
+    FINGERPRINT_V1_DIMENSIONS,
+    REGULARIZATION_GRID,
+    TRAINABLE_TRIAD_PREDICATE,
+    TriadEvent,
+    fingerprint_vector,
+    load_trainable_triads,
+)
 
 Scorer = Callable[[str], float]
 
@@ -399,11 +406,13 @@ def build_report(scores: List[TriadScore], thresholds: GateThresholds, label: st
 
 
 def load_profiles(cursor, exclude_domains: Sequence[str]) -> Tuple[List[ProfileData], Dict[str, int]]:
+    # Counted and loaded through training.py's own predicate (H4): the gate
+    # must see exactly the triads training would, holdout rows excluded.
     cursor.execute(
-        """
+        f"""
         SELECT p.id FROM profiles p JOIN users u ON u.id = p."userId"
         WHERE u.active AND NOT EXISTS (SELECT 1 FROM unnest(%s::text[]) d WHERE u.email ILIKE '%%@' || d)
-          AND (SELECT COUNT(*) FROM triads t WHERE t."profileId" = p.id AND t.status = 'completed' AND t.ranking IS NOT NULL) >= 5
+          AND (SELECT COUNT(*) FROM triads t WHERE t."profileId" = p.id AND {TRAINABLE_TRIAD_PREDICATE}) >= 5
         ORDER BY p."createdAt"
         """,
         (list(exclude_domains),),
@@ -414,18 +423,7 @@ def load_profiles(cursor, exclude_domains: Sequence[str]) -> Tuple[List[ProfileD
 
     profiles: List[ProfileData] = []
     for profile_id in profile_ids:
-        cursor.execute(
-            """
-            SELECT "titleIds", ranking FROM triads
-            WHERE "profileId" = %s AND status = 'completed' AND ranking IS NOT NULL
-            ORDER BY COALESCE("answeredAt", "createdAt") ASC
-            """,
-            (profile_id,),
-        )
-        triads = [
-            (tuple(str(t) for t in ids), ranking_to_indices(tuple(str(t) for t in ids), ranking))
-            for ids, ranking in cursor.fetchall()
-        ]
+        triads = load_trainable_triads(cursor, profile_id)
         wanted = sorted({t for ids, _ in triads for t in ids})
         cursor.execute('SELECT id, fingerprint, genres, "originalLanguage" FROM titles WHERE id = ANY(%s::uuid[])', (wanted,))
         fingerprints: Dict[str, np.ndarray] = {}

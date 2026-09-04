@@ -2,6 +2,7 @@ import math
 
 import numpy as np
 
+from src.evaluation import load_profiles
 from src.evaluation import (
     BASELINES,
     MODEL_NAME,
@@ -144,3 +145,27 @@ def test_build_report_on_no_scores_is_insufficient_not_an_error():
     assert report["heldOut"] == {"triads": 0, "profiles": 0}
     assert report["gate"]["sufficient"] is False
     assert report["bestBaseline"] is None
+
+
+class FakeCursor:
+    def __init__(self):
+        self.executed = []
+
+    def execute(self, sql, params=None):
+        self.executed.append(" ".join(sql.split()))
+
+    def fetchall(self):
+        return []
+
+
+# H4 (AUDIT_2026-09-05): the gate must count and load exactly the triads
+# training would -- holdout rows excluded from the >= 5 threshold too,
+# through training.py's own predicate.
+def test_load_profiles_counts_only_trainable_triads_excluding_holdout():
+    cursor = FakeCursor()
+
+    profiles, popularity = load_profiles(cursor, ["demo.local"])
+
+    assert profiles == [] and popularity == {}
+    assert "NOT holdout" in cursor.executed[0]
+    assert "status = 'completed'" in cursor.executed[0]

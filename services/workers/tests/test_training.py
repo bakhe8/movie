@@ -6,10 +6,12 @@ from src.training import (
     FINGERPRINT_DIMENSIONS,
     FINGERPRINT_V1_DIMENSIONS,
     REGULARIZATION_GRID,
+    TRAINABLE_TRIAD_PREDICATE,
     compute_director_diversity,
     compute_genre_diversity,
     compute_language_diversity,
     fingerprint_vector,
+    load_trainable_triads,
     ranking_to_indices,
     train_and_evaluate,
 )
@@ -416,3 +418,44 @@ class TestChosenRegularization:
         check_ranker = PlackettLuceRanker(1, regularization=result.chosen_regularization)
         check_ranker.fit(triads, fingerprints, population_priors=None)
         np.testing.assert_allclose(result.weights, check_ranker.weights)
+
+
+class FakeCursor:
+    """Records every statement and answers fetchall() from a fixed list."""
+
+    def __init__(self, rows):
+        self.rows = rows
+        self.executed = []
+
+    def execute(self, sql, params=None):
+        self.executed.append((" ".join(sql.split()), params))
+
+    def fetchall(self):
+        return self.rows
+
+
+class TestLoadTrainableTriads:
+    # H4 (AUDIT_2026-09-05): RANKING_ALGORITHM.md §6 excludes holdout = true
+    # rows from training. The column is always false today, so the query text
+    # is the only place the exclusion can be proven before a policy sets it.
+    def test_query_excludes_holdout_rows_and_takes_only_answered_ones(self):
+        cursor = FakeCursor([])
+
+        load_trainable_triads(cursor, "profile-1")
+
+        [(sql, params)] = cursor.executed
+        assert "NOT holdout" in sql
+        assert "status = 'completed'" in sql and "ranking IS NOT NULL" in sql
+        assert 'ORDER BY COALESCE("answeredAt", "createdAt") ASC' in sql
+        assert params == ("profile-1",)
+
+    def test_predicate_shared_with_evaluation_carries_the_same_exclusion(self):
+        assert "NOT holdout" in TRAINABLE_TRIAD_PREDICATE
+
+    def test_converts_rankings_to_positions_and_keeps_row_order(self):
+        cursor = FakeCursor([(["a", "b", "c"], ["c", "a", "b"]), (["d", "e", "f"], ["d", "e", "f"])])
+
+        assert load_trainable_triads(cursor, "profile-1") == [
+            (("a", "b", "c"), [2, 0, 1]),
+            (("d", "e", "f"), [0, 1, 2]),
+        ]
