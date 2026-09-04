@@ -8,6 +8,26 @@
   min-height: 100vh;
 }
 
+/* Skip navigation: visually hidden until focused by keyboard. */
+.skipNav {
+  position: absolute;
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+  top: -100%;
+  z-index: 9999;
+  padding: 0.5rem 1rem;
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 2px solid var(--color-accent);
+  border-radius: 0 0 4px 4px;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.skipNav:focus {
+  top: 0;
+}
+
 /* Room for the fixed bottom tabs on the phone (tab height + safe area). */
 .withNav {
   padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));

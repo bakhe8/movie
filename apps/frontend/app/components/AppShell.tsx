@@ -11,7 +11,9 @@ type Lang = 'ar' | 'en';
 
 const labels = {
   ar: {
+    skip: 'تخطّ إلى المحتوى',
     nav: 'أقسام التطبيق',
+    navTabs: 'تنقل الأقسام',
     home: 'الرئيسية',
     rank: 'رتّب',
     discover: 'اكتشف',
@@ -24,7 +26,9 @@ const labels = {
     prefs: 'التفضيلات',
   },
   en: {
+    skip: 'Skip to content',
     nav: 'App sections',
+    navTabs: 'Section tabs',
     home: 'Home',
     rank: 'Rank',
     discover: 'Discover',
@@ -172,6 +176,7 @@ export function AppShell({
 
   return (
     <div className={hasNav ? `${styles.shell} ${styles.withNav}` : styles.shell} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+      <a href="#main-content" className={styles.skipNav}>{t.skip}</a>
       <header className={styles.header}>
         <div className={styles.bar}>
           <button
@@ -239,10 +244,10 @@ export function AppShell({
         </div>
       </header>
 
-      <main className={styles.content}>{children}</main>
+      <main id="main-content" className={styles.content}>{children}</main>
 
       {hasNav && (
-        <nav className={styles.tabs} aria-label={t.nav}>
+        <nav className={styles.tabs} aria-label={t.navTabs}>
           {VIEWS.map((item) => (
             <button
               key={item}

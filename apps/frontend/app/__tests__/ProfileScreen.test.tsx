@@ -17,6 +17,7 @@ import { useSession } from '../lib/session';
 const BASE_SESSION = {
   user: { id: 'u1', email: 'test@example.com', name: 'Test', role: 'user' as const },
   profile: { id: 'p1', userId: 'u1', name: 'ملف الذوق الرئيسي', preferredLanguage: 'ar' as const, market: 'SA', platforms: ['netflix'] as string[], pausedAt: null as string | null },
+  token: null as string | null,
   refreshProfile: vi.fn().mockResolvedValue(undefined),
   logout: vi.fn(),
   login: vi.fn(),
@@ -54,12 +55,12 @@ vi.mock('../lib/api', () => ({
 }));
 
 import { api } from '../lib/api';
-const mockApi = api as Record<string, ReturnType<typeof vi.fn>>;
+const mockApi = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 const mockUseSession = vi.mocked(useSession);
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockUseSession.mockReturnValue({ ...BASE_SESSION, profile: { ...BASE_SESSION.profile, pausedAt: null } } as ReturnType<typeof useSession>);
+  mockUseSession.mockReturnValue({ ...BASE_SESSION, profile: { ...BASE_SESSION.profile, pausedAt: null } } as unknown as ReturnType<typeof useSession>);
   mockApi.getTrainingStatus.mockResolvedValue({ state: 'idle', latestSnapshot: null, completedTriads: 0, nextTrainingAt: null, job: null });
   mockApi.getRecommendations.mockResolvedValue({ state: 'pending', needed: 3 });
   mockApi.getConsents.mockResolvedValue([]);
@@ -126,7 +127,7 @@ describe('ProfileScreen — pause/resume toggle', () => {
     mockUseSession.mockReturnValue({
       ...BASE_SESSION,
       profile: { ...BASE_SESSION.profile, pausedAt: new Date().toISOString() },
-    } as ReturnType<typeof useSession>);
+    } as unknown as ReturnType<typeof useSession>);
     renderProfile();
     const resumeBtn = await screen.findByRole('button', { name: /استئناف المعالجة/i });
     await user.click(resumeBtn);

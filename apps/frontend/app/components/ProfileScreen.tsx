@@ -633,7 +633,7 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
             {exportBusy ? t.exporting : t.exportSubmit}
           </button>
         </div>
-        {exportNotice && <p className={styles.notice}>{exportNotice}</p>}
+        {exportNotice && <p className={styles.notice} role="status">{exportNotice}</p>}
 
         {/* Delete account (PRIVACY.md §5 §10, ALPHA 2.4): 30-day scheduled,
             cancellable, password-verified. */}
@@ -684,7 +684,7 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
             </div>
           </>
         )}
-        {deleteNotice && <p className={styles.notice}>{deleteNotice}</p>}
+        {deleteNotice && <p className={styles.notice} role="status">{deleteNotice}</p>}
 
         <h3>{t.pauseTitle}</h3>
         <p>{t.pauseBody}</p>
@@ -698,7 +698,7 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
             {pauseBusy ? (paused ? t.resuming : t.pausing) : (paused ? t.resumeAction : t.pauseAction)}
           </button>
         </div>
-        {pauseNotice && <p className={styles.notice}>{pauseNotice}</p>}
+        {pauseNotice && <p className={styles.notice} role="status">{pauseNotice}</p>}
       </section>
     </div>
   );

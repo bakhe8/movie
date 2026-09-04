@@ -45,7 +45,7 @@ vi.mock('../lib/api', () => ({
 }));
 
 import { api } from '../lib/api';
-const mockApi = api as { getCurrentTriad: ReturnType<typeof vi.fn>; replaceTriadItem: ReturnType<typeof vi.fn>; rankTriad: ReturnType<typeof vi.fn>; getCompletedTriads: ReturnType<typeof vi.fn> };
+const mockApi = api as unknown as { getCurrentTriad: ReturnType<typeof vi.fn>; replaceTriadItem: ReturnType<typeof vi.fn>; rankTriad: ReturnType<typeof vi.fn>; getCompletedTriads: ReturnType<typeof vi.fn> };
 
 beforeEach(() => {
   vi.clearAllMocks();

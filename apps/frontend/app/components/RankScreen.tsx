@@ -362,7 +362,7 @@ export function RankScreen({
             {notice}
           </p>
         )}
-        <p className={`${styles.status} ${styles.error}`} role="status">
+        <p className={`${styles.status} ${styles.error}`} role="alert">
           {t.needMore(phase.needed)}
         </p>
         {/* The screen's single filled action (Q6, Q18): the watched set is the
