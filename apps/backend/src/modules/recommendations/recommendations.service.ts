@@ -315,8 +315,14 @@ export class RecommendationsService {
     limit: number,
     explorationShare: number,
   ): (ScoredTitle & { track: RecommendationTrack })[] {
-    const explorationSlots = usual.genres.size === 0 ? 0 : Math.floor(limit * explorationShare);
-    const mainSlots = Math.max(0, limit - explorationSlots);
+    // Slots are counted against what there is to show, not against what was
+    // asked for (A-13): with a pool smaller than `limit` the head would
+    // otherwise take every candidate and leave the exploration track empty --
+    // silently switching exploration off exactly when the pool is thin, which
+    // is when it matters most.
+    const shown = Math.min(limit, ranked.length);
+    const explorationSlots = usual.genres.size === 0 ? 0 : Math.floor(shown * explorationShare);
+    const mainSlots = Math.max(0, shown - explorationSlots);
 
     const crosses = (item: ScoredTitle): boolean => {
       const genres = item.title.genres ?? [];

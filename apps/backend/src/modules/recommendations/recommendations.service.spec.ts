@@ -989,6 +989,69 @@ describe('RecommendationsService', () => {
       expect(items.every((item) => item.track === 'safe')).toBe(true);
     });
 
+    // A-13, found live by session B: a profile whose candidate pool is
+    // smaller than the requested limit came back all-`safe`. The share has to
+    // be spent on what there actually is to show, not on the number asked
+    // for -- otherwise the head slots swallow the whole pool and the
+    // exploration track silently disappears exactly when the catalogue is
+    // thinnest, which is when a bubble forms most easily.
+    it('still spends the share when the pool is smaller than the requested limit', async () => {
+      const titles = Array.from({ length: 7 }, (_, index) =>
+        titleWith(`t${index}`, (10 - index) / 10, ['Drama'], 'ar'),
+      );
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const items = await recommendItems('user-1', 'profile-1', 12);
+
+      // 20% of the 7 available = 1 slot, taken from the worst-ranked.
+      expect(items).toHaveLength(7);
+      expect(items.filter((item) => item.track === 'outside_usual').map((item) => item.title.id)).toEqual(['t6']);
+    });
+
+    // The floor still applies: with four candidates, 20% is 0.8 of a slot and
+    // no title is promoted to a track it did not earn.
+    it('spends nothing when the share does not add up to a whole slot', async () => {
+      const titles = Array.from({ length: 4 }, (_, index) =>
+        titleWith(`t${index}`, (10 - index) / 10, ['Drama'], 'ar'),
+      );
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const items = await recommendItems('user-1', 'profile-1', 12);
+
+      expect(items).toHaveLength(4);
+      expect(items.every((item) => item.track !== 'outside_usual')).toBe(true);
+    });
+
+    // The other half of A-13's answer. `crosses()` needs *every* genre of a
+    // candidate to sit outside the profile's union of watched genres, so the
+    // wider that union grows the harder `discovery` is to reach -- a profile
+    // that has watched a Drama and a Horror gets no discovery from a
+    // Drama/Horror title, only from a language it has never watched. That is
+    // the current definition, pinned here so it cannot drift unnoticed; BP
+    // §4.4 wanted a "non-obvious link", and whether this is strict enough or
+    // too strict is an open product question, not a silent implementation
+    // detail.
+    it('does not call a partial genre overlap a discovery, however wide the history', async () => {
+      statesRepository.find.mockResolvedValue([{ titleId: 'watched-1' }, { titleId: 'watched-2' }]);
+      titlesRepository.find.mockResolvedValue([
+        { id: 'watched-1', genres: ['Drama'], originalLanguage: 'ar' },
+        { id: 'watched-2', genres: ['Horror'], originalLanguage: 'ar' },
+      ] as unknown as Title[]);
+      const titles = [
+        titleWith('overlaps', 0.9, ['Drama', 'Horror'], 'ar'),
+        titleWith('half-overlaps', 0.8, ['Drama', 'Comedy'], 'ar'),
+        titleWith('fully-outside', 0.7, ['Comedy'], 'ar'),
+      ];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const items = await recommendItems('user-1', 'profile-1', 3);
+      const tracks = new Map(items.map((item) => [item.title.id, item.track]));
+
+      expect(tracks.get('overlaps')).toBe('safe');
+      expect(tracks.get('half-overlaps')).toBe('safe');
+      expect(tracks.get('fully-outside')).toBe('discovery');
+    });
+
     it('takes the exploration share from the running experiment arm when there is one', async () => {
       experimentsService.armFor.mockResolvedValue('exploration-high');
       const titles = Array.from({ length: 10 }, (_, index) =>
