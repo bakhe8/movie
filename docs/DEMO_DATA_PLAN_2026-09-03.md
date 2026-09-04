@@ -556,6 +556,10 @@ The owner's standing rule (2026-09-03): never plan around the 15 hand-entered `F
 
 ---
 
+### 7.9 Catalog expansion candidates: +125 real Wikidata QIDs, no model calls (board C-16)
+
+Prepared for the owner's review before any enrichment runs (ALPHA_PLAN 5.4). `apps/backend/src/scripts/fixtures/catalog.expansion.candidates.tsv` and its companion `catalog.expansion.criteria.md` (published selection criteria and method) list 125 real film candidates addressing measured gaps in the current 300: zero Sub-Saharan Africa titles, 5 Latin America, near-zero Southeast/South Asia beyond India, thin Eastern Europe, near-zero Documentary/War/Political genres. Every row resolved to a real Wikidata QID with a verified IMDb id (P345) -- `query.wikidata.org`'s SPARQL service was mid-outage for part of this pass (HTTP 429/502/504), so per-title resolution via Wikidata's REST API filled that gap, and direct SPARQL resumed once it recovered. The target was +200; 125 is what survived after dropping ~35 SPARQL hits that were Hollywood co-production credits, not genuine national cinema, and ~18 duplicates of the existing 300 (checked by real QID, not title string) -- see the criteria doc's "Result: 125, not 200" section for the honest accounting. Nothing here is enriched or loaded anywhere.
+
 ## 8. Provider decision — LLM enrichment through the Anthropic Messages API
 
 Owner's decision, 2026-09-03, in answer to "what is the alternative to an OpenAI key". Written here in ADR form because [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) was being edited by a concurrent session at the time; **it must be appended there under the next free number**, with a row in the summary table and a "superseded in part by" line under ADR-6, ADR-23 and ADR-36. Until then this section is the record.
@@ -596,3 +600,4 @@ Owner's decision, 2026-09-03, in answer to "what is the alternative to an OpenAI
 | 2026-09-04 | §7.6 (C-10): `linearity`'s name-vs-description ambiguity diagnosed and fixed (wording only, same 0/1 convention); stability gate now passes, drift 0.109→0.015 on a real re-verification |
 | 2026-09-04 | §7.7 (C-14, owner approval O-6): full 300-title V1 re-extraction under the fixed prompt published to movie-postgres (3,890 rows superseded); cost 1.02M in / 114K out tokens, no dollar figure by design; personas and judge model retrained, WS4 bar still met |
 | 2026-09-04 | §7.8 (C-15): the 15 `FILM*` placeholders and the 64 test/load-test accounts referencing them retired from `movie-postgres`; README/QUICKSTART point at `db:seed:demo`, not `db:seed`, by default |
+| 2026-09-04 | §7.9 (C-16): +125 candidate Wikidata QIDs for the 500-title target, published criteria, zero model calls -- for the owner's review before any enrichment |
