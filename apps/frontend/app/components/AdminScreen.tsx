@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { api, ApiError } from '../lib/api';
+import { api } from '../lib/api';
 import s from './AdminScreen.module.css';
 
 type Tab = 'catalog' | 'features' | 'models' | 'privacy';
@@ -430,21 +430,31 @@ const TAB_LABELS: Record<Tab, string> = {
   privacy: 'الخصوصية',
 };
 
+type Access = 'checking' | 'allowed' | 'forbidden';
+
 export function AdminScreen() {
   const [tab, setTab] = useState<Tab>('catalog');
-  const [forbidden, setForbidden] = useState(false);
+  const [access, setAccess] = useState<Access>('checking');
 
-  // Detect non-admin on first load
+  // Gate the whole screen on a real admin check (AUDIT_2026-09-05 C1/M5):
+  // the tab UI below must not mount before this resolves, and ANY non-2xx
+  // response (401 for an anonymous visitor included, not just 403) must
+  // deny access -- checking `err.status === 403` only let an anonymous
+  // visitor's 401 fall through and leave the admin shell visible.
   useEffect(() => {
-    api.adminGetTitles({ limit: 1 }).catch(err => {
-      if (err instanceof ApiError && err.status === 403) setForbidden(true);
-    });
+    let cancelled = false;
+    api.adminGetTitles({ limit: 1 })
+      .then(() => { if (!cancelled) setAccess('allowed'); })
+      .catch(() => { if (!cancelled) setAccess('forbidden'); });
+    return () => { cancelled = true; };
   }, []);
 
-  if (forbidden) {
+  if (access !== 'allowed') {
     return (
       <div className={s.screen}>
-        <p className={s.forbidden}>ليس لديك صلاحية الوصول إلى لوحة الإدارة.</p>
+        <p className={s.forbidden}>
+          {access === 'checking' ? 'جارٍ التحقق من الصلاحية...' : 'ليس لديك صلاحية الوصول إلى لوحة الإدارة.'}
+        </p>
       </div>
     );
   }
