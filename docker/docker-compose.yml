@@ -27,6 +27,10 @@ services:
       - "127.0.0.1:5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # First-init-only: creates `moviedb_test` alongside `moviedb` in this
+      # same instance (board C-17). A volume from before C-17 needs the
+      # one-time manual step documented in init-test-db.sql's header instead.
+      - ./init-test-db.sql:/docker-entrypoint-initdb.d/10-init-test-db.sql:ro
     networks:
       - movie-network
     healthcheck:
@@ -50,27 +54,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  # Separate, disposable database for the backend's e2e test suite
-  # (apps/backend/npm run test:e2e). Never used for dev/prod data.
-  postgres-test:
-    image: ankane/pgvector:latest
-    container_name: movie-postgres-test
-    environment:
-      POSTGRES_USER: movieapp
-      POSTGRES_PASSWORD: test_password
-      POSTGRES_DB: moviedb_test
-    ports:
-      - "127.0.0.1:5544:5432"
-    tmpfs:
-      - /var/lib/postgresql/data
-    networks:
-      - movie-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U movieapp"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
 
 volumes:
   postgres_data:

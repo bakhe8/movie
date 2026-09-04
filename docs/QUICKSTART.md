@@ -60,7 +60,7 @@ cp .env.example .env
 npm run docker:up
 ```
 
-Starts `movie-postgres` (host port 5433), `movie-redis` (6379) and `movie-postgres-test` (5544, disposable, for e2e tests). Check with `docker ps`.
+Starts `movie-postgres` (host port 5433) and `movie-redis` (6379). Check with `docker ps`. The e2e test suite's database (`moviedb_test`) lives inside this same Postgres instance, not a separate container (board C-17, 2026-09-04) — `npm run test:e2e:up` (from `apps/backend`) creates it the first time, idempotently.
 
 The compose project name is pinned to `movie` in `docker/docker-compose.yml`, so every invocation (root scripts, `apps/backend` e2e, the Makefile) lands in one project and volumes are named `movie_postgres_data` / `movie_redis_data`. Containers created before that line existed show under a `docker` group in Docker Desktop and need a one-time recreate that keeps their data; the steps are in the comment at the top of `docker/docker-compose.yml`.
 
@@ -74,7 +74,7 @@ npm run db:migrate
 npm run db:seed:demo
 ```
 
-Migrations create the tables in [SCHEMA.md](SCHEMA.md) §1; this seed upserts the 300-title demo catalog (fingerprints included, from the fixture already in the repo) and rebuilds the four demo persona accounts, idempotently — see §6.1. The 15-placeholder-title seed (`npm run db:seed`, `apps/backend/src/scripts/seed.ts`) is retired from `movie-postgres` (board C-15, owner's "never 15" rule, 2026-09-03) and kept only as a fixture for `postgres-test`'s own e2e specs.
+Migrations create the tables in [SCHEMA.md](SCHEMA.md) §1; this seed upserts the 300-title demo catalog (fingerprints included, from the fixture already in the repo) and rebuilds the four demo persona accounts, idempotently — see §6.1. The 15-placeholder-title seed (`npm run db:seed`, `apps/backend/src/scripts/seed.ts`) is retired from `movie-postgres` (board C-15, owner's "never 15" rule, 2026-09-03) and kept only as a fixture for the e2e suite's own `moviedb_test` database.
 
 ## 5. Run
 
@@ -134,7 +134,7 @@ cd apps/backend && npx tsc --noEmit
 cd apps/frontend && npx tsc --noEmit
 ```
 
-The e2e suite starts `postgres-test`, runs migrations against it and proves cross-user access is blocked; it never touches the dev database.
+The e2e suite runs migrations against `moviedb_test` (a separate database, same Postgres instance as dev since board C-17) and proves cross-user access is blocked; it never touches the `moviedb` dev database.
 
 ## 8. Useful commands
 
@@ -173,10 +173,10 @@ Backup and restore (`docker/backup-postgres.sh`, `docker/restore-postgres.sh`) a
 | `JWT_SECRET environment variable is required` | same | set any non-empty value locally |
 | backend connects but tables are missing | migrations not run | `npm run db:migrate` |
 | `relation "triads" does not exist` in the trainer | trainer points at another DB | `DATABASE_URL` must use port 5433 |
-| port in use (3000/3101/5433/6379/5544) | another process/container | `netstat -ano \| findstr :3101` on Windows, `lsof -i :3101` on macOS/Linux; stop it or change the port |
+| port in use (3000/3101/5433/6379) | another process/container | `netstat -ano \| findstr :3101` on Windows, `lsof -i :3101` on macOS/Linux; stop it or change the port |
 | Rank tab says "mark at least three films" | fewer than 3 watched titles for the profile | Discover → mark more |
 | My list shows "not ready yet" | no model snapshot | run the trainer (step 6.4) |
-| e2e fails to connect on 5544 | `postgres-test` not healthy yet | `docker ps`, retry |
+| e2e fails to connect / migrate | `movie-postgres` not healthy yet, or `moviedb_test` not created yet | `docker ps`; `npm run test:e2e:up` (from `apps/backend`) creates `moviedb_test` idempotently |
 | fresh clone: backend can't authenticate to Postgres (`password authentication failed`) | Compose resolves `.env` relative to the *compose file's* directory (`docker/`), not the repo root, so `POSTGRES_PASSWORD` silently fell back to `postgres` on first `docker:up` while the backend's own `.env` expects `dev_password_change_in_production` (H5, [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) ADR-38) | already fixed in `docker:up`/`docker:down`/`test:e2e:up`/`docker-logs` (`--project-directory .`, or `../..` from `apps/backend`) as of this revision — if you still hit it, your Postgres volume was initialized before the fix; `docker compose -f docker/docker-compose.yml down -v` and re-run step 2 |
 | CRLF warnings from git | Windows autocrlf | harmless |
 
@@ -189,6 +189,7 @@ Backup and restore (`docker/backup-postgres.sh`, `docker/restore-postgres.sh`) a
 ---
 
 **Changelog**
+- 2.4 (2026-09-04): the disposable `postgres-test` container is gone (board C-17, owner's order); the e2e suite's `moviedb_test` database now lives inside `movie-postgres` itself, same port. `npm run test:e2e:up` creates it idempotently.
 - 2.3 (2026-09-04): §4's seed step is `db:seed:demo` (the 300-title catalog), not `db:seed` (the 15 `FILM*` placeholders, retired from `movie-postgres`, board C-15).
 - 2.2 (2026-09-04): §8.1 added — the staging/production build (ALPHA_PLAN 7.3/7.4: per-service Dockerfiles, `docker-compose.prod.yml`, backup/restore) is now in this guide, not just in ARCHITECTURE.md's table (board C-13).
 - 2.1 (2026-09-03): added the fresh-clone Postgres-password troubleshooting row (H5, ADR-38) now that `docker:up`/`docker:down`/`test:e2e:up`/`docker-logs` correctly resolve the root `.env`.

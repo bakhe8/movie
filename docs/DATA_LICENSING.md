@@ -81,7 +81,7 @@ The user uploads a file they are entitled to (e.g. an export from a service that
 5. Posters only where a registry row allows display; otherwise text cards.
 6. Record the catalog's coverage and quality by language, country and popularity (`BP §11.3`).
 
-The 15 hand-entered titles in `apps/backend/src/scripts/seed.ts` are development fixtures with `licenseStatus: 'unknown'`; retired from `movie-postgres` (board C-15, 2026-09-04 — the owner's catalog floor is 200+ titles, never these 15), kept only as a fixture for `postgres-test`'s own e2e specs, and must not appear in any external test.
+The 15 hand-entered titles in `apps/backend/src/scripts/seed.ts` are development fixtures with `licenseStatus: 'unknown'`; retired from `movie-postgres` (board C-15, 2026-09-04 — the owner's catalog floor is 200+ titles, never these 15), kept only as a fixture for the e2e suite's own `moviedb_test` database (board C-17), and must not appear in any external test.
 
 ## 5. Attribution
 

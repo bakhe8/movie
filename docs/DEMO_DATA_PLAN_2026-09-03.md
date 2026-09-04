@@ -552,7 +552,7 @@ A small, expected fluctuation from a real data correction — NLL and accuracy m
 
 The owner's standing rule (2026-09-03): never plan around the 15 hand-entered `FILM*` titles in `apps/backend/src/scripts/seed.ts` — 200 is the floor, 300–500 the target. They had stayed in `movie-postgres` since before the 300-title catalog existed. Investigated before touching anything: 64 accounts' triads (395) or watch-states (107) referenced them — `triads.titleIds` is a plain array with no FK, so the titles couldn't simply be deleted without leaving dangling references. Every one of the 64 was a disposable QA/load-test account (`load-*@example.com`, `rank-ui-*`, `verify-20260903`, `triad-test-*`, `browser.test.20260902`) — none `@demo.local`, none `claude@judge.local`. Deleted (cascade: profiles, triads, watch-states, replacements, refresh tokens; `consents.userId` set NULL by design) then the 15 titles. Verified after: 0 `FILM*` titles, 0 dangling triad references, all 5 real accounts intact, 300 catalog titles untouched.
 
-`seed.ts` itself is unchanged and still runs against `postgres-test` for its own isolated fixture use; only the default setup flow (README.md, QUICKSTART.md §4) no longer points a fresh clone at it — `npm run db:seed:demo` (the 300-title catalog) is the documented step now.
+`seed.ts` itself is unchanged and still runs against the e2e suite's own `moviedb_test` database (board C-17) for its isolated fixture use; only the default setup flow (README.md, QUICKSTART.md §4) no longer points a fresh clone at it — `npm run db:seed:demo` (the 300-title catalog) is the documented step now.
 
 ---
 

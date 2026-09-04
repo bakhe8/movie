@@ -38,7 +38,7 @@ Two views are kept apart: **as built (2026-09-03)** and **target**. Anything mar
                               └──────────────────────────┘        └────────────────────┘
 ```
 
-Test infrastructure: a disposable `postgres-test` container (host port 5544, tmpfs) for the backend e2e suite.
+Test infrastructure: the backend e2e suite runs against `moviedb_test`, a second database inside the same dev Postgres instance (board C-17) — not a separate container.
 
 ## 2. Responsibilities
 
@@ -135,7 +135,7 @@ modules/triads               current (random-v1), completed list, rank
 modules/recommendations      Personal Fit from latest snapshot, band heuristic
 modules/user-title-state     PATCH state, watched-titles, watchlist
 scripts/seed.ts              15 hand-entered titles
-test/idor.e2e-spec.ts        cross-user access proof over real HTTP + postgres-test
+test/idor.e2e-spec.ts        cross-user access proof over real HTTP + moviedb_test
 ```
 
 Target additions: `modules/replacements` (or inside `triads`), `modules/watch-events`, `modules/consents`, `modules/privacy`, `modules/library-imports`, `modules/admin` (role guard), `modules/model-client` (HTTP client to the Python service), `modules/enrichment` (job producer), `common/` (guards, decorators, request-id middleware, audit interceptor). Every profile-scoped handler keeps the existing `assertProfileOwnership` pattern.
@@ -186,7 +186,7 @@ Target (the rest of `api.py`: triads/select, score, taste-profile, shared-space/
 
 | Environment | Built | Required before Alpha |
 |---|---|---|
-| Local | `docker compose` Postgres (5433) + Redis (6379) + `postgres-test` (5544); `npm run dev` (frontend 3000, backend 3101); Python CLI | unchanged |
+| Local | `docker compose` Postgres (5433, also hosts `moviedb_test` for e2e — board C-17) + Redis (6379); `npm run dev` (frontend 3000, backend 3101); Python CLI | unchanged |
 | CI | `.github/workflows/ci.yml`: three jobs (backend, frontend, workers) on every push to `main` and every PR; `main` pushes no longer cancel each other (per-commit-sha concurrency group, PR branches still do) | unchanged |
 | Staging | `docker/Dockerfile` per service (`apps/backend`, `apps/frontend`, `services/workers`) + `docker/docker-compose.prod.yml`: one-shot `migrate` service before the app containers, secrets as files under `docker/secrets/` (never `.env`) read via `docker/read-secrets.sh`; `docker/backup-postgres.sh` / `restore-postgres.sh`, a full live restore drill run and documented (`ALPHA_PLAN_2026-09-04.md` §8.12) | feature flags |
 | Production | same images/compose as staging | managed Postgres with PITR and encryption at rest (ADR-24, still open), TLS, secrets manager, model rollback, OpenTelemetry + Sentry + first-party analytics, cost monitoring; data residency in KSA/region preferred ([PRIVACY.md](PRIVACY.md)) |
