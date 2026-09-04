@@ -92,6 +92,8 @@ export interface Title {
   // The description's source from the rights registry (ALPHA_PLAN 5.1
   // follow-up); the page's SourcesFooter folds its credit. null = no row.
   descriptionSource?: TextSource | null;
+  // Human-reviewed content dimensions as level bands (ADR-81); null = none reviewed.
+  fingerprintSummary?: { key: string; level: 'low' | 'mid' | 'high' }[] | null;
 }
 
 export interface PaginatedTitles {
