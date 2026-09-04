@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import type { PosterService } from '../public-quality/poster.service';
 import type { Repository } from 'typeorm';
 import { Outcome } from '../../entities/outcome.entity';
 import { Profile } from '../../entities/profile.entity';
@@ -43,6 +44,7 @@ function titlesQueryBuilderMock(titles: Title[], poolSize: number) {
 }
 
 describe('TriadsService', () => {
+  let posterService: { attach: ReturnType<typeof vi.fn>; forTitles: ReturnType<typeof vi.fn> };
   let profilesRepository: ReturnType<typeof repoMock>;
   let titlesRepository: ReturnType<typeof repoMock>;
   let triadsRepository: ReturnType<typeof repoMock>;
@@ -66,6 +68,7 @@ describe('TriadsService', () => {
     // a no-op, matching every rank() test's behavior before ranked_later
     // existed, unless a test below sets this up itself.
     recommendationsRepository.findOne.mockResolvedValue(null);
+    posterService = { attach: vi.fn(async (rows: unknown[]) => rows), forTitles: vi.fn().mockResolvedValue(new Map()) };
     service = new TriadsService(
       profilesRepository as unknown as Repository<Profile>,
       titlesRepository as unknown as Repository<Title>,
@@ -74,6 +77,7 @@ describe('TriadsService', () => {
       replacementsRepository as unknown as Repository<TriadReplacement>,
       recommendationsRepository as unknown as Repository<Recommendation>,
       outcomesRepository as unknown as Repository<Outcome>,
+      posterService as unknown as PosterService,
     );
   });
 

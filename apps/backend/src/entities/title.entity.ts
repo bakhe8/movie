@@ -30,6 +30,13 @@ export class Title {
   @Column({ type: 'varchar', nullable: true })
   originalLanguage: string | null;
 
+  // TMDB's path for the film's poster (`/abc.jpg`), never a full URL: the
+  // served URL is composed per request with the size wanted and only when
+  // the image's `source_records` row allows display in this environment
+  // (ADR-82). NULL when TMDB has no poster for the title, or it has no tmdb id.
+  @Column({ type: 'varchar', nullable: true })
+  posterPath: string | null;
+
   @Column({ type: 'json', nullable: true })
   externalIds: {
     imdb?: string;

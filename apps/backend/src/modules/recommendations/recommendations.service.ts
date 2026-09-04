@@ -7,6 +7,7 @@ import { Profile } from '../../entities/profile.entity';
 import { Recommendation } from '../../entities/recommendation.entity';
 import { Title } from '../../entities/title.entity';
 import { Triad } from '../../entities/triad.entity';
+import { PosterService } from '../public-quality/poster.service';
 import { PublicQuality, PublicQualityService } from '../public-quality/public-quality.service';
 import { TrainingService } from '../training/training.service';
 import { FINGERPRINT_V2_DIMENSIONS, FINGERPRINT_V3_DIMENSIONS } from '../../entities/title-fingerprint.type';
@@ -203,6 +204,7 @@ export class RecommendationsService {
     @InjectRepository(Triad)
     private readonly triadsRepository: Repository<Triad>,
     private readonly trainingService: TrainingService,
+    private readonly posterService: PosterService,
   ) {}
 
   async findForProfile(userId: string, profileId: string, limit: number): Promise<RecommendationsResponse> {
@@ -248,7 +250,15 @@ export class RecommendationsService {
     });
 
     await this.persistShown(profileId, snapshot.modelVersion, results);
-    return { state: 'ready', items: results };
+    // The poster travels with every title the client renders (ADR-82).
+    const posters = await this.posterService.forTitles(results.map((result) => result.title));
+    return {
+      state: 'ready',
+      items: results.map((result) => {
+        const poster = posters.get(result.title.id);
+        return { ...result, title: { ...result.title, posterUrl: poster?.posterUrl ?? null, posterSource: poster?.posterSource ?? null } };
+      }),
+    };
   }
 
   // One row per recommendation actually shown (blueprint §13.1, §14, §14.1) --
@@ -308,8 +318,13 @@ export class RecommendationsService {
       .andWhere('title.id IN (:...watchedTitleIds)', { watchedTitleIds })
       .getMany();
 
-    return this.scoreTitles(titles, snapshot).map((scored, index) => ({
-      title: scored.title,
+    const scoredLibrary = this.scoreTitles(titles, snapshot);
+    const libraryPosters = await this.posterService.forTitles(scoredLibrary.map((scored) => scored.title));
+    return scoredLibrary.map((scored, index) => ({
+      title: (() => {
+        const poster = libraryPosters.get(scored.title.id);
+        return { ...scored.title, posterUrl: poster?.posterUrl ?? null, posterSource: poster?.posterSource ?? null };
+      })(),
       position: index + 1,
       confidenceBand: scored.confidenceBand,
       fingerprintCoverage: scored.fingerprintCoverage,

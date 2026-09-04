@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Profile } from '../../entities/profile.entity';
 import { Title } from '../../entities/title.entity';
 import { TitleState, UserTitleState } from '../../entities/user-title-state.entity';
+import { PosterService } from '../public-quality/poster.service';
 import { UpdateTitleStateDto } from './dto/update-title-state.dto';
 
 @Injectable()
@@ -15,6 +16,7 @@ export class UserTitleStateService {
     private readonly titlesRepository: Repository<Title>,
     @InjectRepository(UserTitleState)
     private readonly statesRepository: Repository<UserTitleState>,
+    private readonly posterService: PosterService,
   ) {}
 
   async upsert(
@@ -60,11 +62,19 @@ export class UserTitleStateService {
 
   async findByState(userId: string, profileId: string, state: TitleState): Promise<UserTitleState[]> {
     await this.assertProfileOwnership(userId, profileId);
-    return this.statesRepository.find({
+    const rows = await this.statesRepository.find({
       where: { profileId, state },
       relations: { title: true },
       order: { updatedAt: 'DESC' },
     });
+    // The poster travels with the title on this surface too (ADR-82).
+    const posters = await this.posterService.forTitles(rows.map((row) => row.title).filter(Boolean));
+    return rows.map((row) => {
+      const poster = row.title ? posters.get(row.title.id) : undefined;
+      return row.title
+        ? { ...row, title: { ...row.title, posterUrl: poster?.posterUrl ?? null, posterSource: poster?.posterSource ?? null } }
+        : row;
+    }) as UserTitleState[];
   }
 
   private async assertProfileOwnership(userId: string, profileId: string): Promise<void> {

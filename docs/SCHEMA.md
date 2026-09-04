@@ -37,6 +37,7 @@ titles (
   "releaseYear" integer, genres text,                            -- TypeORM simple-array (comma-joined)
   "externalIds" json,                                            -- { imdb?, tmdb?, wikidata? }
   fingerprint json,                                              -- FilmFingerprintV1 or NULL (see FINGERPRINT_SCHEMA.md)
+  "posterPath" varchar,                                          -- TMDB path only ("/abc.jpg"); the served URL is composed per read and gated on the image's source_records row (ADR-82). NULL until the catalog is re-seeded
   "originalLanguage" varchar,                                    -- Wikidata P364, single value; NULL for titles ingested before this column existed or with no recorded language (gap 5/gap 6, ADR-64)
   "createdAt" timestamp, "updatedAt" timestamp
 )
@@ -498,6 +499,7 @@ Each step is one TypeORM migration; none require data backfill beyond defaults b
 ---
 
 **Changelog**
+- 2.27 (2026-09-04): twenty-second migration `AddTitlePosterPath` -- `titles.posterPath` (ADR-82, owner decision on posters). Path only; `PosterService` composes the URL per read and withholds it unless the image's `source_records` row is displayable at this stage. NULL on `movie-postgres` until the catalog is re-seeded from the fixture that carries it.
 - 2.26 (2026-09-04): twenty-first migration `ConsentsTombstone` applied -- `consents.userId` nullable with `ON DELETE SET NULL` plus an indexed `subjectKey` (ADR-80, board F5). Consents now survive a purge as a personal-data-free record, the treatment `privacy_requests` got in `PrivacyRequestsTombstone`; rows predating this migration keep `subjectKey` NULL (no backfill, same as the sibling). `POST /privacy/{pause,resume}` write `profiles.pausedAt`, which recommendations now refuse to serve against.
 - 2.25 (2026-09-04): no migration -- application code, `RecommendationsService.findForProfile()` (ADR-78, G4). `PublicQualityService.forTitles()` (ADR-77's read side) is now batched over the shown results and attached as `publicQuality`/`publicQualityScore` on every `RecommendationResult`, which `persistShown()` already wrote into `recommendations.publicQuality` unmodified -- that column has existed since M5 but was hardcoded `null` (no source existed) since ADR-58. Verified: 4 new unit tests; backend suite green (278 unit, 100 e2e).
 - 2.24 (2026-09-04): no migration -- application code, `apps/backend/src/scripts/load-imdb-ratings.ts` (ADR-77, retroactive documentation of already-shipped work). Populates `public_quality_sources` (M6, empty since it was created) from IMDb's official non-commercial dataset dump: 298 rows on `movie-postgres` as of this pass, one `source_records` row per value (`non_commercial_only`, `attributionRequired`), idempotent/append-only matching every other loader this session built. Read side (`PublicQualityService`) already existed and was already consumed by `GET /titles/:id`; ADR-78 (next) wires it into recommendations too.

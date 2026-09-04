@@ -4,6 +4,7 @@ import { Brackets, Repository } from 'typeorm';
 import { ContentFeature } from '../../entities/content-feature.entity';
 import { Title } from '../../entities/title.entity';
 import { AttributionService, TextSource } from '../public-quality/attribution.service';
+import { PosterService, PosterSource } from '../public-quality/poster.service';
 import { PublicQuality, PublicQualityService } from '../public-quality/public-quality.service';
 import { ListTitlesQueryDto } from './dto/list-titles-query.dto';
 import { ARABIC_FOLD_FROM, ARABIC_FOLD_TO, diversify, foldArabic } from './starter';
@@ -17,7 +18,13 @@ const STARTER_POOL_SIZE = 300;
 // licensed, derived asset, and §5.3 only allows a reviewed *summary* of it on
 // the work page, which doesn't exist yet. Not fetched from the DB at all
 // (see the `select` lists below), not just omitted from the response.
-export type PublicTitle = Omit<Title, 'fingerprint' | 'externalIds'>;
+// posterUrl/posterSource are composed per read and only for an image whose
+// rights row allows display in this environment (ADR-82); both null
+// otherwise, which the client renders as the hollow slot.
+export type PublicTitle = Omit<Title, 'fingerprint' | 'externalIds'> & {
+  posterUrl: string | null;
+  posterSource: PosterSource | null;
+};
 
 // The work page (`GET /titles/:id`, BP §5.3): Public Quality travels as its
 // own value with its source and attribution, never merged into anything;
@@ -58,6 +65,7 @@ const PUBLIC_TITLE_COLUMNS = [
   'title.description',
   'title.releaseYear',
   'title.genres',
+  'title.posterPath',
   'title.createdAt',
   'title.updatedAt',
 ] as const;
@@ -77,6 +85,7 @@ export class TitlesService {
     private readonly titlesRepository: Repository<Title>,
     private readonly publicQualityService: PublicQualityService,
     private readonly attributionService: AttributionService,
+    private readonly posterService: PosterService,
     @InjectRepository(ContentFeature)
     private readonly contentFeaturesRepository: Repository<ContentFeature>,
   ) {}
@@ -114,7 +123,7 @@ export class TitlesService {
 
     const [items, total] = await queryBuilder.getManyAndCount();
     return {
-      items: items as PublicTitle[],
+      items: (await this.posterService.attach(items as unknown as PublicTitle[])) as PublicTitle[],
       page,
       limit,
       total,
@@ -132,7 +141,7 @@ export class TitlesService {
       .orderBy('title.titleEn', 'ASC')
       .take(STARTER_POOL_SIZE)
       .getMany();
-    return diversify(pool as PublicTitle[], limit);
+    return (await this.posterService.attach(diversify(pool as unknown as PublicTitle[], limit))) as PublicTitle[];
   }
 
   async findOne(titleId: string): Promise<WorkPageTitle> {
@@ -158,7 +167,8 @@ export class TitlesService {
       title.description ? this.attributionService.descriptionSource(titleId) : Promise.resolve(null),
       this.fingerprintSummary(titleId),
     ]);
-    return { ...title, publicQuality, descriptionSource, fingerprintSummary };
+    const [withPoster] = await this.posterService.attach([title as unknown as PublicTitle]);
+    return { ...withPoster, publicQuality, descriptionSource, fingerprintSummary } as WorkPageTitle;
   }
 
   // One entry per reviewed dimension, newest extractor version per key, in

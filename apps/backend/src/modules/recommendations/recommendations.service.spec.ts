@@ -9,6 +9,7 @@ import { Triad } from '../../entities/triad.entity';
 import { UserModelSnapshot } from '../../entities/user-model-snapshot.entity';
 import { UserTitleState } from '../../entities/user-title-state.entity';
 import type { PublicQuality, PublicQualityService } from '../public-quality/public-quality.service';
+import type { PosterService } from '../public-quality/poster.service';
 import type { TrainingService } from '../training/training.service';
 import { RecommendationsService } from './recommendations.service';
 
@@ -147,6 +148,7 @@ describe('RecommendationsService', () => {
   let modelVersionsRepository: ReturnType<typeof repoMock>;
   let publicQualityService: { forTitles: ReturnType<typeof vi.fn> };
   let triadsRepository: { count: ReturnType<typeof vi.fn> };
+  let posterService: { forTitles: ReturnType<typeof vi.fn> };
   let service: RecommendationsService;
 
   // Every 'ready' assertion below works on the items; the states have their
@@ -171,6 +173,7 @@ describe('RecommendationsService', () => {
     modelVersionsRepository.findOne.mockResolvedValue(null);
     publicQualityService = { forTitles: vi.fn().mockResolvedValue(new Map()) };
     triadsRepository = { count: vi.fn().mockResolvedValue(0) };
+    posterService = { forTitles: vi.fn().mockResolvedValue(new Map()) };
     service = new RecommendationsService(
       profilesRepository as unknown as Repository<Profile>,
       titlesRepository as unknown as Repository<Title>,
@@ -181,6 +184,7 @@ describe('RecommendationsService', () => {
       publicQualityService as unknown as PublicQualityService,
       triadsRepository as unknown as Repository<Triad>,
       { firstTriadCount: 3 } as unknown as TrainingService,
+      posterService as unknown as PosterService,
     );
   });
 

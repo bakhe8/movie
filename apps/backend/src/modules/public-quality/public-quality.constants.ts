@@ -24,6 +24,9 @@ export const ATTRIBUTION_BY_SOURCE: Record<string, string> = {
   'wikipedia:en': 'Text from Wikipedia, licensed CC BY-SA 4.0',
   'wikipedia:ar': 'Text from Wikipedia, licensed CC BY-SA 4.0',
   wikidata: 'Data from Wikidata (CC0)',
+  // Posters (board B4, owner 2026-09-04): TMDB's free tier requires this
+  // line wherever one of their images is shown.
+  tmdb: 'This product uses the TMDB API but is not endorsed or certified by TMDB.',
 };
 
 // DATA_LICENSING.md §0: while the service earns nothing, a value with a

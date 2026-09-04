@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { PublicQualityModule } from '../public-quality/public-quality.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Outcome } from '../../entities/outcome.entity';
 import { Profile } from '../../entities/profile.entity';
@@ -13,6 +14,7 @@ import { TriadsService } from './triads.service';
 @Module({
   imports: [
     TypeOrmModule.forFeature([Profile, Title, Triad, TriadReplacement, UserTitleState, Recommendation, Outcome]),
+    PublicQualityModule,
   ],
   controllers: [TriadsController],
   providers: [TriadsService],

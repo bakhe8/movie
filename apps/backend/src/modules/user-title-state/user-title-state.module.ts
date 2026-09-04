@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { PublicQualityModule } from '../public-quality/public-quality.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Profile } from '../../entities/profile.entity';
 import { Title } from '../../entities/title.entity';
@@ -7,7 +8,7 @@ import { UserTitleStateController } from './user-title-state.controller';
 import { UserTitleStateService } from './user-title-state.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Profile, Title, UserTitleState])],
+  imports: [TypeOrmModule.forFeature([Profile, Title, UserTitleState]), PublicQualityModule],
   controllers: [UserTitleStateController],
   providers: [UserTitleStateService],
   // WatchEventsService reuses upsert() rather than duplicating its PATCH

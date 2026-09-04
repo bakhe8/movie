@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { isUUID } from 'class-validator';
 import { EntityManager, In, Repository } from 'typeorm';
 import { Outcome } from '../../entities/outcome.entity';
+import { PosterService } from '../public-quality/poster.service';
 import { Profile } from '../../entities/profile.entity';
 import { Recommendation } from '../../entities/recommendation.entity';
 import { Title } from '../../entities/title.entity';
@@ -64,6 +65,7 @@ export class TriadsService {
     private readonly recommendationsRepository: Repository<Recommendation>,
     @InjectRepository(Outcome)
     private readonly outcomesRepository: Repository<Outcome>,
+    private readonly posterService: PosterService,
   ) {}
 
   async getCurrent(userId: string, profileId: string): Promise<CurrentTriadResponse> {
@@ -164,11 +166,14 @@ export class TriadsService {
         description: true,
         releaseYear: true,
         genres: true,
+        posterPath: true,
         createdAt: true,
         updatedAt: true,
       },
     });
-    const byId = new Map(titles.map((title) => [title.id, title as TriadItem]));
+    // Every surface that shows a film shows its poster (board B4, ADR-82).
+    const withPosters = await this.posterService.attach(titles);
+    const byId = new Map(withPosters.map((title) => [title.id, title as unknown as TriadItem]));
     const items = order.map((id) => byId.get(id)).filter((title): title is TriadItem => title !== undefined);
     return { ...triad, items };
   }

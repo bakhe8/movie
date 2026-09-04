@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NotFoundException } from '@nestjs/common';
 import type { Repository } from 'typeorm';
+import type { PosterService } from '../public-quality/poster.service';
 import { ContentFeature } from '../../entities/content-feature.entity';
 import { Title } from '../../entities/title.entity';
 import { ListTitlesQueryDto } from './dto/list-titles-query.dto';
@@ -30,6 +31,7 @@ describe('TitlesService', () => {
   let publicQualityService: { forTitle: ReturnType<typeof vi.fn> };
   let attributionService: { descriptionSource: ReturnType<typeof vi.fn> };
   let contentFeaturesRepository: { find: ReturnType<typeof vi.fn> };
+  let posterService: { attach: ReturnType<typeof vi.fn>; forTitles: ReturnType<typeof vi.fn> };
   let service: TitlesService;
 
   beforeEach(() => {
@@ -37,10 +39,13 @@ describe('TitlesService', () => {
     publicQualityService = { forTitle: vi.fn().mockResolvedValue(null) };
     attributionService = { descriptionSource: vi.fn().mockResolvedValue(null) };
     contentFeaturesRepository = { find: vi.fn().mockResolvedValue([]) };
+    // No displayable poster by default: attach() then fills explicit nulls.
+    posterService = { attach: vi.fn(async (rows: unknown[]) => rows.map((row) => ({ ...(row as object), posterUrl: null, posterSource: null }))), forTitles: vi.fn().mockResolvedValue(new Map()) };
     service = new TitlesService(
       titlesRepository as unknown as Repository<Title>,
       publicQualityService as unknown as PublicQualityService,
       attributionService as unknown as AttributionService,
+      posterService as unknown as PosterService,
       contentFeaturesRepository as unknown as Repository<ContentFeature>,
     );
   });
