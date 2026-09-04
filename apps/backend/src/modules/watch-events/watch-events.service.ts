@@ -7,6 +7,7 @@ import { Recommendation } from '../../entities/recommendation.entity';
 import { Title } from '../../entities/title.entity';
 import { WatchEvent } from '../../entities/watch-event.entity';
 import { UserTitleStateService } from '../user-title-state/user-title-state.service';
+import { AnalyticsService } from '../analytics/analytics.service';
 import { CreateWatchEventDto } from './dto/create-watch-event.dto';
 
 @Injectable()
@@ -23,6 +24,7 @@ export class WatchEventsService {
     @InjectRepository(Outcome)
     private readonly outcomesRepository: Repository<Outcome>,
     private readonly userTitleStateService: UserTitleStateService,
+    private readonly analyticsService: AnalyticsService,
   ) {}
 
   // Records a watch instance and, when the title traces back to a shown
@@ -63,6 +65,16 @@ export class WatchEventsService {
         provider: dto.provider ?? null,
         recommendationId: recommendation?.id ?? null,
       }),
+    );
+
+    // ALPHA_PLAN 7.5's watch signal. `fromRecommendation` is the one number
+    // that says whether the loop closed; nothing here records what was
+    // watched -- the title id belongs in watch_events, not in a counter.
+    await this.analyticsService.record(
+      profileId,
+      'watch_marked',
+      { source: dto.source, fromRecommendation: Boolean(recommendation) },
+      watchedAt,
     );
 
     if (recommendation) {

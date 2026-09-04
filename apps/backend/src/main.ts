@@ -3,8 +3,14 @@ import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './modules/app/app.module';
+import { initObservability } from './observability/observability';
 
 async function bootstrap() {
+  // Before the app: instrumentation has to patch http and pg before anything
+  // requires them. Both are no-ops unless their env var is set (ALPHA_PLAN
+  // 7.5), and neither can stop the boot.
+  await initObservability();
+
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // M10 (BP §21.3): behind any reverse proxy -- every staging/prod topology

@@ -6,6 +6,7 @@ import { Profile } from '../../entities/profile.entity';
 import { Recommendation } from '../../entities/recommendation.entity';
 import { Title } from '../../entities/title.entity';
 import { WatchEvent } from '../../entities/watch-event.entity';
+import type { AnalyticsService } from '../analytics/analytics.service';
 import type { UserTitleStateService } from '../user-title-state/user-title-state.service';
 import { WatchEventsService } from './watch-events.service';
 
@@ -24,6 +25,7 @@ describe('WatchEventsService', () => {
   let watchEventsRepository: ReturnType<typeof repoMock>;
   let outcomesRepository: ReturnType<typeof repoMock>;
   let userTitleStateService: { upsert: ReturnType<typeof vi.fn> };
+  let analyticsService: { record: ReturnType<typeof vi.fn> };
   let service: WatchEventsService;
 
   beforeEach(() => {
@@ -33,6 +35,7 @@ describe('WatchEventsService', () => {
     watchEventsRepository = repoMock();
     outcomesRepository = repoMock();
     userTitleStateService = { upsert: vi.fn().mockResolvedValue({}) };
+    analyticsService = { record: vi.fn().mockResolvedValue(undefined) };
     service = new WatchEventsService(
       profilesRepository as unknown as Repository<Profile>,
       titlesRepository as unknown as Repository<Title>,
@@ -40,7 +43,23 @@ describe('WatchEventsService', () => {
       watchEventsRepository as unknown as Repository<WatchEvent>,
       outcomesRepository as unknown as Repository<Outcome>,
       userTitleStateService as unknown as UserTitleStateService,
+      analyticsService as unknown as AnalyticsService,
     );
+  });
+
+  // ALPHA_PLAN 7.5: whether the loop closed is the one thing worth counting
+  // here. What was watched stays in watch_events -- a title id has no place
+  // in a counter.
+  it('records the watch with whether it followed a recommendation, and no title id', async () => {
+    profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+    titlesRepository.findOne.mockResolvedValue({ id: 'title-1' });
+    recommendationsRepository.findOne.mockResolvedValue({ id: 'rec-1' });
+
+    await service.create('user-1', 'profile-1', { titleId: 'title-1', source: 'in_app' } as never);
+
+    const [profileId, name, properties] = analyticsService.record.mock.calls[0];
+    expect([profileId, name]).toEqual(['profile-1', 'watch_marked']);
+    expect(properties).toEqual({ source: 'in_app', fromRecommendation: true });
   });
 
   it('rejects recording a watch for a profile owned by another user', async () => {

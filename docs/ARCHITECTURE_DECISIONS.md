@@ -609,6 +609,15 @@ Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 
 ---
 
+## ADR-86 — First-party analytics behind the consent that already exists, observability behind unset flags (ALPHA_PLAN 7.5)
+
+**Context.** `ALPHA_PLAN` 7.5 asks for the onboarding funnel, triad timing and click/watch counts, plus OpenTelemetry and Sentry. `BP §13` requires the product analytics to be first-party — a table in this database, not a third-party pixel — and `PRIVACY.md §3` already reserves the purpose `analytics_first_party`, which nothing read.
+**Decision.** `analytics_events` holds one row per event: a closed `AnalyticsEventName` union (ten names), a `properties` jsonb that keeps only finite numbers, booleans and tags of at most 32 characters (at most 12 keys), and `profileId` with `ON DELETE SET NULL` — the tombstone shape consents and privacy_requests use (ADR-80), so deleting a profile does not rewrite the funnel counts. `AnalyticsService.record()` writes nothing unless that profile's latest `analytics_first_party` consent is granted and un-revoked; it never throws, because analytics that can fail a rank is worse than no analytics. What the server can measure it measures itself — `triad_answered`'s duration comes from the row's own `shownAt`/`answeredAt`, never from the client, and is **omitted** rather than zeroed when the round was never marked shown (ADR-19). `POST /profiles/:id/analytics/events` accepts only what the server cannot see (which onboarding step, which card opened), always answers `202`, and clamps a client's `occurredAt` to a 7-day backdating window. OpenTelemetry and Sentry start only when `OTEL_EXPORTER_OTLP_ENDPOINT` / `SENTRY_DSN` are set, and their packages are deliberately **not** dependencies: hosting is undecided (ADR-24), so they load through a runtime import and a missing package logs what to install instead of failing the boot. `sendDefaultPii: false`.
+**Consequences.** The funnel is measurable without a third party, and a user who has not opted in leaves no row — verified over real HTTP: nothing written before the grant, written after it, nothing again after revocation, an unknown event name refused with 400, an object property stripped, and another user's profile silently ignored. The cost is that "how many people finished onboarding" is now "how many *consenting* people finished onboarding", which is the honest number and must be read as such. Tracing stays unmeasured until someone installs the two SDKs and points them somewhere.
+**Revisit when.** Hosting is chosen (install the SDKs, ADR-24), a new event is genuinely needed (extend the union — deliberately not a free-form name), or `§16` wants an aggregate the row shape cannot answer.
+
+---
+
 ## Summary
 
 | # | Decision | Serves | Revisit trigger |
@@ -687,6 +696,7 @@ Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 | 83 | Adaptive triad selection v1 behind an experiment flag | `BP §8.2`, `§8.3`; RANKING_ALGORITHM §9 | evaluation compares the arms, or the shared space enables real Fisher targeting |
 | 84 | The three tracks become real, with a declared exploration share | `BP §4.4`; ADR-8 | evaluation measures the tracks, or Watchability data lands |
 | 85 | Password reset behind a swappable mailer; provider still undecided | `BP §21.3`; ALPHA_PLAN 3.2 | O-3 picks a provider, or the mail needs more than plain text |
+| 86 | First-party analytics gated on `analytics_first_party`; OTel/Sentry behind unset flags, packages not installed | `BP §13`; PRIVACY.md §3; ALPHA_PLAN 7.5 | hosting chosen; a new event is needed; §16 wants another aggregate |
 
 ## How to add a decision
 

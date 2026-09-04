@@ -51,6 +51,7 @@ describe('TriadsService', () => {
   let snapshotsRepository: { findOne: ReturnType<typeof vi.fn>; find: ReturnType<typeof vi.fn> };
   let experimentsService: { armFor: ReturnType<typeof vi.fn> };
   let triadPolicyService: { select: ReturnType<typeof vi.fn> };
+  let analyticsService: { record: ReturnType<typeof vi.fn> };
   let profilesRepository: ReturnType<typeof repoMock>;
   let titlesRepository: ReturnType<typeof repoMock>;
   let triadsRepository: ReturnType<typeof repoMock>;
@@ -79,6 +80,7 @@ describe('TriadsService', () => {
     // Control arm by default: every existing test keeps exercising random-v1.
     experimentsService = { armFor: vi.fn().mockResolvedValue('control') };
     triadPolicyService = { select: vi.fn().mockResolvedValue(null) };
+    analyticsService = { record: vi.fn().mockResolvedValue(undefined) };
     service = new TriadsService(
       profilesRepository as unknown as Repository<Profile>,
       titlesRepository as unknown as Repository<Title>,
@@ -91,6 +93,7 @@ describe('TriadsService', () => {
       snapshotsRepository as unknown as Repository<UserModelSnapshot>,
       experimentsService as unknown as ExperimentsService,
       triadPolicyService as unknown as TriadPolicyService,
+      analyticsService as unknown as AnalyticsService,
     );
   });
 
@@ -172,6 +175,36 @@ describe('TriadsService', () => {
       expect(result.ranking).toEqual(validRanking);
       expect(result.answeredAt).toBeInstanceOf(Date);
       expect(triadsRepository.save).toHaveBeenCalled();
+    });
+
+    // ALPHA_PLAN 7.5: the round's duration measured from the row's own two
+    // stamps, never from anything a client sends.
+    describe('analytics', () => {
+      it('records the answered round with the duration between shown and answered', async () => {
+        const shownAt = new Date(Date.now() - 4200);
+        triadsRepository.findOne.mockResolvedValue({ ...activeTriad, shownAt, modelVersion: 'adaptive-v1' });
+        profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+        triadsRepository.save.mockImplementation((triad: Triad) => Promise.resolve(triad));
+
+        await service.rank('user-1', 'triad-1', { ranking: validRanking });
+
+        const [profileId, name, properties] = analyticsService.record.mock.calls[0];
+        expect([profileId, name]).toEqual(['profile-1', 'triad_answered']);
+        expect(properties.durationMs).toBeGreaterThanOrEqual(4200);
+        expect(properties.policy).toBe('adaptive-v1');
+      });
+
+      // ADR-19: a round never marked shown has an unknown duration, and an
+      // unknown is left out rather than reported as 0.
+      it('omits the duration entirely when the round was never marked shown', async () => {
+        triadsRepository.findOne.mockResolvedValue({ ...activeTriad, shownAt: null });
+        profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+        triadsRepository.save.mockImplementation((triad: Triad) => Promise.resolve(triad));
+
+        await service.rank('user-1', 'triad-1', { ranking: validRanking });
+
+        expect(analyticsService.record.mock.calls[0][2]).not.toHaveProperty('durationMs');
+      });
     });
 
     // BP §4.5's "compare prediction to real ranking" arrow (blueprint gap

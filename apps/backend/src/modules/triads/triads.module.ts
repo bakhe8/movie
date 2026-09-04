@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ExperimentsModule } from '../experiments/experiments.module';
 import { PublicQualityModule } from '../public-quality/public-quality.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AnalyticsModule } from '../analytics/analytics.module';
 import { Outcome } from '../../entities/outcome.entity';
 import { Profile } from '../../entities/profile.entity';
 import { Recommendation } from '../../entities/recommendation.entity';
@@ -17,6 +18,7 @@ import { TriadsService } from './triads.service';
 
 @Module({
   imports: [
+    AnalyticsModule,
     TypeOrmModule.forFeature([Profile, Title, Triad, TriadReplacement, UserTitleState, Recommendation, Outcome, UserModelSnapshot, Credit]),
     PublicQualityModule,
     ExperimentsModule,

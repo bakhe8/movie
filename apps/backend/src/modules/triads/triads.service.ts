@@ -4,6 +4,7 @@ import { isUUID } from 'class-validator';
 import { EntityManager, In, Repository } from 'typeorm';
 import { Outcome } from '../../entities/outcome.entity';
 import { UserModelSnapshot } from '../../entities/user-model-snapshot.entity';
+import { AnalyticsService } from '../analytics/analytics.service';
 import { ExperimentsService, TRIAD_POLICY_EXPERIMENT } from '../experiments/experiments.service';
 import { PosterService } from '../public-quality/poster.service';
 import { ADAPTIVE_POLICY_VERSION, AdaptiveSelection, TriadPolicyService } from './triad-policy.service';
@@ -73,6 +74,7 @@ export class TriadsService {
     private readonly snapshotsRepository: Repository<UserModelSnapshot>,
     private readonly experimentsService: ExperimentsService,
     private readonly triadPolicyService: TriadPolicyService,
+    private readonly analyticsService: AnalyticsService,
   ) {}
 
   async getCurrent(userId: string, profileId: string): Promise<CurrentTriadResponse> {
@@ -243,6 +245,20 @@ export class TriadsService {
     try {
       const saved = await this.triadsRepository.save(triad);
       await this.recordRankedOutcomes(saved);
+      // ALPHA_PLAN 7.5's triad timing, measured server-side from the two
+      // stamps the row already carries rather than trusted from a client.
+      // Recorded after the save, so a failure here cannot cost the answer.
+      await this.analyticsService.record(
+        saved.profileId,
+        'triad_answered',
+        {
+          // Omitted, not zeroed or sentinelled, when the round was never
+          // marked shown (ADR-19: unknown is not a value).
+          ...(this.roundDurationMs(saved) !== null ? { durationMs: this.roundDurationMs(saved) as number } : {}),
+          ...(saved.modelVersion ? { policy: saved.modelVersion } : {}),
+        },
+        saved.answeredAt ?? new Date(),
+      );
       return this.withItems(saved);
     } catch (error) {
       if (!idempotencyKey || !this.isUniqueConstraintError(error)) {
@@ -270,6 +286,17 @@ export class TriadsService {
   // nothing; most triads today are drawn straight from watched titles with
   // no recommendation history, so that's the common case, not a bug. Only
   // called from the fresh-completion path in rank() -- never from an
+  // How long the round took, from the two stamps the row already carries.
+  // null when the triad was never marked shown (older rows, ADR-32) -- never
+  // guessed, and never zero, which would read as an impossibly fast answer.
+  private roundDurationMs(triad: Triad): number | null {
+    if (!triad.shownAt || !triad.answeredAt) {
+      return null;
+    }
+    const elapsed = triad.answeredAt.getTime() - triad.shownAt.getTime();
+    return elapsed >= 0 ? elapsed : null;
+  }
+
   // idempotent replay or a lost-race retry, both of which return a triad
   // the winning attempt already recorded outcomes for.
   private async recordRankedOutcomes(triad: Triad): Promise<void> {

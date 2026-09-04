@@ -21,6 +21,7 @@ import { OutcomesModule } from '../outcomes/outcomes.module';
 import { TrainingModule } from '../training/training.module';
 import { PrivacyModule } from '../privacy/privacy.module';
 import { AdminModule } from '../admin/admin.module';
+import { AnalyticsModule } from '../analytics/analytics.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { AdminModule } from '../admin/admin.module';
     TrainingModule,
     PrivacyModule,
     AdminModule,
+    AnalyticsModule,
   ],
   controllers: [AppController],
   providers: [

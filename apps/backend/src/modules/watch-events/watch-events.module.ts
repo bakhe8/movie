@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AnalyticsModule } from '../analytics/analytics.module';
 import { Outcome } from '../../entities/outcome.entity';
 import { Profile } from '../../entities/profile.entity';
 import { Recommendation } from '../../entities/recommendation.entity';
@@ -10,7 +11,8 @@ import { WatchEventsController } from './watch-events.controller';
 import { WatchEventsService } from './watch-events.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Profile, Title, Recommendation, WatchEvent, Outcome]), UserTitleStateModule],
+  imports: [
+    AnalyticsModule,TypeOrmModule.forFeature([Profile, Title, Recommendation, WatchEvent, Outcome]), UserTitleStateModule],
   controllers: [WatchEventsController],
   providers: [WatchEventsService],
 })
