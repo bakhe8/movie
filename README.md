@@ -14,7 +14,7 @@ A personal film-taste assistant that learns from one question only — "rank the
 | `apps/backend` | NestJS 10, TypeORM 0.3 (migrations only), Passport JWT, class-validator, @nestjs/throttler; global prefix `/api` |
 | `services/workers` | Python 3.11+, NumPy/SciPy (Plackett–Luce), Pydantic, Anthropic SDK (enrichment); Poetry |
 | `packages/shared` | shared TypeScript types (fingerprint) |
-| `docker/` | PostgreSQL (`ankane/pgvector`), Redis 7, disposable `postgres-test` |
+| `docker/` | Dev: PostgreSQL (`ankane/pgvector`), Redis 7, disposable `postgres-test`. Staging/prod: `Dockerfile` per service, `docker-compose.prod.yml` (file-based secrets, one-shot migrations), backup/restore scripts |
 
 ## Repository layout
 
@@ -23,7 +23,7 @@ apps/backend/       NestJS API: modules (auth, profiles, titles, triads, recomme
 apps/frontend/      Next.js app: one page with rank / discover / list / profile views
 services/workers/   Python model service: ranker, CLI trainer, enrichment worker, tests
 packages/shared/    shared types
-docker/             docker-compose.yml
+docker/             docker-compose.yml (dev) + docker-compose.prod.yml, per-service Dockerfiles, backup/restore scripts
 docs/               product blueprint (AR) + derived engineering docs (EN) — start at docs/README.md
 ```
 
@@ -58,6 +58,8 @@ cd apps/backend && npm run test:e2e
 ```bash
 cd services/workers && python -m pytest -q
 ```
+
+GitHub Actions (`.github/workflows/ci.yml`) runs all three on every push to `main` and every pull request; a failing job blocks the merge. Enrichment has its own acceptance gates (stability drift, human-review agreement) — see [DEMO_DATA_PLAN_2026-09-03.md](docs/DEMO_DATA_PLAN_2026-09-03.md) §7.6.
 
 ## License
 

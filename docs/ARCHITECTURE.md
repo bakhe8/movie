@@ -187,9 +187,9 @@ Target (the rest of `api.py`: triads/select, score, taste-profile, shared-space/
 | Environment | Built | Required before Alpha |
 |---|---|---|
 | Local | `docker compose` Postgres (5433) + Redis (6379) + `postgres-test` (5544); `npm run dev` (frontend 3000, backend 3101); Python CLI | unchanged |
-| CI | none | lint, type-check, unit + e2e tests, migrations applied to a fresh DB, Python tests, on every PR |
-| Staging | none | same topology as prod with seeded catalog and feature flags; migrations run in the pipeline |
-| Production | none | managed Postgres with PITR and encryption at rest, backups with a **documented restore drill**, TLS, secrets manager, model rollback, feature flags, OpenTelemetry + Sentry + first-party analytics, cost monitoring; data residency in KSA/region preferred ([PRIVACY.md](PRIVACY.md)) |
+| CI | `.github/workflows/ci.yml`: three jobs (backend, frontend, workers) on every push to `main` and every PR; `main` pushes no longer cancel each other (per-commit-sha concurrency group, PR branches still do) | unchanged |
+| Staging | `docker/Dockerfile` per service (`apps/backend`, `apps/frontend`, `services/workers`) + `docker/docker-compose.prod.yml`: one-shot `migrate` service before the app containers, secrets as files under `docker/secrets/` (never `.env`) read via `docker/read-secrets.sh`; `docker/backup-postgres.sh` / `restore-postgres.sh`, a full live restore drill run and documented (`ALPHA_PLAN_2026-09-04.md` §8.12) | feature flags |
+| Production | same images/compose as staging | managed Postgres with PITR and encryption at rest (ADR-24, still open), TLS, secrets manager, model rollback, OpenTelemetry + Sentry + first-party analytics, cost monitoring; data residency in KSA/region preferred ([PRIVACY.md](PRIVACY.md)) |
 
 Hosting vendor is deliberately undecided (ADR-24); the earlier AWS/Vercel/Lambda diagrams were speculative and are withdrawn.
 

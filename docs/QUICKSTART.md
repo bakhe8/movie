@@ -152,6 +152,19 @@ cd apps/backend && npm run migration:generate -- src/migrations/<Name>
 
 `make` targets mirror the npm scripts (`make help`) but `make` is not required on Windows.
 
+### 8.1 Staging / production build (ALPHA_PLAN 7.3, 7.4)
+
+Not this quickstart's dev stack — a separate compose file with its own Dockerfiles, one per service:
+
+```bash
+cp docker/.env.prod.example docker/.env.prod          # fill in non-secret config
+cp docker/secrets/*.txt.example docker/secrets/…       # drop the .example suffix, fill in real secrets (never .env)
+docker compose -f docker/docker-compose.prod.yml --env-file docker/.env.prod --profile migrate up --abort-on-container-exit migrate
+docker compose -f docker/docker-compose.prod.yml --env-file docker/.env.prod up -d
+```
+
+Backup and restore (`docker/backup-postgres.sh`, `docker/restore-postgres.sh`) are documented and drilled in `docs/ALPHA_PLAN_2026-09-04.md` §8.12. ADR-24 (hosting) is still open; this targets a self-hosted/staging deployment.
+
 ## 9. Troubleshooting
 
 | Symptom | Cause | Fix |
@@ -176,6 +189,7 @@ cd apps/backend && npm run migration:generate -- src/migrations/<Name>
 ---
 
 **Changelog**
+- 2.2 (2026-09-04): §8.1 added — the staging/production build (ALPHA_PLAN 7.3/7.4: per-service Dockerfiles, `docker-compose.prod.yml`, backup/restore) is now in this guide, not just in ARCHITECTURE.md's table (board C-13).
 - 2.1 (2026-09-03): added the fresh-clone Postgres-password troubleshooting row (H5, ADR-38) now that `docker:up`/`docker:down`/`test:e2e:up`/`docker-logs` correctly resolve the root `.env`.
 - 2.1 (2026-09-03): enrichment worker moved to the Anthropic Messages API — `ANTHROPIC_*` variables replace `OPENAI_*`, the pip line matches `pyproject.toml`, `make catalog-fetch` / `make catalog-enrich` added for the demo catalog ([DEMO_DATA_PLAN_2026-09-03.md](DEMO_DATA_PLAN_2026-09-03.md)).
 - 2.0 (2026-09-03): added the missing migrate/seed/train steps (the previous guide went from `docker:up` straight to `npm run dev`, which cannot work with `synchronize: false`), corrected framework versions, removed the OpenAI-key prerequisite and the ad-hoc endpoint list, added Windows notes.
