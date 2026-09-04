@@ -479,7 +479,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Unit tests | ✅ | — | `auth.service.spec.ts`, 10 tests |
 | Frontend: login / register (`AuthScreen`) + onboarding (`OnboardingScreen`) | ✅ | 🟡 | `§4.1`: language, market and platforms collected and saved; the "what we collect and why" step now records `watch_history`/`personalization_individual` consent (ADR-60) — `personalization_pooled`/`analytics_first_party` disclosure+opt-out, `terms_privacy` at registration, and CSV import still missing (gap 7) |
 | Frontend: session persistence, auto-redirect, logout | ✅ | — | `localStorage` via `lib/session.tsx` |
-| Password reset | ✅ | 🟡 | ADR-85: `POST /auth/password-reset/{request,confirm}`, single-use hashed token (30 min), same 202 for any address (no membership oracle), spending it revokes every live session. **Nothing is emailed yet**: the only transport is `LogMailer`, which writes the link to the server log — the provider is open owner decision O-3 |
+| Password reset | ✅ | 🟡 | ADR-85: `POST /auth/password-reset/{request,confirm}`, single-use hashed token (30 min), same 202 for any address (no membership oracle), spending it revokes every live session. O-3 chose Resend and `MAIL_TRANSPORT=resend` exists (A-17), but **nothing is emailed anywhere yet**: every environment still runs `log`, which writes the link to the server log. Turning it on needs an API key and a sender the owner creates, plus the `kolme.app` SPF/DKIM records in Cloudflare (board C-20) |
 
 ## Profiles
 
