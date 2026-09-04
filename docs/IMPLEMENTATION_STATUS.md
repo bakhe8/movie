@@ -552,7 +552,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | `GET /profiles/:id/library/ranking` (personal ranking of the watched set) | ✅ | ✅ | `§5.3` "ترتيب شخصي": the same scoring path, positions only — no score leaves the server (ADR-33); 409 until a snapshot exists |
 | Personal Fit from latest snapshot; dimension-mismatch guard | ✅ | — | |
 | Four separate values, never merged | ✅ | ✅ | `§4.4`: Public Quality is real (IMDb, ADR-77/78) when a displayable value exists, explicit `null` otherwise; Watchability is still explicit `null` (no source) — neither ever fabricated |
-| Three tracks | ❌ | ❌ | every result is `safe` (`§4.4`, ADR-8) |
+| Three tracks (`safe`/`discovery`/`outside_usual`) | ✅ | 🟡 | ADR-84: `discovery` = crosses a watched genre or language, `outside_usual` = the declared exploration share (default 0.2, `exploration-share` experiment arm when running) taken from the ranking's tail; deterministic, `track` logged per row. Not yet measured against `§16` outcomes |
 | Candidate filtering | ✅ | ✅ | excludes `watched` and unfingerprinted only; `not_watched` stays a candidate (`§2.4 #3`) |
 | Unknown dimensions | ✅ | ✅ | pool-mean imputation, `fingerprintCoverage`, one-band demotion (`§11.3`, ADR-19) |
 | Confidence band (verbal, no %) | ✅ | 🟡 | band from triad count, capped by a per-band held-out accuracy floor (0.8 strong / 0.7 likely, ADR-79), fingerprint-quality demotion, posterior stability, and all three `§9.2` diversity axes — genre, language, director (ADR-59, ADR-62, ADR-64, ADR-71). Still no Brier/ECE calibration (`§9.3`) |

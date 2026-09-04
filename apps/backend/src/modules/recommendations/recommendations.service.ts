@@ -1,12 +1,13 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'node:crypto';
-import { QueryDeepPartialEntity, Repository } from 'typeorm';
+import { In, QueryDeepPartialEntity, Repository } from 'typeorm';
 import { ModelVersion } from '../../entities/model-version.entity';
 import { Profile } from '../../entities/profile.entity';
 import { Recommendation } from '../../entities/recommendation.entity';
 import { Title } from '../../entities/title.entity';
 import { Triad } from '../../entities/triad.entity';
+import { EXPLORATION_SHARE_EXPERIMENT, ExperimentsService } from '../experiments/experiments.service';
 import { PosterService } from '../public-quality/poster.service';
 import { PublicQuality, PublicQualityService } from '../public-quality/public-quality.service';
 import { TrainingService } from '../training/training.service';
@@ -79,6 +80,11 @@ const STRONG_MIN_HELD_OUT_ACCURACY = 0.8;
 const LIKELY_MIN_HELD_OUT_ACCURACY = 0.7;
 
 // Weakest to strongest; used to take the lower of two bands.
+// ADR-8's "small, declared" exploration share, and the arms the
+// `exploration-share` experiment may put a profile in (ALPHA_PLAN 6.5).
+const DEFAULT_EXPLORATION_SHARE = 0.2;
+const EXPLORATION_SHARES: Record<string, number> = { control: 0.2, 'exploration-low': 0.1, 'exploration-high': 0.35 };
+
 const BAND_ORDER: ConfidenceBand[] = ['inconclusive', 'initial', 'likely', 'strong'];
 
 // z = |weight| / standardError. 1.0 is the most permissive defensible bar --
@@ -205,6 +211,7 @@ export class RecommendationsService {
     private readonly triadsRepository: Repository<Triad>,
     private readonly trainingService: TrainingService,
     private readonly posterService: PosterService,
+    private readonly experimentsService: ExperimentsService,
   ) {}
 
   async findForProfile(userId: string, profileId: string, limit: number): Promise<RecommendationsResponse> {
@@ -228,7 +235,14 @@ export class RecommendationsService {
     }
     const titles = await queryBuilder.getMany();
 
-    const scored = this.scoreTitles(titles, snapshot).slice(0, limit);
+    // ADR-8's three tracks (BP §4.4): the whole ranking is assigned first,
+    // then the requested number is taken from it, so `outside_usual` can
+    // come from below the top -- taking the top `limit` first would leave
+    // nothing risky to explore with.
+    const ranked = this.scoreTitles(titles, snapshot);
+    const usual = await this.usualRegion(excludedTitleIds);
+    const explorationShare = await this.explorationShare(profileId);
+    const scored = this.assignTracks(ranked, usual, limit, explorationShare);
     // Batched over just the titles actually being returned, not the whole
     // candidate pool -- a title absent from the map has no displayable
     // source and gets null, never 0 (BP §11.3).
@@ -243,7 +257,7 @@ export class RecommendationsService {
         watchabilityScore: null,
         confidenceBand: item.confidenceBand,
         fingerprintCoverage: item.fingerprintCoverage,
-        track: 'safe' as const,
+        track: item.track,
         modelVersion: snapshot.modelVersion,
         reason: item.reason,
       };
@@ -259,6 +273,73 @@ export class RecommendationsService {
         return { ...result, title: { ...result.title, posterUrl: poster?.posterUrl ?? null, posterSource: poster?.posterSource ?? null } };
       }),
     };
+  }
+
+  // What this profile already watches: the genres and original languages of
+  // its watched titles. "Usual" is descriptive, never a filter -- it only
+  // decides which track a recommendation is shown under.
+  private async usualRegion(watchedTitleIds: string[]): Promise<{ genres: Set<string>; languages: Set<string> }> {
+    if (watchedTitleIds.length === 0) {
+      return { genres: new Set(), languages: new Set() };
+    }
+    const watched = await this.titlesRepository.find({
+      where: { id: In(watchedTitleIds) },
+      select: { id: true, genres: true, originalLanguage: true },
+    });
+    return {
+      genres: new Set(watched.flatMap((title) => title.genres ?? [])),
+      languages: new Set(watched.map((title) => title.originalLanguage).filter((code): code is string => Boolean(code))),
+    };
+  }
+
+  // ALPHA_PLAN 6.5's second flag. Default unless the `exploration-share`
+  // experiment is running and puts this profile in a named arm; an unknown
+  // arm falls back to the default rather than inventing a share.
+  private async explorationShare(profileId: string): Promise<number> {
+    const arm = await this.experimentsService.armFor(EXPLORATION_SHARE_EXPERIMENT, profileId);
+    return EXPLORATION_SHARES[arm] ?? DEFAULT_EXPLORATION_SHARE;
+  }
+
+  // Deterministic, in rank order (ADR-8): `safe` is the best fit inside the
+  // region the model knows; `discovery` is the best fit that crosses a genre
+  // or a language boundary -- the "non-obvious link to your taste" BP §4.4
+  // describes; `outside_usual` is the declared exploration share, taken from
+  // the tail of the ranking rather than the head, because a track that only
+  // ever showed near-misses would not prevent any bubble. A profile with no
+  // watch history has no "usual" yet, so nothing can cross it: everything is
+  // `safe` until it does, which is honest rather than labelling arbitrary
+  // titles as discoveries.
+  private assignTracks(
+    ranked: ScoredTitle[],
+    usual: { genres: Set<string>; languages: Set<string> },
+    limit: number,
+    explorationShare: number,
+  ): (ScoredTitle & { track: RecommendationTrack })[] {
+    const explorationSlots = usual.genres.size === 0 ? 0 : Math.floor(limit * explorationShare);
+    const mainSlots = Math.max(0, limit - explorationSlots);
+
+    const crosses = (item: ScoredTitle): boolean => {
+      const genres = item.title.genres ?? [];
+      const language = item.title.originalLanguage;
+      const genreCrosses = genres.length > 0 && genres.every((genre) => !usual.genres.has(genre));
+      const languageCrosses = Boolean(language) && !usual.languages.has(language as string);
+      return genreCrosses || languageCrosses;
+    };
+
+    const head = ranked.slice(0, mainSlots).map((item) => ({
+      ...item,
+      track: (usual.genres.size > 0 && crosses(item) ? 'discovery' : 'safe') as RecommendationTrack,
+    }));
+    if (explorationSlots === 0) {
+      return head;
+    }
+    // The tail of the same ranking: real exploration, still deterministic and
+    // still logged with its own track so §16 can compare the three.
+    const tail = ranked
+      .slice(mainSlots)
+      .slice(-explorationSlots)
+      .map((item) => ({ ...item, track: 'outside_usual' as RecommendationTrack }));
+    return [...head, ...tail];
   }
 
   // One row per recommendation actually shown (blueprint §13.1, §14, §14.1) --

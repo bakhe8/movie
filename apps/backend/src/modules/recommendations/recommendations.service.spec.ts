@@ -9,6 +9,7 @@ import { Triad } from '../../entities/triad.entity';
 import { UserModelSnapshot } from '../../entities/user-model-snapshot.entity';
 import { UserTitleState } from '../../entities/user-title-state.entity';
 import type { PublicQuality, PublicQualityService } from '../public-quality/public-quality.service';
+import type { ExperimentsService } from '../experiments/experiments.service';
 import type { PosterService } from '../public-quality/poster.service';
 import type { TrainingService } from '../training/training.service';
 import { RecommendationsService } from './recommendations.service';
@@ -149,6 +150,7 @@ describe('RecommendationsService', () => {
   let publicQualityService: { forTitles: ReturnType<typeof vi.fn> };
   let triadsRepository: { count: ReturnType<typeof vi.fn> };
   let posterService: { forTitles: ReturnType<typeof vi.fn> };
+  let experimentsService: { armFor: ReturnType<typeof vi.fn> };
   let service: RecommendationsService;
 
   // Every 'ready' assertion below works on the items; the states have their
@@ -164,6 +166,9 @@ describe('RecommendationsService', () => {
   beforeEach(() => {
     profilesRepository = repoMock();
     titlesRepository = { ...repoMock(), createQueryBuilder: vi.fn() };
+    // usualRegion() reads the watched titles' genres/languages; no history
+    // by default, so every result is 'safe' unless a test says otherwise.
+    titlesRepository.find.mockResolvedValue([]);
     snapshotsRepository = repoMock();
     statesRepository = repoMock();
     recommendationsRepository = { insert: vi.fn().mockResolvedValue({}) };
@@ -174,6 +179,8 @@ describe('RecommendationsService', () => {
     publicQualityService = { forTitles: vi.fn().mockResolvedValue(new Map()) };
     triadsRepository = { count: vi.fn().mockResolvedValue(0) };
     posterService = { forTitles: vi.fn().mockResolvedValue(new Map()) };
+    // No running experiment: the default exploration share applies.
+    experimentsService = { armFor: vi.fn().mockResolvedValue('control') };
     service = new RecommendationsService(
       profilesRepository as unknown as Repository<Profile>,
       titlesRepository as unknown as Repository<Title>,
@@ -185,6 +192,7 @@ describe('RecommendationsService', () => {
       triadsRepository as unknown as Repository<Triad>,
       { firstTriadCount: 3 } as unknown as TrainingService,
       posterService as unknown as PosterService,
+      experimentsService as unknown as ExperimentsService,
     );
   });
 
@@ -920,6 +928,78 @@ describe('RecommendationsService', () => {
       const withoutV3Result = result.find((item) => item.title.id === 'v1v2-only');
       const v1v2Length = FINGERPRINT_V1_DIMENSIONS.length + FINGERPRINT_V2_DIMENSIONS.length;
       expect(withoutV3Result?.fingerprintCoverage).toBeCloseTo(v1v2Length / FINGERPRINT_DIMENSIONS.length);
+    });
+  });
+
+  // ADR-8 / ALPHA_PLAN 6.3: three deterministic tracks with a declared
+  // exploration share.
+  describe('tracks (ADR-8)', () => {
+    function titleWith(id: string, warmth: number, genres: string[], originalLanguage: string | null) {
+      return { id, genres, originalLanguage, fingerprint: zeroFingerprint({ warmth }) } as unknown as Title;
+    }
+
+    beforeEach(() => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot());
+      statesRepository.find.mockResolvedValue([{ titleId: 'watched-1' }]);
+      // The profile's history: Drama, in Arabic.
+      titlesRepository.find.mockResolvedValue([
+        { id: 'watched-1', genres: ['Drama'], originalLanguage: 'ar' },
+      ] as unknown as Title[]);
+    });
+
+    it('labels a candidate inside the known region safe, and one crossing genre or language discovery', async () => {
+      const titles = [
+        titleWith('same-region', 0.9, ['Drama'], 'ar'),
+        titleWith('other-genre', 0.8, ['Horror'], 'ar'),
+        titleWith('other-language', 0.7, ['Drama'], 'ja'),
+      ];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const items = await recommendItems('user-1', 'profile-1', 3);
+
+      expect(items.map((item) => [item.title.id, item.track])).toEqual([
+        ['same-region', 'safe'],
+        ['other-genre', 'discovery'],
+        ['other-language', 'discovery'],
+      ]);
+    });
+
+    it('spends the declared exploration share on the tail of the ranking, not the head', async () => {
+      const titles = Array.from({ length: 10 }, (_, index) =>
+        titleWith(`t${index}`, (10 - index) / 10, ['Drama'], 'ar'),
+      );
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const items = await recommendItems('user-1', 'profile-1', 10);
+
+      // 20% of 10 = 2 exploration slots, filled from the worst-ranked titles.
+      expect(items.filter((item) => item.track === 'outside_usual').map((item) => item.title.id)).toEqual(['t8', 't9']);
+      expect(items.slice(0, 8).every((item) => item.track !== 'outside_usual')).toBe(true);
+    });
+
+    it('calls nothing a discovery for a profile with no history to cross', async () => {
+      statesRepository.find.mockResolvedValue([]);
+      titlesRepository.find.mockResolvedValue([]);
+      const titles = [titleWith('a', 0.9, ['Horror'], 'ja'), titleWith('b', 0.5, ['Drama'], 'ar')];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const items = await recommendItems('user-1', 'profile-1', 2);
+
+      expect(items.every((item) => item.track === 'safe')).toBe(true);
+    });
+
+    it('takes the exploration share from the running experiment arm when there is one', async () => {
+      experimentsService.armFor.mockResolvedValue('exploration-high');
+      const titles = Array.from({ length: 10 }, (_, index) =>
+        titleWith(`t${index}`, (10 - index) / 10, ['Drama'], 'ar'),
+      );
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const items = await recommendItems('user-1', 'profile-1', 10);
+
+      // 35% of 10 = 3 slots.
+      expect(items.filter((item) => item.track === 'outside_usual')).toHaveLength(3);
     });
   });
 
