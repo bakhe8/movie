@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { DataSource } from 'typeorm';
+import { DataSource, IsNull } from 'typeorm';
 import { getConnectionOptions } from '../src/config/database.config';
 import { Consent } from '../src/entities/consent.entity';
 import { ContentFeature } from '../src/entities/content-feature.entity';
@@ -87,9 +87,19 @@ describe('seed-demo (postgres-test)', () => {
         expect(watchedIds.has(`${triad.profileId}:${titleId}`)).toBe(true);
       }
     }
-    // A replaced title never sits in any triad; its replacement does.
-    const inTriads = new Set(firstRows.triads.flatMap((triad) => triad.titleIds));
+    // A replaced title never sits in ITS OWN profile's triads; its replacement
+    // does. Scoped per profile: the same titleId can be validly replaced for one
+    // persona while sitting in a different persona's own triad -- both draw from
+    // the same 300-title catalog, so that overlap is normal, not a defect.
+    const triadProfileById = new Map(firstRows.triads.map((triad) => [triad.id, triad.profileId]));
+    const inTriadsByProfile = new Map<string, Set<string>>();
+    for (const triad of firstRows.triads) {
+      const set = inTriadsByProfile.get(triad.profileId) ?? new Set<string>();
+      triad.titleIds.forEach((titleId) => set.add(titleId));
+      inTriadsByProfile.set(triad.profileId, set);
+    }
     for (const replacement of firstRows.replacements) {
+      const inTriads = inTriadsByProfile.get(triadProfileById.get(replacement.triadId)!) ?? new Set<string>();
       expect(inTriads.has(replacement.replacedTitleId)).toBe(false);
       expect(inTriads.has(replacement.replacementTitleId!)).toBe(true);
     }
@@ -102,11 +112,18 @@ describe('seed-demo (postgres-test)', () => {
     const expectedRows = catalog.reduce((sum, entry) => sum + featureRowsFor(entry, 'x', now).length, 0);
     expect(first.contentFeatureRows).toBe(expectedRows);
     const demoTitles = await dataSource.getRepository(Title).find({ where: catalog.slice(0, 1).map((entry) => ({ internalId: entry.internalId })) });
-    const firstTitleRows = await dataSource.getRepository(ContentFeature).find({ where: { titleId: demoTitles[0].id } });
+    // Only current rows: this database is long-lived across the session's
+    // many runs, so an earlier extractor version of the same title (superseded,
+    // never deleted -- SCHEMA.md §2.3) can still be sitting there from before.
+    const firstTitleRows = await dataSource.getRepository(ContentFeature).find({ where: { titleId: demoTitles[0].id, supersededBy: IsNull() } });
     expect(firstTitleRows.length).toBe(featureRowsFor(catalog[0], demoTitles[0].id, now).length);
     expect(firstTitleRows.every((row) => (row.value !== null) !== (row.distribution !== null) && row.supersededBy === null)).toBe(true);
     expect(firstTitleRows.some((row) => row.featureKey === 'cultural.originalLanguage' && row.distribution !== null)).toBe(true);
     // An older extractor version of one feature, planted before the second run, must end up superseded by the current row.
+    // Baseline captured right before the plant, not assumed to be firstTitleRows.length:
+    // this database is long-lived across the session's many runs, so stale
+    // superseded rows from earlier fixture epochs may already sit here too.
+    const totalBeforePlant = await dataSource.getRepository(ContentFeature).count({ where: { titleId: demoTitles[0].id } });
     const planted = await dataSource.getRepository(ContentFeature).save({
       titleId: demoTitles[0].id,
       featureKey: 'pacing',
@@ -122,13 +139,15 @@ describe('seed-demo (postgres-test)', () => {
     // Second run: same counts, same rankings, no duplicates.
     const second = await seedDemo(dataSource, { fixturesDir, now });
     const plantedAfter = await dataSource.getRepository(ContentFeature).findOneByOrFail({ id: planted.id });
+    // Whatever extractor version is current for pacing right now (not a hardcoded
+    // one -- the fixture's own version drifts as the catalog is re-extracted).
     const currentPacing = await dataSource
       .getRepository(ContentFeature)
-      .findOneByOrFail({ titleId: demoTitles[0].id, featureKey: 'pacing', extractorVersion: 'enrichment-worker-v2' });
+      .findOneByOrFail({ titleId: demoTitles[0].id, featureKey: 'pacing', supersededBy: IsNull() });
     expect(plantedAfter.supersededBy).toBe(currentPacing.id);
     expect(currentPacing.supersededBy).toBeNull();
     expect(second.contentFeatureRowsSuperseded).toBe(1);
-    expect(await dataSource.getRepository(ContentFeature).count({ where: { titleId: demoTitles[0].id } })).toBe(firstTitleRows.length + 1);
+    expect(await dataSource.getRepository(ContentFeature).count({ where: { titleId: demoTitles[0].id } })).toBe(totalBeforePlant + 1);
     await dataSource.getRepository(ContentFeature).delete({ id: planted.id });
     const secondRows = await snapshot();
     expect(second.personas).toEqual(first.personas.map((persona) => ({ ...persona, profileId: expect.any(String) })));

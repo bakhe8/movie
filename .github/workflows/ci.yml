@@ -12,9 +12,12 @@ on:
     branches: [main]
   pull_request:
 
+# On main every push gets its own group (keyed by commit sha), so a later push
+# never cancels an in-progress run and every commit to main gets one full CI
+# result; PR branches still cancel a superseded in-progress run to save minutes.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   backend:
