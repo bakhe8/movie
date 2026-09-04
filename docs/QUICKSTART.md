@@ -178,7 +178,7 @@ Four Railway services, each built from this repo's existing Dockerfiles (no sepa
 | `backend` | `apps/backend/railway.json` | `api.kolme.app` / `api.alpha.kolme.app` | Root directory = repo root (workspace build context) |
 | `frontend` | `apps/frontend/railway.json` | `kolme.app` / `alpha.kolme.app` | Root directory = repo root |
 | `model-service` (workers) | `services/workers/railway.json` | none (private, reached via `MODEL_SERVICE_URL`) | Root directory = repo root |
-| `migrate` | `apps/backend/railway.migrate.json` | none | Same image as `backend`, start command overridden to `npm run release`: pending migrations, then the catalog seed (`seed-demo --catalog-only`, no persona accounts), `load-catalog-rights`, `load-imdb-ratings --fetch`; idempotent, exits when done (ADR-90); auto-deploys on every push, so the catalog is never a separate manual step. Live, this service has no config-as-code path (Railway deprecated it): set `npm run release` as its Custom Start Command under Settings → Deploy; the JSON is the reference copy |
+| `migrate` | `apps/backend/railway.migrate.json` | none | Same image as `backend`, start command `npm run release` (= `node dist/migrate.js`; the live service calls it as `npm run migrate:prod`, the same entry): pending migrations, then the catalog seed (`seed-demo --catalog-only`, no persona accounts), the rights-registry rows and the IMDb ratings, in one process; idempotent, exits when done (ADR-90); auto-deploys on every push, so the catalog is never a separate manual step. Live, this service has no config-as-code path (Railway deprecated it): the command lives under Settings → Deploy; the JSON is the reference copy |
 
 **Environment variables** (Railway "Variables", not files — unlike `docker-compose.prod.yml`'s file-based secrets, which target a generic self-host, not Railway. The `<NAME>_FILE` convention in the existing images is a no-op when the plain `<NAME>` variable is already set, so no Dockerfile changes were needed):
 
@@ -231,6 +231,7 @@ Four Railway services, each built from this repo's existing Dockerfiles (no sepa
 ---
 
 **Changelog**
+- 2.8 (2026-09-05): §8.2's `migrate` service is the release step — `node dist/migrate.js` runs the migrations and then the catalog seed, rights rows and IMDb ratings in one process (ADR-90); the catalog is never loaded by hand.
 - 2.7 (2026-09-05): §8.2's `migrate` service runs `npm run migrate:prod` (the compiled entry point, A-19) — `npm run migrate` needs ts-node, absent from the production image; `OTEL_SERVICE_NAME`/`OTEL_TRACES_SAMPLE_RATE` added to the variable list.
 - 2.6 (2026-09-05): §8.1/§8.2 cited ADR-87 as the hosting decision; it is ADR-88 (ADR-87 is the training-trigger timing fix). Corrected here and in the 2.5 entry (AUDIT_2026-09-05 §4).
 - 2.5 (2026-09-04): §8.2 added — the actual hosting plan (Railway + Cloudflare, `kolme.app`/`alpha.kolme.app`, ADR-88, owner decision O-2, board C-18). Nothing deployed yet; a click list for the owner to execute and approve.

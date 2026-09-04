@@ -35,9 +35,8 @@
     "migration:run": "npm run typeorm -- migration:run",
     "migration:revert": "npm run typeorm -- migration:revert",
     "migrate": "npm run migration:run",
-    "migrate:prod": "node dist/migrate.js",
-    "release": "npm run migrate:prod && npm run release:catalog",
-    "release:catalog": "node dist/scripts/seed-demo.js --catalog-only && node dist/scripts/load-catalog-rights.js && node dist/scripts/load-imdb-ratings.js --fetch"
+    "migrate:prod": "npm run release",
+    "release": "node dist/migrate.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.2.3",
