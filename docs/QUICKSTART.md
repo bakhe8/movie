@@ -191,6 +191,8 @@ Four Railway services, each built from this repo's existing Dockerfiles (no sepa
 | `JWT_SECRET`, `ANTHROPIC_API_KEY`, `TMDB_API_KEY`, `MODEL_SERVICE_TOKEN`, `AUDIT_IP_SALT` | `backend` (as needed) | generate fresh values — never reuse `.env`'s dev placeholders |
 | `POSTGRES_PASSWORD`, `POSTGRES_USER`, `POSTGRES_DB` | `postgres` | generate a fresh password; `movieapp` / `moviedb` |
 | `API_PORT`, `PORT`, `MODEL_SERVICE_PORT` | each service | `3101` / `3110` / `8001` (Railway also injects its own `PORT`; keep these explicit since the app code reads them by these names) |
+| `MAIL_TRANSPORT`, `RESEND_API_KEY`, `MAIL_FROM_ADDRESS` | `backend` | mail transport (A-9/ADR-85); `kolme.app` is already verified in Resend (auto-configured via Cloudflare) |
+| `SENTRY_DSN`, `OTEL_EXPORTER_OTLP_ENDPOINT` | `backend` | observability (A-11/ADR-86) — unset in dev, both start only when set here |
 
 **Owner's click list, in order** (nothing here has been done yet):
 
