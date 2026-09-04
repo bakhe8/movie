@@ -62,10 +62,11 @@ class DemoRow:
     # (seed-demo.lib.ts reads the 13 V1 keys), so this is the continuation of the
     # pre-ADR-69 recovery score and the one the acceptance floor applies to.
     recovery_v1: Optional[float] = None
-    # ||w_v2|| / ||w||: how much of the learned direction the model put on the V2
-    # families, whose true weight for a fixture persona is exactly zero. A
-    # diagnostic of spurious V2 preference (correlated features), not a failure.
-    v2_weight_share: Optional[float] = None
+    # ||w beyond V1|| / ||w||: how much of the learned direction the model put on
+    # the V2+V3 families combined, whose true weight for a fixture persona is
+    # exactly zero unless its theta was extended to cover them. A diagnostic of
+    # spurious preference from correlated features, not a failure by itself.
+    beyond_v1_weight_share: Optional[float] = None
     # The L2 strength the trainer chose by held-out NLL (ADR-69); None when the
     # trainer result carries no such field.
     chosen_regularization: Optional[float] = None
@@ -164,7 +165,7 @@ def train_demo_profiles(profiles: List[DemoProfile], fixture: Dict[str, Any], tr
                 director_diversity=getattr(result, "training_director_diversity", None),
                 recovery=cosine(weights, hidden_theta(theta, len(weights))) if theta is not None else None,
                 recovery_v1=cosine(weights[:n_v1], list(theta)[:n_v1]) if theta is not None else None,
-                v2_weight_share=(v2_norm / total_norm) if len(weights) > n_v1 and total_norm > 0 else None,
+                beyond_v1_weight_share=(v2_norm / total_norm) if len(weights) > n_v1 and total_norm > 0 else None,
                 chosen_regularization=getattr(result, "chosen_regularization", None),
                 theta_covers_model=theta is not None and len(theta) == len(weights) and len(weights) > n_v1,
                 recovery_defined=cosine(weights[: len(theta)], list(theta)) if theta is not None and len(theta) <= len(weights) else None,
@@ -177,7 +178,7 @@ def format_table(rows: List[DemoRow], fixture: Dict[str, Any]) -> str:
     expected = {persona["slug"]: persona["expectedBand"] for persona in fixture["personas"]}
     lines = [
         f"{'persona':<12} {'triads':>6} {'held-out':>8} {'ho-acc':>7} {'ho-nll':>7} {'genres':>6} {'langs':>5} {'dirs':>4} "
-        f"{'recovery':>8} {'rec-v1':>6} {'v2-share':>8} {'lambda':>6}  expected band",
+        f"{'recovery':>8} {'rec-v1':>6} {'>v1-shr':>8} {'lambda':>6}  expected band",
         "-" * 113,
     ]
     for row in rows:
@@ -189,7 +190,7 @@ def format_table(rows: List[DemoRow], fixture: Dict[str, Any]) -> str:
             f"{row.slug:<12} {row.training_triad_count:>6} {row.held_out_triad_count:>8} "
             f"{fmt(row.held_out_pairwise_accuracy, '7.2f')} {fmt(row.held_out_nll, '7.3f')} "
             f"{fmt(row.genre_diversity, '6d')} {fmt(row.language_diversity, '5d')} {fmt(row.director_diversity, '4d')} {fmt(row.recovery, '8.2f')} "
-            f"{fmt(row.recovery_v1, '6.2f')} {fmt(row.v2_weight_share, '8.2f')} {fmt(row.chosen_regularization, '6.2f')}  {expected.get(row.slug, '?')}"
+            f"{fmt(row.recovery_v1, '6.2f')} {fmt(row.beyond_v1_weight_share, '8.2f')} {fmt(row.chosen_regularization, '6.2f')}  {expected.get(row.slug, '?')}"
         )
     return "\n".join(lines)
 

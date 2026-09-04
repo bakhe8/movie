@@ -4,13 +4,13 @@
  * unit tests pin the behaviour and `seed-demo.ts` stays a thin writer.
  *
  * The persona model: a hidden taste vector θ over the model's 28 fingerprint
- * dimensions (13 V1 keys, then the 15 V2 family keys, in the trainer's order —
- * ADR-69); utility u = θ·x with unknown dimensions imputed at the midpoint
+ * dimensions (13 V1 keys, then the 15 V2 and 12 V3 family keys, in the
+ * trainer's order — ADR-69/C10); utility u = θ·x with unknown dimensions imputed at the midpoint
  * (never zero, ADR-19); a triad ranking is an exact Plackett–Luce sample —
  * utility / τ plus Gumbel noise, best first — so the learner's own assumption
  * holds and accuracy lands around 0.8–0.9, not 1.0.
  */
-import { FINGERPRINT_V2_DIMENSIONS } from '../entities/title-fingerprint.type';
+import { FINGERPRINT_V2_DIMENSIONS, FINGERPRINT_V3_DIMENSIONS } from '../entities/title-fingerprint.type';
 import type { FilmFingerprintV1 } from '../entities/title-fingerprint.type';
 import type { CulturalBlock } from './fetch-cultural.lib';
 import type { Title } from '../entities/title.entity';
@@ -32,14 +32,15 @@ export const DIMENSIONS = [
 ] as const;
 
 /**
- * The 28 keys a persona's θ and the trainer's weights are indexed by: V1 at the
- * top level of the fingerprint, then the V2 families read from
- * `fingerprint.v2.features` (FINGERPRINT_SCHEMA.md §3.1). Same order as
- * `FINGERPRINT_DIMENSIONS` in `services/workers/src/training.py` and the
- * scorer, so a persona's hidden θ and the learned weights compare position by
- * position (the recovery score in `train_demo.py`).
+ * The 40 keys a persona's θ and the trainer's weights are indexed by: V1 at the
+ * top level of the fingerprint, then the V2 and V3 families read from their
+ * nested blocks (`fingerprint.v2.features` / `fingerprint.v3.features`,
+ * FINGERPRINT_SCHEMA.md §3.1/§3.3). Same order as `FINGERPRINT_DIMENSIONS` in
+ * `services/workers/src/training.py` and the scorer, so a persona's hidden θ
+ * and the learned weights compare position by position (the recovery score
+ * in `train_demo.py`).
  */
-export const MODEL_DIMENSIONS = [...DIMENSIONS, ...FINGERPRINT_V2_DIMENSIONS] as const;
+export const MODEL_DIMENSIONS = [...DIMENSIONS, ...FINGERPRINT_V2_DIMENSIONS, ...FINGERPRINT_V3_DIMENSIONS] as const;
 
 export interface PersonaSpec {
   slug: string;
@@ -144,19 +145,29 @@ export function gumbel(rng: Rng): number {
 // ---------------------------------------------------------------------------
 
 /**
- * The 28 dimensions in model order; a missing or non-finite value is `null`
- * (unknown), never 0. V1 keys are read at the top level, V2 keys from the
- * nested `v2.features` block — the same two-shape read as the trainer's
- * `fingerprint_vector()`.
+ * The 40 dimensions in model order; a missing or non-finite value is `null`
+ * (unknown), never 0. V1 keys are read at the top level; a namespaced key is
+ * looked up in whichever nested block has it (`v2.features`, `v3.features`)
+ * — the same merged, block-agnostic read as the trainer's `feature_vector()`
+ * in `fingerprint_v2_eval.py`, so a feature moving between blocks needs no
+ * change here.
  */
+function nestedFeatures(fingerprint: CatalogEntry['fingerprint']): Record<string, unknown> {
+  const merged: Record<string, unknown> = {};
+  for (const blockKey of ['v2', 'v3'] as const) {
+    const block = fingerprint?.[blockKey];
+    const features = block && typeof block === 'object' ? (block as { features?: unknown }).features : null;
+    if (features && typeof features === 'object') {
+      Object.assign(merged, features as Record<string, unknown>);
+    }
+  }
+  return merged;
+}
+
 export function fingerprintVector(fingerprint: CatalogEntry['fingerprint']): (number | null)[] {
-  const v2 = fingerprint?.v2;
-  const v2Features =
-    v2 && typeof v2 === 'object' && (v2 as { features?: unknown }).features && typeof (v2 as { features?: unknown }).features === 'object'
-      ? ((v2 as { features: Record<string, unknown> }).features as Record<string, unknown>)
-      : {};
+  const nested = nestedFeatures(fingerprint);
   return MODEL_DIMENSIONS.map((dimension) => {
-    const value = dimension.includes('.') ? v2Features[dimension] : fingerprint?.[dimension];
+    const value = dimension.includes('.') ? nested[dimension] : fingerprint?.[dimension];
     return typeof value === 'number' && Number.isFinite(value) ? value : null;
   });
 }
@@ -503,7 +514,7 @@ export function validatePersona(persona: PersonaSpec): string[] {
     problems.push(`${persona.slug}: slug must be lower-case kebab`);
   }
   if (persona.theta.length !== MODEL_DIMENSIONS.length) {
-    problems.push(`${persona.slug}: theta must have ${MODEL_DIMENSIONS.length} values (13 V1 keys, then the 15 V2 family keys)`);
+    problems.push(`${persona.slug}: theta must have ${MODEL_DIMENSIONS.length} values (13 V1 keys, then the 15 V2 and 12 V3 family keys)`);
   }
   if (persona.watched < 3) {
     problems.push(`${persona.slug}: at least 3 watched titles are needed for a triad`);

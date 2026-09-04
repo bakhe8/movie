@@ -548,4 +548,5 @@ Owner's decision, 2026-09-03, in answer to "what is the alternative to an OpenAI
 | 2026-09-04 | §7.3: third block (form families, 12 keys) specified in FINGERPRINT_SCHEMA §3.3, extracted for all 300 titles (0 failures), published to the dev database with provenance rows, evaluated offline against Claude's order; wiring requested as C10 |
 | 2026-09-04 | §7.4: cultural-context block from Wikidata (languages, countries, setting places and eras, CC0) on all 300 titles, stored as categorical provenance rows; coverage report per language / country / slice / tier is the first `BP §11.3` measurement |
 | 2026-09-04 | §7.3 re-measured after C10 (`6abf34d`, 40 keys served): judge NLL 0.823 / acc 85.7 %, API Spearman 0.896 (from 0.846); two observations passed to the model-service owner |
+| 2026-09-04 | Board C-8: personas regenerated on the full 40-key model (V3 half of θ added, τ 0.5); WS4 bar met on the served trainer: slow-burn recovery 0.83, held-out accuracy 0.92 |
 | 2026-09-04 | §7.5: Arabic Wikipedia plot as second evidence for short English plots; V1 re-extracted under `+ar-evidence`, confidence measured before/after per slice, rows superseded |

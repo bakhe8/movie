@@ -29,9 +29,9 @@ def test_committed_personas_fixture_is_valid():
     fixture = load_personas(DEFAULT_PERSONAS)
     slugs = [persona["slug"] for persona in fixture["personas"]]
     assert slugs == ["slow-burn", "spectacle", "warm-talky", "newcomer"]
-    # Regenerated on all 28 keys (2026-09-04, after ADR-69): every theta spans the model.
-    assert all(len(persona["theta"]) == len(FINGERPRINT_V1_DIMENSIONS) + 15 for persona in fixture["personas"])  # V1 + the 15 V2 families
-    assert fixture["temperature"] == 0.4
+    # Regenerated on the full 40-key model (2026-09-04, board C-8, after C10 wired V3).
+    assert all(len(persona["theta"]) == len(FINGERPRINT_DIMENSIONS) for persona in fixture["personas"])
+    assert fixture["temperature"] == 0.5
     assert fixture["emailDomain"] == "demo.local"
 
 
@@ -72,7 +72,7 @@ def test_recovery_uses_the_personas_hidden_theta_and_survives_one_failure(tmp_pa
 
     assert rows[0].recovery == pytest.approx(cosine([0.9] + [0.05] * 12, [1.0] + [0.0] * 12))
     assert rows[0].recovery_v1 == pytest.approx(rows[0].recovery)  # 13 weights: no V2 block to separate
-    assert rows[0].v2_weight_share is None
+    assert rows[0].beyond_v1_weight_share is None
     assert rows[0].genre_diversity == 7
     assert rows[0].language_diversity is None  # the attribute was absent on this result: unknown, not 0
     assert rows[0].director_diversity is None  # same rule for the director count (ADR-71)
@@ -124,7 +124,7 @@ def test_recovery_under_the_28_dimension_model_splits_v1_from_spurious_v2(tmp_pa
     rows = train_demo_profiles([DemoProfile("rich", "rich@demo.local", "p1")], fixture, trainer=lambda _pid: _result(weights))
     assert rows[0].recovery_v1 == pytest.approx(1.0)
     assert rows[0].recovery == pytest.approx(1 / math.sqrt(2))
-    assert rows[0].v2_weight_share == pytest.approx(1 / math.sqrt(2))
+    assert rows[0].beyond_v1_weight_share == pytest.approx(1 / math.sqrt(2))
     # A 13-key persona is judged on its V1 recovery: the model recovers it on its
     # own dimensions, so it passes even though the full-vector cosine is below the floor.
     assert rows[0].theta_covers_model is False
@@ -138,5 +138,5 @@ def test_recovery_under_the_28_dimension_model_splits_v1_from_spurious_v2(tmp_pa
     assert rows_full[0].recovery_defined == pytest.approx(rows_full[0].recovery)
     assert rows[0].recovery_defined == pytest.approx(rows[0].recovery_v1)  # 13-key theta: its prefix is V1
     table = format_table(rows, fixture)
-    assert "rec-v1" in table and "v2-share" in table and "lambda" in table
+    assert "rec-v1" in table and ">v1-shr" in table and "lambda" in table
     assert rows[0].chosen_regularization is None  # the fake result carries no such field: unknown, not 0

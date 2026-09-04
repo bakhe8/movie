@@ -72,10 +72,11 @@ describe('deterministic randomness', () => {
 describe('utility', () => {
   it('imputes unknown dimensions at the midpoint, never zero', () => {
     const theta = MODEL_DIMENSIONS.map(() => 1);
-    const vector = fingerprintVector({ pacing: 1 }); // 27 unknowns: 12 V1 and the whole V2 block
-    expect(vector).toHaveLength(28);
-    expect(vector.filter((value) => value === null)).toHaveLength(27);
-    expect(utility(theta, vector)).toBeCloseTo(1 + 27 * 0.5);
+    const vector = fingerprintVector({ pacing: 1 }); // unknown: 12 remaining V1 keys plus the whole V2 and V3 blocks
+    expect(vector).toHaveLength(MODEL_DIMENSIONS.length);
+    const unknowns = MODEL_DIMENSIONS.length - 1;
+    expect(vector.filter((value) => value === null)).toHaveLength(unknowns);
+    expect(utility(theta, vector)).toBeCloseTo(1 + unknowns * 0.5);
   });
 
   it('reads V2 families from the nested block in the trainer\'s order', () => {
