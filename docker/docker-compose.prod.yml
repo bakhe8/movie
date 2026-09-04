@@ -1,0 +1,193 @@
+# Production/staging compose (board C-5, ALPHA_PLAN 7.3). Run from the repo
+# root so the Dockerfiles' build contexts resolve:
+#
+#   docker compose -f docker/docker-compose.prod.yml --env-file .env.prod \
+#     --profile migrate up --abort-on-container-exit migrate
+#   docker compose -f docker/docker-compose.prod.yml --env-file .env.prod up -d
+#
+# Secrets are files under ./secrets/ (gitignored; see docker/secrets/*.example
+# for the list), never baked into an image and never read from the app's own
+# `.env` -- each service mounts only the files it needs via Compose's native
+# `secrets:` and reads them through `docker/read-secrets.sh` (the same
+# `<NAME>_FILE` convention the official postgres/redis images already use for
+# theirs, extended here to the three app images). `.env.prod` (also
+# gitignored) holds only non-secret configuration: ports, hosts, model ids,
+# feature flags -- the same shape as `.env.example`, minus every value this
+# file lists under `secrets:`.
+#
+# ADR-24 (hosting) is still open (ALPHA_PLAN 7.2); this compose assumes a
+# self-hosted/staging target with its own Postgres and Redis. A managed
+# Postgres (the likely production choice, per ALPHA_PLAN 7.2's fixed
+# requirements) replaces the `postgres` service with an external
+# `DATABASE_URL`/`DB_HOST` and removes its volume -- nothing else here changes.
+
+name: movie-prod
+
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password.txt
+  jwt_secret:
+    file: ./secrets/jwt_secret.txt
+  anthropic_api_key:
+    file: ./secrets/anthropic_api_key.txt
+  tmdb_api_key:
+    file: ./secrets/tmdb_api_key.txt
+  model_service_token:
+    file: ./secrets/model_service_token.txt
+  audit_ip_salt:
+    file: ./secrets/audit_ip_salt.txt
+  database_url:
+    file: ./secrets/database_url.txt
+
+services:
+  postgres:
+    image: ankane/pgvector:latest
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-movieapp}
+      POSTGRES_DB: ${POSTGRES_DB:-moviedb}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - movie-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-movieapp}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - movie-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # One-shot: applies pending migrations, then exits. Run this and wait for it
+  # to finish before starting `backend` (the deploy pipeline's own job, or
+  # `--profile migrate up --abort-on-container-exit migrate` locally) --
+  # `backend` does not run migrations itself (SCHEMA.md: migrations only).
+  migrate:
+    profiles: ["migrate"]
+    build:
+      context: ..
+      dockerfile: apps/backend/Dockerfile
+      target: build
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-movieapp}
+      POSTGRES_DB: ${POSTGRES_DB:-moviedb}
+    secrets:
+      - postgres_password
+    working_dir: /repo
+    entrypoint: ["sh", "-c"]
+    command:
+      - export POSTGRES_PASSWORD="$$(cat /run/secrets/postgres_password)" && npm run migrate -w @movie/backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - movie-network
+
+  backend:
+    build:
+      context: ..
+      dockerfile: apps/backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      API_PORT: "3101"
+      API_ENV: production
+      NODE_ENV: production
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-movieapp}
+      POSTGRES_DB: ${POSTGRES_DB:-moviedb}
+      REDIS_URL: redis://redis:6379
+      MODEL_SERVICE_URL: http://model-service:8001
+      ANTHROPIC_FINGERPRINT_MODEL: ${ANTHROPIC_FINGERPRINT_MODEL:-claude-opus-5}
+      ANTHROPIC_EXPLANATION_MODEL: ${ANTHROPIC_EXPLANATION_MODEL:-claude-opus-5}
+      ANTHROPIC_WORKSPACE_ID: ${ANTHROPIC_WORKSPACE_ID:-}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-30}
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
+      PRIVACY_DELETE_SAFETY_DAYS: ${PRIVACY_DELETE_SAFETY_DAYS:-7}
+      PRIVACY_SWEEP_INTERVAL_MS: ${PRIVACY_SWEEP_INTERVAL_MS:-60000}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
+      TMDB_API_KEY_FILE: /run/secrets/tmdb_api_key
+      MODEL_SERVICE_TOKEN_FILE: /run/secrets/model_service_token
+      AUDIT_IP_SALT_FILE: /run/secrets/audit_ip_salt
+    secrets:
+      - postgres_password
+      - jwt_secret
+      - anthropic_api_key
+      - tmdb_api_key
+      - model_service_token
+      - audit_ip_salt
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - movie-network
+    ports:
+      - "127.0.0.1:3101:3101"
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: apps/frontend/Dockerfile
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?set to the public backend URL, e.g. https://api.example.com/api}
+      PORT: "3110"
+    depends_on:
+      - backend
+    networks:
+      - movie-network
+    ports:
+      - "127.0.0.1:3110:3110"
+
+  model-service:
+    build:
+      context: ..
+      dockerfile: services/workers/Dockerfile
+    restart: unless-stopped
+    environment:
+      MODEL_SERVICE_HOST: 0.0.0.0
+      MODEL_SERVICE_PORT: "8001"
+      TRAINING_FIRST_TRIAD_COUNT: ${TRAINING_FIRST_TRIAD_COUNT:-3}
+      TRAINING_EVERY_N_TRIADS: ${TRAINING_EVERY_N_TRIADS:-5}
+      DATABASE_URL_FILE: /run/secrets/database_url
+      MODEL_SERVICE_TOKEN_FILE: /run/secrets/model_service_token
+    secrets:
+      - database_url
+      - model_service_token
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - movie-network
+    ports:
+      - "127.0.0.1:8001:8001"
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  movie-network:
+    driver: bridge

@@ -27,6 +27,11 @@ build/
 .env
 .env.local
 .env.*.local
+
+# Production/staging secrets (board C-5): real files never committed, only
+# docker/secrets/*.txt.example documents what's needed.
+docker/secrets/*.txt
+.env.prod
 .idea/
 .vscode/
 *.sw[op]
