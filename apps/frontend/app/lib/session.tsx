@@ -1,12 +1,26 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { api, ApiError, setAuthToken, UNAUTHORIZED_EVENT, type Profile, type User } from './api';
+import {
+  api,
+  ApiError,
+  getRefreshToken,
+  setAuthToken,
+  setRefreshToken,
+  setTokenRefreshListener,
+  UNAUTHORIZED_EVENT,
+  type AuthResponse,
+  type Profile,
+  type User,
+} from './api';
 
 const STORAGE_KEY = 'reel.session.v1';
 
 interface StoredSession {
   token: string;
+  // Absent for sessions stored before refresh tokens (F8): they keep working
+  // until the access token expires, then the door appears.
+  refreshToken?: string;
   user: User;
 }
 
@@ -56,6 +70,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       if (raw) {
         const stored: StoredSession = JSON.parse(raw);
         setAuthToken(stored.token);
+        setRefreshToken(stored.refreshToken ?? null);
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setAuth(stored);
       }
@@ -101,10 +116,31 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     };
   }, [auth]);
 
-  const applyAuth = useCallback(async (token: string, user: User) => {
-    setAuthToken(token);
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ token, user }));
-    setAuth({ token, user });
+  const applyAuth = useCallback(async (result: AuthResponse) => {
+    setAuthToken(result.access_token);
+    setRefreshToken(result.refresh_token);
+    const stored: StoredSession = { token: result.access_token, refreshToken: result.refresh_token, user: result.user };
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+    setAuth(stored);
+  }, []);
+
+  // A silent renewal (api.ts) hands over the new pair: persist it so a reload
+  // does not resurrect the rotated, now-revoked refresh token.
+  useEffect(() => {
+    setTokenRefreshListener(({ access, refresh }) => {
+      try {
+        const raw = window.localStorage.getItem(STORAGE_KEY);
+        const stored: StoredSession | null = raw ? JSON.parse(raw) : null;
+        if (stored) {
+          const next: StoredSession = { ...stored, token: access, refreshToken: refresh };
+          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+          setAuth((current) => (current ? { ...current, token: access, refreshToken: refresh } : current));
+        }
+      } catch {
+        // Storage unavailable: the in-memory pair still serves this tab.
+      }
+    });
+    return () => setTokenRefreshListener(null);
   }, []);
 
   const login = useCallback(
@@ -112,7 +148,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       setError(null);
       try {
         const result = await api.login({ email, password });
-        await applyAuth(result.access_token, result.user);
+        await applyAuth(result);
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'تعذر تسجيل الدخول');
         throw err;
@@ -126,7 +162,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       setError(null);
       try {
         const result = await api.register(data);
-        await applyAuth(result.access_token, result.user);
+        await applyAuth(result);
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'تعذر إنشاء الحساب');
         throw err;
@@ -136,8 +172,15 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = useCallback(() => {
+    // Revoke the refresh token server-side (F8); best effort, never blocking
+    // the sign-out, and quiet if the access token was already rejected.
+    const refresh = getRefreshToken();
+    if (refresh) {
+      void api.logout({ refresh_token: refresh }).catch(() => {});
+    }
     window.localStorage.removeItem(STORAGE_KEY);
     setAuthToken(null);
+    setRefreshToken(null);
     setAuth(null);
     setProfile(null);
   }, []);

@@ -10,9 +10,21 @@ export interface User {
   createdAt: string;
 }
 
+// Register/login reply (ADR-26): a short-lived access token and a rotating
+// refresh token; the client keeps the pair and renews through /auth/refresh.
 export interface AuthResponse {
   access_token: string;
+  refresh_token: string;
+  token_type: 'Bearer';
+  expires_in: number;
   user: User;
+}
+
+export interface RefreshResponse {
+  access_token: string;
+  refresh_token: string;
+  token_type: 'Bearer';
+  expires_in: number;
 }
 
 export type PreferredLanguage = 'ar' | 'en';
@@ -221,6 +233,9 @@ export class ApiError extends Error {
 }
 
 let authToken: string | null = null;
+let refreshToken: string | null = null;
+// Told the new pair after a silent renewal, so the session provider persists it.
+let onTokensRefreshed: ((tokens: { access: string; refresh: string }) => void) | null = null;
 
 // Fired once per rejected token so the session provider can sign out.
 export const UNAUTHORIZED_EVENT = 'reel:unauthorized';
@@ -229,7 +244,55 @@ export function setAuthToken(token: string | null) {
   authToken = token;
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+export function setRefreshToken(token: string | null) {
+  refreshToken = token;
+}
+
+export function getRefreshToken() {
+  return refreshToken;
+}
+
+export function setTokenRefreshListener(listener: ((tokens: { access: string; refresh: string }) => void) | null) {
+  onTokensRefreshed = listener;
+}
+
+// One renewal for every concurrent 401 (F8): rotation revokes the presented
+// token, so two parallel refreshes would read as reuse and close the family.
+let refreshing: Promise<boolean> | null = null;
+
+async function refreshOnce(): Promise<boolean> {
+  if (!refreshing) {
+    refreshing = (async () => {
+      const presented = refreshToken;
+      if (!presented) return false;
+      try {
+        const response = await fetch(`${API_URL}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: presented }),
+        });
+        if (!response.ok) return false;
+        const data = (await response.json()) as RefreshResponse;
+        authToken = data.access_token;
+        refreshToken = data.refresh_token;
+        onTokensRefreshed?.({ access: data.access_token, refresh: data.refresh_token });
+        return true;
+      } catch {
+        return false;
+      }
+    })();
+    refreshing.finally(() => {
+      refreshing = null;
+    });
+  }
+  return refreshing;
+}
+
+// `quiet`: a 401 neither renews nor signs out -- for the logout call itself,
+// which may run with a token already rejected.
+type RequestFlags = { quiet?: boolean; retried?: boolean };
+
+async function request<T>(path: string, options: RequestInit = {}, flags: RequestFlags = {}): Promise<T> {
   const headers = new Headers(options.headers);
   headers.set('Content-Type', 'application/json');
   if (authToken) {
@@ -239,14 +302,18 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, { ...options, headers });
 
   if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    const message = Array.isArray(body.message) ? body.message.join(', ') : body.message || response.statusText;
-    // A rejected token on any call, not only the first profile load (M4):
-    // the session provider signs out so the door appears instead of every
-    // screen failing one by one. Only 401 -- never a transient 5xx/429.
-    if (response.status === 401 && authToken && typeof window !== 'undefined') {
+    if (response.status === 401 && authToken && !flags.quiet && typeof window !== 'undefined') {
+      // An expired access token renews silently once (F8, ADR-26) and the
+      // call is repeated with the new pair. Only when renewal fails too is
+      // the token really rejected: then the session provider signs out
+      // (M4) so the door appears instead of every screen failing one by one.
+      if (!flags.retried && refreshToken && (await refreshOnce())) {
+        return request<T>(path, options, { ...flags, retried: true });
+      }
       window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
     }
+    const body = await response.json().catch(() => ({}));
+    const message = Array.isArray(body.message) ? body.message.join(', ') : body.message || response.statusText;
     throw new ApiError(message, response.status, typeof body === 'object' && body !== null ? body : {});
   }
 
@@ -259,6 +326,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 export const api = {
   register: (data: { email: string; password: string; firstName: string; lastName: string }) =>
     request<AuthResponse>('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Revokes the refresh token (or, with `all`, every live one); the access
+  // token stays valid until it expires (API.md §1). Quiet: never re-enters
+  // the sign-out path it is part of.
+  logout: (data: { refresh_token?: string; all?: boolean }) =>
+    request<{ revoked: number }>('/auth/logout', { method: 'POST', body: JSON.stringify(data) }, { quiet: true }),
 
   login: (data: { email: string; password: string }) =>
     request<AuthResponse>('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
