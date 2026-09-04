@@ -71,10 +71,10 @@ npm run db:migrate
 ```
 
 ```bash
-npm run db:seed
+npm run db:seed:demo
 ```
 
-Migrations create the 7 tables in [SCHEMA.md](SCHEMA.md) §1; the seed inserts 15 development titles with placeholder fingerprints (idempotent upsert).
+Migrations create the tables in [SCHEMA.md](SCHEMA.md) §1; this seed upserts the 300-title demo catalog (fingerprints included, from the fixture already in the repo) and rebuilds the four demo persona accounts, idempotently — see §6.1. The 15-placeholder-title seed (`npm run db:seed`, `apps/backend/src/scripts/seed.ts`) is retired from `movie-postgres` (board C-15, owner's "never 15" rule, 2026-09-03) and kept only as a fixture for `postgres-test`'s own e2e specs.
 
 ## 5. Run
 
@@ -189,6 +189,7 @@ Backup and restore (`docker/backup-postgres.sh`, `docker/restore-postgres.sh`) a
 ---
 
 **Changelog**
+- 2.3 (2026-09-04): §4's seed step is `db:seed:demo` (the 300-title catalog), not `db:seed` (the 15 `FILM*` placeholders, retired from `movie-postgres`, board C-15).
 - 2.2 (2026-09-04): §8.1 added — the staging/production build (ALPHA_PLAN 7.3/7.4: per-service Dockerfiles, `docker-compose.prod.yml`, backup/restore) is now in this guide, not just in ARCHITECTURE.md's table (board C-13).
 - 2.1 (2026-09-03): added the fresh-clone Postgres-password troubleshooting row (H5, ADR-38) now that `docker:up`/`docker:down`/`test:e2e:up`/`docker-logs` correctly resolve the root `.env`.
 - 2.1 (2026-09-03): enrichment worker moved to the Anthropic Messages API — `ANTHROPIC_*` variables replace `OPENAI_*`, the pip line matches `pyproject.toml`, `make catalog-fetch` / `make catalog-enrich` added for the demo catalog ([DEMO_DATA_PLAN_2026-09-03.md](DEMO_DATA_PLAN_2026-09-03.md)).

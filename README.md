@@ -32,7 +32,7 @@ docs/               product blueprint (AR) + derived engineering docs (EN) — s
 Follow [docs/QUICKSTART.md](docs/QUICKSTART.md). In short:
 
 ```bash
-npm install && cp .env.example .env && npm run docker:up && npm run db:migrate && npm run db:seed && npm run dev
+npm install && cp .env.example .env && npm run docker:up && npm run db:migrate && npm run db:seed:demo && npm run dev
 ```
 
 Frontend http://localhost:3000 · API http://localhost:3101/api · health http://localhost:3101/api/health.

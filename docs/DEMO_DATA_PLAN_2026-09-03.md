@@ -548,6 +548,12 @@ Not done here, and flagged rather than assumed: the catalog's 300 titles still c
 
 A small, expected fluctuation from a real data correction — NLL and accuracy move within the noise a 14-round held-out set carries, Spearman is unchanged in practice. The judge's own ranking was never confused by `linearity`; only the catalog's feature values were, so no material change here was expected and none appeared.
 
+### 7.8 Retiring the 15 `FILM*` placeholders from `movie-postgres` (board C-15)
+
+The owner's standing rule (2026-09-03): never plan around the 15 hand-entered `FILM*` titles in `apps/backend/src/scripts/seed.ts` — 200 is the floor, 300–500 the target. They had stayed in `movie-postgres` since before the 300-title catalog existed. Investigated before touching anything: 64 accounts' triads (395) or watch-states (107) referenced them — `triads.titleIds` is a plain array with no FK, so the titles couldn't simply be deleted without leaving dangling references. Every one of the 64 was a disposable QA/load-test account (`load-*@example.com`, `rank-ui-*`, `verify-20260903`, `triad-test-*`, `browser.test.20260902`) — none `@demo.local`, none `claude@judge.local`. Deleted (cascade: profiles, triads, watch-states, replacements, refresh tokens; `consents.userId` set NULL by design) then the 15 titles. Verified after: 0 `FILM*` titles, 0 dangling triad references, all 5 real accounts intact, 300 catalog titles untouched.
+
+`seed.ts` itself is unchanged and still runs against `postgres-test` for its own isolated fixture use; only the default setup flow (README.md, QUICKSTART.md §4) no longer points a fresh clone at it — `npm run db:seed:demo` (the 300-title catalog) is the documented step now.
+
 ---
 
 ## 8. Provider decision — LLM enrichment through the Anthropic Messages API
@@ -589,3 +595,4 @@ Owner's decision, 2026-09-03, in answer to "what is the alternative to an OpenAI
 | 2026-09-04 | §7.5: Arabic Wikipedia plot as second evidence for short English plots; V1 re-extracted under `+ar-evidence`, confidence measured before/after per slice, rows superseded |
 | 2026-09-04 | §7.6 (C-10): `linearity`'s name-vs-description ambiguity diagnosed and fixed (wording only, same 0/1 convention); stability gate now passes, drift 0.109→0.015 on a real re-verification |
 | 2026-09-04 | §7.7 (C-14, owner approval O-6): full 300-title V1 re-extraction under the fixed prompt published to movie-postgres (3,890 rows superseded); cost 1.02M in / 114K out tokens, no dollar figure by design; personas and judge model retrained, WS4 bar still met |
+| 2026-09-04 | §7.8 (C-15): the 15 `FILM*` placeholders and the 64 test/load-test accounts referencing them retired from `movie-postgres`; README/QUICKSTART point at `db:seed:demo`, not `db:seed`, by default |
