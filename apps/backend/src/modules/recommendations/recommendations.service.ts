@@ -309,6 +309,21 @@ export class RecommendationsService {
   // watch history has no "usual" yet, so nothing can cross it: everything is
   // `safe` until it does, which is honest rather than labelling arbitrary
   // titles as discoveries.
+  // 0-2: one point for a genre set entirely outside what this profile
+  // watches, one for a language it has never watched. A profile with no
+  // history has no usual region, so nothing can cross it and everything
+  // scores 0 -- honest, rather than labelling arbitrary titles discoveries.
+  private crossingScore(item: ScoredTitle, usual: { genres: Set<string>; languages: Set<string> }): number {
+    if (usual.genres.size === 0) {
+      return 0;
+    }
+    const genres = item.title.genres ?? [];
+    const language = item.title.originalLanguage;
+    const genreCrosses = genres.length > 0 && genres.every((genre) => !usual.genres.has(genre));
+    const languageCrosses = Boolean(language) && !usual.languages.has(language as string);
+    return (genreCrosses ? 1 : 0) + (languageCrosses ? 1 : 0);
+  }
+
   private assignTracks(
     ranked: ScoredTitle[],
     usual: { genres: Set<string>; languages: Set<string> },
@@ -324,17 +339,24 @@ export class RecommendationsService {
     const explorationSlots = usual.genres.size === 0 ? 0 : Math.floor(shown * explorationShare);
     const mainSlots = Math.max(0, shown - explorationSlots);
 
-    const crosses = (item: ScoredTitle): boolean => {
-      const genres = item.title.genres ?? [];
-      const language = item.title.originalLanguage;
-      const genreCrosses = genres.length > 0 && genres.every((genre) => !usual.genres.has(genre));
-      const languageCrosses = Boolean(language) && !usual.languages.has(language as string);
-      return genreCrosses || languageCrosses;
-    };
+    const candidates = ranked.slice(0, mainSlots);
+    // A-16 (owner decision O-7): how far outside the profile's usual region a
+    // candidate sits, 0-2, not a yes/no filter. A filter had to decide what
+    // "crosses" means and then drop everything short of it -- so a catalogue
+    // where nothing was fully outside showed an empty discovery section,
+    // which is the one outcome a bubble-breaking track must not have. Scoring
+    // keeps the strict case first (a 2 outranks every 1) without making it a
+    // precondition for the section existing at all.
+    const bestScore = Math.max(0, ...candidates.map((item) => this.crossingScore(item, usual)));
 
-    const head = ranked.slice(0, mainSlots).map((item) => ({
+    const head = candidates.map((item) => ({
       ...item,
-      track: (usual.genres.size > 0 && crosses(item) ? 'discovery' : 'safe') as RecommendationTrack,
+      // Only the best available crossing is a discovery: when something is
+      // outside on both axes, a one-axis near-miss shown beside it would read
+      // as the same kind of suggestion when it is not.
+      track: (bestScore > 0 && this.crossingScore(item, usual) === bestScore
+        ? 'discovery'
+        : 'safe') as RecommendationTrack,
     }));
     if (explorationSlots === 0) {
       return head;

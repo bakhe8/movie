@@ -1052,6 +1052,65 @@ describe('RecommendationsService', () => {
       expect(tracks.get('fully-outside')).toBe('discovery');
     });
 
+    // A-16 (owner decision O-7). The old filter asked a yes/no question and
+    // dropped everything short of its answer; the score asks how far outside
+    // and takes the best available, so the two cases below both have one.
+    describe('crossing score (O-7)', () => {
+      beforeEach(() => {
+        // Watches Drama and Horror, in Arabic.
+        statesRepository.find.mockResolvedValue([{ titleId: 'watched-1' }, { titleId: 'watched-2' }]);
+        titlesRepository.find.mockResolvedValue([
+          { id: 'watched-1', genres: ['Drama'], originalLanguage: 'ar' },
+          { id: 'watched-2', genres: ['Horror'], originalLanguage: 'ar' },
+        ] as unknown as Title[]);
+      });
+
+      it('leads with the fully outside candidate when there is one', async () => {
+        const titles = [
+          titleWith('inside', 0.9, ['Drama'], 'ar'),
+          titleWith('genre-only', 0.8, ['Comedy'], 'ar'),
+          titleWith('language-only', 0.7, ['Drama'], 'ja'),
+          titleWith('both', 0.6, ['Comedy'], 'ja'),
+        ];
+        titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+        const items = await recommendItems('user-1', 'profile-1', 4);
+        const discoveries = items.filter((item) => item.track === 'discovery').map((item) => item.title.id);
+
+        // Score 2 beats the two score-1 near-misses, which stay `safe`.
+        expect(discoveries).toEqual(['both']);
+      });
+
+      // The failure the score exists to remove: under the old filter a
+      // catalogue with nothing fully outside showed an empty discovery
+      // section, which is exactly when a bubble is forming.
+      it('shows the closest candidate when nothing is fully outside', async () => {
+        const titles = [
+          titleWith('inside', 0.9, ['Drama'], 'ar'),
+          titleWith('genre-only', 0.8, ['Comedy'], 'ar'),
+          titleWith('language-only', 0.7, ['Horror'], 'ja'),
+        ];
+        titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+        const items = await recommendItems('user-1', 'profile-1', 3);
+        const discoveries = items.filter((item) => item.track === 'discovery').map((item) => item.title.id);
+
+        expect(discoveries).toEqual(['genre-only', 'language-only']);
+      });
+
+      // Nothing crosses at all: still no discovery. A section that always
+      // fills itself would eventually label an ordinary title a discovery,
+      // which is worse than an empty one.
+      it('leaves the track empty when nothing crosses at all', async () => {
+        const titles = [titleWith('a', 0.9, ['Drama'], 'ar'), titleWith('b', 0.8, ['Horror'], 'ar')];
+        titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+        const items = await recommendItems('user-1', 'profile-1', 2);
+
+        expect(items.every((item) => item.track === 'safe')).toBe(true);
+      });
+    });
+
     it('takes the exploration share from the running experiment arm when there is one', async () => {
       experimentsService.armFor.mockResolvedValue('exploration-high');
       const titles = Array.from({ length: 10 }, (_, index) =>
