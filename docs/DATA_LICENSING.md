@@ -117,7 +117,7 @@ Credits page and API metadata list every source actually used with the attributi
 | Re-export or redistribute IMDb, TMDB or MovieLens values in bulk (dumps, API listings, data files) | dataset terms | show per title with attribution; exports carry the user's own data only |
 | Take revenue (paid tier, ads, commission) while still on the TMDB free key, IMDb's non-commercial datasets or MovieLens research terms | those terms are non-commercial | decide the agreements in the revenue study first; text cards and internal seeding are the built fallbacks |
 | Scrape any provider | terms and law | licensed APIs and contracts |
-| Show a poster without a registry row | rights | text card until licensed |
+| Show a poster without a registry row | hygiene, not a display block during the free period (§0; owner 2026-09-05) | write the `source_records` row (`load-catalog-rights`); the display gate returns with the revenue decision |
 | Send user data to the LLM | privacy | film evidence only, `store=false` |
 | Train on text you copied from reviews | copyright | licensed or own text; abstract features |
 | Keep a MovieLens/Tag Genome-seeded component served after revenue starts, without permission | GroupLens license | permission at the revenue decision, or re-seed from internal data (ADR-13 default) |
