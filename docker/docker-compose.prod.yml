@@ -152,7 +152,14 @@ services:
       dockerfile: apps/frontend/Dockerfile
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?set to the public backend URL, e.g. https://api.example.com/api}
+      # A default, not `:?required`: Compose interpolates every service's
+      # variables for ANY invocation of this file, including migrate/postgres-
+      # only ops commands (backup, restore) that never touch the frontend --
+      # a hard requirement here blocked exactly those (board C-12). Real
+      # deploys must still set this in `.env.prod` to the actual public
+      # backend URL; the placeholder below is wrong on purpose so a forgotten
+      # override is visible in the running app, not silently accepted.
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://SET_NEXT_PUBLIC_API_URL_IN_ENV_PROD/api}
       PORT: "3110"
     depends_on:
       - backend

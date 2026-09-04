@@ -32,6 +32,7 @@ build/
 # docker/secrets/*.txt.example documents what's needed.
 docker/secrets/*.txt
 .env.prod
+docker/backups/
 .idea/
 .vscode/
 *.sw[op]
