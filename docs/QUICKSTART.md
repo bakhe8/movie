@@ -163,11 +163,11 @@ docker compose -f docker/docker-compose.prod.yml --env-file docker/.env.prod --p
 docker compose -f docker/docker-compose.prod.yml --env-file docker/.env.prod up -d
 ```
 
-Backup and restore (`docker/backup-postgres.sh`, `docker/restore-postgres.sh`) are documented and drilled in `docs/ALPHA_PLAN_2026-09-04.md` §8.12. Since AUDIT_2026-09-05 H8/H9 a backup is verified with `pg_restore --list` before it gets its name, and the restore takes the compose file as a required argument and asks for the database name to be typed back (`--yes` for a scripted drill). This is the generic self-hosted path; §8.2 below is the actual hosting decision (ADR-87).
+Backup and restore (`docker/backup-postgres.sh`, `docker/restore-postgres.sh`) are documented and drilled in `docs/ALPHA_PLAN_2026-09-04.md` §8.12. Since AUDIT_2026-09-05 H8/H9 a backup is verified with `pg_restore --list` before it gets its name, and the restore takes the compose file as a required argument and asks for the database name to be typed back (`--yes` for a scripted drill). This is the generic self-hosted path; §8.2 below is the actual hosting decision (ADR-88).
 
 ### 8.2 Hosting: Railway + Cloudflare (ALPHA_PLAN 7.2, board C-18, owner decision O-2)
 
-Compute on Railway (owner's account), domain `kolme.app` fronted by Cloudflare (TLS + WAF), staging on `alpha.kolme.app`. Full reasoning and constraints: ADR-87 in [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md). **Nothing below has been deployed yet — it is a plan for the owner to execute and approve, per board C-18.**
+Compute on Railway (owner's account), domain `kolme.app` fronted by Cloudflare (TLS + WAF), staging on `alpha.kolme.app`. Full reasoning and constraints: ADR-88 in [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md). **Nothing below has been deployed yet — it is a plan for the owner to execute and approve, per board C-18.**
 
 Four Railway services, each built from this repo's existing Dockerfiles (no separate hosting-specific images):
 
@@ -231,7 +231,8 @@ Four Railway services, each built from this repo's existing Dockerfiles (no sepa
 ---
 
 **Changelog**
-- 2.5 (2026-09-04): §8.2 added — the actual hosting plan (Railway + Cloudflare, `kolme.app`/`alpha.kolme.app`, ADR-87, owner decision O-2, board C-18). Nothing deployed yet; a click list for the owner to execute and approve.
+- 2.6 (2026-09-05): §8.1/§8.2 cited ADR-87 as the hosting decision; it is ADR-88 (ADR-87 is the training-trigger timing fix). Corrected here and in the 2.5 entry (AUDIT_2026-09-05 §4).
+- 2.5 (2026-09-04): §8.2 added — the actual hosting plan (Railway + Cloudflare, `kolme.app`/`alpha.kolme.app`, ADR-88, owner decision O-2, board C-18). Nothing deployed yet; a click list for the owner to execute and approve.
 - 2.4 (2026-09-04): the disposable `postgres-test` container is gone (board C-17, owner's order); the e2e suite's `moviedb_test` database now lives inside `movie-postgres` itself, same port. `npm run test:e2e:up` creates it idempotently.
 - 2.3 (2026-09-04): §4's seed step is `db:seed:demo` (the 300-title catalog), not `db:seed` (the 15 `FILM*` placeholders, retired from `movie-postgres`, board C-15).
 - 2.2 (2026-09-04): §8.1 added — the staging/production build (ALPHA_PLAN 7.3/7.4: per-service Dockerfiles, `docker-compose.prod.yml`, backup/restore) is now in this guide, not just in ARCHITECTURE.md's table (board C-13).

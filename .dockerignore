@@ -1,0 +1,42 @@
+# Build-context trim for the three Dockerfiles, whose context is this repo
+# root (docker/docker-compose.prod.yml `context: ..`, Railway likewise). Every
+# COPY in them names an explicit path -- package manifests, packages/shared,
+# one app or service, docker/read-secrets.sh -- so nothing here changes what
+# lands in an image; it only stops the daemon receiving dependencies, build
+# output, test suites, data and secrets it would never use
+# (AUDIT_2026-09-05 §4).
+.git
+.github
+.claude
+.idea
+.vscode
+
+# Dependencies and build output: every image installs and builds its own.
+**/node_modules
+**/dist
+**/.next
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/coverage
+**/htmlcov
+**/*.tsbuildinfo
+
+# Tests, docs and tooling the images never run.
+apps/backend/test
+apps/frontend/app/__tests__
+apps/frontend/playwright
+services/workers/tests
+docs
+Makefile
+**/*.log
+
+# Local configuration, data and secrets: runtime reads these from the
+# environment or from mounted files, never from the image.
+.env
+.env.*
+!.env.example
+docker/secrets
+docker/backups
+docker/docker-compose*.yml

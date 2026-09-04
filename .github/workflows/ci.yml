@@ -25,8 +25,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     services:
-      # Same image, credentials and port as docker/docker-compose.yml's
-      # `postgres-test`, so apps/backend/test/test-db-env.js needs no change.
+      # Same image and credentials as docker/docker-compose.yml's single
+      # `postgres` service (the separate `postgres-test` container was merged
+      # into it, board C-17). This is CI's own disposable instance, created
+      # with `moviedb_test` as its database, so apps/backend/test/test-db-env.js
+      # needs no change.
       postgres:
         image: ankane/pgvector:latest
         env:
