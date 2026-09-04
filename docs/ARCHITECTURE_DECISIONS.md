@@ -174,7 +174,7 @@ The vendor question is closed: Railway + Cloudflare, owner decision O-2. The req
 ## ADR-26 — Authentication and authorization
 
 **Decision.** JWT bearer tokens (as built) with refresh tokens added before Alpha; bcrypt passwords (library choice: ADR-27); per-endpoint throttling on auth; owner-only profile routes verified by the e2e IDOR suite on every change; `users.role` (`user`/`admin`) gates the internal board; staff actions are audit-logged; optional MFA later (`BP §21.3`).
-**Update, `7603900`.** Refresh tokens implemented: rotated on every use, with family-level reuse detection — presenting a superseded token revokes the whole rotation chain (`refresh_tokens` table, `familyId`). `AdminGuard` implemented and checks `users.role === 'admin'`, but no admin route exists yet to guard with it.
+**Update, `7603900`.** Refresh tokens implemented: rotated on every use, with family-level reuse detection — presenting a superseded token revokes the whole rotation chain (`refresh_tokens` table, `familyId`). `AdminGuard` implemented and checks `users.role === 'admin'`; the admin board's routes (`admin.controller.ts`, board B-4) sit behind it, and since `31a2ac1` the client resolves that same check before mounting `/admin` (AUDIT_2026-09-05 C1).
 
 ## ADR-27 — Password hashing library: `bcryptjs`, not `bcrypt`
 
@@ -646,6 +646,17 @@ Written by session C, who did the work; recorded here because this file has one 
 
 ---
 
+## ADR-89 — Rate limit keyed by user identity, by address only when anonymous (ALPHA_PLAN 7.6, board A-10)
+
+Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 §4).
+
+**Context.** The app-wide `ThrottlerModule` limit (`THROTTLE_LIMIT`/`THROTTLE_TTL_MS`, 60 per minute by default) was keyed per IP: a household, campus or carrier NAT shared one bucket between unrelated users, while one account rotating addresses got a fresh bucket each time.
+**Decision.** `IdentityThrottlerGuard`, the global `APP_GUARD`, keys the bucket on the JWT `sub` when the request carries a valid access token and on the client address otherwise, namespaced (`user:`/`ip:`) so the two can never collide. It verifies the token's signature itself rather than reading `req.user`: a global guard runs before the route's `JwtAuthGuard`, and an unverified `sub` could be re-rolled on every request and never counted. The per-route auth throttles (login, register, password reset — ADR-26) are unchanged.
+**Consequences.** A rejected or expired token falls back to the address bucket, so no caller escapes a limit by sending a token the app rejects anyway. One extra signature verification per authenticated request. `src/perf/load-test.ts` drives the real journey and counts 429s apart from 5xx (150 users × 30 triads, 0 failures, `42830a3`).
+**Revisit when.** Limits need to differ by plan or by route family, or the throttler moves to a shared store (Redis) for multi-instance deploys.
+
+---
+
 ## Summary
 
 | # | Decision | Serves | Revisit trigger |
@@ -701,6 +712,17 @@ Written by session C, who did the work; recorded here because this file has one 
 | 49 | M5 closed by concurrent screen rebuilds; verified, not authored | engineering choice (audit closure) | a fourth screen regresses the error-handling pattern |
 | 50 | `generate_recommendation_explanation()` never receives user data (M12) | `BP §15.2`; ADR-23; PRIVACY.md §6.1 | this function is ever wired into a live path |
 | 51 | M1 migration plan closed in full (gap 1, step 1/7) | `BP §5.1`, `§13.2`; PRIVACY.md §4; ADR-16 | M2 (`consents`/`privacy_requests`/`audit_log`) lands |
+| 52 | M2 closed in full (gap 1, step 2/7): `consents`, `privacy_requests`, `audit_log` | `BP §21`; PRIVACY.md §3–§5; SCHEMA.md §2.4 | the consents/privacy application layer resolves the `privacy_requests`/`audit_log` FK tension — done by the tombstone migrations |
+| 53 | M3 closed in full (gap 1, step 3/7): rights registry and catalog provenance | `BP §11.1`, `§11.3`; DATA_LICENSING.md; SCHEMA.md §2.4 | M4 — landed (ADR-54) |
+| 54 | M4 closed; `calibratedAgainst`'s FK deferred to M7 (gap 1, step 4/7) | `BP §7.5`, `§13.2`; SCHEMA.md §2.4 | M7 adds the deferred FK — landed (ADR-57) |
+| 55 | M5 closed in full (gap 1, step 5/7): `recommendations`, `outcomes`, `watch_events`, `library_imports` | `BP §4.5`, `§13.1`, `§14`; SCHEMA.md §2.4 | `recommendations` populated — landed (ADR-58) |
+| 56 | M6 closed in full (gap 1, step 6/7): `public_quality_sources`, `availability_snapshots` | `BP §6`, `§10.3`; SCHEMA.md §2.4 | a public-quality or availability source is licensed (IMDb non-commercial for the free period, ADR-77) |
+| 57 | M7's table closed; `embeddings.vector` pgvector conversion deferred, not guessed (gap 1, step 7/7) | `BP §7.5`, `§12.1`; SCHEMA.md §2.4 | an embedding model is chosen (vendor, cost, dimension `n`) |
+| 58 | `RecommendationsService` persists every shown recommendation (gap 4, write side) | `BP §4.5`, `§13.1`, `§14` | outcomes/watch_events recording — landed (ADR-66, ADR-67) |
+| 59 | Confidence band factors in held-out prediction success (gap 5, partial) | `BP §9.2` | the remaining `§9.2` criteria — landed (ADR-62, ADR-64, ADR-71) |
+| 60 | Onboarding records real consent for the two mandatory purposes (gap 7, partial) | `BP §4.1`, `§21`; PRIVACY.md §3, §5 | disclosure copy and opt-out UI for `personalization_pooled`/`analytics_first_party`; `terms_privacy` on registration |
+| 61 | Installable PWA manifest, icons and service worker (gap 8) | `BP §5.1`–`§5.2`; ADR-5 | live install/offline verification in a real browser; the real logo (IDENTITY Q23) |
+| 62 | Confidence band: posterior stability and genre diversity (gap 5, remainder) | `BP §9.2` | director/language diversity — landed (ADR-64 language, ADR-71 director) |
 | 63 | LLM enrichment provider switched to Anthropic's Messages API (partially supersedes ADR-6, ADR-23, ADR-36) | `BP §15.3`, `§21`; PRIVACY.md §6.1 | ADR-6's cost/vendor-risk trigger, or PRIVACY.md §6.1's retention posture unmet on the chosen model tier |
 | 64 | Confidence band closes a third `§9.2` criterion: language diversity (blueprint gap 5/gap 6, partial) | `BP §9.2` | director diversity data exists (blueprint gap 6's people/credits ingestion) |
 | 65 | Director credits fetched and staged from Wikidata (blueprint gap 6, first ingestion pass, not yet loaded) | `BP §7.1`, `§9.2`, `§10.2`; DATA_LICENSING.md §3.1 | WS3 loads the catalog — write the `people`/`credits`/`source_records` loader and the director-diversity check |
@@ -727,6 +749,7 @@ Written by session C, who did the work; recorded here because this file has one 
 | 86 | First-party analytics gated on `analytics_first_party`; OTel/Sentry behind unset flags, packages not installed | `BP §13`; PRIVACY.md §3; ALPHA_PLAN 7.5 | hosting chosen; a new event is needed; §16 wants another aggregate |
 | 87 | The training trigger fires from `afterTransactionCommit`, not from `afterUpdate` + `setImmediate` | fixes ADR-25's trigger | the trigger must survive a restart between commit and call (needs an outbox) |
 | 88 | Railway + Cloudflare hosting, kolme.app | ALPHA_PLAN 7.2; owner decision O-2 | managed Postgres available (PITR), or Railway config-as-code improves |
+| 89 | Rate limit keyed by user identity, by address only when anonymous | ALPHA_PLAN 7.6; `BP §21.3` | per-plan or per-route-family limits, or a shared throttle store for multi-instance deploys |
 
 ## How to add a decision
 
