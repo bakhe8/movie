@@ -86,6 +86,54 @@ describe('getConnectionOptions', () => {
     expect(() => getConnectionOptions()).toThrow(/DATABASE_URL/);
   });
 
+  // The first Railway deploy failed with a bare ECONNREFUSED to 127.0.0.1:5433
+  // -- a stale local DB_PORT and no DATABASE_URL. A deployed app that resolves
+  // to loopback is talking to itself, never to a database.
+  describe('production loopback guard', () => {
+    const savedNodeEnv = process.env.NODE_ENV;
+
+    beforeEach(() => {
+      process.env.NODE_ENV = 'production';
+      process.env.POSTGRES_PASSWORD = 'whatever';
+    });
+
+    afterEach(() => {
+      process.env.NODE_ENV = savedNodeEnv;
+    });
+
+    it.each([
+      ['a stale DB_HOST/DB_PORT', { DB_HOST: '127.0.0.1', DB_PORT: '5433' }],
+      ['nothing set at all, defaulting to localhost', {}],
+      ['a DATABASE_URL that itself points at loopback', { DATABASE_URL: 'postgresql://u:p@localhost:5432/moviedb' }],
+    ])('refuses to start in production with %s', (_case, values) => {
+      Object.assign(process.env, values);
+
+      expect(() => getConnectionOptions()).toThrow(/Refusing to start/);
+    });
+
+    it('names DATABASE_URL as the fix, since that is the one variable to set', () => {
+      process.env.DB_HOST = '127.0.0.1';
+
+      expect(() => getConnectionOptions()).toThrow(/DATABASE_URL/);
+    });
+
+    it('allows a real host', () => {
+      process.env.DATABASE_URL = 'postgresql://u:p@postgres.railway.internal:5432/moviedb';
+
+      expect(getConnectionOptions().host).toBe('postgres.railway.internal');
+    });
+
+    // Local development runs against 127.0.0.1 by design; the guard is only
+    // about a deployed process.
+    it('leaves local development alone', () => {
+      process.env.NODE_ENV = 'development';
+      process.env.DB_HOST = '127.0.0.1';
+      process.env.DB_PORT = '5433';
+
+      expect(getConnectionOptions()).toMatchObject({ host: '127.0.0.1', port: 5433 });
+    });
+  });
+
   it('still requires a password when neither source supplies one', () => {
     process.env.DB_HOST = 'localhost';
 

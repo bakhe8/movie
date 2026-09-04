@@ -114,6 +114,24 @@ function fromDatabaseUrl(): Omit<ConnectionOptions, 'type' | 'entities'> | null 
   };
 }
 
+// A deployed app that resolves to loopback is not talking to a database at
+// all -- it is talking to itself. That surfaced as a bare ECONNREFUSED stack
+// on the first Railway deploy, which says nothing about the cause; in a
+// managed environment the database is always another host, so this is a
+// configuration mistake with exactly one fix worth naming.
+const LOOPBACK = new Set(['localhost', '127.0.0.1', '::1', '0.0.0.0']);
+
+function assertNotLoopbackInProduction(host: string, port: number, source: string): void {
+  if (process.env.NODE_ENV !== 'production' || !LOOPBACK.has(host)) {
+    return;
+  }
+  throw new Error(
+    `Refusing to start: NODE_ENV=production but the database host resolves to ${host}:${port} (from ${source}), which is this container itself. ` +
+      "Set DATABASE_URL to the database service's own internal address -- on Railway use the variable reference picker, " +
+      'postgresql://<user>:<password>@<postgres RAILWAY_PRIVATE_DOMAIN>:5432/<db> -- and remove any DB_HOST/DB_PORT left over from local development.',
+  );
+}
+
 export function getConnectionOptions(): ConnectionOptions {
   const fromUrl = fromDatabaseUrl();
   const password = fromUrl?.password || process.env.POSTGRES_PASSWORD;
@@ -123,13 +141,18 @@ export function getConnectionOptions(): ConnectionOptions {
     );
   }
   if (fromUrl) {
+    assertNotLoopbackInProduction(fromUrl.host, fromUrl.port, 'DATABASE_URL');
     return { type: 'postgres', ...fromUrl, password, entities: ENTITIES };
   }
 
+  const host = process.env.DB_HOST || 'localhost';
+  const port = parseInt(process.env.DB_PORT || '5432');
+  assertNotLoopbackInProduction(host, port, process.env.DB_HOST ? 'DB_HOST/DB_PORT' : 'the DB_HOST default, DATABASE_URL being unset');
+
   return {
     type: 'postgres',
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '5432'),
+    host,
+    port,
     username: process.env.POSTGRES_USER || 'movieapp',
     password,
     database: process.env.POSTGRES_DB || 'moviedb',
