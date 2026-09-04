@@ -417,6 +417,23 @@ export const api = {
       method: 'POST',
     }),
 
+  listPrivacyRequests: () =>
+    request<{ id: string; type: string; status: string; requestedAt: string; executeAfter: string | null; completedAt: string | null }[]>(
+      '/privacy/requests',
+    ),
+
+  exportData: (password: string) =>
+    request<Record<string, unknown>>('/privacy/export', { method: 'POST', body: JSON.stringify({ password }) }),
+
+  requestDelete: (password: string) =>
+    request<{ id: string; type: string; status: string; requestedAt: string; executeAfter: string | null }>('/privacy/delete', {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    }),
+
+  cancelDelete: (requestId: string) =>
+    request<{ id: string; status: string }>(`/privacy/delete/${requestId}/cancel`, { method: 'POST' }),
+
   getConsents: () => request<Consent[]>('/consents'),
 
   // User-scoped, not profile-scoped (blueprint gap 7): terms_privacy is

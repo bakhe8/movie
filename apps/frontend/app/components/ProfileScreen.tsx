@@ -58,7 +58,22 @@ const labels = {
     resetDone: 'بدأ ملف ذوق جديد.',
     cancel: 'إلغاء',
     exportAction: 'تصدير بياناتك',
+    exportBody: 'ملف JSON يحتوي على كل ما نعرفه عنك: حسابك، ترتيباتك، بصماتك المُحكَّمة، وسجل الطلبات.',
+    exportPassword: 'كلمة المرور للتحقق',
+    exportSubmit: 'تصدير',
+    exporting: 'جارٍ التصدير…',
+    exportDone: 'اكتمل التصدير.',
+    exportFailed: 'تعذّر التصدير. تحقق من كلمة المرور.',
     deleteAction: 'حذف الحساب',
+    deleteBody: 'يُجدوَل الحذف لمدة 30 يومًا ويمكن إلغاؤه. بعد التنفيذ لا يمكن التراجع.',
+    deletePassword: 'كلمة المرور للتحقق',
+    deleteSubmit: 'طلب الحذف',
+    deleting: 'جارٍ الطلب…',
+    deletePending: (date: string) => `مجدوَل للحذف بتاريخ ${date}. يمكنك الإلغاء حتى ذلك الحين.`,
+    deleteCancelAction: 'إلغاء طلب الحذف',
+    cancelling: 'جارٍ الإلغاء…',
+    deleteCancelled: 'أُلغي طلب الحذف.',
+    deleteFailed: 'تعذّر الطلب. تحقق من كلمة المرور.',
     notYet: 'لم يُبنَ بعد',
     failed: 'تعذّر الحفظ. حاول مجددًا.',
     loading: 'جارٍ التحميل…',
@@ -106,7 +121,22 @@ const labels = {
     resetDone: 'A new taste profile has started.',
     cancel: 'Cancel',
     exportAction: 'Export your data',
+    exportBody: 'A JSON file with everything we hold about you: your account, rankings, reviewed fingerprints, and request log.',
+    exportPassword: 'Password to verify',
+    exportSubmit: 'Export',
+    exporting: 'Exporting…',
+    exportDone: 'Export complete.',
+    exportFailed: 'Export failed. Check your password.',
     deleteAction: 'Delete account',
+    deleteBody: 'Deletion is scheduled 30 days ahead and can be cancelled until then. After it runs it cannot be undone.',
+    deletePassword: 'Password to verify',
+    deleteSubmit: 'Request deletion',
+    deleting: 'Requesting…',
+    deletePending: (date: string) => `Scheduled for deletion on ${date}. You can cancel until then.`,
+    deleteCancelAction: 'Cancel deletion request',
+    cancelling: 'Cancelling…',
+    deleteCancelled: 'Deletion request cancelled.',
+    deleteFailed: 'Request failed. Check your password.',
     notYet: 'not built yet',
     failed: 'Could not save. Please try again.',
     loading: 'Loading…',
@@ -137,6 +167,13 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
   const [retraining, setRetraining] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [exportPassword, setExportPassword] = useState('');
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; executeAfter: string | null } | null | 'loading'>('loading');
 
   const profileId = profile?.id;
   const profileName = profile?.name;
@@ -229,6 +266,70 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
       else next.add(id);
       return next;
     });
+  }
+
+  useEffect(() => {
+    api
+      .listPrivacyRequests()
+      .then((requests) => {
+        const pending = requests.find((r) => r.type === 'delete' && r.status === 'scheduled');
+        setPendingDelete(pending ? { id: pending.id, executeAfter: pending.executeAfter } : null);
+      })
+      .catch(() => setPendingDelete(null));
+  }, []);
+
+  async function exportData() {
+    if (!exportPassword || exportBusy) return;
+    setExportBusy(true);
+    setExportNotice(null);
+    try {
+      const data = await api.exportData(exportPassword);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `reel-export-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setExportPassword('');
+      setExportNotice(t.exportDone);
+    } catch {
+      setExportNotice(t.exportFailed);
+    } finally {
+      setExportBusy(false);
+    }
+  }
+
+  async function requestAccountDelete() {
+    if (!deletePassword || deleteBusy) return;
+    setDeleteBusy(true);
+    setDeleteNotice(null);
+    try {
+      const result = await api.requestDelete(deletePassword);
+      setPendingDelete({ id: result.id, executeAfter: result.executeAfter });
+      setDeletePassword('');
+    } catch {
+      setDeleteNotice(t.deleteFailed);
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
+
+  async function cancelAccountDelete() {
+    if (pendingDelete === 'loading' || !pendingDelete || deleteBusy) return;
+    setDeleteBusy(true);
+    setDeleteNotice(null);
+    try {
+      await api.cancelDelete(pendingDelete.id);
+      setPendingDelete(null);
+      setDeleteNotice(t.deleteCancelled);
+    } catch {
+      setDeleteNotice(t.deleteFailed);
+    } finally {
+      setDeleteBusy(false);
+    }
   }
 
   async function retrain() {
@@ -470,20 +571,77 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
           </div>
         )}
 
-        {/* Promised by principle #9 and PRIVACY.md §5; the endpoints do not
-            exist yet, and the screen says so instead of hiding the rights. */}
-        <div className={styles.row}>
-          <button type="button" className={styles.ghost} disabled>
-            {t.exportAction}
+        {/* Export (PRIVACY.md §5, ALPHA 2.4): synchronous JSON at Alpha scale;
+            password re-verifies the account before handing the document. */}
+        <p className={styles.strong}>{t.exportAction}</p>
+        <p>{t.exportBody}</p>
+        <div className={styles.passwordRow}>
+          <input
+            type="password"
+            className={styles.passwordInput}
+            value={exportPassword}
+            onChange={(e) => setExportPassword(e.target.value)}
+            placeholder={t.exportPassword}
+            autoComplete="current-password"
+            aria-label={t.exportPassword}
+            disabled={exportBusy}
+          />
+          <button type="button" className={styles.ghost} onClick={exportData} disabled={exportBusy || !exportPassword}>
+            {exportBusy ? t.exporting : t.exportSubmit}
           </button>
-          <span className={styles.notYet}>{t.notYet}</span>
         </div>
-        <div className={styles.row}>
-          <button type="button" className={styles.ghost} disabled>
-            {t.deleteAction}
-          </button>
-          <span className={styles.notYet}>{t.notYet}</span>
-        </div>
+        {exportNotice && <p className={styles.notice}>{exportNotice}</p>}
+
+        {/* Delete account (PRIVACY.md §5 §10, ALPHA 2.4): 30-day scheduled,
+            cancellable, password-verified. */}
+        <p className={styles.strong}>{t.deleteAction}</p>
+        {pendingDelete === 'loading' ? (
+          <p>{t.loading}</p>
+        ) : pendingDelete ? (
+          <>
+            <p>
+              {t.deletePending(
+                pendingDelete.executeAfter
+                  ? new Date(pendingDelete.executeAfter).toLocaleDateString(lang === 'ar' ? 'ar-SA' : 'en-GB', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                    })
+                  : '—',
+              )}
+            </p>
+            <div className={styles.row}>
+              <button type="button" className={`${styles.ghost} ${styles.danger}`} onClick={cancelAccountDelete} disabled={deleteBusy}>
+                {deleteBusy ? t.cancelling : t.deleteCancelAction}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p>{t.deleteBody}</p>
+            <div className={styles.passwordRow}>
+              <input
+                type="password"
+                className={styles.passwordInput}
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+                placeholder={t.deletePassword}
+                autoComplete="current-password"
+                aria-label={t.deletePassword}
+                disabled={deleteBusy}
+              />
+              <button
+                type="button"
+                className={`${styles.ghost} ${styles.danger}`}
+                onClick={requestAccountDelete}
+                disabled={deleteBusy || !deletePassword}
+              >
+                {deleteBusy ? t.deleting : t.deleteSubmit}
+              </button>
+            </div>
+          </>
+        )}
+        {deleteNotice && <p className={styles.notice}>{deleteNotice}</p>}
       </section>
     </div>
   );
