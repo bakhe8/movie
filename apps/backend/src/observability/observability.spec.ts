@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { initObservability, observabilityConfig } from './observability';
 
 describe('observabilityConfig', () => {
@@ -51,19 +51,27 @@ describe('initObservability', () => {
     });
   });
 
-  // The packages are deliberately not dependencies of this repo yet (hosting
-  // is undecided, ADR-24). Turning a flag on without installing them must
-  // leave a clear message and a running app, not a crash at boot.
-  it('reports a missing package and boots anyway', async () => {
-    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-
-    const started = await initObservability({
-      ...base,
-      sentryDsn: 'https://key@sentry.example/1',
-      otelEndpoint: 'http://collector:4318/v1/traces',
-    });
+  // A DSN the SDK cannot parse must not stop the app it exists to watch.
+  it('reports a malformed Sentry DSN and boots anyway', async () => {
+    const started = await initObservability({ ...base, sentryDsn: 'not-a-dsn', otelEndpoint: null });
 
     expect(started).toEqual({ sentry: false, tracing: false });
-    error.mockRestore();
   });
+
+  // The other half of the same claim: a DSN it *can* parse reports true, so
+  // the return value distinguishes the two rather than always saying yes.
+  it('reports true for a DSN the SDK can parse', async () => {
+    const started = await initObservability({
+      ...base,
+      sentryDsn: 'https://0123456789abcdef0123456789abcdef@o0.ingest.sentry.io/0',
+      otelEndpoint: null,
+    });
+
+    expect(started.sentry).toBe(true);
+  });
+
+  // Tracing is deliberately not started here: NodeSDK patches http, pg and
+  // dns process-wide, which would leak into every other spec sharing this
+  // worker. It is verified by booting the real app instead -- see the
+  // observability check in the A-15 commit.
 });
