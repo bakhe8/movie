@@ -22,10 +22,10 @@ function CatalogTab() {
   const [busy, setBusy] = useState(false);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const load = useCallback(async (q: string, miss: string, pg: number) => {
+  const load = useCallback(async (q: string, miss: '' | 'fingerprint' | 'v2' | 'license', pg: number) => {
     setBusy(true);
     try {
-      const data = await api.adminGetTitles({ query: q || undefined, missing: miss as TitleRow['licenseStatus'] || undefined, page: pg, limit: 50 });
+      const data = await api.adminGetTitles({ query: q || undefined, missing: miss || undefined, page: pg, limit: 50 });
       setResult(data);
     } catch {
       setResult(null);
