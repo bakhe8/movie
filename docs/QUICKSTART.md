@@ -192,7 +192,7 @@ Four Railway services, each built from this repo's existing Dockerfiles (no sepa
 | `POSTGRES_PASSWORD`, `POSTGRES_USER`, `POSTGRES_DB` | `postgres` | generate a fresh password; `movieapp` / `moviedb` |
 | `API_PORT`, `PORT`, `MODEL_SERVICE_PORT` | each service | `3101` / `3110` / `8001` (Railway also injects its own `PORT`; keep these explicit since the app code reads them by these names) |
 | `MAIL_TRANSPORT`, `RESEND_API_KEY`, `MAIL_FROM_ADDRESS` | `backend` | mail transport (A-9/ADR-85); `kolme.app` is already verified in Resend (auto-configured via Cloudflare) |
-| `SENTRY_DSN`, `OTEL_EXPORTER_OTLP_ENDPOINT` | `backend` | observability (A-11/ADR-86) — unset in dev, both start only when set here |
+| `SENTRY_DSN`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, `OTEL_TRACES_SAMPLE_RATE` | `backend` | observability (A-11/ADR-86) — unset in dev, Sentry and tracing each start only when their variable is set here; the last two default to `reel-backend` and `1` (`.env.example`) |
 
 **Owner's click list, in order** (nothing here has been done yet):
 
@@ -231,6 +231,7 @@ Four Railway services, each built from this repo's existing Dockerfiles (no sepa
 ---
 
 **Changelog**
+- 2.7 (2026-09-05): §8.2's `migrate` service runs `npm run migrate:prod` (the compiled entry point, A-19) — `npm run migrate` needs ts-node, absent from the production image; `OTEL_SERVICE_NAME`/`OTEL_TRACES_SAMPLE_RATE` added to the variable list.
 - 2.6 (2026-09-05): §8.1/§8.2 cited ADR-87 as the hosting decision; it is ADR-88 (ADR-87 is the training-trigger timing fix). Corrected here and in the 2.5 entry (AUDIT_2026-09-05 §4).
 - 2.5 (2026-09-04): §8.2 added — the actual hosting plan (Railway + Cloudflare, `kolme.app`/`alpha.kolme.app`, ADR-88, owner decision O-2, board C-18). Nothing deployed yet; a click list for the owner to execute and approve.
 - 2.4 (2026-09-04): the disposable `postgres-test` container is gone (board C-17, owner's order); the e2e suite's `moviedb_test` database now lives inside `movie-postgres` itself, same port. `npm run test:e2e:up` creates it idempotently.

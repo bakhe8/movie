@@ -1,12 +1,12 @@
 {
   "$schema": "https://railway.app/railway.schema.json",
-  "//": "Board C-18 (ADR-87). A SEPARATE Railway service (not the backend service above), same repo/root directory/Dockerfile, but overriding the start command to run pending migrations once and exit -- mirrors docker-compose.prod.yml's `migrate` profile, since Railway has no native pre-deploy/release-phase hook to rely on without live testing. Trigger a redeploy of THIS service manually before redeploying `backend` whenever a commit adds a migration; it needs no public domain and no restart-on-success.",
+  "//": "Board C-18 (ADR-88). A SEPARATE Railway service (not the backend service above), same repo/root directory/Dockerfile, but overriding the start command to run pending migrations once and exit -- mirrors docker-compose.prod.yml's `migrate` profile, since Railway has no native pre-deploy/release-phase hook to rely on without live testing. Trigger a redeploy of THIS service manually before redeploying `backend` whenever a commit adds a migration; it needs no public domain and no restart-on-success. The start command is the compiled entry point (node dist/migrate.js, A-19): `npm run migrate` drives the typeorm CLI through ts-node, which `npm ci --omit=dev` leaves out of this image.",
   "build": {
     "builder": "DOCKERFILE",
     "dockerfilePath": "apps/backend/Dockerfile"
   },
   "deploy": {
-    "startCommand": "npm run migrate",
+    "startCommand": "npm run migrate:prod",
     "numReplicas": 1,
     "restartPolicyType": "NEVER"
   }
