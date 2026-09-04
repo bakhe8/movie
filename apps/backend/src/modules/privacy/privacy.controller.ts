@@ -44,4 +44,18 @@ export class PrivacyController {
   reset(@Request() request: AuthedRequest, @Body() body: ResetTasteDto) {
     return this.privacyService.reset(request.user.id, body.profileId, request.ip ?? null);
   }
+
+  // PRIVACY.md §4 restrictions. No password re-verification: neither stops
+  // being reversible, and neither exposes or destroys anything.
+  @Post('pause')
+  @HttpCode(200)
+  pause(@Request() request: AuthedRequest) {
+    return this.privacyService.pauseAll(request.user.id, request.ip ?? null);
+  }
+
+  @Post('resume')
+  @HttpCode(200)
+  resume(@Request() request: AuthedRequest) {
+    return this.privacyService.resumeAll(request.user.id, request.ip ?? null);
+  }
 }

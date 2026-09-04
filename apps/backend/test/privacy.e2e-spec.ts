@@ -6,6 +6,7 @@ import request from 'supertest';
 import type { Repository } from 'typeorm';
 import { AppModule } from '../src/modules/app/app.module';
 import { AuditLog } from '../src/entities/audit-log.entity';
+import { Consent } from '../src/entities/consent.entity';
 import { PrivacyRequest } from '../src/entities/privacy-request.entity';
 import { Profile } from '../src/entities/profile.entity';
 import { Title } from '../src/entities/title.entity';
@@ -70,6 +71,7 @@ describe('Privacy rights: export, reset, delete (real HTTP, real DB)', () => {
   let audit: Repository<AuditLog>;
   let profiles: Repository<Profile>;
   let users: Repository<User>;
+  let consents: Repository<Consent>;
   let triads: Repository<Triad>;
 
   beforeAll(async () => {
@@ -80,6 +82,7 @@ describe('Privacy rights: export, reset, delete (real HTTP, real DB)', () => {
 
     requests = app.get<Repository<PrivacyRequest>>(getRepositoryToken(PrivacyRequest));
     audit = app.get<Repository<AuditLog>>(getRepositoryToken(AuditLog));
+    consents = app.get<Repository<Consent>>(getRepositoryToken(Consent));
     profiles = app.get<Repository<Profile>>(getRepositoryToken(Profile));
     users = app.get<Repository<User>>(getRepositoryToken(User));
     triads = app.get<Repository<Triad>>(getRepositoryToken(Triad));
@@ -99,6 +102,12 @@ describe('Privacy rights: export, reset, delete (real HTTP, real DB)', () => {
     ownerProfileId = await createProfile(app, owner.token, 'Privacy owner');
     await markWatched(app, owner.token, ownerProfileId, titleIds);
     await completeOneRound(app, owner.token, ownerProfileId);
+    // A real consent row, so the purge below has something to leave behind.
+    await request(app.getHttpServer())
+      .put('/consents')
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ consents: [{ purpose: 'watch_history', version: 'privacy-2.0', granted: true }] })
+      .expect(200);
     attacker = await registerUser(app, 'attacker');
   }, 20_000);
 
@@ -234,6 +243,27 @@ describe('Privacy rights: export, reset, delete (real HTTP, real DB)', () => {
       expect(twice.body).toMatchObject({ reason: 'not_cancellable', status: 'cancelled' });
     });
 
+    it('pause_all stops recommendations, and resume brings them back (PRIVACY.md §4)', async () => {
+      const paused = await request(app.getHttpServer())
+        .post('/privacy/pause')
+        .set('Authorization', `Bearer ${owner.token}`)
+        .expect(200);
+      expect(paused.body.paused).toBeGreaterThan(0);
+
+      await request(app.getHttpServer())
+        .get(`/profiles/${ownerProfileId}/recommendations`)
+        .set('Authorization', `Bearer ${owner.token}`)
+        .expect(409)
+        .expect((response) => expect(response.body.reason).toBe('profile_paused'));
+
+      const resumed = await request(app.getHttpServer())
+        .post('/privacy/resume')
+        .set('Authorization', `Bearer ${owner.token}`)
+        .expect(200);
+      expect(resumed.body.resumed).toBeGreaterThan(0);
+      expect(await profiles.findOne({ where: { id: ownerProfileId } })).toMatchObject({ pausedAt: null });
+    });
+
     it('purges the account when due and leaves only a tombstone and an audit row', async () => {
       const scheduled = await request(app.getHttpServer())
         .post('/privacy/delete')
@@ -261,6 +291,12 @@ describe('Privacy rights: export, reset, delete (real HTTP, real DB)', () => {
       // Every earlier request of the same account is a tombstone too.
       const earlier = await requests.findOne({ where: { id: requestId } });
       expect(earlier?.userId).toBeNull();
+
+      // Consents outlive the account the same way (ADR-80): the record of
+      // what was agreed to survives, the person it named does not.
+      const survivingConsents = await consents.find({ where: { subjectKey: subjectKeyFor(owner.userId) } });
+      expect(survivingConsents.length).toBeGreaterThan(0);
+      expect(survivingConsents.every((row) => row.userId === null)).toBe(true);
 
       const executed = await audit.findOne({ where: { action: 'privacy.delete.executed', resourceId: owner.userId } });
       expect(executed).toMatchObject({ actorUserId: null, actorRole: 'system', status: 'ok' });

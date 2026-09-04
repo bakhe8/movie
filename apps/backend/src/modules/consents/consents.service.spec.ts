@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Repository } from 'typeorm';
 import { Consent } from '../../entities/consent.entity';
+import { Profile } from '../../entities/profile.entity';
 import { ConsentsService } from './consents.service';
 
 function repoMock() {
@@ -14,11 +15,40 @@ function repoMock() {
 
 describe('ConsentsService', () => {
   let consentsRepository: ReturnType<typeof repoMock>;
+  let profilesRepository: ReturnType<typeof repoMock>;
   let service: ConsentsService;
 
   beforeEach(() => {
     consentsRepository = repoMock();
-    service = new ConsentsService(consentsRepository as unknown as Repository<Consent>);
+    profilesRepository = repoMock();
+    service = new ConsentsService(
+      consentsRepository as unknown as Repository<Consent>,
+      profilesRepository as unknown as Repository<Profile>,
+    );
+  });
+
+  // PRIVACY.md §4's no_pooled, the boundary a shared-space retrain reads.
+  describe('pooledEligibleProfileIds', () => {
+    it('excludes the profiles of users who revoked personalization_pooled, and only those', async () => {
+      consentsRepository.find.mockResolvedValue([{ userId: 'revoker' }] as Consent[]);
+      profilesRepository.find.mockResolvedValue([
+        { id: 'p-open', userId: 'never-answered' },
+        { id: 'p-revoked', userId: 'revoker' },
+        { id: 'p-granted', userId: 'granter' },
+      ] as Profile[]);
+
+      expect(await service.pooledEligibleProfileIds()).toEqual(['p-open', 'p-granted']);
+      expect(consentsRepository.find).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { purpose: 'personalization_pooled', granted: false } }),
+      );
+    });
+
+    it('ignores a tombstoned row whose user is already purged', async () => {
+      consentsRepository.find.mockResolvedValue([{ userId: null }] as unknown as Consent[]);
+      profilesRepository.find.mockResolvedValue([{ id: 'p1', userId: 'someone' }] as Profile[]);
+
+      expect(await service.pooledEligibleProfileIds()).toEqual(['p1']);
+    });
   });
 
   describe('findForUser', () => {

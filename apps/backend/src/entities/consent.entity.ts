@@ -20,13 +20,22 @@ export class Consent {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  // SET NULL, not CASCADE: PRIVACY.md §9 keeps consents as a permanent
+  // record without personal data after a deletion, the same tombstone
+  // privacy_requests carries (ConsentsTombstone, ADR-80).
+  @ManyToOne(() => User, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'userId' })
-  user: User;
+  user: User | null;
 
   @Index('IDX_consents_userId')
-  @Column()
-  userId: string;
+  @Column({ type: 'uuid', nullable: true })
+  userId: string | null;
+
+  // sha256(userId), written on every row: links a purged user's consents to
+  // each other, and to their privacy_requests, without keeping the id.
+  @Index('IDX_consents_subjectKey')
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  subjectKey: string | null;
 
   @Column({ type: 'varchar' })
   purpose: ConsentPurpose;

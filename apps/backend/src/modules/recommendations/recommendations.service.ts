@@ -309,6 +309,18 @@ export class RecommendationsService {
     if (!profile) {
       throw new NotFoundException('Profile not found');
     }
+    // PRIVACY.md §4's `pause_all`: training already refuses a paused profile
+    // (TrainingService); serving predictions from the model it stopped
+    // updating is the other half of "training and recommendations stop".
+    // Nothing is deleted, so this is reversible by resuming.
+    if (profile.pausedAt) {
+      throw new ConflictException({
+        statusCode: 409,
+        message: 'This profile is paused',
+        error: 'Conflict',
+        reason: 'profile_paused',
+      });
+    }
 
     const activeVersion = await this.modelVersionsRepository.findOne({ where: { active: true } });
     let snapshot: UserModelSnapshot | null = null;

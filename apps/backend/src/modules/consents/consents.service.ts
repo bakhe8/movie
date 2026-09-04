@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Consent } from '../../entities/consent.entity';
+import { Profile } from '../../entities/profile.entity';
+import { subjectKeyFor } from '../privacy/privacy.service';
 import { ConsentGrantDto } from './dto/update-consents.dto';
 
 @Injectable()
@@ -9,7 +11,29 @@ export class ConsentsService {
   constructor(
     @InjectRepository(Consent)
     private readonly consentsRepository: Repository<Consent>,
+    @InjectRepository(Profile)
+    private readonly profilesRepository: Repository<Profile>,
   ) {}
+
+  // PRIVACY.md §4's `no_pooled`: revoking `personalization_pooled` excludes
+  // that user's profiles from the next shared-space retrain, and changes
+  // nothing about their individual model. Default-on (PRIVACY.md §3), so
+  // only an explicit, still-standing revocation excludes -- a user who never
+  // answered is included, and one who revoked then re-granted is included
+  // again (the row's `granted` is the current state, ADR-60).
+  //
+  // The shared latent space itself is unbuilt (ADR-13, narrowed by ADR-72),
+  // so this is the boundary its retrain must read rather than re-deriving
+  // consent later: any pooled job takes its profile set from here.
+  async pooledEligibleProfileIds(): Promise<string[]> {
+    const revoked = await this.consentsRepository.find({
+      where: { purpose: 'personalization_pooled', granted: false },
+      select: { userId: true },
+    });
+    const excludedUserIds = new Set(revoked.map((row) => row.userId).filter((id): id is string => id !== null));
+    const profiles = await this.profilesRepository.find({ select: { id: true, userId: true } });
+    return profiles.filter((profile) => !excludedUserIds.has(profile.userId)).map((profile) => profile.id);
+  }
 
   async findForUser(userId: string): Promise<Consent[]> {
     return this.consentsRepository.find({ where: { userId }, order: { grantedAt: 'DESC' } });
@@ -32,6 +56,8 @@ export class ConsentsService {
       if (!existing) {
         const created = this.consentsRepository.create({
           userId,
+          // Written on creation so the row survives the account (ADR-80).
+          subjectKey: subjectKeyFor(userId),
           purpose: grant.purpose,
           version: grant.version,
           granted: grant.granted,

@@ -11,7 +11,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcryptjs';
 import { createHash } from 'node:crypto';
-import { DataSource, EntityManager, In, IsNull, LessThanOrEqual, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, IsNull, LessThanOrEqual, Not, Repository } from 'typeorm';
 import { PrivacyRequest } from '../../entities/privacy-request.entity';
 import { Profile } from '../../entities/profile.entity';
 import { Recommendation } from '../../entities/recommendation.entity';
@@ -166,6 +166,44 @@ export class PrivacyService implements OnModuleInit, OnModuleDestroy {
       return this.execute(request);
     }
     return request;
+  }
+
+  // PRIVACY.md §4's `pause_all`: training and recommendations stop, nothing
+  // is deleted. Idempotent -- pausing an already-paused account reports the
+  // same shape rather than erroring, so a retried tap is harmless.
+  async pauseAll(userId: string, ip: string | null): Promise<{ paused: number; pausedAt: Date }> {
+    const now = new Date();
+    return this.dataSource.transaction(async (manager) => {
+      const open = await manager.find(Profile, { where: { userId, pausedAt: IsNull() } });
+      if (open.length) {
+        await manager.update(Profile, { id: In(open.map((profile) => profile.id)) }, { pausedAt: now });
+      }
+      await this.audit.record(
+        { actorUserId: userId, action: 'privacy.pause_all', resource: 'user', resourceId: userId, status: 'ok', reason: `${open.length} profile(s)`, ip },
+        manager,
+      );
+      return { paused: open.length, pausedAt: now };
+    });
+  }
+
+  // Resume only lifts a pause the user asked for: a profile paused by a
+  // scheduled deletion stays paused until that request is cancelled, which
+  // is what clears it (cancelDelete above).
+  async resumeAll(userId: string, ip: string | null): Promise<{ resumed: number }> {
+    return this.dataSource.transaction(async (manager) => {
+      const scheduled = await manager.find(PrivacyRequest, { where: { userId, type: 'delete', status: 'scheduled' } });
+      const heldByDeletion = new Set(scheduled.flatMap((request) => (request.executionLog?.pausedProfileIds as string[] | undefined) ?? []));
+      const paused = await manager.find(Profile, { where: { userId, pausedAt: Not(IsNull()) } });
+      const resumable = paused.filter((profile) => !heldByDeletion.has(profile.id)).map((profile) => profile.id);
+      if (resumable.length) {
+        await manager.update(Profile, { id: In(resumable) }, { pausedAt: null });
+      }
+      await this.audit.record(
+        { actorUserId: userId, action: 'privacy.resume', resource: 'user', resourceId: userId, status: 'ok', reason: `${resumable.length} profile(s)`, ip },
+        manager,
+      );
+      return { resumed: resumable.length };
+    });
   }
 
   async cancelDelete(userId: string, requestId: string, ip: string | null): Promise<PrivacyRequest> {

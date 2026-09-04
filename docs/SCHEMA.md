@@ -2,7 +2,7 @@
 
 **Status**: Derived from blueprint `§13` (entities and event shapes), `§11` (rights registry), `§7.5`–`§7.6`, `§21`. Two layers, kept apart on purpose:
 
-- **§1 Current physical schema** — exactly what the eighteen TypeORM migrations in `apps/backend/src/migrations/` create (verified 2026-09-04). This is the truth for anyone writing SQL today.
+- **§1 Current physical schema** — exactly what the twenty-two TypeORM migrations in `apps/backend/src/migrations/` create (verified 2026-09-04). This is the truth for anyone writing SQL today.
 - **§2 Target schema** — the `BP §13.1` entity set expressed as tables, plus the migration plan from §1 to §2.
 
 Naming (ADR-16): tables `snake_case` plural; columns are TypeORM's default `camelCase` and therefore **quoted** in raw SQL (`"profileId"`); primary keys `uuid` via `uuid_generate_v4()`; timestamps `TIMESTAMP` (UTC by convention). The one plural-naming exception (`user_title_state`) was renamed to `user_title_states` in M1. Schema changes go through `npm run migration:generate` / `npm run db:migrate` only — `synchronize` is off in every environment.
@@ -11,7 +11,7 @@ Naming (ADR-16): tables `snake_case` plural; columns are TypeORM's default `came
 
 ## 1. Current physical schema (migrated)
 
-Migrations, in order: `1788410140231-InitialSchema`, `1788411790951-AddTriadEventFields`, `1788412500000-SplitImportedRatingFromInAppState`, `1788418200000-ArabicFirstProfileDefault`, `1788421102891-AddOneActiveTriadPerProfileConstraint`, `1788424108820-AddHeldOutTrainingMetrics`, `1788425067800-AddTriadEventCompleteness`, `1788428400000-AddTriadReplacements`, `1788432000000-AddProfileMarketAndPlatforms`, `1788435000000-CompleteM1Plan`, `1788438000000-AddM2ConsentAndAuditTables`, `1788440000000-AddM3RightsRegistryAndCatalogProvenance`, `1788442000000-AddM4ModelVersioningAndExperiments`, `1788444000000-AddM5RecommendationsAndWatchEvents`, `1788446000000-AddM6PublicQualityAndAvailability`, `1788448000000-AddM7SharedLatentSpaceVersions`, `1788450000000-AddTrainingGenreDiversity`, `1788452000000-AddTrainingLanguageDiversity`. Extension: `uuid-ossp`. The `ankane/pgvector` image is used but no column has the `vector` type yet — `embeddings.vector` is still `real[]`, deliberately unconverted (see the note below §1's DDL block).
+Migrations, in order: `1788410140231-InitialSchema`, `1788411790951-AddTriadEventFields`, `1788412500000-SplitImportedRatingFromInAppState`, `1788418200000-ArabicFirstProfileDefault`, `1788421102891-AddOneActiveTriadPerProfileConstraint`, `1788424108820-AddHeldOutTrainingMetrics`, `1788425067800-AddTriadEventCompleteness`, `1788428400000-AddTriadReplacements`, `1788432000000-AddProfileMarketAndPlatforms`, `1788435000000-CompleteM1Plan`, `1788438000000-AddM2ConsentAndAuditTables`, `1788440000000-AddM3RightsRegistryAndCatalogProvenance`, `1788442000000-AddM4ModelVersioningAndExperiments`, `1788444000000-AddM5RecommendationsAndWatchEvents`, `1788446000000-AddM6PublicQualityAndAvailability`, `1788448000000-AddM7SharedLatentSpaceVersions`, `1788450000000-AddTrainingGenreDiversity`, `1788452000000-AddTrainingLanguageDiversity`, `1788454000000-PrivacyRequestsTombstone`, `1788456000000-AddTrainingDirectorDiversity`, `1788458000000-AddRefreshTokens`, `1788460000000-ConsentsTombstone`. Extension: `uuid-ossp`. The `ankane/pgvector` image is used but no column has the `vector` type yet — `embeddings.vector` is still `real[]`, deliberately unconverted (see the note below §1's DDL block).
 
 ```sql
 users (
@@ -26,7 +26,7 @@ profiles (                      -- the pseudonymous taste id (BP §13.1, §21.1)
   name varchar(255) NOT NULL, "preferredLanguage" varchar(5) NOT NULL DEFAULT 'ar',   -- Arabic-first (BP §2)
   market varchar(2),                                             -- ISO 3166-1 alpha-2; NULL until chosen at onboarding (BP §4.1); display/availability only
   platforms text[] NOT NULL DEFAULT '{}',                        -- platform identifiers the user can watch on (BP §4.1); display/availability only
-  "pausedAt" timestamp,                                          -- 'pause_all' restriction (PRIVACY.md §4); NULL = not paused; no route reads/writes this yet
+  "pausedAt" timestamp,                                          -- 'pause_all' restriction (PRIVACY.md §4); NULL = not paused; written by POST /privacy/{pause,resume} and by a scheduled deletion (ADR-80)
   "createdAt" timestamp, "updatedAt" timestamp,
   UNIQUE ("userId", name)
 )
@@ -102,12 +102,13 @@ user_model_snapshots (                                           -- one row per 
 )
 
 consents (                                                       -- one grant/revoke record per (user, purpose, policy version) (BP §13.1)
-  id uuid PK, "userId" uuid NOT NULL FK users ON DELETE CASCADE,
+  id uuid PK, "userId" uuid FK users ON DELETE SET NULL,          -- nullable since ConsentsTombstone (ADR-80): the record outlives the account
+  "subjectKey" varchar(64),                                      -- sha256(userId) on every new row, indexed; links a purged user's consents (PRIVACY.md §9)
   purpose varchar NOT NULL,                                      -- closed list, PRIVACY.md §3; enforced at the application layer only
   version varchar NOT NULL,                                      -- policy text version the user saw
   granted boolean NOT NULL, "grantedAt" timestamp NOT NULL, "revokedAt" timestamp,
   UNIQUE ("userId", purpose, version),
-  INDEX ("userId")
+  INDEX ("userId"), INDEX ("subjectKey")
 )
 
 privacy_requests (                                               -- export/delete/reset lifecycle (BP §13.1, §14, PRIVACY.md §5)
@@ -497,6 +498,7 @@ Each step is one TypeORM migration; none require data backfill beyond defaults b
 ---
 
 **Changelog**
+- 2.26 (2026-09-04): twenty-first migration `ConsentsTombstone` applied -- `consents.userId` nullable with `ON DELETE SET NULL` plus an indexed `subjectKey` (ADR-80, board F5). Consents now survive a purge as a personal-data-free record, the treatment `privacy_requests` got in `PrivacyRequestsTombstone`; rows predating this migration keep `subjectKey` NULL (no backfill, same as the sibling). `POST /privacy/{pause,resume}` write `profiles.pausedAt`, which recommendations now refuse to serve against.
 - 2.25 (2026-09-04): no migration -- application code, `RecommendationsService.findForProfile()` (ADR-78, G4). `PublicQualityService.forTitles()` (ADR-77's read side) is now batched over the shown results and attached as `publicQuality`/`publicQualityScore` on every `RecommendationResult`, which `persistShown()` already wrote into `recommendations.publicQuality` unmodified -- that column has existed since M5 but was hardcoded `null` (no source existed) since ADR-58. Verified: 4 new unit tests; backend suite green (278 unit, 100 e2e).
 - 2.24 (2026-09-04): no migration -- application code, `apps/backend/src/scripts/load-imdb-ratings.ts` (ADR-77, retroactive documentation of already-shipped work). Populates `public_quality_sources` (M6, empty since it was created) from IMDb's official non-commercial dataset dump: 298 rows on `movie-postgres` as of this pass, one `source_records` row per value (`non_commercial_only`, `attributionRequired`), idempotent/append-only matching every other loader this session built. Read side (`PublicQualityService`) already existed and was already consumed by `GET /titles/:id`; ADR-78 (next) wires it into recommendations too.
 - 2.23 (2026-09-04): no migration -- application code and JSON-column shape only (`titles.fingerprint` is already `json`; the new `v3` key is additive within it, no DDL change). `training.py`/`recommendations.service.ts` grow `FINGERPRINT_DIMENSIONS` from 28 (V1+V2) to 40 (V1+V2+12 namespaced V3 "form family" dimensions, ADR-75, FINGERPRINT_SCHEMA.md §3.3) and now read `fingerprint.v3.features` for the third block. `UserModelSnapshot.weights`'s existing length guard (`loadSnapshot()`) already refuses a pre-this-change (28-length) snapshot -- no migration or backfill needed for correctness. Verified with a real `python -m src.training` run against `movie-postgres` (71 completed triads), persisted row read back confirming 40 weights and `modelVersion: plackett-luce-v3`.
