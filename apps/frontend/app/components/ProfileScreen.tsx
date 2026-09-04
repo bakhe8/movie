@@ -228,7 +228,8 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
       } else if (status.latestSnapshot) {
         // We have a trained snapshot; fetch the confidence band from recs.
         try {
-          const [first] = await api.getRecommendations(profileId, 1);
+          const recs = await api.getRecommendations(profileId, 1);
+          const first = recs.state === 'ready' ? recs.items[0] : undefined;
           setModel(
             first
               ? { kind: 'trained', version: first.modelVersion, band: first.confidenceBand }
