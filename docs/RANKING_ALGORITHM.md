@@ -113,7 +113,7 @@ $$\operatorname{Score}(T) = \frac{IG(T)\,P(\text{watched all})\,P(\text{reliable
 - $IG$ is mutual information under an approximate posterior over $\theta_u$ (or $z_u$), so it separates "we lack evidence" from "the user is inconsistent". With the shared space, $IG$ targets the least-certain factor (Fisher information), `BP §7.5`.
 - The policy samples from the top-$K$ candidates rather than always taking the argmax, and logs $\rho = P(\text{policy chose } T)$ as `selectionPropensity` on every triad.
 - Safety constraints (`BP §8.3`): no series/director/language repetition that makes inference circular; a small **declared** exploration share; positions randomized and logged; triads with high replacement or poor-memory probability are demoted; session limits and free stop (fatigue is a cost); some triads reserved as `holdout = true` for validation and never trained on.
-- Policy versions: `random-v1` (today: uniform draw of 3 from watched-unranked, $\rho = 1/\binom{n}{3}$) → `adaptive-v1` (target). Every triad row records its `policyVersion`.
+- Policy versions: `random-v1` (uniform draw of 3 from watched-unranked, $\rho = 1/\binom{n}{3}$) and `adaptive-v1`, **implemented 2026-09-04 behind the `triad-policy` experiment flag** (ADR-83, `TriadPolicyService`): score = Σ_d (per-dimension uncertainty × spread across the three titles) − repeat penalty − genre repetition, no two titles by one director (§8.3), sampled from the top-K with $\rho = 1/K$. Uncertainty is the trainer's Laplace standard errors (ADR-62), flat before a posterior exists. Every triad row records its `policyVersion`; with no running experiment row every profile stays on `random-v1`.
 
 ## 10. Confidence (`BP §9`)
 

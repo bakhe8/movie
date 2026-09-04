@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import type { PosterService } from '../public-quality/poster.service';
+import type { ExperimentsService } from '../experiments/experiments.service';
+import { UserModelSnapshot } from '../../entities/user-model-snapshot.entity';
+import type { TriadPolicyService } from './triad-policy.service';
 import type { Repository } from 'typeorm';
 import { Outcome } from '../../entities/outcome.entity';
 import { Profile } from '../../entities/profile.entity';
@@ -45,6 +48,9 @@ function titlesQueryBuilderMock(titles: Title[], poolSize: number) {
 
 describe('TriadsService', () => {
   let posterService: { attach: ReturnType<typeof vi.fn>; forTitles: ReturnType<typeof vi.fn> };
+  let snapshotsRepository: { findOne: ReturnType<typeof vi.fn>; find: ReturnType<typeof vi.fn> };
+  let experimentsService: { armFor: ReturnType<typeof vi.fn> };
+  let triadPolicyService: { select: ReturnType<typeof vi.fn> };
   let profilesRepository: ReturnType<typeof repoMock>;
   let titlesRepository: ReturnType<typeof repoMock>;
   let triadsRepository: ReturnType<typeof repoMock>;
@@ -69,6 +75,10 @@ describe('TriadsService', () => {
     // existed, unless a test below sets this up itself.
     recommendationsRepository.findOne.mockResolvedValue(null);
     posterService = { attach: vi.fn(async (rows: unknown[]) => rows), forTitles: vi.fn().mockResolvedValue(new Map()) };
+    snapshotsRepository = { findOne: vi.fn().mockResolvedValue(null), find: vi.fn() };
+    // Control arm by default: every existing test keeps exercising random-v1.
+    experimentsService = { armFor: vi.fn().mockResolvedValue('control') };
+    triadPolicyService = { select: vi.fn().mockResolvedValue(null) };
     service = new TriadsService(
       profilesRepository as unknown as Repository<Profile>,
       titlesRepository as unknown as Repository<Title>,
@@ -78,6 +88,9 @@ describe('TriadsService', () => {
       recommendationsRepository as unknown as Repository<Recommendation>,
       outcomesRepository as unknown as Repository<Outcome>,
       posterService as unknown as PosterService,
+      snapshotsRepository as unknown as Repository<UserModelSnapshot>,
+      experimentsService as unknown as ExperimentsService,
+      triadPolicyService as unknown as TriadPolicyService,
     );
   });
 

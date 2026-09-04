@@ -3,7 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { isUUID } from 'class-validator';
 import { EntityManager, In, Repository } from 'typeorm';
 import { Outcome } from '../../entities/outcome.entity';
+import { UserModelSnapshot } from '../../entities/user-model-snapshot.entity';
+import { ExperimentsService, TRIAD_POLICY_EXPERIMENT } from '../experiments/experiments.service';
 import { PosterService } from '../public-quality/poster.service';
+import { ADAPTIVE_POLICY_VERSION, AdaptiveSelection, TriadPolicyService } from './triad-policy.service';
 import { Profile } from '../../entities/profile.entity';
 import { Recommendation } from '../../entities/recommendation.entity';
 import { Title } from '../../entities/title.entity';
@@ -66,6 +69,10 @@ export class TriadsService {
     @InjectRepository(Outcome)
     private readonly outcomesRepository: Repository<Outcome>,
     private readonly posterService: PosterService,
+    @InjectRepository(UserModelSnapshot)
+    private readonly snapshotsRepository: Repository<UserModelSnapshot>,
+    private readonly experimentsService: ExperimentsService,
+    private readonly triadPolicyService: TriadPolicyService,
   ) {}
 
   async getCurrent(userId: string, profileId: string): Promise<CurrentTriadResponse> {
@@ -113,7 +120,12 @@ export class TriadsService {
       return { state: 'need_more_watched', needed, message };
     }
 
-    const titleIds = titles.map((title) => title.id);
+    // ALPHA_PLAN 6.2/6.5: the adaptive policy runs only for profiles the
+    // `triad-policy` experiment put in that arm; everyone else keeps
+    // random-v1 as the control, and both record which policy chose them.
+    const adaptive = await this.adaptiveSelection(profileId, watchedTitleIds, recentlyUsedTitleIds);
+    const titleIds = adaptive ? adaptive.titleIds : titles.map((title) => title.id);
+    const policyVersion = adaptive ? ADAPTIVE_POLICY_VERSION : TRIAD_POLICY_VERSION;
 
     try {
       const created = await this.triadsRepository.save(
@@ -123,13 +135,14 @@ export class TriadsService {
           // Shuffled independently of titleIds so position bias in the UI can
           // be measured and corrected for (blueprint section 4.3).
           displayOrder: this.shuffle([...titleIds]),
-          policyVersion: TRIAD_POLICY_VERSION,
-          // Probability this exact unordered triple was selected: uniform
-          // random draw of 3 from the eligible pool.
-          selectionPropensity: 1 / this.combinations(poolSize, 3),
+          policyVersion,
+          // The probability this policy chose this triple: uniform over the
+          // eligible pool under random-v1, uniform over the scored top-K
+          // under adaptive-v1 (RANKING_ALGORITHM §9).
+          selectionPropensity: adaptive ? adaptive.selectionPropensity : 1 / this.combinations(poolSize, 3),
           status: 'active',
           shownAt: new Date(),
-          metadata: { reasonForSelection: 'random-watched-unranked' },
+          metadata: { reasonForSelection: adaptive ? 'adaptive-uncertainty' : 'random-watched-unranked' },
         }),
       );
       return { ...(await this.withItems(created)), state: 'ready' };
@@ -410,6 +423,27 @@ export class TriadsService {
     if (!profile) {
       throw new NotFoundException('Profile not found');
     }
+  }
+
+  // Null unless this profile is in the adaptive arm and a full pool could be
+  // scored -- every failure path falls back to the control policy rather
+  // than blocking a round.
+  private async adaptiveSelection(
+    profileId: string,
+    watchedTitleIds: string[],
+    recentlyUsedTitleIds: string[],
+  ): Promise<AdaptiveSelection | null> {
+    const arm = await this.experimentsService.armFor(TRIAD_POLICY_EXPERIMENT, profileId);
+    if (arm !== ADAPTIVE_POLICY_VERSION) {
+      return null;
+    }
+    const eligible = watchedTitleIds.filter((id) => !recentlyUsedTitleIds.includes(id));
+    if (eligible.length < 3) {
+      return null;
+    }
+    const pool = await this.titlesRepository.find({ where: { id: In(eligible) } });
+    const snapshot = await this.snapshotsRepository.findOne({ where: { profileId }, order: { createdAt: 'DESC' } });
+    return this.triadPolicyService.select(pool, snapshot, new Set(recentlyUsedTitleIds));
   }
 
   private async selectRandomTitles(watchedTitleIds: string[], recentlyUsedTitleIds: string[]): Promise<CandidateSelection> {
