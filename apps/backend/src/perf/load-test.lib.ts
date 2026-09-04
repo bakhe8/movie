@@ -11,6 +11,7 @@ export interface LoadConfig {
   thinkTimeMs: number;
   catalogue: number;
   out: string | null;
+  allowNonTestDatabase: boolean;
 }
 
 export interface Sample {
@@ -54,6 +55,7 @@ export const DEFAULTS: LoadConfig = {
   // driver pages up to this many and reports how many it actually got.
   catalogue: 500,
   out: null,
+  allowNonTestDatabase: false,
 };
 
 // `--users=150 --out=report.md`, plus LOAD_* environment variables for CI.
@@ -82,6 +84,7 @@ export function parseConfig(argv: string[], env: Record<string, string | undefin
     thinkTimeMs: Math.trunc(number('think-time', 'LOAD_THINK_TIME_MS', DEFAULTS.thinkTimeMs)),
     catalogue: Math.max(3, Math.trunc(number('catalogue', 'LOAD_CATALOGUE', DEFAULTS.catalogue))),
     out: read('out', 'LOAD_OUT') ?? DEFAULTS.out,
+    allowNonTestDatabase: flags.get('i-know-this-is-not-test') === 'true',
   };
 }
 
@@ -131,6 +134,26 @@ export function summarise(samples: Sample[], wallClockMs: number): RunSummary {
     wallClockMs,
     requestsPerSecond: wallClockMs > 0 ? (samples.length / wallClockMs) * 1000 : 0,
   };
+}
+
+// The guard this harness earned the hard way. It creates accounts and answers
+// triads for real, and it is driven over HTTP -- so nothing in the request
+// path tells it which database is behind the server. It therefore resolves
+// the connection the same way the server does and refuses anything whose
+// database name is not a test one. The escape hatch is a flag long enough to
+// be deliberate, never an environment variable, because the whole failure
+// mode was an environment variable that did not mean what its operator
+// thought it meant.
+const TEST_DATABASE = /(^|_)test$/;
+
+export function assertTestDatabase(databaseName: string, config: LoadConfig): void {
+  if (TEST_DATABASE.test(databaseName) || config.allowNonTestDatabase) {
+    return;
+  }
+  throw new Error(
+    `refusing to load-test against database "${databaseName}": the name does not end in _test, and this harness writes hundreds of accounts and thousands of triads. ` +
+      'Point DATABASE_URL at postgres-test (moviedb_test), or pass --i-know-this-is-not-test if you really mean it.',
+  );
 }
 
 export interface ReportContext {

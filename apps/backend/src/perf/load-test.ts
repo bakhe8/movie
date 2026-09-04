@@ -1,6 +1,8 @@
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { getConnectionOptions } from '../config/database.config';
 import {
+  assertTestDatabase,
   parseConfig,
   renderReport,
   summarise,
@@ -13,9 +15,11 @@ import {
 // validation pipe and the ORM -- not a synthetic in-process harness that
 // measures none of that.
 //
-// It creates accounts and answers triads for real. Point it at a throwaway
-// database (postgres-test, or a copy), never at `movie-postgres` while other
-// sessions are testing against it -- CLAUDE.md §3.
+// It creates accounts and answers triads for real, so it refuses to start
+// unless the database it resolves is a test one (CLAUDE.md §3). Set
+// DATABASE_URL to postgres-test before running it -- the same variable the
+// server now reads, so the harness and the server cannot disagree about
+// which database is in play.
 //
 //   npm run perf:load -- --users=150 --triads=30 --out=perf-report.md
 //
@@ -195,8 +199,13 @@ async function readCatalogue(driver: Driver, config: LoadConfig, token: string):
 
 async function main(): Promise<void> {
   const config = parseConfig(process.argv.slice(2), process.env);
+  // Before a single request: resolve the connection exactly as the server
+  // does and refuse anything that is not a test database.
+  const { database, host, port } = getConnectionOptions();
+  assertTestDatabase(database, config);
+
   const driver = new Driver(config);
-  const notes: string[] = [];
+  const notes: string[] = [`target database \`${database}\` at ${host}:${port}.`];
   const startedAt = new Date();
 
   // The catalogue is read through an account of its own, because /titles is

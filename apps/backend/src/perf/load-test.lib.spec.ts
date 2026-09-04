@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULTS, parseConfig, percentile, renderReport, summarise, type Sample } from './load-test.lib';
+import {
+  DEFAULTS,
+  assertTestDatabase,
+  parseConfig,
+  percentile,
+  renderReport,
+  summarise,
+  type Sample,
+} from './load-test.lib';
 
 const sample = (label: string, ms: number, status = 200): Sample => ({ label, ms, status });
 
@@ -30,6 +38,30 @@ describe('parseConfig', () => {
 
   it('drops a trailing slash so paths do not double up', () => {
     expect(parseConfig(['--base-url=http://host:3101/api/'], {}).baseUrl).toBe('http://host:3101/api');
+  });
+});
+
+// A-14: the harness wrote 160 accounts into the shared dev database because
+// nothing checked which database was behind the server it was pointed at.
+describe('assertTestDatabase', () => {
+  const config = (allow = false) => ({ ...DEFAULTS, allowNonTestDatabase: allow });
+
+  it.each(['moviedb_test', 'test'])('accepts %j', (name) => {
+    expect(() => assertTestDatabase(name, config())).not.toThrow();
+  });
+
+  it.each(['moviedb', 'movie_dev', 'production', 'test_moviedb', 'moviedbtest'])('refuses %j', (name) => {
+    expect(() => assertTestDatabase(name, config())).toThrow(/refusing to load-test/);
+  });
+
+  it('names the database it refused, so the operator can see what it was really pointed at', () => {
+    expect(() => assertTestDatabase('moviedb', config())).toThrow(/"moviedb"/);
+  });
+
+  it('yields to the explicit flag, and only to the flag', () => {
+    expect(() => assertTestDatabase('moviedb', config(true))).not.toThrow();
+    expect(parseConfig([], { LOAD_ALLOW_NON_TEST: 'true' }).allowNonTestDatabase).toBe(false);
+    expect(parseConfig(['--i-know-this-is-not-test'], {}).allowNonTestDatabase).toBe(true);
   });
 });
 
