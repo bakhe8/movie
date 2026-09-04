@@ -5,7 +5,7 @@
 - **§1 Current physical schema** — exactly what the twenty-four TypeORM migrations in `apps/backend/src/migrations/` create (verified 2026-09-04). This is the truth for anyone writing SQL today.
 - **§2 Target schema** — the `BP §13.1` entity set expressed as tables, plus the migration plan from §1 to §2.
 
-Naming (ADR-16): tables `snake_case` plural; columns are TypeORM's default `camelCase` and therefore **quoted** in raw SQL (`"profileId"`); primary keys `uuid` via `uuid_generate_v4()`; timestamps `TIMESTAMP` (UTC by convention). The one plural-naming exception (`user_title_state`) was renamed to `user_title_states` in M1. Schema changes go through `npm run migration:generate` / `npm run db:migrate` only — `synchronize` is off in every environment.
+Naming (ADR-16): tables `snake_case` plural; columns are TypeORM's default `camelCase` and therefore **quoted** in raw SQL (`"profileId"`); primary keys `uuid` via `uuid_generate_v4()`; timestamps `TIMESTAMP` (UTC by convention). The one plural-naming exception (`user_title_state`) was renamed to `user_title_states` in M1. Schema changes go through `npm run migration:generate` / `npm run db:migrate` only (in a built image there is no TypeScript and no `ts-node`, so the deployed migrate step is `npm run migrate:prod` → `node dist/migrate.js`, A-19) — `synchronize` is off in every environment.
 
 ---
 

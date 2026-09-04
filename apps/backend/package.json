@@ -34,7 +34,8 @@
     "migration:generate": "npm run typeorm -- migration:generate",
     "migration:run": "npm run typeorm -- migration:run",
     "migration:revert": "npm run typeorm -- migration:revert",
-    "migrate": "npm run migration:run"
+    "migrate": "npm run migration:run",
+    "migrate:prod": "node dist/migrate.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.2.3",
