@@ -38,6 +38,9 @@ COPY --from=prod-deps /repo/apps/backend/package.json apps/backend/package.json
 COPY --from=build /repo/packages/shared/dist packages/shared/dist
 COPY --from=build /repo/packages/shared/package.json packages/shared/package.json
 COPY --from=build /repo/apps/backend/dist apps/backend/dist
+# The catalog fixture `npm run release` seeds from (ADR-90), beside dist/scripts
+# where resolveFixturesDir()/resolveFixturePath() look first when packaged.
+COPY --from=build /repo/apps/backend/src/scripts/fixtures/catalog.demo.json /repo/apps/backend/src/scripts/fixtures/personas.demo.json apps/backend/dist/scripts/fixtures/
 COPY docker/read-secrets.sh /usr/local/bin/read-secrets.sh
 RUN chmod +x /usr/local/bin/read-secrets.sh
 USER app

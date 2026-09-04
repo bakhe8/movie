@@ -178,7 +178,7 @@ Four Railway services, each built from this repo's existing Dockerfiles (no sepa
 | `backend` | `apps/backend/railway.json` | `api.kolme.app` / `api.alpha.kolme.app` | Root directory = repo root (workspace build context) |
 | `frontend` | `apps/frontend/railway.json` | `kolme.app` / `alpha.kolme.app` | Root directory = repo root |
 | `model-service` (workers) | `services/workers/railway.json` | none (private, reached via `MODEL_SERVICE_URL`) | Root directory = repo root |
-| `migrate` | `apps/backend/railway.migrate.json` | none | Same image as `backend`, start command overridden to run migrations once and exit (Railway has no compose-style `profiles:`, so this is its own service — redeploy it manually before redeploying `backend` whenever a commit adds a migration) |
+| `migrate` | `apps/backend/railway.migrate.json` | none | Same image as `backend`, start command overridden to `npm run release`: pending migrations, then the catalog seed (`seed-demo --catalog-only`, no persona accounts), `load-catalog-rights`, `load-imdb-ratings --fetch`; idempotent, exits when done (ADR-90); auto-deploys on every push, so the catalog is never a separate manual step. Live, this service has no config-as-code path (Railway deprecated it): set `npm run release` as its Custom Start Command under Settings → Deploy; the JSON is the reference copy |
 
 **Environment variables** (Railway "Variables", not files — unlike `docker-compose.prod.yml`'s file-based secrets, which target a generic self-host, not Railway. The `<NAME>_FILE` convention in the existing images is a no-op when the plain `<NAME>` variable is already set, so no Dockerfile changes were needed):
 
@@ -200,7 +200,7 @@ Four Railway services, each built from this repo's existing Dockerfiles (no sepa
 2. Add the `postgres` service: Docker Image → `ankane/pgvector:latest`, region EU-West, attach a Volume at `/var/lib/postgresql/data`, set its three variables above.
 3. Add `redis`: Docker Image → `redis:7-alpine`, command override, attach a Volume at `/data`.
 4. Add `backend`: from the same GitHub repo, root directory `/`, config-as-code path `apps/backend/railway.json`; set its variables.
-5. Add `migrate`: same repo/root, config-as-code path `apps/backend/railway.migrate.json`; run it once now (after step 4's variables are set) to create the schema, before `backend` receives traffic.
+5. Add `migrate`: same repo/root, config-as-code path `apps/backend/railway.migrate.json`; run it now (after step 4's variables are set) to create the schema and load the catalog, before `backend` receives traffic; redeploy it on every later release.
 6. Add `model-service`: same repo/root, config-as-code path `services/workers/railway.json`; set its variables.
 7. Add `frontend`: same repo/root, config-as-code path `apps/frontend/railway.json`; set `NEXT_PUBLIC_API_URL` once `backend`'s domain is known (step 8).
 8. In Railway, generate/attach custom domains: `api.kolme.app` → `backend`, `kolme.app` → `frontend` (and the `alpha.` pair for staging, as a second environment or a second project).

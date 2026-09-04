@@ -52,6 +52,23 @@ describe('seed-demo (postgres-test)', () => {
     return { users, profiles, states, triads, replacements, consents };
   }
 
+  // What a release runs (ADR-90): titles and their provenance rows, and
+  // nothing under the persona accounts -- a deploy must never create a user
+  // with the fixture's public password.
+  it('--catalog-only seeds titles and provenance and leaves the accounts alone', async () => {
+    await cleanDemo(dataSource.manager, personas.emailDomain);
+    const summary = await seedDemo(dataSource, { fixturesDir, now, catalogOnly: true });
+
+    expect(summary.titlesUpserted).toBe(300);
+    expect(summary.contentFeatureRows).toBeGreaterThan(0);
+    expect(summary).toMatchObject({ demoUsersRemoved: 0, personas: [] });
+    expect(await dataSource.getRepository(Title).count()).toBeGreaterThanOrEqual(300);
+    const users = await dataSource
+      .getRepository(User)
+      .find({ where: personas.personas.map((p) => ({ email: `${p.slug}@${personas.emailDomain}` })) });
+    expect(users).toHaveLength(0);
+  });
+
   it('seeds the four personas, deterministically and idempotently', async () => {
     const first = await seedDemo(dataSource, { fixturesDir, now });
     const firstRows = await snapshot();

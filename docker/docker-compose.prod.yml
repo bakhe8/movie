@@ -93,7 +93,7 @@ services:
     working_dir: /repo
     entrypoint: ["sh", "-c"]
     command:
-      - export POSTGRES_PASSWORD="$$(cat /run/secrets/postgres_password)" && npm run migrate -w @movie/backend
+      - export POSTGRES_PASSWORD="$$(cat /run/secrets/postgres_password)" && npm run release -w @movie/backend
     depends_on:
       postgres:
         condition: service_healthy

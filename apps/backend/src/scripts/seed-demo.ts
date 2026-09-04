@@ -4,6 +4,7 @@
  *   npm run db:seed:demo            # upsert the 300-title catalog, rebuild the four personas
  *   npm run db:seed:demo:clean      # remove the persona accounts only (titles stay)
  *   node dist/scripts/seed-demo.js --dry-run   # validate fixtures and print the plan, touch nothing
+ *   node dist/scripts/seed-demo.js --catalog-only  # titles + provenance only, no persona accounts (what a release runs, ADR-90)
  *
  * What it writes, per persona in `fixtures/personas.demo.json`: a user
  * (`<slug>@demo.local`), one Arabic-first profile that looks fully onboarded
@@ -72,6 +73,10 @@ const IMPORTED_RATINGS = [8.5, 7, 9];
 
 export interface SeedDemoOptions {
   fixturesDir?: string;
+  // Titles and their provenance rows only; the persona accounts are neither
+  // removed nor rebuilt. What `npm run release` runs in every environment
+  // (ADR-90): the fixture's password is public, so no deploy may create them.
+  catalogOnly?: boolean;
   seed?: number;
   now?: Date;
   log?: (line: string) => void;
@@ -214,6 +219,16 @@ export async function seedDemo(dataSource: DataSource, options: SeedDemoOptions 
     log(`titles: ${titles.length} upserted`);
     const features = await seedContentFeatures(manager, catalog, uuidByInternalId, now);
     log(`content_features: ${features.rows} rows upserted, ${features.superseded} older rows superseded`);
+    if (options.catalogOnly) {
+      log('catalog only: persona accounts untouched');
+      return {
+        titlesUpserted: titles.length,
+        contentFeatureRows: features.rows,
+        contentFeatureRowsSuperseded: features.superseded,
+        demoUsersRemoved: 0,
+        personas: [],
+      };
+    }
 
     // 2. A clean slate for the persona accounts, then rebuild each one.
     const demoUsersRemoved = await cleanDemo(manager, personas.emailDomain);
@@ -450,10 +465,11 @@ async function seedPersona(
 // CLI
 // ---------------------------------------------------------------------------
 
-function parseArgs(argv: string[]): { clean: boolean; dryRun: boolean; seed: number | null } {
+function parseArgs(argv: string[]): { clean: boolean; dryRun: boolean; catalogOnly: boolean; seed: number | null } {
   return {
     clean: argv.includes('--clean'),
     dryRun: argv.includes('--dry-run'),
+    catalogOnly: argv.includes('--catalog-only'),
     seed: argv.includes('--seed') ? Number(argv[argv.indexOf('--seed') + 1]) : null,
   };
 }
@@ -483,7 +499,19 @@ async function main(): Promise<void> {
       console.log(`Removed ${removed} demo user(s) (@${personas.emailDomain}); titles untouched`);
       return;
     }
-    const summary = await seedDemo(dataSource, { fixturesDir, seed: args.seed ?? undefined, log: (line) => console.log(`  ${line}`) });
+    const summary = await seedDemo(dataSource, {
+      fixturesDir,
+      seed: args.seed ?? undefined,
+      catalogOnly: args.catalogOnly,
+      log: (line) => console.log(`  ${line}`),
+    });
+    if (args.catalogOnly) {
+      console.log(
+        `\nSeeded ${summary.titlesUpserted} titles (${summary.contentFeatureRows} provenance rows, ${summary.contentFeatureRowsSuperseded} superseded); ` +
+          'persona accounts untouched (--catalog-only)',
+      );
+      return;
+    }
     const { personas } = loadFixtures(fixturesDir);
     console.log(
       `\nSeeded ${summary.titlesUpserted} titles (${summary.contentFeatureRows} provenance rows, ${summary.contentFeatureRowsSuperseded} superseded) ` +
