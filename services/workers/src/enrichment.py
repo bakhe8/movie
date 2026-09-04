@@ -26,7 +26,7 @@ from pydantic import BaseModel, Field
 # Anthropic port -- the prompt is unchanged, but a different model family
 # behind the same prompt is exactly the kind of change that must be visible
 # in every published fingerprint's provenance.
-EXTRACTOR_VERSION = "enrichment-worker-v2"
+EXTRACTOR_VERSION = "enrichment-worker-v2-linearity-fix"
 
 # Output ceilings. Adaptive thinking (on by default for the configured model
 # family) counts toward max_tokens, so these leave room for reasoning before
@@ -53,7 +53,7 @@ class FilmFingerprintV1(BaseModel):
     darkness: float = Field(..., description="Darkness 0-1 (light to dark)")
 
     # Narrative
-    linearity: float = Field(..., description="Narrative linearity 0-1 (linear to fragmented)")
+    linearity: float = Field(..., description='Chronological structure 0-1: 0 = told in strict chronological order, 1 = fragmented / non-chronological (flashbacks, intercut timelines, non-linear order). A HIGH score means LESS linear and MORE fragmented -- never read a high score as "very linear".')
     dialogueDensity: float = Field(..., description="Dialogue density 0-1")
     actionIntensity: float = Field(..., description="Action intensity 0-1")
     plotComplexity: float = Field(..., description="Plot complexity 0-1")
@@ -121,7 +121,7 @@ class FingerprintOutput(BaseModel):
     psychologicalDepth: float = Field(..., description="Psychological depth 0-1 (shallow to deep)")
     warmth: float = Field(..., description="Emotional warmth 0-1 (cold to warm)")
     darkness: float = Field(..., description="Darkness 0-1 (light to dark)")
-    linearity: float = Field(..., description="Narrative structure 0-1 (linear to fragmented)")
+    linearity: float = Field(..., description='Chronological structure 0-1: 0 = told in strict chronological order, 1 = fragmented / non-chronological (flashbacks, intercut timelines, non-linear order). A HIGH score means LESS linear and MORE fragmented -- never read a high score as "very linear".')
     dialogueDensity: float = Field(..., description="Dialogue density 0-1 (sparse to dense)")
     actionIntensity: float = Field(..., description="Action intensity 0-1 (contemplative to action-heavy)")
     plotComplexity: float = Field(..., description="Plot complexity 0-1 (simple to complex)")

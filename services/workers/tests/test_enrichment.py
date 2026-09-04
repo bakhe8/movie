@@ -105,7 +105,7 @@ class TestGenerateFingerprint:
         assert result.generatedBy == "anthropic"
         # The id the API served, not the alias we asked for.
         assert result.modelVersion == "claude-test-served"
-        assert result.extractorVersion == EXTRACTOR_VERSION == "enrichment-worker-v2"
+        assert result.extractorVersion == EXTRACTOR_VERSION == "enrichment-worker-v2-linearity-fix"
         assert result.sourceIds == ["sr-1"]
         # Neither knowable at this layer yet (no source_records/review queue) --
         # honest "unknown", never a fabricated claim (FINGERPRINT_SCHEMA.md §8).

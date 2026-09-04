@@ -512,6 +512,23 @@ The appended Arabic sections are short themselves (median 533 characters against
 
 The finding that matters is `linearity`: it moves 0.10 per re-run under identical evidence and flips outright for a tenth of the titles (0.85 → 0.15 for The Blue Caftan, My Wife the Director General, The Perfect Candidate, The Nightingale's Prayer), while every other dimension moves 0.01–0.035. The scale's wording is ambiguous to the model — "linear" reads as chronological order to one run and as single-thread simplicity to another — which is exactly what §6's stability gate exists to catch. Until the scale is rewritten and re-extracted, `linearity` should not be cited as a displayed reason; this is the first data point for C-4 (drift between extractor runs). Call accounting for the run: 52 calls, 172,793 input and 19,556 output tokens, 3,323 / 376 per title, 4.7 s mean latency (report table, G7).
 
+### 7.6 `linearity` drift diagnosed and fixed — the stability gate now passes (board C-10)
+
+Cause: `linearity`'s prompt description read "0-1 (linear to fragmented)" — 0 = linear, 1 = fragmented, the documented convention (§3, §6.1) — but the field is *named* `linearity`, whose plain reading implies the opposite (a high score = very linear). Every other directional field's name matches its own high end (`darkness` high = dark, `warmth` high = warm, `ambiguity` high = ambiguous); `linearity` was the one exception, and a model reading it fast enough sometimes followed the name instead of the parenthetical — producing the outright flips §7.5's control caught (0.85 → 0.15, 0.80 → 0.20 on several titles).
+
+Fix: the field name and its convention are unchanged (0 = linear, 1 = fragmented; no re-labelling, no value convention flip, so every already-extracted title stays comparable) — only the description text in `enrichment.py` (both schema classes) is rewritten to state both ends explicitly and warn against the name's own trap: *"0 = told in strict chronological order, 1 = fragmented / non-chronological… a HIGH score means LESS linear and MORE fragmented — never read a high score as 'very linear'."* `EXTRACTOR_VERSION` bumped to `enrichment-worker-v2-linearity-fix` (a prompt-wording change is a version change, FINGERPRINT_SCHEMA.md §5).
+
+Re-verified the same way §7.5 found the problem: the 52-title batch extracted twice under the fixed prompt.
+
+| | mean \|Δ\| | max \|Δ\| | flips (\|Δ\|≥0.4) |
+|---|---|---|---|
+| `linearity`, before the fix (§7.5) | 0.109 | 0.700 | 5 |
+| `linearity`, after the fix | **0.015** | 0.100 | **0** |
+
+`linearity` now sits at the stable end of the 13 dimensions (0.012–0.030 range), and the **stability gate passes outright** (`enrichment_acceptance.py drift`, no dimension over the 0.08 bound). Spot check: Cairo Station (a straightforward chronological drama) scores 0.15 in both runs — the convention itself is unchanged, only its reliability.
+
+Not done here, and flagged rather than assumed: the catalog's 300 titles still carry V1 fingerprints extracted under the old (ambiguous) wording — `needs_extraction()` now correctly marks all of them as due for re-extraction under the new `EXTRACTOR_VERSION`, but re-running the full catalog is a real API cost (≈300 calls) and a separate decision from fixing the prompt itself.
+
 ---
 
 ## 8. Provider decision — LLM enrichment through the Anthropic Messages API
@@ -551,3 +568,4 @@ Owner's decision, 2026-09-03, in answer to "what is the alternative to an OpenAI
 | 2026-09-04 | Board C-8: personas regenerated on the full 40-key model (V3 half of θ added, τ 0.5); WS4 bar met on the served trainer: slow-burn recovery 0.83, held-out accuracy 0.92 |
 | 2026-09-04 | Board C-4 (ALPHA_PLAN 5.5, BP §15.4): enrichment acceptance tests. Stability gate (`services/workers/src/enrichment_acceptance.py`) run on the real Arabic-evidence batch (52 titles) correctly failed on `linearity` (mean |Δ| 0.109, bound 0.08) and passed every other V1 dimension (0.02-0.04); human-review agreement gate (`apps/backend/src/scripts/measure-review-agreement.ts`) run against movie-postgres: 0 reviewed rows yet, reported honestly rather than a fabricated rate |
 | 2026-09-04 | §7.5: Arabic Wikipedia plot as second evidence for short English plots; V1 re-extracted under `+ar-evidence`, confidence measured before/after per slice, rows superseded |
+| 2026-09-04 | §7.6 (C-10): `linearity`'s name-vs-description ambiguity diagnosed and fixed (wording only, same 0/1 convention); stability gate now passes, drift 0.109→0.015 on a real re-verification |
