@@ -2,7 +2,10 @@
  * Rights-registry rows for the catalog's own fields (ALPHA_PLAN 5.1,
  * DATA_LICENSING.md §0/§6.1): every value the demo catalog shows or feeds to
  * the enrichment gets a `source_records` row naming its source and license,
- * so no title is left at `unknown`.
+ * so no title is left at `unknown`. Also the poster path `fetch-tmdb-posters.ts`
+ * writes (board C-2 / archive B4): TMDB's terms make the image itself
+ * `non_commercial_only` with required attribution, never `commercial_allowed`
+ * like the CC0/CC BY-SA catalog facts above it.
  *
  *   npm run build && node dist/scripts/load-catalog-rights.js [--dry-run]
  *
@@ -48,6 +51,8 @@ export interface CatalogRightsEntry {
   descriptionSource?: 'wikipedia:en' | 'wikidata' | null;
   description?: string | null;
   evidence?: { wikipedia?: { en?: string | null; ar?: string | null } | null; plotSource?: string | null } | null;
+  /** TMDB's own relative path (`fetch-tmdb-posters.ts`), or `null` when TMDB has none; `undefined` when never fetched. */
+  posterPath?: string | null;
 }
 
 export interface LoadCatalogRightsSummary {
@@ -98,6 +103,26 @@ function wikidataRow(fieldName: string, qid: string): RowSpec {
   };
 }
 
+// TMDB's required attribution notice (their API terms), stored as this claim's
+// license text since SourceRecord has no separate attribution-text column
+// (the same pattern `license` already carries free-text terms in above).
+const TMDB_ATTRIBUTION = 'TMDB Terms of Use: image non-commercial without a paid licence; attribution required — "This product uses the TMDB API but is not endorsed or certified by TMDB."';
+
+function tmdbPosterRow(posterPath: string): RowSpec {
+  return {
+    fieldName: 'posterPath',
+    value: `https://image.tmdb.org/t/p/original${posterPath}`,
+    source: 'tmdb',
+    license: TMDB_ATTRIBUTION,
+    licenseStatus: 'non_commercial_only',
+    allowsStorage: true,
+    allowsDerivation: false,
+    allowsTraining: false,
+    attributionRequired: true,
+    fallbackPlan: 'omit the poster (empty slot) until a licensed image is available',
+  };
+}
+
 function wikipediaRow(fieldName: string, lang: 'en' | 'ar', page: string): RowSpec {
   return {
     fieldName,
@@ -144,6 +169,10 @@ export function rowsFor(entry: CatalogRightsEntry): RowSpec[] {
   const plot = plotSource?.match(/^wikipedia:(en|ar):(.+)$/);
   if (plot) {
     rows.push(wikipediaRow('enrichmentEvidence', plot[1] as 'en' | 'ar', plot[2]));
+  }
+
+  if (entry.externalIds?.tmdb && entry.posterPath) {
+    rows.push(tmdbPosterRow(entry.posterPath));
   }
   return rows;
 }

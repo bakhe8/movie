@@ -1,7 +1,8 @@
 /**
- * Cached HTTP for the Wikimedia APIs, shared by the fixture scripts that run
- * after `fetch-catalog.ts` (`fetch-cultural.ts`, `fetch-evidence-ar.ts`).
- * Same cache layout as the catalog fetch — sha1 of the URL → `{ status, body }`
+ * Cached HTTP shared by the fixture scripts that run after `fetch-catalog.ts`
+ * (`fetch-cultural.ts`, `fetch-evidence-ar.ts`, `fetch-tmdb-posters.ts`) —
+ * Wikimedia and TMDB alike, the caching is URL-keyed and API-agnostic. Same
+ * cache layout as the catalog fetch — sha1 of the URL → `{ status, body }`
  * under CATALOG_CACHE_DIR — so a URL either script asked for before is served
  * from disk and a re-run is offline. `fetch-catalog.ts` keeps its own copy
  * because it runs its main() at import time and cannot be imported from.
