@@ -1,3 +1,4 @@
+import '../../jest-dom-vitest';
 /**
  * RankScreen — keyboard reordering and replacement (ALPHA 8.1)
  *

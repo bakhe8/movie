@@ -1,3 +1,4 @@
+import '../../jest-dom-vitest';
 /**
  * ProfileScreen — training state badges and pause/resume toggle (ALPHA 8.1)
  *
