@@ -24,7 +24,7 @@ const labels = {
     searchLabel: 'ابحث بالاسم العربي أو الإنجليزي',
     searchPlaceholder: 'مثال: الوصول، Arrival',
     progress: (count: string) => `سجّلت ${count} كمُشاهَدة`,
-    progressUnit: (n: number) => (n === 1 ? 'فيلمًا واحدًا' : n === 2 ? 'فيلمين' : `${formatNumber(n, 'ar')} أفلام`),
+    progressUnit: (n: number) => (n === 1 ? 'فيلمًا واحدًا' : n === 2 ? 'فيلمين' : n <= 10 ? `${formatNumber(n, 'ar')} أفلام` : `${formatNumber(n, 'ar')} فيلمًا`),
     needMore: (n: number) =>
       n === 1 ? 'بقي فيلم واحد لفتح الترتيب.' : n === 2 ? 'بقي فيلمان لفتح الترتيب.' : 'بقيت ثلاثة أفلام لفتح الترتيب.',
     unlocked: 'الترتيب متاح. كل فيلم إضافي يحسّن جولاتك.',
