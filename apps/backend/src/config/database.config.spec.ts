@@ -99,6 +99,7 @@ describe('getConnectionOptions', () => {
 
     afterEach(() => {
       process.env.NODE_ENV = savedNodeEnv;
+      delete process.env.RAILWAY_ENVIRONMENT_NAME;
     });
 
     it.each([
@@ -131,6 +132,38 @@ describe('getConnectionOptions', () => {
       process.env.DB_PORT = '5433';
 
       expect(getConnectionOptions()).toMatchObject({ host: '127.0.0.1', port: 5433 });
+    });
+
+    // M3 (AUDIT_2026-09-05): the guard used to fire on NODE_ENV=production
+    // only, so a staging or preview deployment with any other value -- or
+    // with NODE_ENV blanked by a dashboard override -- got no protection.
+    it.each([['staging'], ['preview'], ['prod']])('refuses under NODE_ENV=%s too, not only production', (nodeEnv) => {
+      process.env.NODE_ENV = nodeEnv;
+      process.env.DB_HOST = '127.0.0.1';
+
+      expect(() => getConnectionOptions()).toThrow(new RegExp(`Refusing to start: NODE_ENV=${nodeEnv}`));
+    });
+
+    it('refuses with NODE_ENV unset when Railway says this is one of its services', () => {
+      delete process.env.NODE_ENV;
+      process.env.RAILWAY_ENVIRONMENT_NAME = 'staging';
+      process.env.DB_HOST = '127.0.0.1';
+
+      expect(() => getConnectionOptions()).toThrow(/RAILWAY_ENVIRONMENT_NAME is set/);
+    });
+
+    it('treats NODE_ENV unset with no platform marker as local, the way the CLI scripts run', () => {
+      delete process.env.NODE_ENV;
+      process.env.DB_HOST = '127.0.0.1';
+
+      expect(getConnectionOptions()).toMatchObject({ host: '127.0.0.1' });
+    });
+
+    it('treats a test run as local', () => {
+      process.env.NODE_ENV = 'test';
+      process.env.DATABASE_URL = 'postgresql://u:p@localhost:5433/moviedb_test';
+
+      expect(getConnectionOptions()).toMatchObject({ host: 'localhost', database: 'moviedb_test' });
     });
   });
 

@@ -50,7 +50,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tupl
 
 import numpy as np
 
-from .ranker import PlackettLuceRanker
+from .ranker import PlackettLuceRanker, pairwise_credit
 from .training import (
     FINGERPRINT_V1_DIMENSIONS,
     REGULARIZATION_GRID,
@@ -117,18 +117,18 @@ def temporal_split(triads: List[TriadEvent]) -> Tuple[List[TriadEvent], List[Tri
 
 
 def pairwise_hits(triad: TriadEvent, scorer: Scorer) -> Tuple[float, int]:
-    """Correct pairs (ties count half) and total pairs for one triad."""
+    """
+    Correct pairs and total pairs for one triad, under ranker.pairwise_credit
+    -- the same tie rule as the persisted training metric, so the two
+    pairwise-accuracy numbers are comparable (AUDIT_2026-09-05 M2).
+    """
     ids, ranking = triad
     correct = 0.0
     total = 0
     for i in range(3):
         for j in range(i + 1, 3):
             better, worse = ids[ranking[i]], ids[ranking[j]]
-            a, b = scorer(better), scorer(worse)
-            if a > b:
-                correct += 1.0
-            elif a == b:
-                correct += 0.5
+            correct += pairwise_credit(scorer(better), scorer(worse))
             total += 1
     return correct, total
 

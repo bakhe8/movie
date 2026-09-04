@@ -75,7 +75,7 @@ Per profile, on trigger (every 3 newly completed triads, on demand, or nightly):
 1. Load completed triads ordered by `answeredAt`, excluding `holdout = true` rows (policy-reserved validation triads, `BP §8.3`).
 2. Temporal split inside the profile: the most recent $\max(1, \lfloor 0.2\,n \rfloor)$ triads are held out when $n \ge 5$; below that, train on everything and report **no** held-out metrics (band stays `inconclusive`/`initial`).
 3. Whole triads stay on one side of the split. Fingerprints and population priors are frozen at the cutoff; nothing from the future enters the features.
-4. Fit (§2.1 or §2.2). Evaluate on the held-out slice: NLL, top-1 accuracy, full-order accuracy, pairwise accuracy, Kendall τ.
+4. Fit (§2.1 or §2.2). Evaluate on the held-out slice: NLL, top-1 accuracy, full-order accuracy, pairwise accuracy, Kendall τ. Pairwise accuracy gives an exact tie half credit, identically in the persisted training metric (`ranker.compute_pairwise_accuracy`) and the offline gate (`evaluation.pairwise_hits`, both through `ranker.pairwise_credit`), so a model with nothing to say scores chance (0.5), not 0 (AUDIT_2026-09-05 M2).
 5. Persist `user_model_snapshots` with weights, bias terms, posterior/uncertainty, `trainingTriadCount`, `heldOutTriadCount`, `heldOutNll`, `heldOutPairwiseAccuracy`, `modelVersion`, `calibratedAgainst`.
 6. Then refit on all non-reserved triads for serving (the held-out metrics describe the protocol, the served weights use all data), recording both in the snapshot.
 
@@ -197,7 +197,7 @@ def nll(theta, X, B, R, lam):
     return -ll.sum() + lam * theta @ theta
 ```
 
-Tests every model version must pass: recovers known weights from synthetic listwise data; honours a strong prior with near-zero weights; leaves unknown features out instead of zero-filling; temporal split keeps whole triads; pairwise accuracy is 0 for an inverted model and 1 for a perfect one; `selectionPropensity` sums correctly over the candidate set for the policy.
+Tests every model version must pass: recovers known weights from synthetic listwise data; honours a strong prior with near-zero weights; leaves unknown features out instead of zero-filling; temporal split keeps whole triads; pairwise accuracy is 0 for an inverted model, 1 for a perfect one and 0.5 for an all-ties one; `selectionPropensity` sums correctly over the candidate set for the policy.
 
 ## 17. Current implementation (2026-09-03)
 

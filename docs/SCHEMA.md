@@ -11,7 +11,7 @@ Naming (ADR-16): tables `snake_case` plural; columns are TypeORM's default `came
 
 ## 1. Current physical schema (migrated)
 
-Migrations, in order: `1788410140231-InitialSchema`, `1788411790951-AddTriadEventFields`, `1788412500000-SplitImportedRatingFromInAppState`, `1788418200000-ArabicFirstProfileDefault`, `1788421102891-AddOneActiveTriadPerProfileConstraint`, `1788424108820-AddHeldOutTrainingMetrics`, `1788425067800-AddTriadEventCompleteness`, `1788428400000-AddTriadReplacements`, `1788432000000-AddProfileMarketAndPlatforms`, `1788435000000-CompleteM1Plan`, `1788438000000-AddM2ConsentAndAuditTables`, `1788440000000-AddM3RightsRegistryAndCatalogProvenance`, `1788442000000-AddM4ModelVersioningAndExperiments`, `1788444000000-AddM5RecommendationsAndWatchEvents`, `1788446000000-AddM6PublicQualityAndAvailability`, `1788448000000-AddM7SharedLatentSpaceVersions`, `1788450000000-AddTrainingGenreDiversity`, `1788452000000-AddTrainingLanguageDiversity`, `1788454000000-PrivacyRequestsTombstone`, `1788456000000-AddTrainingDirectorDiversity`, `1788458000000-AddRefreshTokens`, `1788460000000-ConsentsTombstone`, `1788462000000-AddTitlePosterPath`, `1788464000000-AddPasswordResets`, `1788466000000-AddAnalyticsEvents`, `1788468000000-AddTitleIdIndexes`. Extension: `uuid-ossp`. The `ankane/pgvector` image is used but no column has the `vector` type yet — `embeddings.vector` is still `real[]`, deliberately unconverted (see the note below §1's DDL block).
+Migrations, in order: `1788410140231-InitialSchema`, `1788411790951-AddTriadEventFields`, `1788412500000-SplitImportedRatingFromInAppState`, `1788418200000-ArabicFirstProfileDefault`, `1788421102891-AddOneActiveTriadPerProfileConstraint`, `1788424108820-AddHeldOutTrainingMetrics`, `1788425067800-AddTriadEventCompleteness`, `1788428400000-AddTriadReplacements`, `1788432000000-AddProfileMarketAndPlatforms`, `1788435000000-CompleteM1Plan`, `1788438000000-AddM2ConsentAndAuditTables`, `1788440000000-AddM3RightsRegistryAndCatalogProvenance`, `1788442000000-AddM4ModelVersioningAndExperiments`, `1788444000000-AddM5RecommendationsAndWatchEvents`, `1788446000000-AddM6PublicQualityAndAvailability`, `1788448000000-AddM7SharedLatentSpaceVersions`, `1788450000000-AddTrainingGenreDiversity`, `1788452000000-AddTrainingLanguageDiversity`, `1788454000000-PrivacyRequestsTombstone`, `1788456000000-AddTrainingDirectorDiversity`, `1788458000000-AddRefreshTokens`, `1788460000000-ConsentsTombstone`, `1788462000000-AddTitlePosterPath`, `1788464000000-AddPasswordResets`, `1788466000000-AddAnalyticsEvents`, `1788468000000-AddTitleIdIndexes`, `1788470000000-SharedLatentSpaceVersionsCreatedAt`. Extension: `uuid-ossp`. The `ankane/pgvector` image is used but no column has the `vector` type yet — `embeddings.vector` is still `real[]`, deliberately unconverted (see the note below §1's DDL block).
 
 ```sql
 users (
@@ -274,7 +274,7 @@ availability_snapshots (                                          -- BP §6 (acc
 
 shared_latent_space_versions (                                   -- BP §7.5
   version varchar PK, "nFactors" integer, "seedDataSources" json NOT NULL DEFAULT '[]',   -- each with licenseStatus; must be 'commercial_allowed' to be active
-  "trainingCohortSize" integer, "acceptanceGateMetrics" json, active boolean NOT NULL DEFAULT false, "createdAt" timestamp
+  "trainingCohortSize" integer, "acceptanceGateMetrics" json, active boolean NOT NULL DEFAULT false, "createdAt" timestamp NOT NULL DEFAULT now()  -- NOT NULL/DEFAULT: AUDIT_2026-09-05 M4
 )
 ```
 
@@ -464,7 +464,7 @@ experiment_assignments (
 
 shared_latent_space_versions (                                                  -- BP §7.5
   version varchar PK, "nFactors" integer, "seedDataSources" json NOT NULL DEFAULT '[]',   -- each with licenseStatus; must be 'commercial_allowed' to be active
-  "trainingCohortSize" integer, "acceptanceGateMetrics" json, active boolean NOT NULL DEFAULT false, "createdAt" timestamp
+  "trainingCohortSize" integer, "acceptanceGateMetrics" json, active boolean NOT NULL DEFAULT false, "createdAt" timestamp NOT NULL DEFAULT now()  -- NOT NULL/DEFAULT: AUDIT_2026-09-05 M4
 )
 
 -- Recommendations and outcomes --------------------------------------------------------

@@ -121,12 +121,33 @@ function fromDatabaseUrl(): Omit<ConnectionOptions, 'type' | 'entities'> | null 
 // configuration mistake with exactly one fix worth naming.
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '::1', '0.0.0.0']);
 
-function assertNotLoopbackInProduction(host: string, port: number, source: string): void {
-  if (process.env.NODE_ENV !== 'production' || !LOOPBACK.has(host)) {
+// "Deployed" is anything that is not local development or a test run: a
+// NODE_ENV of production, staging, preview or any other value -- and, since
+// NODE_ENV=production comes from the image (apps/backend/Dockerfile) and a
+// dashboard override can blank it, NODE_ENV unset while Railway's own
+// service variables say this process is one of its services
+// (AUDIT_2026-09-05 M3). Unset with no such marker stays local: the CLI
+// scripts (migrations, test-db setup) run that way against 127.0.0.1 by
+// design. Returns what made the call, for the error message, or null.
+const LOCAL_NODE_ENVS = new Set(['development', 'test']);
+const DEPLOYMENT_MARKERS = ['RAILWAY_ENVIRONMENT_NAME', 'RAILWAY_PROJECT_ID', 'RAILWAY_SERVICE_ID'];
+
+function deployedEnvironment(): string | null {
+  const nodeEnv = process.env.NODE_ENV?.trim();
+  if (nodeEnv) {
+    return LOCAL_NODE_ENVS.has(nodeEnv) ? null : `NODE_ENV=${nodeEnv}`;
+  }
+  const marker = DEPLOYMENT_MARKERS.find((name) => process.env[name]);
+  return marker ? `${marker} is set (a Railway service) with NODE_ENV unset` : null;
+}
+
+function assertNotLoopbackWhenDeployed(host: string, port: number, source: string): void {
+  const deployed = deployedEnvironment();
+  if (!deployed || !LOOPBACK.has(host)) {
     return;
   }
   throw new Error(
-    `Refusing to start: NODE_ENV=production but the database host resolves to ${host}:${port} (from ${source}), which is this container itself. ` +
+    `Refusing to start: ${deployed} but the database host resolves to ${host}:${port} (from ${source}), which is this container itself. ` +
       "Set DATABASE_URL to the database service's own internal address -- on Railway use the variable reference picker, " +
       'postgresql://<user>:<password>@<postgres RAILWAY_PRIVATE_DOMAIN>:5432/<db> -- and remove any DB_HOST/DB_PORT left over from local development.',
   );
@@ -141,13 +162,13 @@ export function getConnectionOptions(): ConnectionOptions {
     );
   }
   if (fromUrl) {
-    assertNotLoopbackInProduction(fromUrl.host, fromUrl.port, 'DATABASE_URL');
+    assertNotLoopbackWhenDeployed(fromUrl.host, fromUrl.port, 'DATABASE_URL');
     return { type: 'postgres', ...fromUrl, password, entities: ENTITIES };
   }
 
   const host = process.env.DB_HOST || 'localhost';
   const port = parseInt(process.env.DB_PORT || '5432');
-  assertNotLoopbackInProduction(host, port, process.env.DB_HOST ? 'DB_HOST/DB_PORT' : 'the DB_HOST default, DATABASE_URL being unset');
+  assertNotLoopbackWhenDeployed(host, port, process.env.DB_HOST ? 'DB_HOST/DB_PORT' : 'the DB_HOST default, DATABASE_URL being unset');
 
   return {
     type: 'postgres',

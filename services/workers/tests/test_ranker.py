@@ -3,7 +3,7 @@ import math
 import numpy as np
 import pytest
 
-from src.ranker import PlackettLuceRanker, compute_nll, compute_pairwise_accuracy
+from src.ranker import PlackettLuceRanker, compute_nll, compute_pairwise_accuracy, pairwise_credit
 
 
 def make_triad_dataset():
@@ -183,6 +183,23 @@ class TestComputePairwiseAccuracy:
         ranker.weights = np.array([1.0])
 
         assert compute_pairwise_accuracy([], {}, ranker) == 0.0
+
+    # M2 (AUDIT_2026-09-05): an exact tie earns half credit, the same rule
+    # evaluation.pairwise_hits applies, so a model with nothing to say scores
+    # chance rather than looking worse than random.
+    def test_a_model_with_all_zero_weights_scores_chance_not_zero(self):
+        triads, fingerprints = make_triad_dataset()
+        ranker = PlackettLuceRanker(fingerprint_dim=1)
+        ranker.weights = np.array([0.0])  # every utility identical: every pair a tie
+
+        assert compute_pairwise_accuracy(triads, fingerprints, ranker) == 0.5
+
+
+class TestPairwiseCredit:
+    def test_agreement_disagreement_and_tie(self):
+        assert pairwise_credit(2.0, 1.0) == 1.0
+        assert pairwise_credit(1.0, 2.0) == 0.0
+        assert pairwise_credit(1.0, 1.0) == 0.5
 
 
 class TestComputeNll:

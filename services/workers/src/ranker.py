@@ -210,6 +210,23 @@ class PlackettLuceRanker:
         return np.argsort(scores)[::-1].tolist()
 
 
+def pairwise_credit(score_better: float, score_worse: float) -> float:
+    """
+    Credit for one pair the user ordered better > worse: 1 when the model
+    agrees, 0 when it disagrees, 0.5 on an exact tie. The one convention
+    behind every pairwise-accuracy number this pipeline reports, persisted
+    (training.py via compute_pairwise_accuracy) or offline (evaluation.py's
+    gate via pairwise_hits) -- so the two are comparable, and a model with
+    nothing to say (all utilities equal) scores chance, 0.5, rather than 0
+    (AUDIT_2026-09-05 M2).
+    """
+    if score_better > score_worse:
+        return 1.0
+    if score_better == score_worse:
+        return 0.5
+    return 0.0
+
+
 def compute_pairwise_accuracy(
     triads: List[Tuple[Tuple[str, str, str], List[int]]],
     fingerprints: Dict[str, np.ndarray],
@@ -219,8 +236,9 @@ def compute_pairwise_accuracy(
     Evaluate model accuracy on pairwise comparisons.
 
     Extracts all pairwise comparisons from triadic rankings and measures
-    the fraction correctly predicted. This is an evaluation metric only; the
-    triad itself is stored and fitted as one listwise event (blueprint §7.2).
+    the fraction correctly predicted, an exact tie earning half credit
+    (pairwise_credit). This is an evaluation metric only; the triad itself
+    is stored and fitted as one listwise event (blueprint §7.2).
 
     Args:
         triads: List of triadic rankings
@@ -230,7 +248,7 @@ def compute_pairwise_accuracy(
     Returns:
         Pairwise accuracy (0-1)
     """
-    correct = 0
+    correct = 0.0
     total = 0
 
     for triad_ids, ranking in triads:
@@ -244,9 +262,8 @@ def compute_pairwise_accuracy(
                 score_i = ranker.predict_score(tid_i, _require_fingerprint(fingerprints, tid_i))
                 score_j = ranker.predict_score(tid_j, _require_fingerprint(fingerprints, tid_j))
 
-                # Check if predicted correctly (i should beat j)
-                if score_i > score_j:
-                    correct += 1
+                # i should beat j; a tie is half a hit
+                correct += pairwise_credit(score_i, score_j)
                 total += 1
 
     return correct / total if total > 0 else 0.0

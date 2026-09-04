@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { initObservability, observabilityConfig } from './observability';
 
 describe('observabilityConfig', () => {
@@ -42,6 +42,14 @@ describe('observabilityConfig', () => {
 });
 
 describe('initObservability', () => {
+  // initObservability() loads the Sentry SDK with a dynamic import, so the
+  // first test to enable it would otherwise pay the SDK's cold load inside
+  // its own 5s budget -- 7-22s on a loaded machine when the whole suite
+  // runs in parallel. Paid here once, under a hook budget sized for it.
+  beforeAll(async () => {
+    await import('@sentry/node');
+  }, 60_000);
+
   const base = { environment: 'test', serviceName: 'reel-backend', tracesSampleRate: 1 };
 
   it('starts nothing at all when both are unset', async () => {
@@ -52,9 +60,7 @@ describe('initObservability', () => {
   });
 
   // A DSN the SDK cannot parse must not stop the app it exists to watch.
-  // 20s: the first test to import the Sentry SDK pays its cold-load cost,
-  // which exceeds the 5s default when 36 spec files run in parallel.
-  it('reports a malformed Sentry DSN and boots anyway', { timeout: 20_000 }, async () => {
+  it('reports a malformed Sentry DSN and boots anyway', async () => {
     const started = await initObservability({ ...base, sentryDsn: 'not-a-dsn', otelEndpoint: null });
 
     expect(started).toEqual({ sentry: false, tracing: false });
