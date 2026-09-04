@@ -1,0 +1,15 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "//": "Board C-18 (ADR-87). Point this Railway service's root directory at the REPO ROOT (not apps/backend) -- the Dockerfile needs the whole npm workspace for its build context, same as docker/docker-compose.prod.yml. Set this file as the service's config-as-code path in the Railway dashboard.",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "apps/backend/Dockerfile"
+  },
+  "deploy": {
+    "numReplicas": 1,
+    "healthcheckPath": "/api/health",
+    "healthcheckTimeout": 30,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 3
+  }
+}

@@ -163,7 +163,47 @@ docker compose -f docker/docker-compose.prod.yml --env-file docker/.env.prod --p
 docker compose -f docker/docker-compose.prod.yml --env-file docker/.env.prod up -d
 ```
 
-Backup and restore (`docker/backup-postgres.sh`, `docker/restore-postgres.sh`) are documented and drilled in `docs/ALPHA_PLAN_2026-09-04.md` §8.12. ADR-24 (hosting) is still open; this targets a self-hosted/staging deployment.
+Backup and restore (`docker/backup-postgres.sh`, `docker/restore-postgres.sh`) are documented and drilled in `docs/ALPHA_PLAN_2026-09-04.md` §8.12. This is the generic self-hosted path; §8.2 below is the actual hosting decision (ADR-87).
+
+### 8.2 Hosting: Railway + Cloudflare (ALPHA_PLAN 7.2, board C-18, owner decision O-2)
+
+Compute on Railway (owner's account), domain `kolme.app` fronted by Cloudflare (TLS + WAF), staging on `alpha.kolme.app`. Full reasoning and constraints: ADR-87 in [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md). **Nothing below has been deployed yet — it is a plan for the owner to execute and approve, per board C-18.**
+
+Four Railway services, each built from this repo's existing Dockerfiles (no separate hosting-specific images):
+
+| Service | Config-as-code path | Public domain | Notes |
+|---|---|---|---|
+| `postgres` | — (deploy from Docker image `ankane/pgvector:latest`, not Railway's own Postgres plugin — that plugin doesn't ship pgvector) | none (private) | Attach a Railway Volume at `/var/lib/postgresql/data`. Region: **EU-West** (Railway has no Middle East region). Railway's own backup/PITR tier on a bring-your-own-image service is more limited than a fully managed Postgres — run `docker/backup-postgres.sh` on a schedule (Railway Cron service) until/unless this moves to a managed provider |
+| `redis` | — (Docker image `redis:7-alpine`, command `redis-server --appendonly yes`) | none (private) | Volume at `/data` |
+| `backend` | `apps/backend/railway.json` | `api.kolme.app` / `api.alpha.kolme.app` | Root directory = repo root (workspace build context) |
+| `frontend` | `apps/frontend/railway.json` | `kolme.app` / `alpha.kolme.app` | Root directory = repo root |
+| `model-service` (workers) | `services/workers/railway.json` | none (private, reached via `MODEL_SERVICE_URL`) | Root directory = repo root |
+| `migrate` | `apps/backend/railway.migrate.json` | none | Same image as `backend`, start command overridden to run migrations once and exit (Railway has no compose-style `profiles:`, so this is its own service — redeploy it manually before redeploying `backend` whenever a commit adds a migration) |
+
+**Environment variables** (Railway "Variables", not files — unlike `docker-compose.prod.yml`'s file-based secrets, which target a generic self-host, not Railway. The `<NAME>_FILE` convention in the existing images is a no-op when the plain `<NAME>` variable is already set, so no Dockerfile changes were needed):
+
+| Variable | Set on | Value |
+|---|---|---|
+| `DATABASE_URL` | `backend`, `model-service`, `migrate` | `postgresql://movieapp:<password>@${{postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/moviedb` — build with Railway's `${{ServiceName.VAR}}` reference picker in the dashboard; A-14 made `DATABASE_URL` win over `DB_*` in `database.config.ts`, so this one variable is enough for the backend too now |
+| `REDIS_URL` | `backend` | `redis://${{redis.RAILWAY_PRIVATE_DOMAIN}}:6379` |
+| `MODEL_SERVICE_URL` | `backend` | `http://${{model-service.RAILWAY_PRIVATE_DOMAIN}}:8001` |
+| `NEXT_PUBLIC_API_URL` | `frontend` | `https://api.kolme.app/api` (prod) / `https://api.alpha.kolme.app/api` (staging) |
+| `JWT_SECRET`, `ANTHROPIC_API_KEY`, `TMDB_API_KEY`, `MODEL_SERVICE_TOKEN`, `AUDIT_IP_SALT` | `backend` (as needed) | generate fresh values — never reuse `.env`'s dev placeholders |
+| `POSTGRES_PASSWORD`, `POSTGRES_USER`, `POSTGRES_DB` | `postgres` | generate a fresh password; `movieapp` / `moviedb` |
+| `API_PORT`, `PORT`, `MODEL_SERVICE_PORT` | each service | `3101` / `3110` / `8001` (Railway also injects its own `PORT`; keep these explicit since the app code reads them by these names) |
+
+**Owner's click list, in order** (nothing here has been done yet):
+
+1. Railway dashboard → New Project → Deploy from GitHub repo → `bakhe8/movie`.
+2. Add the `postgres` service: Docker Image → `ankane/pgvector:latest`, region EU-West, attach a Volume at `/var/lib/postgresql/data`, set its three variables above.
+3. Add `redis`: Docker Image → `redis:7-alpine`, command override, attach a Volume at `/data`.
+4. Add `backend`: from the same GitHub repo, root directory `/`, config-as-code path `apps/backend/railway.json`; set its variables.
+5. Add `migrate`: same repo/root, config-as-code path `apps/backend/railway.migrate.json`; run it once now (after step 4's variables are set) to create the schema, before `backend` receives traffic.
+6. Add `model-service`: same repo/root, config-as-code path `services/workers/railway.json`; set its variables.
+7. Add `frontend`: same repo/root, config-as-code path `apps/frontend/railway.json`; set `NEXT_PUBLIC_API_URL` once `backend`'s domain is known (step 8).
+8. In Railway, generate/attach custom domains: `api.kolme.app` → `backend`, `kolme.app` → `frontend` (and the `alpha.` pair for staging, as a second environment or a second project).
+9. In Cloudflare (`kolme.app` zone): add CNAME records for `kolme.app`/`www`, `api`, `alpha`, `api.alpha` pointing at the hostnames Railway generated in step 8; proxy (orange cloud) on for TLS/WAF.
+10. Verify: `https://kolme.app` loads, `https://api.kolme.app/api/health` answers, register → watch → rank → train → recommendations end to end (same walk as §6) against the live URL.
 
 ## 9. Troubleshooting
 
@@ -189,6 +229,7 @@ Backup and restore (`docker/backup-postgres.sh`, `docker/restore-postgres.sh`) a
 ---
 
 **Changelog**
+- 2.5 (2026-09-04): §8.2 added — the actual hosting plan (Railway + Cloudflare, `kolme.app`/`alpha.kolme.app`, ADR-87, owner decision O-2, board C-18). Nothing deployed yet; a click list for the owner to execute and approve.
 - 2.4 (2026-09-04): the disposable `postgres-test` container is gone (board C-17, owner's order); the e2e suite's `moviedb_test` database now lives inside `movie-postgres` itself, same port. `npm run test:e2e:up` creates it idempotently.
 - 2.3 (2026-09-04): §4's seed step is `db:seed:demo` (the 300-title catalog), not `db:seed` (the 15 `FILM*` placeholders, retired from `movie-postgres`, board C-15).
 - 2.2 (2026-09-04): §8.1 added — the staging/production build (ALPHA_PLAN 7.3/7.4: per-service Dockerfiles, `docker-compose.prod.yml`, backup/restore) is now in this guide, not just in ARCHITECTURE.md's table (board C-13).
