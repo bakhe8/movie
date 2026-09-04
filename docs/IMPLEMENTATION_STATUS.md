@@ -506,7 +506,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Admin write endpoints | ❌ | — | no admin role |
 | Seed script (15 dev titles) | ✅ | ❌ | `§17.1`: 300–500-film balanced research catalog with rights |
 | Fingerprint batch generation | ❌ | ❌ | `§15.3` |
-| Tests: search/pagination | ❌ | — | |
+| Tests: search/pagination | ✅ | — | search in `test/titles-search.e2e-spec.ts` (Arabic normalisation, starter list); pagination in `test/api-contract.e2e-spec.ts` |
 | Frontend: search + mark watched (`DiscoverScreen`) | ✅ | 🟡 | rebuilt 2026-09-03 (table above), second pass the same day: the starter list now comes from `GET /titles/starter` (genre-diverse, with a line saying it is not by taste) with a "browse the whole catalogue" toggle, and search benefits from the server's Arabic folding; existing marks load, progress to the first triad, watchlist, undo, bilingual titles; `§4.2` still missing CSV import and alternate-title search (backend) |
 | Frontend: work page (fingerprint, fit reason, public quality and availability separate) | ❌ | ❌ | `§5.3` |
 
@@ -596,7 +596,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Backend unit tests (8 files, 98 tests) | ✅ | — | re-run 2026-09-03; +8 with the gap-3 triad rework, +3 with the H1 title-reuse fix, +12 with the ADR-17 replacement endpoint, +5 with the library ranking, +3 with the onboarding profile fields, +1 for inline triad items, +2 for recommendation reasons, +5 for the starter list and Arabic folding |
 | Full first-run journey e2e with the real Python model service (ALPHA 1.4) | ✅ | ✅ | `test/full-journey.e2e-spec.ts`: spawns `model_service.py` against `postgres-test`, then register → 6 watched → 3 rounds → training triggers itself → recommendations served by that snapshot, no CLI. Skips where no Python is resolvable (`$MODEL_SERVICE_PYTHON` or `poetry` on PATH); CI's backend job is Node-only today |
 | Backend e2e: auth guard + IDOR + rate limiting + triad ranking + triad replacement over real HTTP + `postgres-test` + catalogue search/starter (6 files, 41 tests) | ✅ | ✅ | `§21.3` object-level authorization; re-run 2026-09-03 with all eight migrations; `test/throttling.e2e-spec.ts` (ADR-29), `test/triad-rank.e2e-spec.ts` (gap 3/ADR-32, H1/ADR-34) and `test/triad-replace.e2e-spec.ts` (ADR-17) added today; still not full functional coverage of every route; `test/titles-search.e2e-spec.ts` added the same day |
-| Functional API tests (titles, triads, recommendations) | ❌ | — | |
+| Functional API tests (titles, triads, recommendations) | ✅ | — | ALPHA_PLAN 8.3: `test/api-contract.e2e-spec.ts`, 21 cases over real HTTP and real Postgres — the page envelope and real pagination, a page past the end (empty, not an error), every rejected `limit`/`page`, an unknown query parameter refused rather than ignored, `fingerprint`/`externalIds` absent, 400 for a malformed id vs 404 for an absent one, and the `need_more_watched`/not-ready **states** the two personalised reads return instead of an empty list. Behaviour is covered separately (`titles-search`, `triad-rank`, `triad-replace`, `recommendations-persistence`, `idor`) and is not duplicated here |
 | Frontend tests | ❌ | — | |
 | Python tests (36) | ✅ | — | re-run 2026-09-03; +2 with the gap-9 enrichment-worker fix, +8 with the gap-2 temporal hold-out |
 | Offline evaluation protocol (`§16.1`), metrics beyond in-sample pairwise (`§16.2`), baselines (`§16.3`), acceptance gate (`§16.5`) | 🟡 | 🟡 | protocol and gate built (`services/workers/src/evaluation.py`, `make evaluate`, ALPHA_PLAN 6.1): temporal split, held-out pairwise/top-1/Kendall τ/NLL with cluster-bootstrap CIs, language/evidence-size slices, three baselines (random/popularity/genre-match) plus the pre-ADR-69 V1-only ablation, five fixed thresholds (`§8` above) — automatically reads whatever `FINGERPRINT_DIMENSIONS` currently serves. First real run on `movie-postgres` (no synthetic personas): 1 profile, 14 held-out triads — below the ≥30/≥3 floor, correctly reports "insufficient data" rather than a false pass; indicative accuracy 0.81 (model) vs 0.76 (V1-only) vs 0.66 (popularity). Registering/activating a version after a real pass is the owner's call (ADR-76 makes activation actually take effect), not automatic. Still open: Brier/ECE calibration, per-minute learning curves |
@@ -610,7 +610,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Local compose (Postgres 5433, Redis 6379, `postgres-test` 5544) | ✅ | — | |
 | Indexes beyond PK/unique | ❌ | — | [SCHEMA.md](SCHEMA.md) M1 |
 | Redis usage (queue/cache) | ❌ | — | idle by design until `§12.3` (ADR-10, ADR-25) |
-| CI/CD, staging, prod, feature flags, model rollback | ❌ | ❌ | `§12.1`, `§18.1`, ADR-24 |
+| CI/CD, staging, prod, feature flags, model rollback | 🟡 | 🟡 | `§12.1`, `§18.1`. **Feature flags and model rollback are built and tested** (ADR-83, ADR-76; see the `§18.1` row below). CI runs on every push. Staging/prod: hosting is chosen (ADR-88, Railway + Cloudflare, `alpha.kolme.app`) and the service configs exist, but **nothing is deployed yet** |
 | Observability (OpenTelemetry, Sentry, first-party analytics) | 🟡 | ✅ analytics · ❌ tracing | `§12.1`, ADR-86. `analytics_events` + `AnalyticsService`, gated on the `analytics_first_party` consent (opt-in: no grant, no row). Ten closed event names; `triad_answered`/`watch_marked` are emitted server-side, the onboarding funnel and card opens via `POST /profiles/:id/analytics/events`. **OTel and Sentry are wired but inert**: both need an env var that is unset everywhere, and their packages are deliberately not installed until hosting is decided — **hosting is now decided (ADR-88, Railway), so installing the two SDKs is live work**; turning a flag on without them logs the install command and boots anyway. |
 | Backups + restore drill | ❌ | ❌ | `§18.1` |
 | CORS from `FRONTEND_URL`; global throttling | ✅ | — | |
@@ -627,8 +627,8 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Backup restore drill documented | ❌ |
 | No content/images shown without a known license status | 🟡 (no images shown; seeded text is `unknown`) |
 | Metrics board separates click, watch, later ranking | ❌ |
-| Model rollback + feature flags | ❌ |
-| 300–500-film catalog with rights registry | ❌ (15 dev titles) |
+| Model rollback + feature flags | ✅ (rollback: `model_versions.active` read on every recommendation, ADR-76, flipped by `PATCH /admin/models/:version` — verified end to end in `test/model-version-rollback.e2e-spec.ts`: unpinned serves newest, pinning serves the older snapshot, clearing restores. Flags: `ExperimentsService`, ADR-83) |
+| 300–500-film catalog with rights registry | 🟡 (300 titles on `movie-postgres`, the 15 `FILM*` placeholders retired per board C-15, `source_records` populated — but the licence statuses are still the free-period `non_commercial_only`/`unknown` of ADR-72, not negotiated agreements) |
 | 80–150 Alpha users; accepters complete 20–30 triads | ❌ (no Alpha yet) |
 
 ---
