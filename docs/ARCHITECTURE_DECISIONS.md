@@ -609,6 +609,15 @@ Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 
 ---
 
+## ADR-87 — The training trigger fires after the commit, not inside it (fixes ADR-25's trigger)
+
+**Context.** `TriadCompletedSubscriber` (ADR-25) noticed a triad turning `completed` in `afterUpdate` and scheduled `TrainingService.onTriadCompleted()` with `setImmediate`, on the stated assumption that the next tick came after the writing transaction returned. It does not: `afterUpdate` fires *inside* that transaction, and the count `onTriadCompleted` issues runs on a different pooled connection that cannot see the uncommitted row. The count therefore came back one short — the third round counted as the second, `shouldTrainAt` said no, and **no training was ever triggered automatically**. It passed for months only because the tmpfs test container committed faster than the next tick arrived; moving the test database to a disk-backed server (board C-17) lost that race every time and exposed it. Diagnosed by instrumenting the subscriber: three completed rounds, counts of 1, 1, 2.
+**Decision.** `afterUpdate` only *notes* the profile id, in a map keyed by `event.queryRunner` so concurrent requests cannot flush each other's rounds; `afterTransactionCommit` reads the note and fires the trigger, after the row is visible to every connection. `afterTransactionRollback` drops the note, so a round that never happened is never trained on. The trigger stays detached from the request — the response still does not wait on the model service, and a failure is still logged, never thrown.
+**Consequences.** Automatic training now actually happens, on a real database, at the round the threshold names. The e2e that was meant to prove this passed on a timing accident before, so it proved nothing; it now passes on the slow database it had never passed on, three runs in a row, and nine unit tests pin the shape (nothing before commit, once per profile per transaction, per-runner isolation, rollback forgotten, no double-fire). Worth reading twice: a green test on a fast fixture can be green for the wrong reason.
+**Revisit when.** The trigger needs to survive a process restart between commit and call — that needs an outbox row, not a subscriber.
+
+---
+
 ## ADR-86 — First-party analytics behind the consent that already exists, observability behind unset flags (ALPHA_PLAN 7.5)
 
 **Context.** `ALPHA_PLAN` 7.5 asks for the onboarding funnel, triad timing and click/watch counts, plus OpenTelemetry and Sentry. `BP §13` requires the product analytics to be first-party — a table in this database, not a third-party pixel — and `PRIVACY.md §3` already reserves the purpose `analytics_first_party`, which nothing read.
@@ -697,6 +706,7 @@ Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 | 84 | The three tracks become real, with a declared exploration share | `BP §4.4`; ADR-8 | evaluation measures the tracks, or Watchability data lands |
 | 85 | Password reset behind a swappable mailer; provider still undecided | `BP §21.3`; ALPHA_PLAN 3.2 | O-3 picks a provider, or the mail needs more than plain text |
 | 86 | First-party analytics gated on `analytics_first_party`; OTel/Sentry behind unset flags, packages not installed | `BP §13`; PRIVACY.md §3; ALPHA_PLAN 7.5 | hosting chosen; a new event is needed; §16 wants another aggregate |
+| 87 | The training trigger fires from `afterTransactionCommit`, not from `afterUpdate` + `setImmediate` | fixes ADR-25's trigger | the trigger must survive a restart between commit and call (needs an outbox) |
 
 ## How to add a decision
 
