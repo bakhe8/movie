@@ -34,7 +34,7 @@ const readex = Readex_Pro({
 // Theme (decisions Q1): `data-theme` is set before first paint by BOOT_SCRIPT
 // from the stored preference, or left absent so CSS follows the system;
 // `suppressHydrationWarning` covers that pre-hydration attribute.
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: import('react').ReactNode }) {
   return (
     <html lang="ar" dir="rtl" className={`${plexArabic.variable} ${readex.variable}`} suppressHydrationWarning>
       <head>
