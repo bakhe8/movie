@@ -87,6 +87,20 @@
         "3120"
       ],
       "port": 3120
+    },
+    {
+      "name": "frontend-prod-3200-B",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "start",
+        "-w",
+        "apps/frontend",
+        "--",
+        "-p",
+        "3200"
+      ],
+      "port": 3200
     }
   ]
 }
