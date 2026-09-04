@@ -9,8 +9,12 @@ import { LoginDto } from './dto/login.dto';
 import { LogoutDto, RefreshDto } from './dto/refresh.dto';
 
 // Tighter limit than the app-wide default to slow down credential
-// stuffing / brute-force attempts against these two endpoints.
-const AUTH_THROTTLE = { default: { limit: 5, ttl: 60_000 } };
+// stuffing / brute-force attempts against these two endpoints. These routes
+// are unauthenticated, so the bucket is per address (ALPHA_PLAN 7.6) -- which
+// also means a load harness driving 150 sign-ups from one machine is
+// correctly refused after five. AUTH_THROTTLE_LIMIT is how that harness (and
+// only it) raises the ceiling; production leaves it unset.
+const AUTH_THROTTLE = { default: { limit: Number(process.env.AUTH_THROTTLE_LIMIT) || 5, ttl: 60_000 } };
 // Refresh is called once per access-token lifetime per client; 10/min
 // leaves room for a few tabs without opening a token-guessing channel
 // (256-bit random tokens make guessing pointless anyway).

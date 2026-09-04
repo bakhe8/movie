@@ -2,10 +2,11 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { resolve } from 'node:path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { IdentityThrottlerGuard } from './identity-throttler.guard';
 import { DatabaseConfig } from '../../config/database.config';
 import { AuthModule } from '../auth/auth.module';
 import { MailModule } from '../mail/mail.module';
@@ -27,8 +28,16 @@ import { AdminModule } from '../admin/admin.module';
       isGlobal: true,
       envFilePath: ['.env', resolve(process.cwd(), '../../.env')],
     }),
+    // 60/min per identity by default. Overridable because the load harness
+    // (ALPHA_PLAN 7.6) has to out-run a human to measure anything, and a
+    // real deployment will want to tune it without a release.
     ThrottlerModule.forRoot({
-      throttlers: [{ ttl: 60_000, limit: 60 }],
+      throttlers: [
+        {
+          ttl: Number(process.env.THROTTLE_TTL_MS) || 60_000,
+          limit: Number(process.env.THROTTLE_LIMIT) || 60,
+        },
+      ],
     }),
     TypeOrmModule.forRoot(DatabaseConfig()),
     MailModule,
@@ -50,7 +59,8 @@ import { AdminModule } from '../admin/admin.module';
     AppService,
     {
       provide: APP_GUARD,
-      useClass: ThrottlerGuard,
+      // Per user when signed in, per IP otherwise (ALPHA_PLAN 7.6).
+      useClass: IdentityThrottlerGuard,
     },
   ],
 })
