@@ -529,6 +529,25 @@ Re-verified the same way §7.5 found the problem: the 52-title batch extracted t
 
 Not done here, and flagged rather than assumed: the catalog's 300 titles still carry V1 fingerprints extracted under the old (ambiguous) wording — `needs_extraction()` now correctly marks all of them as due for re-extraction under the new `EXTRACTOR_VERSION`, but re-running the full catalog is a real API cost (≈300 calls) and a separate decision from fixing the prompt itself.
 
+### 7.7 Full catalog re-extraction under the corrected prompt (board C-14, owner approval O-6)
+
+§7.6 fixed the `linearity` wording; this closes the loop the owner asked for — re-extract all 300 titles' V1 fingerprint under the corrected prompt, publish, retrain, re-evaluate, and record the real cost.
+
+**Cost** (G7 call accounting, run `enrich-anthropic-20260904T013835Z`): 300 calls, `claude-sonnet-5`, 0 failures, **1,022,988 input + 113,903 output tokens** (3,410 / 380 per title), mean latency 4.7 s. No dollar figure is computed: `LLM_PRICES_JSON` is deliberately unset (pricing is a profitability-study input the owner has not decided, DATA_LICENSING §0) — these token counts are the actual cost data, ready for that study to price whenever it runs.
+
+**Effect**, measured against the pre-run snapshot: `linearity` moved by mean |Δ| 0.37 (median 0.40, max 0.85) across all 300 titles, 149 of them by ≥0.4 — a systematic correction, not noise. Every other of the 13 V1 dimensions moved only 0.015–0.033 on the same evidence and model, confirming the fix touched only what it targeted. The largest moves are exactly the films the old wording read backwards — textbook linear narratives the ambiguous prompt scored as "very fragmented": *12 Angry Men* and *Boyhood* 0.90 → 0.05, *Tokyo Story* / *E.T.* / *Call Me by Your Name* 0.90 → 0.10. The model's own reported confidence in `linearity` barely moved (0.702 → 0.705): it was never unsure, only consistently backwards.
+
+**Published** to `movie-postgres` (announced before/after; only `titles.fingerprint` and `content_features` touched, no account or other table): 3,890 older V1 rows superseded, never deleted; `content_features` 13,796 → 17,686 total (13,122 current); `source_records` (3,304), `public_quality_sources` (298) and `users` (16) unchanged.
+
+**Retrained and re-measured**: the four demo personas still meet the WS4 bar (`slow-burn` recovery 0.83, held-out accuracy 0.92). `claude@judge.local` from the tree, before → after this fix:
+
+| | NLL | accuracy | Spearman (API ranking vs Claude's order) | penalty chosen |
+|---|---|---|---|---|
+| Before (§7.3, C10 re-measurement) | 0.823 | 85.7 % | 0.896 | 0.03 |
+| After (this run) | 0.981 | 83 % | 0.893 (API) / 0.90 (offline) | 0.1 |
+
+A small, expected fluctuation from a real data correction — NLL and accuracy move within the noise a 14-round held-out set carries, Spearman is unchanged in practice. The judge's own ranking was never confused by `linearity`; only the catalog's feature values were, so no material change here was expected and none appeared.
+
 ---
 
 ## 8. Provider decision — LLM enrichment through the Anthropic Messages API
@@ -569,3 +588,4 @@ Owner's decision, 2026-09-03, in answer to "what is the alternative to an OpenAI
 | 2026-09-04 | Board C-4 (ALPHA_PLAN 5.5, BP §15.4): enrichment acceptance tests. Stability gate (`services/workers/src/enrichment_acceptance.py`) run on the real Arabic-evidence batch (52 titles) correctly failed on `linearity` (mean |Δ| 0.109, bound 0.08) and passed every other V1 dimension (0.02-0.04); human-review agreement gate (`apps/backend/src/scripts/measure-review-agreement.ts`) run against movie-postgres: 0 reviewed rows yet, reported honestly rather than a fabricated rate |
 | 2026-09-04 | §7.5: Arabic Wikipedia plot as second evidence for short English plots; V1 re-extracted under `+ar-evidence`, confidence measured before/after per slice, rows superseded |
 | 2026-09-04 | §7.6 (C-10): `linearity`'s name-vs-description ambiguity diagnosed and fixed (wording only, same 0/1 convention); stability gate now passes, drift 0.109→0.015 on a real re-verification |
+| 2026-09-04 | §7.7 (C-14, owner approval O-6): full 300-title V1 re-extraction under the fixed prompt published to movie-postgres (3,890 rows superseded); cost 1.02M in / 114K out tokens, no dollar figure by design; personas and judge model retrained, WS4 bar still met |
