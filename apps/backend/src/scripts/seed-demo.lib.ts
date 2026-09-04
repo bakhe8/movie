@@ -81,6 +81,8 @@ export interface CatalogEntry {
   genres: string[];
   originalLanguage?: string | null;
   externalIds: { wikidata: string; imdb?: string; tmdb?: string };
+  /** TMDB's own relative path (`fetch-tmdb-posters.ts`), or `null` when TMDB has none; absent when never fetched. */
+  posterPath?: string | null;
   fingerprint: (Partial<FilmFingerprintV1> & Record<string, unknown>) | null;
   /** The cultural-context block (fetch-cultural.ts): facts, separate from the fingerprint, never in the taste vector. */
   cultural?: CulturalBlock | null;
@@ -89,7 +91,7 @@ export interface CatalogEntry {
 // `originalLanguage` is typed here rather than picked from `Title` so this
 // module compiles on a checkout where that column has not landed yet; the
 // writer drops the key when the entity metadata has no such column.
-export type TitleSeedRow = Pick<Title, 'internalId' | 'titleEn' | 'titleAr' | 'description' | 'releaseYear' | 'genres' | 'externalIds' | 'fingerprint'> & {
+export type TitleSeedRow = Pick<Title, 'internalId' | 'titleEn' | 'titleAr' | 'description' | 'releaseYear' | 'genres' | 'externalIds' | 'fingerprint' | 'posterPath'> & {
   originalLanguage?: string | null;
 };
 
@@ -360,6 +362,7 @@ export function catalogEntryToTitle(entry: CatalogEntry): TitleSeedRow {
     genres: entry.genres ?? [],
     originalLanguage: entry.originalLanguage ?? null,
     externalIds: entry.externalIds,
+    posterPath: entry.posterPath ?? null,
     fingerprint: (entry.fingerprint as FilmFingerprintV1 | null) ?? null,
   } as TitleSeedRow;
 }

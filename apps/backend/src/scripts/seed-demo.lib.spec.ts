@@ -318,10 +318,12 @@ describe('fixture mapping and validation', () => {
     const lead = { ...entry(2, null), descriptionSource: 'wikipedia:en' as const, descriptionAr: 'x' };
     expect(catalogEntryToTitle(lead).description).toBe('x'.length ? lead.description : null);
     expect(Object.keys(catalogEntryToTitle(lead)).sort()).toEqual(
-      ['description', 'externalIds', 'fingerprint', 'genres', 'internalId', 'originalLanguage', 'releaseYear', 'titleAr', 'titleEn'].sort(),
+      ['description', 'externalIds', 'fingerprint', 'genres', 'internalId', 'originalLanguage', 'posterPath', 'releaseYear', 'titleAr', 'titleEn'].sort(),
     );
     expect(catalogEntryToTitle({ ...entry(3, null), originalLanguage: 'ar' }).originalLanguage).toBe('ar');
     expect(catalogEntryToTitle(entry(4, null)).originalLanguage).toBeNull();
+    expect(catalogEntryToTitle({ ...entry(5, null), posterPath: '/abc123.jpg' }).posterPath).toBe('/abc123.jpg');
+    expect(catalogEntryToTitle(entry(6, null)).posterPath).toBeNull(); // never fetched: unknown, stored as null like every other absent field here
   });
 
   it('flags malformed catalog entries and personas', () => {
