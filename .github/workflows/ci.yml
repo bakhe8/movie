@@ -75,7 +75,7 @@ jobs:
           DB_PORT: '5544'
 
   frontend:
-    name: frontend (types, lint, build)
+    name: frontend (types, lint, unit, build)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -90,6 +90,8 @@ jobs:
         working-directory: apps/frontend
       - name: lint
         run: npm run lint -w apps/frontend
+      - name: unit tests
+        run: npm test -w apps/frontend
       - name: production build
         run: npm run build -w apps/frontend
         env:

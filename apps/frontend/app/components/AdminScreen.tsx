@@ -23,6 +23,7 @@ function CatalogTab() {
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async (q: string, miss: '' | 'fingerprint' | 'v2' | 'license', pg: number) => {
+    await Promise.resolve(); // defer setBusy out of synchronous effect context
     setBusy(true);
     try {
       const data = await api.adminGetTitles({ query: q || undefined, missing: miss || undefined, page: pg, limit: 50 });
@@ -40,7 +41,10 @@ function CatalogTab() {
     return () => { if (debounce.current) clearTimeout(debounce.current); };
   }, [query, missing, load]);
 
-  useEffect(() => { load(query, missing, page); }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const id = setTimeout(() => { void load(query, missing, page); }, 0);
+    return () => clearTimeout(id);
+  }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className={s.tabBody}>
@@ -130,6 +134,7 @@ function FeaturesTab() {
   const [reviewing, setReviewing] = useState<string | null>(null);
 
   const load = useCallback(async (rs: string, pg: number) => {
+    await Promise.resolve(); // defer setBusy out of synchronous effect context
     setBusy(true);
     try {
       const data = await api.adminGetContentFeatures({ reviewStatus: rs || undefined, page: pg, limit: 50 });
@@ -141,8 +146,10 @@ function FeaturesTab() {
     }
   }, []);
 
-  useEffect(() => { setPage(1); load(reviewStatus, 1); }, [reviewStatus, load]);
-  useEffect(() => { load(reviewStatus, page); }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const id = setTimeout(() => { void load(reviewStatus, page); }, 0);
+    return () => clearTimeout(id);
+  }, [reviewStatus, page, load]);
 
   const markSampled = async (featureId: string) => {
     setReviewing(featureId);
@@ -160,7 +167,7 @@ function FeaturesTab() {
   return (
     <div className={s.tabBody}>
       <div className={s.toolbar}>
-        <select className={s.filter} value={reviewStatus} onChange={e => setReviewStatus(e.target.value)}>
+        <select className={s.filter} value={reviewStatus} onChange={e => { setReviewStatus(e.target.value); setPage(1); }}>
           <option value="unreviewed">غير مراجَع</option>
           <option value="sampled">مأخوذ عينة</option>
           <option value="human_verified">بشري مُتحقَّق</option>
@@ -327,6 +334,7 @@ function PrivacyTab() {
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async (t: string, st: string, pg: number) => {
+    await Promise.resolve(); // defer setBusy out of synchronous effect context
     setBusy(true);
     try {
       const data = await api.adminGetPrivacyRequests({ type: t || undefined, status: st || undefined, page: pg, limit: 50 });
@@ -338,19 +346,21 @@ function PrivacyTab() {
     }
   }, []);
 
-  useEffect(() => { setPage(1); load(type, status, 1); }, [type, status, load]);
-  useEffect(() => { load(type, status, page); }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const id = setTimeout(() => { void load(type, status, page); }, 0);
+    return () => clearTimeout(id);
+  }, [type, status, page, load]);
 
   return (
     <div className={s.tabBody}>
       <div className={s.toolbar}>
-        <select className={s.filter} value={type} onChange={e => setType(e.target.value)}>
+        <select className={s.filter} value={type} onChange={e => { setType(e.target.value); setPage(1); }}>
           <option value="">كل الأنواع</option>
           <option value="export">تصدير</option>
           <option value="delete">حذف</option>
           <option value="reset">إعادة ضبط</option>
         </select>
-        <select className={s.filter} value={status} onChange={e => setStatus(e.target.value)}>
+        <select className={s.filter} value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}>
           <option value="">كل الحالات</option>
           <option value="requested">مطلوب</option>
           <option value="verifying">جارٍ التحقق</option>

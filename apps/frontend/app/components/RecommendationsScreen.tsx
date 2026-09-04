@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { api, ApiError, type Recommendation, type RecommendationTrack } from '../lib/api';
+import { api, type Recommendation, type RecommendationTrack } from '../lib/api';
 import { TRACK_COPY } from '../lib/copy';
 import { formatNumber, type PersonalFitLevel } from '../lib/format';
 import { WorkCard } from './WorkCard';
