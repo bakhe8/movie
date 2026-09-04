@@ -163,7 +163,7 @@ docker compose -f docker/docker-compose.prod.yml --env-file docker/.env.prod --p
 docker compose -f docker/docker-compose.prod.yml --env-file docker/.env.prod up -d
 ```
 
-Backup and restore (`docker/backup-postgres.sh`, `docker/restore-postgres.sh`) are documented and drilled in `docs/ALPHA_PLAN_2026-09-04.md` §8.12. This is the generic self-hosted path; §8.2 below is the actual hosting decision (ADR-87).
+Backup and restore (`docker/backup-postgres.sh`, `docker/restore-postgres.sh`) are documented and drilled in `docs/ALPHA_PLAN_2026-09-04.md` §8.12. Since AUDIT_2026-09-05 H8/H9 a backup is verified with `pg_restore --list` before it gets its name, and the restore takes the compose file as a required argument and asks for the database name to be typed back (`--yes` for a scripted drill). This is the generic self-hosted path; §8.2 below is the actual hosting decision (ADR-87).
 
 ### 8.2 Hosting: Railway + Cloudflare (ALPHA_PLAN 7.2, board C-18, owner decision O-2)
 
