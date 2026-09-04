@@ -64,6 +64,20 @@ const REASON_MIN_SHARE_OF_TOP = 0.2;
 // it is the domain-standard floor for a binary comparison.
 const HELD_OUT_CHANCE_ACCURACY = 0.5;
 
+// Above chance is not the same as predictive. The first non-synthetic ranker
+// (a real human order, DEMO_DATA_PLAN §7.1) landed on 'strong' from its triad
+// count alone while predicting only 0.67 of held-out pairs -- the band was
+// claiming more than the evidence supported (board C8). Each band a tendency
+// is shown under now carries its own held-out floor: 'strong' needs 0.8,
+// 'likely' 0.7. The synthetic personas that pass the plan's own bar sit at
+// 0.75-1.00, so the floors separate a genuinely predictive model from one
+// that is merely better than a coin flip.
+const STRONG_MIN_HELD_OUT_ACCURACY = 0.8;
+const LIKELY_MIN_HELD_OUT_ACCURACY = 0.7;
+
+// Weakest to strongest; used to take the lower of two bands.
+const BAND_ORDER: ConfidenceBand[] = ['inconclusive', 'initial', 'likely', 'strong'];
+
 // z = |weight| / standardError. 1.0 is the most permissive defensible bar --
 // "at least one standard error from zero", not a strict significance test
 // (that would be ~1.96 for 95% confidence) -- consistent with
@@ -460,6 +474,11 @@ export class RecommendationsService {
       return 'inconclusive';
     }
 
+    // The floors below cap whatever the rest of this method concludes: no
+    // amount of triad count, diversity or posterior stability makes a band
+    // the held-out accuracy does not support (C8).
+    const ceiling = this.heldOutAccuracyCeiling(snapshot);
+
     // Fewer than 2 distinct genres across the training evidence: "one series
     // repeated" by BP §9.2's own phrase, not diverse evidence.
     if (snapshot.trainingGenreDiversity !== null && snapshot.trainingGenreDiversity < MIN_TRAINING_GENRE_DIVERSITY) {
@@ -481,13 +500,23 @@ export class RecommendationsService {
     if (snapshot.trainingTriadCount < 3) {
       return 'inconclusive';
     }
-    if (snapshot.trainingTriadCount < 10) {
-      return 'initial';
+    const fromTriadCount: ConfidenceBand =
+      snapshot.trainingTriadCount < 10 ? 'initial' : snapshot.trainingTriadCount < 20 ? 'likely' : 'strong';
+    return BAND_ORDER.indexOf(ceiling) < BAND_ORDER.indexOf(fromTriadCount) ? ceiling : fromTriadCount;
+  }
+
+  // The highest band this snapshot's held-out accuracy supports. Unknown
+  // accuracy (below the 5-triad floor, ADR-31) caps nothing, exactly like
+  // every other held-out-gated check here.
+  private heldOutAccuracyCeiling(snapshot: UserModelSnapshot): ConfidenceBand {
+    const accuracy = snapshot.heldOutPairwiseAccuracy;
+    if (accuracy === null || accuracy === undefined) {
+      return 'strong';
     }
-    if (snapshot.trainingTriadCount < 20) {
-      return 'likely';
+    if (accuracy >= STRONG_MIN_HELD_OUT_ACCURACY) {
+      return 'strong';
     }
-    return 'strong';
+    return accuracy >= LIKELY_MIN_HELD_OUT_ACCURACY ? 'likely' : 'initial';
   }
 
   private hasStablePosteriorDirection(snapshot: UserModelSnapshot): boolean {

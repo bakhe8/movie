@@ -555,7 +555,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Three tracks | ❌ | ❌ | every result is `safe` (`§4.4`, ADR-8) |
 | Candidate filtering | ✅ | ✅ | excludes `watched` and unfingerprinted only; `not_watched` stays a candidate (`§2.4 #3`) |
 | Unknown dimensions | ✅ | ✅ | pool-mean imputation, `fingerprintCoverage`, one-band demotion (`§11.3`, ADR-19) |
-| Confidence band (verbal, no %) | ✅ | 🟡 | band from triad count, fingerprint-quality demotion, held-out prediction success, posterior stability, genre and language diversity (ADR-59, ADR-62, ADR-64); director diversity still missing — no longer blocked on gap 6 (closed, ADR-70), just not yet wired (gap 5) |
+| Confidence band (verbal, no %) | ✅ | 🟡 | band from triad count, capped by a per-band held-out accuracy floor (0.8 strong / 0.7 likely, ADR-79), fingerprint-quality demotion, posterior stability, and all three `§9.2` diversity axes — genre, language, director (ADR-59, ADR-62, ADR-64, ADR-71). Still no Brier/ECE calibration (`§9.3`) |
 | Internal rerank blend (`§10.3`, ADR-20) | ❌ | ❌ | |
 | Attribution gate + `evidenceSource` | 🟡 | 🟡 | every reason carries `evidenceSource: 'individual'` (MVP phase 1 of `§7.6`, SPECIFICATION §5.3) and the screen labels it "from your own choices"; the gate itself (`population_enriched`, `§12.2`) waits for the shared space (ADR-13) |
 | Outcomes endpoint | ❌ | ❌ | `§13.1 outcomes` — table exists since M5, empty |

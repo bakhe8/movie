@@ -450,9 +450,9 @@ describe('RecommendationsService', () => {
       expect(result[0].confidenceBand).toBe('inconclusive');
     });
 
-    it('keeps the triad-count band when held-out accuracy is meaningfully above chance', async () => {
+    it('keeps the triad-count band when held-out accuracy clears the band it claims', async () => {
       profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
-      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot(30, 0.75));
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot(30, 0.85));
       statesRepository.find.mockResolvedValue([]);
       const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
       titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
@@ -460,6 +460,36 @@ describe('RecommendationsService', () => {
       const result = await service.findForProfile('user-1', 'profile-1', 10);
 
       expect(result[0].confidenceBand).toBe('strong');
+    });
+
+    // C8: 30 triads alone used to say 'strong' at 0.67 held-out accuracy --
+    // above chance, but not predictive enough for the claim.
+    it.each([
+      [0.67, 'initial'],
+      [0.75, 'likely'],
+      [0.8, 'strong'],
+    ] as const)('caps the band at what held-out accuracy %f supports: %s', async (accuracy, expected) => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot(30, accuracy));
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+      expect(result[0].confidenceBand).toBe(expected);
+    });
+
+    it('never raises a band: a high accuracy on few triads stays initial', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot(5, 0.95));
+      statesRepository.find.mockResolvedValue([]);
+      const titles = [{ id: 'title-1', fingerprint: zeroFingerprint() }] as unknown as Title[];
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const result = await service.findForProfile('user-1', 'profile-1', 10);
+
+      expect(result[0].confidenceBand).toBe('initial');
     });
 
     it('falls back to the triad-count heuristic when held-out accuracy is unknown (below the 5-triad floor, ADR-31)', async () => {
