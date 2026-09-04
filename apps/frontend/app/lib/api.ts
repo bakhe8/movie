@@ -442,4 +442,55 @@ export const api = {
   // safe no-op.
   updateConsents: (consents: { purpose: ConsentPurpose; version: string; granted: boolean }[]) =>
     request<Consent[]>('/consents', { method: 'PUT', body: JSON.stringify({ consents }) }),
+
+  // ── Admin (role:admin required; 403 { reason:'admin_required' } otherwise) ──
+
+  adminGetTitles: (params: { query?: string; missing?: 'fingerprint' | 'v2' | 'license'; page?: number; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.query) qs.set('query', params.query);
+    if (params.missing) qs.set('missing', params.missing);
+    if (params.page) qs.set('page', String(params.page));
+    if (params.limit) qs.set('limit', String(params.limit));
+    return request<{
+      items: { id: string; internalId: string; titleEn: string; titleAr: string; releaseYear: number | null; hasFingerprint: boolean; hasV2: boolean; licenseStatus: string; sourceRecords: number; unreviewedFeatures: number }[];
+      total: number; page: number; limit: number; totalPages: number;
+    }>(`/admin/titles?${qs}`);
+  },
+
+  adminGetContentFeatures: (params: { reviewStatus?: string; titleId?: string; featureKey?: string; page?: number; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.reviewStatus) qs.set('reviewStatus', params.reviewStatus);
+    if (params.titleId) qs.set('titleId', params.titleId);
+    if (params.featureKey) qs.set('featureKey', params.featureKey);
+    if (params.page) qs.set('page', String(params.page));
+    if (params.limit) qs.set('limit', String(params.limit));
+    return request<{
+      items: { id: string; titleId: string; featureKey: string; value: number; extractorVersion: string; reviewStatus: string; title: { id: string; internalId: string; titleEn: string; titleAr: string } | null }[];
+      total: number; page: number; totalPages: number;
+    }>(`/admin/content-features?${qs}`);
+  },
+
+  adminReviewFeature: (featureId: string, data: { reviewStatus: string; correctedValue?: number; note?: string }) =>
+    request<{ id: string; reviewStatus: string }>(`/admin/content-features/${featureId}/review`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  adminGetModels: () =>
+    request<{
+      versions: { version: string; rankerType: string; active: boolean; fingerprintSchemaVersion: string; createdAt: string; stats: { snapshotCount: number; profileCount: number } | null }[];
+      unregistered: { modelVersion: string; snapshotCount: number; profileCount: number }[];
+    }>('/admin/models'),
+
+  adminGetPrivacyRequests: (params: { type?: string; status?: string; page?: number; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.type) qs.set('type', params.type);
+    if (params.status) qs.set('status', params.status);
+    if (params.page) qs.set('page', String(params.page));
+    if (params.limit) qs.set('limit', String(params.limit));
+    return request<{
+      items: { id: string; type: string; status: string; requestedAt: string; executeAfter: string | null; completedAt: string | null }[];
+      total: number; page: number; totalPages: number;
+    }>(`/admin/privacy-requests?${qs}`);
+  },
 };
