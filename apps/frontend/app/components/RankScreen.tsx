@@ -149,8 +149,25 @@ export function RankScreen({
   const dragRef = useRef<DragState | null>(null);
   const startYRef = useRef(0);
   const cardRefs = useRef<(HTMLLIElement | null)[]>([]);
+  // The three guards below are refs, not state, because each is read and
+  // written synchronously inside the handler that needs it -- a state flag
+  // only takes effect on the next render (AUDIT_2026-09-05 M6, M8).
+  //
+  // A second submit or confirm while the first is still in the air is
+  // dropped on entry, whatever the button's disabled attribute says.
+  const inFlightRef = useRef(false);
+  // One Idempotency-Key per loaded triad, minted in hydrate() and reused by
+  // every submit attempt for that triad: a retry after a timeout then
+  // replays the first attempt's result (ADR-15) instead of arriving with a
+  // fresh key the backend would refuse as "already submitted".
+  const rankKeyRef = useRef<string | null>(null);
+  // Every loadTriad() call takes the next sequence number, and a response
+  // belonging to an earlier call than the latest is discarded -- so a
+  // profile switch mid-flight cannot be clobbered by the old profile's
+  // triad (the same guard DiscoverScreen and WorkScreen apply to their loads).
+  const loadSeqRef = useRef(0);
 
-  const hydrate = useCallback(async (current: Triad) => {
+  const hydrate = useCallback(async (current: Triad, isCurrent: () => boolean = () => true) => {
     // Cards are shown in the server's displayOrder (randomised independently
     // of titleIds so position bias can be measured, blueprint §4.3). The
     // triad carries its three titles inline in that order; the per-title
@@ -158,30 +175,40 @@ export function RankScreen({
     const titles = current.items?.length
       ? current.items
       : await Promise.all((current.displayOrder ?? current.titleIds).map((id) => api.getTitle(id)));
+    if (!isCurrent()) return;
+    rankKeyRef.current = crypto.randomUUID();
     setTriad(current);
     setOrder(titles);
     setPending(null);
   }, []);
 
   const loadTriad = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
+    const isCurrent = () => seq === loadSeqRef.current;
     setPhase({ kind: 'loading' });
     // Rounds so far, shown next to the instruction; independent of whether a
     // new triad can be drawn right now.
     api
       .getCompletedTriads(profileId)
-      .then((completed) => setCompletedRounds(completed.length))
-      .catch(() => setCompletedRounds(null));
+      .then((completed) => {
+        if (isCurrent()) setCompletedRounds(completed.length);
+      })
+      .catch(() => {
+        if (isCurrent()) setCompletedRounds(null);
+      });
     try {
       // ADR-80: 200 with a state discriminator instead of 400.
       const result = await api.getCurrentTriad(profileId);
+      if (!isCurrent()) return;
       if (result.state === 'need_more_watched') {
         setPhase({ kind: 'blocked', needed: result.needed });
       } else {
-        await hydrate(result);
+        await hydrate(result, isCurrent);
+        if (!isCurrent()) return;
         setPhase({ kind: 'ready' });
       }
     } catch {
-      setPhase({ kind: 'failed' });
+      if (isCurrent()) setPhase({ kind: 'failed' });
     }
   }, [profileId, hydrate]);
 
@@ -275,16 +302,17 @@ export function RankScreen({
   // --- Actions -------------------------------------------------------------
 
   async function submitRanking() {
-    if (!triad) return;
+    if (!triad || inFlightRef.current) return;
+    inFlightRef.current = true;
     setSaving(true);
     try {
       // `order` is the user's preferred sequence (best first); `ranking` is
       // the title ids themselves, not indices into triad.titleIds (ADR-15).
-      // A fresh key per attempt (not per retry) makes a network retry or
-      // double-click safe -- the backend returns the same result instead of
-      // an "already submitted" error.
+      // The key was minted when this triad was loaded and is the same on
+      // every attempt for it, so a retry after a timeout or a lost response
+      // replays the first attempt's result rather than colliding with it.
       const ranking = order.map((title) => title.id);
-      await api.rankTriad(triad.id, ranking, crypto.randomUUID());
+      await api.rankTriad(triad.id, ranking, (rankKeyRef.current ??= crypto.randomUUID()));
       const reached = (completedRounds ?? 0) + 1;
       setCompletedRounds(reached);
       // The third round is where a first result becomes possible (§5.1 step
@@ -294,12 +322,14 @@ export function RankScreen({
     } catch {
       setNotice(t.loadFailed);
     } finally {
+      inFlightRef.current = false;
       setSaving(false);
     }
   }
 
   async function confirmReplacement() {
-    if (!triad || !pending) return;
+    if (!triad || !pending || inFlightRef.current) return;
+    inFlightRef.current = true;
     setReplacing(true);
     try {
       const result = await api.replaceTriadItem(triad.id, pending.titleId, pending.reason);
@@ -315,6 +345,7 @@ export function RankScreen({
     } catch {
       setNotice(t.replaceFailed);
     } finally {
+      inFlightRef.current = false;
       setReplacing(false);
     }
   }

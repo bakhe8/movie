@@ -6,6 +6,11 @@ import type { MetadataRoute } from 'next';
 // background_color/theme_color use the light-theme tokens (styles/tokens.css)
 // since a manifest carries only one static pair; the HTML <head> separately
 // declares a dark-aware theme-color via the `viewport` export in layout.tsx.
+// No `lang`, and `dir: 'auto'`: the app runs in Arabic or English at the
+// user's choice (app/page.tsx keeps <html lang/dir> in step), but this route
+// is static and cannot see that choice, and its own strings are English --
+// so it declares neither language and lets the OS derive direction from the
+// text it is given (AUDIT_2026-09-05 M7).
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'Reel',
@@ -15,8 +20,7 @@ export default function manifest(): MetadataRoute.Manifest {
     display: 'standalone',
     background_color: '#f3f5f5',
     theme_color: '#0b7a70',
-    lang: 'ar',
-    dir: 'rtl',
+    dir: 'auto',
     categories: ['entertainment'],
     icons: [
       { src: '/icon-192', sizes: '192x192', type: 'image/png', purpose: 'any' },

@@ -9,7 +9,7 @@ import '../../jest-dom-vitest';
  * 4. Blocked state when need_more_watched
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RankScreen } from '../components/RankScreen';
 
@@ -128,5 +128,90 @@ describe('RankScreen — blocked state', () => {
     await waitFor(() =>
       expect(screen.getByText(/فيلمين|2|أفلام/)).toBeInTheDocument(),
     );
+  });
+});
+
+// ── AUDIT_2026-09-05 M6 / M8 ──────────────────────────────────────────────────
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+describe('RankScreen — submit guards (M6)', () => {
+  it('submits once for a double-click, with one idempotency key', async () => {
+    const user = userEvent.setup();
+    const inFlight = deferred<Record<string, never>>();
+    mockApi.rankTriad.mockReturnValue(inFlight.promise);
+    renderRank();
+    await waitFor(() => screen.getByText('رأس ممحاة'));
+
+    await user.dblClick(screen.getByRole('button', { name: 'حفظ الترتيب' }));
+
+    expect(mockApi.rankTriad).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      inFlight.resolve({});
+      await inFlight.promise;
+    });
+    await waitFor(() => expect(mockApi.getCurrentTriad).toHaveBeenCalledTimes(2));
+  });
+
+  // The Idempotency-Key is minted per loaded triad, not per attempt: a retry
+  // after a timeout must carry the key the first attempt carried, so the
+  // backend replays that result (ADR-15) instead of refusing a new key.
+  it('retries a failed submit with the same idempotency key', async () => {
+    const user = userEvent.setup();
+    mockApi.rankTriad.mockRejectedValueOnce(new Error('network')).mockResolvedValueOnce({});
+    renderRank();
+    await waitFor(() => screen.getByText('رأس ممحاة'));
+
+    await user.click(screen.getByRole('button', { name: 'حفظ الترتيب' }));
+    await screen.findByText('تعذّر تحميل الثلاثية.');
+    await user.click(screen.getByRole('button', { name: 'حفظ الترتيب' }));
+
+    await waitFor(() => expect(mockApi.rankTriad).toHaveBeenCalledTimes(2));
+    const [first, second] = mockApi.rankTriad.mock.calls;
+    expect(first[0]).toBe('triad-1');
+    expect(second[0]).toBe('triad-1');
+    expect(first[2]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(second[2]).toBe(first[2]);
+  });
+});
+
+describe('RankScreen — stale load guard (M8)', () => {
+  it("ignores the previous profile's triad when it arrives after a profile switch", async () => {
+    const late = deferred<typeof TRIAD_READY>();
+    const TRIAD_P2 = {
+      ...TRIAD_READY,
+      id: 'triad-p2',
+      profileId: 'p2',
+      titleIds: ['t4', 't5', 't6'],
+      displayOrder: ['t4', 't5', 't6'],
+      items: [
+        { id: 't4', titleEn: 'Alien', titleAr: 'الكائن الفضائي', releaseYear: 1979, genres: ['Sci-Fi'] },
+        { id: 't5', titleEn: 'Heat', titleAr: 'هيت', releaseYear: 1995, genres: ['Crime'] },
+        { id: 't6', titleEn: 'Ran', titleAr: 'ران', releaseYear: 1985, genres: ['Drama'] },
+      ],
+    };
+    mockApi.getCurrentTriad.mockImplementation((profileId: string) =>
+      profileId === 'p1' ? late.promise : Promise.resolve(TRIAD_P2),
+    );
+
+    const { rerender } = render(<RankScreen lang="ar" profileId="p1" />);
+    rerender(<RankScreen lang="ar" profileId="p2" />);
+    await screen.findByText('الكائن الفضائي');
+
+    // p1's response lands after p2's: it must not replace what p2 showed.
+    await act(async () => {
+      late.resolve(TRIAD_READY);
+      await late.promise;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(screen.queryByText('رأس ممحاة')).toBeNull();
+    expect(screen.getByText('الكائن الفضائي')).toBeInTheDocument();
   });
 });
