@@ -52,7 +52,9 @@ describe('initObservability', () => {
   });
 
   // A DSN the SDK cannot parse must not stop the app it exists to watch.
-  it('reports a malformed Sentry DSN and boots anyway', async () => {
+  // 20s: the first test to import the Sentry SDK pays its cold-load cost,
+  // which exceeds the 5s default when 36 spec files run in parallel.
+  it('reports a malformed Sentry DSN and boots anyway', { timeout: 20_000 }, async () => {
     const started = await initObservability({ ...base, sentryDsn: 'not-a-dsn', otelEndpoint: null });
 
     expect(started).toEqual({ sentry: false, tracing: false });

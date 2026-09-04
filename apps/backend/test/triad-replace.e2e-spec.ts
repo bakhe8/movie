@@ -176,4 +176,41 @@ describe('Triad replacement (real HTTP, real DB)', () => {
 
     expect(await replacements.count({ where: { triadId: triad.id } })).toBe(0);
   });
+
+  // H3 (AUDIT_2026-09-05): two concurrent replacements of the same title --
+  // a double-click, or a retry sent before the first response arrives --
+  // serialize on a row lock inside the transaction. Before it, both passed
+  // the checks on one stale read, both drew the spare, and the later save
+  // overwrote the earlier swap while its event row still claimed it
+  // happened. The invariants hold whichever way the two land: one event
+  // row, one swap, and no caller sees a 500.
+  it('serializes two concurrent replacements of the same title: one event row, one swap, no 500', async () => {
+    const { token, triad } = await startRound();
+    const replaced = triad.titleIds[1];
+    const spare = titleIds.find((id) => !triad.titleIds.includes(id)) as string;
+    const expected = [triad.titleIds[0], spare, triad.titleIds[2]];
+    const replace = () =>
+      request(app.getHttpServer())
+        .post(`/triads/${triad.id}/replace`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ titleId: replaced, reason: 'not_watched' });
+
+    const responses = await Promise.all([replace(), replace()]);
+
+    // The winner answers 201 with the swap. The loser is handed the winner's
+    // triad (201) when it queued on the lock; if it only reached the database
+    // after the winner committed, its pre-transaction check answers 400 --
+    // never a 500, and never a second swap.
+    const statuses = responses.map((response) => response.status).sort();
+    expect(statuses[0]).toBe(201);
+    expect([201, 400]).toContain(statuses[1]);
+    for (const response of responses.filter((candidate) => candidate.status === 201)) {
+      expect(response.body.status).toBe('active');
+      expect(response.body.titleIds).toEqual(expected);
+    }
+
+    const rows = await replacements.find({ where: { triadId: triad.id } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ replacedTitleId: replaced, replacementTitleId: spare, reason: 'not_watched' });
+  });
 });

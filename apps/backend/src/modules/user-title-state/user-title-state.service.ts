@@ -32,7 +32,33 @@ export class UserTitleStateService {
     }
 
     const existing = await this.statesRepository.findOne({ where: { profileId, titleId } });
-    const state = existing ?? this.statesRepository.create({ profileId, titleId });
+    const state = this.applyUpdate(existing ?? this.statesRepository.create({ profileId, titleId }), updateTitleStateDto);
+
+    try {
+      return await this.statesRepository.save(state);
+    } catch (error) {
+      if (existing || !this.isUniqueConstraintError(error)) {
+        throw error;
+      }
+      // Lost a race to a concurrent first write for the same (profile,
+      // title) -- a double-fired PATCH, or WatchEventsService.create()'s own
+      // call into this upsert -- and @Unique(['profileId', 'titleId'])
+      // refused the second INSERT. Re-read the winner's row and apply this
+      // update on top of it: exactly what a sequential second call would
+      // have done, instead of a raw 500 (AUDIT_2026-09-05 H2; the same
+      // lost-race handling TriadsService and AuthService.register use).
+      const winner = await this.statesRepository.findOne({ where: { profileId, titleId } });
+      if (!winner) {
+        throw error;
+      }
+      return this.statesRepository.save(this.applyUpdate(winner, updateTitleStateDto));
+    }
+  }
+
+  // The PATCH's effect on a row -- freshly created, found, or re-read after
+  // a lost race -- kept in one place so the retry cannot drift from the
+  // first attempt.
+  private applyUpdate(state: UserTitleState, updateTitleStateDto: UpdateTitleStateDto): UserTitleState {
     state.state = updateTitleStateDto.state;
 
     // watchedAt only means anything for state 'watched' (M1): a caller-
@@ -57,7 +83,11 @@ export class UserTitleStateService {
 
     // importedRating/ratingSource are intentionally untouched here — this endpoint never
     // writes a rating (see UpdateTitleStateDto). Only a future import path may set them.
-    return this.statesRepository.save(state);
+    return state;
+  }
+
+  private isUniqueConstraintError(error: unknown): boolean {
+    return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505';
   }
 
   async findByState(userId: string, profileId: string, state: TitleState): Promise<UserTitleState[]> {

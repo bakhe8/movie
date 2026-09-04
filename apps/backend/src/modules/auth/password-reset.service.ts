@@ -64,7 +64,7 @@ export class PasswordResetService {
     await this.resetsRepository.update({ userId: user.id, usedAt: IsNull(), revokedAt: IsNull() }, { revokedAt: new Date() });
 
     const raw = randomBytes(32).toString('base64url');
-    await this.resetsRepository.save(
+    const reset = await this.resetsRepository.save(
       this.resetsRepository.create({
         userId: user.id,
         tokenHash: hashResetToken(raw),
@@ -74,19 +74,36 @@ export class PasswordResetService {
     );
 
     const link = `${this.appUrl}/reset-password?token=${raw}`;
-    await this.mailer.send({
-      to: user.email,
-      subject: 'إعادة تعيين كلمة المرور · Reset your password',
-      text: `افتح الرابط لتعيين كلمة مرور جديدة (صالح ${Math.round(this.ttlMs / 60_000)} دقيقة):\n${link}\n\nOpen this link to set a new password. If you did not ask for this, ignore this message.`,
-    });
+    // A provider failure (bounce, outage, unverified sender) must resolve
+    // exactly like a success from outside: letting it propagate would answer
+    // 500 for a real address and 202 for an unknown one -- the membership
+    // oracle this route exists not to be (AUDIT_2026-09-05 H1). The token is
+    // revoked (nobody ever received it), and the failure is logged and
+    // audited so an operator can see the request went nowhere instead of
+    // finding an orphaned live row.
+    let delivered = true;
+    try {
+      await this.mailer.send({
+        to: user.email,
+        subject: 'إعادة تعيين كلمة المرور · Reset your password',
+        text: `افتح الرابط لتعيين كلمة مرور جديدة (صالح ${Math.round(this.ttlMs / 60_000)} دقيقة):\n${link}\n\nOpen this link to set a new password. If you did not ask for this, ignore this message.`,
+      });
+    } catch (error) {
+      delivered = false;
+      // User id only: never the address, the link or the token.
+      this.logger.error(
+        `password-reset mail not delivered for user ${user.id}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      await this.resetsRepository.update({ id: reset.id }, { revokedAt: new Date() });
+    }
 
     await this.audit.record({
       actorUserId: user.id,
       action: 'auth.password_reset.requested',
       resource: 'user',
       resourceId: user.id,
-      status: 'ok',
-      reason: null,
+      status: delivered ? 'ok' : 'failed',
+      reason: delivered ? null : 'mail_send_failed',
       ip,
     });
   }

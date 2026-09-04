@@ -6,6 +6,7 @@ import request from 'supertest';
 import type { Repository } from 'typeorm';
 import { AppModule } from '../src/modules/app/app.module';
 import { Title } from '../src/entities/title.entity';
+import { UserTitleState } from '../src/entities/user-title-state.entity';
 
 async function registerAndCreateProfile(app: INestApplication) {
   const email = `m1-state-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
@@ -33,6 +34,7 @@ async function registerAndCreateProfile(app: INestApplication) {
 describe('Watch state PATCH semantics (M1)', () => {
   let app: INestApplication;
   let titleId: string;
+  let states: Repository<UserTitleState>;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -40,6 +42,7 @@ describe('Watch state PATCH semantics (M1)', () => {
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
     await app.init();
 
+    states = app.get<Repository<UserTitleState>>(getRepositoryToken(UserTitleState));
     const titlesRepository = app.get<Repository<Title>>(getRepositoryToken(Title));
     const suffix = Date.now();
     const title = await titlesRepository.save({
@@ -100,5 +103,30 @@ describe('Watch state PATCH semantics (M1)', () => {
       .expect(200);
 
     expect(response.body.watchedAt).toBeNull();
+  });
+
+  // H2 (AUDIT_2026-09-05): concurrent first writes for the same (profile,
+  // title) -- a double-fired PATCH, or a watch event racing the screen's own
+  // PATCH -- all pass the find-then-create check, and the unique constraint
+  // refuses every INSERT but the first. That used to surface as a raw 500;
+  // the losers now apply their PATCH on top of the winner's row. Four at
+  // once, so the race is actually exercised rather than merely possible.
+  it('answers every one of four concurrent first writes for the same title with 200 and keeps exactly one row', async () => {
+    const { token, profileId } = await registerAndCreateProfile(app);
+    const notes = ['one', 'two', 'three', 'four'];
+    const write = (note: string) =>
+      request(app.getHttpServer())
+        .patch(`/profiles/${profileId}/titles/${titleId}/state`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ state: 'watched', notes: note });
+
+    const responses = await Promise.all(notes.map(write));
+
+    expect(responses.map((response) => response.status)).toEqual([200, 200, 200, 200]);
+    const rows = await states.find({ where: { profileId, titleId } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].state).toBe('watched');
+    expect(rows[0].watchedAt).toBeInstanceOf(Date);
+    expect(notes).toContain(rows[0].notes);
   });
 });

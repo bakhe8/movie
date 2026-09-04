@@ -63,8 +63,6 @@ export class TriadsService {
     private readonly triadsRepository: Repository<Triad>,
     @InjectRepository(UserTitleState)
     private readonly statesRepository: Repository<UserTitleState>,
-    @InjectRepository(TriadReplacement)
-    private readonly replacementsRepository: Repository<TriadReplacement>,
     @InjectRepository(Recommendation)
     private readonly recommendationsRepository: Repository<Recommendation>,
     @InjectRepository(Outcome)
@@ -343,19 +341,41 @@ export class TriadsService {
       throw new BadRequestException("Title is not one of this triad's three title ids");
     }
 
-    const priorReplacements = await this.replacementsRepository.count({ where: { triadId } });
-    const replacementTitleId =
-      priorReplacements < MAX_REPLACEMENTS_PER_TRIAD
-        ? await this.pickReplacementTitle(triad.profileId, triad.titleIds)
-        : null;
-
     // One transaction: the exposure change, the event row and the triad
     // update all land or none do -- a triad must never keep showing a title
     // the user just said they haven't watched.
     const updated = await this.triadsRepository.manager.transaction(async (manager) => {
+      // Row lock (SELECT ... FOR UPDATE): two concurrent calls for the same
+      // triad -- a double-click, or a retry sent before the first response
+      // arrives -- serialize here. Without it both pass the checks above on
+      // the same stale read, both pick a title, and the later save()
+      // overwrites the earlier swap while its event row still claims it
+      // happened (AUDIT_2026-09-05 H3). Every decision below reads the
+      // locked row, never the pre-transaction one.
+      const locked = await manager.findOne(Triad, { where: { id: triadId }, lock: { mode: 'pessimistic_write' } });
+      if (!locked) {
+        throw new NotFoundException('Triad not found');
+      }
+      if (locked.status !== 'active') {
+        throw new BadRequestException('Only an active triad can have an item replaced');
+      }
+      if (!locked.titleIds.includes(replaceTriadItemDto.titleId)) {
+        // The other call already swapped this very title out: nothing is
+        // left to replace, so hand back its result rather than log a second
+        // event for a title no longer in the triad -- the same "return the
+        // winner" answer getCurrent() and rank() give to a lost race.
+        return locked;
+      }
+
+      const priorReplacements = await manager.count(TriadReplacement, { where: { triadId } });
+      const replacementTitleId =
+        priorReplacements < MAX_REPLACEMENTS_PER_TRIAD
+          ? await this.pickReplacementTitle(locked.profileId, locked.titleIds)
+          : null;
+
       await this.applyReplacementReason(
         manager,
-        triad.profileId,
+        locked.profileId,
         replaceTriadItemDto.titleId,
         replaceTriadItemDto.reason,
       );
@@ -364,7 +384,7 @@ export class TriadsService {
       // when nothing could be swapped in.
       await manager.save(
         manager.create(TriadReplacement, {
-          triadId: triad.id,
+          triadId: locked.id,
           replacedTitleId: replaceTriadItemDto.titleId,
           replacementTitleId,
           reason: replaceTriadItemDto.reason,
@@ -374,16 +394,16 @@ export class TriadsService {
       if (replacementTitleId) {
         // Same slot, new title; displayOrder is re-drawn so the swapped-in
         // card's position is as unbiased as the original draw (ADR-17).
-        triad.titleIds = triad.titleIds.map((id) => (id === replaceTriadItemDto.titleId ? replacementTitleId : id));
-        triad.displayOrder = this.shuffle([...triad.titleIds]);
+        locked.titleIds = locked.titleIds.map((id) => (id === replaceTriadItemDto.titleId ? replacementTitleId : id));
+        locked.displayOrder = this.shuffle([...locked.titleIds]);
       } else {
         // Nothing eligible left, or the per-triad limit is exceeded: the
         // event above is still recorded, the triad is abandoned rather than
         // patched. The next getCurrent() draws a fresh one -- or says exactly
         // how many more watched titles it needs.
-        triad.status = 'skipped';
+        locked.status = 'skipped';
       }
-      return manager.save(triad);
+      return manager.save(locked);
     });
     return this.withItems(updated);
   }

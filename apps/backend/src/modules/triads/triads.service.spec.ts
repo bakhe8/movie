@@ -19,6 +19,7 @@ function repoMock() {
   // can assert every write that happened inside the transaction.
   const manager = {
     findOne: vi.fn(),
+    count: vi.fn(),
     save: vi.fn(async (entity: unknown) => entity),
     create: vi.fn((_target: unknown, data: unknown) => data),
     transaction: vi.fn(async (run: (manager: unknown) => Promise<unknown>) => run(manager)),
@@ -56,7 +57,6 @@ describe('TriadsService', () => {
   let titlesRepository: ReturnType<typeof repoMock>;
   let triadsRepository: ReturnType<typeof repoMock>;
   let statesRepository: ReturnType<typeof repoMock>;
-  let replacementsRepository: ReturnType<typeof repoMock>;
   let recommendationsRepository: ReturnType<typeof repoMock>;
   let outcomesRepository: ReturnType<typeof repoMock>;
   let service: TriadsService;
@@ -68,7 +68,6 @@ describe('TriadsService', () => {
     titlesRepository = repoMock();
     triadsRepository = repoMock();
     statesRepository = repoMock();
-    replacementsRepository = repoMock();
     recommendationsRepository = repoMock();
     outcomesRepository = repoMock();
     // No matching recommendation by default -- recordRankedOutcomes() is then
@@ -86,7 +85,6 @@ describe('TriadsService', () => {
       titlesRepository as unknown as Repository<Title>,
       triadsRepository as unknown as Repository<Triad>,
       statesRepository as unknown as Repository<UserTitleState>,
-      replacementsRepository as unknown as Repository<TriadReplacement>,
       recommendationsRepository as unknown as Repository<Recommendation>,
       outcomesRepository as unknown as Repository<Outcome>,
       posterService as unknown as PosterService,
@@ -597,11 +595,14 @@ describe('TriadsService', () => {
       displayOrder: [titleC, titleA, titleB],
     });
 
-    // Call order inside replace(): triad -> ownership -> prior replacement
-    // count -> previous completed triad -> eligible watched states -> the
-    // transaction (state row, event row, triad).
+    // Call order inside replace(): triad -> ownership -> the transaction
+    // (locked re-read of the triad -> prior replacement count -> previous
+    // completed triad -> eligible watched states -> state row, event row,
+    // triad). `locked` is what the row-locked re-read returns: the same row
+    // unless a test simulates a concurrent write landing first (H3).
     function arrange({
       triad = activeTriad(),
+      locked = undefined as Record<string, unknown> | undefined,
       eligible = [titleA, titleB, titleC, spare],
       previousTriad = null as { titleIds: string[] } | null,
       priorReplacements = 0,
@@ -611,9 +612,9 @@ describe('TriadsService', () => {
     } = {}) {
       triadsRepository.findOne.mockResolvedValueOnce(triad).mockResolvedValueOnce(previousTriad);
       profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
-      replacementsRepository.count.mockResolvedValue(priorReplacements);
+      triadsRepository.manager.count.mockResolvedValue(priorReplacements);
       statesRepository.find.mockResolvedValue(eligible.map((titleId) => ({ titleId })));
-      triadsRepository.manager.findOne.mockResolvedValue(stateRow);
+      triadsRepository.manager.findOne.mockResolvedValueOnce(locked ?? triad).mockResolvedValue(stateRow);
       return triad;
     }
 
@@ -725,6 +726,52 @@ describe('TriadsService', () => {
         TriadReplacement,
         expect.objectContaining({ reason: 'not_remembered', replacementTitleId: null }),
       );
+    });
+
+    // H3: every decision that shapes the swap is made on a row-locked
+    // re-read inside the transaction, so two concurrent calls for the same
+    // triad serialize instead of both passing the checks on one stale read.
+    it('re-reads the triad under a row lock inside the transaction and counts prior replacements there', async () => {
+      arrange();
+
+      await service.replace('user-1', 'triad-1', { titleId: titleB, reason: 'not_watched' });
+
+      expect(triadsRepository.manager.findOne).toHaveBeenNthCalledWith(1, Triad, {
+        where: { id: 'triad-1' },
+        lock: { mode: 'pessimistic_write' },
+      });
+      expect(triadsRepository.manager.count).toHaveBeenCalledWith(TriadReplacement, { where: { triadId: 'triad-1' } });
+    });
+
+    it("returns the winner's triad without writing when a concurrent call already swapped the same title", async () => {
+      const winner = { ...activeTriad(), titleIds: [titleA, spare, titleC], displayOrder: [spare, titleC, titleA] };
+      arrange({ locked: winner });
+
+      const result = await service.replace('user-1', 'triad-1', { titleId: titleB, reason: 'not_watched' });
+
+      expect(result.titleIds).toEqual([titleA, spare, titleC]);
+      expect(triadsRepository.manager.save).not.toHaveBeenCalled();
+      expect(triadsRepository.manager.create).not.toHaveBeenCalled();
+      expect(statesRepository.find).not.toHaveBeenCalled();
+    });
+
+    it('rejects, without writing, when a concurrent call closed the triad before the lock was taken', async () => {
+      arrange({ locked: { ...activeTriad(), status: 'skipped' } });
+
+      await expect(
+        service.replace('user-1', 'triad-1', { titleId: titleB, reason: 'not_watched' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(triadsRepository.manager.save).not.toHaveBeenCalled();
+      expect(triadsRepository.manager.create).not.toHaveBeenCalled();
+    });
+
+    it("decides the replacement limit from the locked row's count, not a pre-lock read", async () => {
+      arrange({ priorReplacements: 3 });
+
+      const result = await service.replace('user-1', 'triad-1', { titleId: titleB, reason: 'not_watched' });
+
+      expect(result.status).toBe('skipped');
+      expect(triadsRepository.manager.count).toHaveBeenCalledTimes(1);
     });
 
     it('creates the state row when none exists for the title yet', async () => {
