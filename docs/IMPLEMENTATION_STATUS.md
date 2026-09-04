@@ -594,6 +594,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Item | Built | Blueprint | Evidence / gap |
 |---|---|---|---|
 | Backend unit tests (8 files, 98 tests) | ✅ | — | re-run 2026-09-03; +8 with the gap-3 triad rework, +3 with the H1 title-reuse fix, +12 with the ADR-17 replacement endpoint, +5 with the library ranking, +3 with the onboarding profile fields, +1 for inline triad items, +2 for recommendation reasons, +5 for the starter list and Arabic folding |
+| Full first-run journey e2e with the real Python model service (ALPHA 1.4) | ✅ | ✅ | `test/full-journey.e2e-spec.ts`: spawns `model_service.py` against `postgres-test`, then register → 6 watched → 3 rounds → training triggers itself → recommendations served by that snapshot, no CLI. Skips where no Python is resolvable (`$MODEL_SERVICE_PYTHON` or `poetry` on PATH); CI's backend job is Node-only today |
 | Backend e2e: auth guard + IDOR + rate limiting + triad ranking + triad replacement over real HTTP + `postgres-test` + catalogue search/starter (6 files, 41 tests) | ✅ | ✅ | `§21.3` object-level authorization; re-run 2026-09-03 with all eight migrations; `test/throttling.e2e-spec.ts` (ADR-29), `test/triad-rank.e2e-spec.ts` (gap 3/ADR-32, H1/ADR-34) and `test/triad-replace.e2e-spec.ts` (ADR-17) added today; still not full functional coverage of every route; `test/titles-search.e2e-spec.ts` added the same day |
 | Functional API tests (titles, triads, recommendations) | ❌ | — | |
 | Frontend tests | ❌ | — | |

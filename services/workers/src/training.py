@@ -287,7 +287,11 @@ def train_and_evaluate(
 
 
 def train_profile(profile_id: str) -> TrainingResult:
-    load_dotenv(Path(__file__).resolve().parents[3] / ".env", override=True)
+    # override=False: a DATABASE_URL already set in the process environment
+    # (e2e spawns the real model service against postgres-test this way)
+    # wins over the repo .env's dev-database value; the CLI's own usage,
+    # where DATABASE_URL is never pre-set, is unaffected either way.
+    load_dotenv(Path(__file__).resolve().parents[3] / ".env", override=False)
     database_url = os.environ.get("DATABASE_URL")
     if not database_url:
         raise RuntimeError("DATABASE_URL is required")
