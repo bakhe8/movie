@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { api, ApiError, type ReplacementReason, type Title, type Triad } from '../lib/api';
+import { api, type ReplacementReason, type Title, type Triad } from '../lib/api';
 import { TRIAD_INSTRUCTION } from '../lib/copy';
 import { formatNumber } from '../lib/format';
 import { Poster } from './Poster';
@@ -172,19 +172,16 @@ export function RankScreen({
       .then((completed) => setCompletedRounds(completed.length))
       .catch(() => setCompletedRounds(null));
     try {
-      const current = await api.getCurrentTriad(profileId);
-      await hydrate(current);
-      setPhase({ kind: 'ready' });
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 400) {
-        // The backend says exactly how many more watched titles it needs
-        // (`{ reason: 'need_more_watched', needed }`); fall back to "three"
-        // if that field is ever missing.
-        const needed = err.details.reason === 'need_more_watched' && typeof err.details.needed === 'number' ? err.details.needed : 3;
-        setPhase({ kind: 'blocked', needed });
+      // ADR-80: 200 with a state discriminator instead of 400.
+      const result = await api.getCurrentTriad(profileId);
+      if (result.state === 'need_more_watched') {
+        setPhase({ kind: 'blocked', needed: result.needed });
       } else {
-        setPhase({ kind: 'failed' });
+        await hydrate(result);
+        setPhase({ kind: 'ready' });
       }
+    } catch {
+      setPhase({ kind: 'failed' });
     }
   }, [profileId, hydrate]);
 

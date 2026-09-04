@@ -74,6 +74,15 @@ const labels = {
     cancelling: 'جارٍ الإلغاء…',
     deleteCancelled: 'أُلغي طلب الحذف.',
     deleteFailed: 'تعذّر الطلب. تحقق من كلمة المرور.',
+    pauseTitle: 'إيقاف كل المعالجة مؤقتًا',
+    pauseBody: 'يوقف التوصيات وجولات الترتيب على كل ملفاتك ريثما تُكمل طلب الخصوصية.',
+    pauseAction: 'إيقاف المعالجة',
+    pausing: 'جارٍ الإيقاف…',
+    pauseDone: 'المعالجة موقوفة.',
+    resumeAction: 'استئناف المعالجة',
+    resuming: 'جارٍ الاستئناف…',
+    resumeDone: 'المعالجة مستأنفة.',
+    pauseFailed: 'تعذّرت العملية. حاول مجددًا.',
     notYet: 'لم يُبنَ بعد',
     failed: 'تعذّر الحفظ. حاول مجددًا.',
     loading: 'جارٍ التحميل…',
@@ -137,6 +146,15 @@ const labels = {
     cancelling: 'Cancelling…',
     deleteCancelled: 'Deletion request cancelled.',
     deleteFailed: 'Request failed. Check your password.',
+    pauseTitle: 'Pause all processing',
+    pauseBody: 'Stops recommendations and ranking rounds on all your profiles while your privacy request is fulfilled.',
+    pauseAction: 'Pause processing',
+    pausing: 'Pausing…',
+    pauseDone: 'Processing paused.',
+    resumeAction: 'Resume processing',
+    resuming: 'Resuming…',
+    resumeDone: 'Processing resumed.',
+    pauseFailed: 'Could not complete. Please try again.',
     notYet: 'not built yet',
     failed: 'Could not save. Please try again.',
     loading: 'Loading…',
@@ -174,6 +192,9 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; executeAfter: string | null } | null | 'loading'>('loading');
+  const [pauseBusy, setPauseBusy] = useState(false);
+  const [pauseNotice, setPauseNotice] = useState<string | null>(null);
+  const [paused, setPaused] = useState<boolean>(profile?.pausedAt !== null && profile?.pausedAt !== undefined);
 
   const profileId = profile?.id;
   const profileName = profile?.name;
@@ -329,6 +350,27 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
       setDeleteNotice(t.deleteFailed);
     } finally {
       setDeleteBusy(false);
+    }
+  }
+
+  async function togglePause() {
+    if (pauseBusy) return;
+    setPauseBusy(true);
+    setPauseNotice(null);
+    try {
+      if (paused) {
+        await api.resumeAll();
+        setPaused(false);
+        setPauseNotice(t.resumeDone);
+      } else {
+        await api.pauseAll();
+        setPaused(true);
+        setPauseNotice(t.pauseDone);
+      }
+    } catch {
+      setPauseNotice(t.pauseFailed);
+    } finally {
+      setPauseBusy(false);
     }
   }
 
@@ -642,6 +684,20 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
           </>
         )}
         {deleteNotice && <p className={styles.notice}>{deleteNotice}</p>}
+
+        <h3>{t.pauseTitle}</h3>
+        <p>{t.pauseBody}</p>
+        <div className={styles.row}>
+          <button
+            type="button"
+            className={`${styles.ghost} ${paused ? styles.danger : ''}`}
+            onClick={togglePause}
+            disabled={pauseBusy}
+          >
+            {pauseBusy ? (paused ? t.resuming : t.pausing) : (paused ? t.resumeAction : t.pauseAction)}
+          </button>
+        </div>
+        {pauseNotice && <p className={styles.notice}>{pauseNotice}</p>}
       </section>
     </div>
   );

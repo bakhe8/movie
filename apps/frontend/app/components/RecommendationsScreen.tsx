@@ -21,6 +21,10 @@ const labels = {
     hint: 'لكل فيلم أربع قيم منفصلة: الملاءمة الشخصية، الجودة العامة، التوفر، والثقة. لا نجمعها في رقم واحد.',
     pendingTitle: 'ما زلنا نتعلم ذوقك',
     pendingBody: 'التوصيات تظهر بعد أن يُدرَّب نموذجك على جولات ترتيب كافية.',
+    pausedTitle: 'المعالجة موقوفة مؤقتًا',
+    pausedBody: 'طلبك قيد التنفيذ. يمكنك استئناف المعالجة في إعدادات الخصوصية.',
+    outdatedTitle: 'يحتاج نموذجك تحديثًا',
+    outdatedBody: 'مُخطَّط التدريب تغيّر. رتّب بضعة أفلام إضافية لإعادة البناء.',
     goRank: 'إلى الترتيب',
     goDiscover: 'اختر أفلامًا شاهدتها',
     emptyTrack: 'لا اقتراحات في هذا المسار بعد.',
@@ -54,6 +58,10 @@ const labels = {
     hint: 'Each film shows four separate values: personal fit, public quality, availability and confidence. They are never merged into one number.',
     pendingTitle: 'Still learning your taste',
     pendingBody: 'Recommendations appear once your model has been trained on enough ranking rounds.',
+    pausedTitle: 'Processing paused',
+    pausedBody: 'Your request is in progress. You can resume processing from privacy settings.',
+    outdatedTitle: 'Model needs updating',
+    outdatedBody: 'The training schema changed. Rank a few more films to rebuild.',
     goRank: 'Go to ranking',
     goDiscover: 'Pick films you have watched',
     emptyTrack: 'Nothing on this track yet.',
@@ -85,7 +93,7 @@ const labels = {
 
 // `pending` carries the watched count so its one action leads where progress
 // is possible: the triad needs three watched titles first (SPEC §5.1).
-type Phase = { kind: 'loading' } | { kind: 'ready' } | { kind: 'pending'; watched: number | null } | { kind: 'failed' };
+type Phase = { kind: 'loading' } | { kind: 'ready' } | { kind: 'pending'; watched: number | null } | { kind: 'paused' } | { kind: 'outdated' } | { kind: 'failed' };
 
 export function RecommendationsScreen({
   lang,
@@ -113,15 +121,13 @@ export function RecommendationsScreen({
   const load = useCallback(async () => {
     setPhase({ kind: 'loading' });
     try {
-      // The home screen is "tonight's decision": a short list per track
-      // (blueprint §5.3), so 15 covers 3–5 items on each of three tracks.
+      // ADR-80: 200 with a discriminator instead of 409/400.
+      // 15 items covers 3–5 per each of the three tracks (blueprint §5.3).
       const result = await api.getRecommendations(profileId, 15);
-      setItems(result);
-      setPhase({ kind: 'ready' });
-    } catch (err) {
-      // 409 is the backend's honest "no trained preference model yet"
-      // (RecommendationsService); anything else is a real failure.
-      if (err instanceof ApiError && err.status === 409) {
+      if (result.state === 'ready') {
+        setItems(result.items);
+        setPhase({ kind: 'ready' });
+      } else if (result.state === 'pending') {
         let watched: number | null = null;
         try {
           watched = (await api.getWatchedTitles(profileId)).length;
@@ -129,9 +135,13 @@ export function RecommendationsScreen({
           watched = null;
         }
         setPhase({ kind: 'pending', watched });
+      } else if (result.state === 'paused') {
+        setPhase({ kind: 'paused' });
       } else {
-        setPhase({ kind: 'failed' });
+        setPhase({ kind: 'outdated' });
       }
+    } catch {
+      setPhase({ kind: 'failed' });
     }
   }, [profileId]);
 
@@ -215,6 +225,35 @@ export function RecommendationsScreen({
                 {t.goRank}
               </button>
             )
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (phase.kind === 'paused') {
+    return (
+      <div className={styles.screen}>
+        {header}
+        <div className={styles.pending} role="status">
+          <h3>{t.pausedTitle}</h3>
+          <p>{t.pausedBody}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (phase.kind === 'outdated') {
+    return (
+      <div className={styles.screen}>
+        {header}
+        <div className={styles.pending} role="status">
+          <h3>{t.outdatedTitle}</h3>
+          <p>{t.outdatedBody}</p>
+          {onGoToRank && (
+            <button type="button" className={styles.cta} onClick={onGoToRank}>
+              {t.goRank}
+            </button>
           )}
         </div>
       </div>

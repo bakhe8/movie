@@ -65,6 +65,8 @@ export interface Profile {
   // onboarding screen shows while it is null.
   market: string | null;
   platforms: string[];
+  // NULL = not paused; non-null = all processing paused by POST /privacy/pause.
+  pausedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -380,7 +382,11 @@ export const api = {
   // 409 until a model snapshot exists, like recommendations.
   getLibraryRanking: (profileId: string) => request<LibraryRankingItem[]>(`/profiles/${profileId}/library/ranking`),
 
-  getCurrentTriad: (profileId: string) => request<Triad>(`/profiles/${profileId}/triads/current`),
+  // ADR-80: 200 with a state discriminator instead of 400/409.
+  getCurrentTriad: (profileId: string) =>
+    request<(Triad & { state: 'ready' }) | { state: 'need_more_watched'; needed: number; message: string }>(
+      `/profiles/${profileId}/triads/current`,
+    ),
 
   // `idempotencyKey` should be a fresh UUID per submit attempt (not per
   // retry) so a network retry or double-click safely returns the same
@@ -401,8 +407,15 @@ export const api = {
       body: JSON.stringify({ titleId, reason }),
     }),
 
+  // ADR-80: 200 with a state discriminator instead of 409. `needed` is the
+  // number of ranking rounds still missing before the first training run.
   getRecommendations: (profileId: string, limit = 10) =>
-    request<Recommendation[]>(`/profiles/${profileId}/recommendations?limit=${limit}`),
+    request<
+      | { state: 'ready'; items: Recommendation[] }
+      | { state: 'pending'; needed: number }
+      | { state: 'paused' }
+      | { state: 'model_outdated' }
+    >(`/profiles/${profileId}/recommendations?limit=${limit}`),
 
   getTrainingStatus: (profileId: string) =>
     request<{
@@ -433,6 +446,11 @@ export const api = {
 
   cancelDelete: (requestId: string) =>
     request<{ id: string; status: string }>(`/privacy/delete/${requestId}/cancel`, { method: 'POST' }),
+
+  // Pause all profiles (no new ranking rounds, no recommendations). A paused
+  // profile's recommendations endpoint returns { state:'paused' } (ADR-80).
+  pauseAll: () => request<{ paused: number; pausedAt: string }>('/privacy/pause', { method: 'POST' }),
+  resumeAll: () => request<{ resumed: number }>('/privacy/resume', { method: 'POST' }),
 
   getConsents: () => request<Consent[]>('/consents'),
 
