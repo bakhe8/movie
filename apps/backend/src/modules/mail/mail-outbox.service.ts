@@ -5,6 +5,7 @@ import { In, LessThan, LessThanOrEqual, Repository } from 'typeorm';
 import { MailOutbox, MailOutboxStatus } from '../../entities/mail-outbox.entity';
 import { MailBodyCipher } from './mail-body-cipher';
 import { Mailer } from './mailer';
+import { captureException } from '../../observability/observability';
 
 export interface QueuedMail {
   userId?: string | null;
@@ -186,6 +187,7 @@ export class MailOutboxService implements OnModuleInit, OnModuleDestroy {
       const message = (error instanceof Error ? error.message : String(error)).slice(0, LAST_ERROR_MAX);
       if (attempts >= MAX_ATTEMPTS) {
         this.logger.error(`[outbox] ${row.kind} ${row.id} dead after ${attempts} attempts: ${message}`);
+        captureException(error, { outboxKind: row.kind, outboxId: row.id });
         return this.finish(row, 'dead', attempts, message, null, now);
       }
       const delay = BACKOFF_MS[attempts - 1];

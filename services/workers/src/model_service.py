@@ -43,6 +43,7 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 
+from .observability import capture_exception, init_observability
 from .training import MODEL_VERSION, TrainingResult, train_profile
 
 logger = logging.getLogger("model_service")
@@ -148,6 +149,7 @@ class JobStore:
             self._finish(job, "failed", errorKind="invalid", error=str(error))
         except Exception as error:  # noqa: BLE001 -- the ledger must record any failure
             logger.exception("training failed for profile %s", job.profileId)
+            capture_exception(error, tags={"jobId": job.id, "profileId": job.profileId})
             self._finish(job, "failed", errorKind="error", error=f"{type(error).__name__}: {error}")
         else:
             self._finish(job, "succeeded", result=summarize(result))
@@ -245,6 +247,7 @@ def main() -> None:
 
     load_dotenv(Path(__file__).resolve().parents[3] / ".env", override=False)
     logging.basicConfig(level=logging.INFO)
+    init_observability()
     host = os.environ.get("MODEL_SERVICE_HOST", "127.0.0.1")
     port = int(os.environ.get("MODEL_SERVICE_PORT", "8001"))
     token = os.environ.get("MODEL_SERVICE_TOKEN") or None

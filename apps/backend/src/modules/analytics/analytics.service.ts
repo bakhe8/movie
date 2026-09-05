@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { AnalyticsEvent, type AnalyticsEventName } from '../../entities/analytics-event.entity';
 import { Consent } from '../../entities/consent.entity';
 import { Profile } from '../../entities/profile.entity';
+import { captureException } from '../../observability/observability';
 
 // Values a property may hold. Anything else is dropped rather than coerced:
 // an object or an array is how free-form text and ids sneak into an analytics
@@ -53,6 +54,7 @@ export class AnalyticsService {
       });
     } catch (error) {
       this.logger.warn(`analytics event ${name} not recorded: ${error instanceof Error ? error.message : error}`);
+      captureException(error, { analyticsEvent: name });
     }
   }
 

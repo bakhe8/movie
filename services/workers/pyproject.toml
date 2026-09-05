@@ -34,6 +34,9 @@ python-dotenv = "^1.0.0"
 # (src/model_service.py). httpx is what FastAPI's TestClient runs on.
 fastapi = "^0.111.0"
 uvicorn = "^0.30.0"
+# P0-3: error reporting for the one long-running Python process (src/model_service.py).
+# Off unless SENTRY_DSN is set (src/observability.py), same as the backend.
+sentry-sdk = "^2.0.0"
 
 [tool.poetry.group.dev.dependencies]
 # ^7.4.0 (pytest) and ^0.1.0 (ruff) both excluded the versions actually

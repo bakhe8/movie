@@ -9,6 +9,7 @@ import { RefreshToken } from '../../entities/refresh-token.entity';
 import { User } from '../../entities/user.entity';
 import { AuditService } from '../audit/audit.service';
 import { MailOutboxService } from '../mail/mail-outbox.service';
+import { captureException } from '../../observability/observability';
 
 export function hashResetToken(raw: string): string {
   return createHash('sha256').update(raw).digest('hex');
@@ -99,6 +100,7 @@ export class PasswordResetService {
       this.logger.error(
         `password-reset mail could not be queued for user ${user.id}: ${error instanceof Error ? error.message : String(error)}`,
       );
+      captureException(error, { job: 'password-reset-mail' });
     }
     if (outcome === 'failed') {
       await this.resetsRepository.update({ id: reset.id }, { revokedAt: new Date() });

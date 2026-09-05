@@ -4,6 +4,7 @@ import { DataSource } from 'typeorm';
 import { PublicQualitySource } from '../../entities/public-quality-source.entity';
 import { refreshImdbRatings, type LoadImdbRatingsSummary } from '../../scripts/load-imdb-ratings';
 import { IMDB_SOURCE } from './public-quality.constants';
+import { captureException } from '../../observability/observability';
 
 // Keeps Public Quality a living value (ALPHA_PLAN 5.3 follow-up): IMDb's
 // dump is refreshed daily at the source, so when IMDB_REFRESH_INTERVAL_HOURS
@@ -105,6 +106,7 @@ export class PublicQualityRefreshService implements OnApplicationBootstrap, OnAp
       return summary;
     } catch (error) {
       this.logger.error(`IMDb ratings refresh failed: ${(error as Error).message}`);
+      captureException(error, { job: 'imdb-ratings-refresh' });
       this.schedule(Math.max(MIN_RETRY_MS, this.intervalMs));
       return null;
     } finally {

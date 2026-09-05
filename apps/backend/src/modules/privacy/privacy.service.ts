@@ -22,6 +22,7 @@ import { UserTitleState } from '../../entities/user-title-state.entity';
 import { WatchEvent } from '../../entities/watch-event.entity';
 import { AuditService } from '../audit/audit.service';
 import { buildExport, ExportDocument } from './export.builder';
+import { captureException } from '../../observability/observability';
 
 export interface ResetResult {
   request: PrivacyRequest;
@@ -294,6 +295,7 @@ export class PrivacyService implements OnModuleInit, OnModuleDestroy {
           purged += 1;
         } catch (error) {
           this.logger.error(`deletion ${request.id} failed: ${error instanceof Error ? error.message : String(error)}`);
+          captureException(error, { privacyRequestId: request.id });
         }
       }
       return purged;

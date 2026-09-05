@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { Repository } from 'typeorm';
 import { Experiment } from '../../entities/experiment.entity';
 import { ExperimentAssignment } from '../../entities/experiment-assignment.entity';
+import { captureException } from '../../observability/observability';
 
 // ALPHA_PLAN 6.5: the `experiments` table (M4) read from the backend at
 // last. An experiment's `config` names its arms and their shares:
@@ -84,6 +85,7 @@ export class ExperimentsService {
     } catch (error) {
       // An experiment must never break the request it decorates.
       this.logger.warn(`could not record assignment for ${experimentId}/${profileId}: ${String(error)}`);
+      captureException(error, { experimentId });
     }
   }
 }

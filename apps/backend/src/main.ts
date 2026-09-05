@@ -4,6 +4,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './modules/app/app.module';
 import { initObservability } from './observability/observability';
+import { requestIdMiddleware } from './observability/request-id.middleware';
 import { corsOrigin } from './config/cors.config';
 
 async function bootstrap() {
@@ -31,6 +32,11 @@ async function bootstrap() {
   // Matches NEXT_PUBLIC_API_URL=http://localhost:3101/api in
   // apps/frontend/.env.local -- keep both in sync.
   app.setGlobalPrefix('api');
+
+  // P0-3: tags every later Sentry capture on this request with an id that
+  // also comes back as a response header, so a report and a log line (or a
+  // frontend crash report that forwarded the same id) can be matched.
+  app.use(requestIdMiddleware);
 
   // Global validation pipe
   app.useGlobalPipes(new ValidationPipe({
