@@ -33,7 +33,16 @@ const LIGHT_GROUND = '#f4f4fa';
 const DARK_GROUND = '#06070f';
 const QUERY = '(prefers-color-scheme: dark)';
 
+// What the visitor chose when storage refused to keep it (private mode, or a
+// browser set to block site data). It lives for this page only, which is
+// exactly what "applies now, is not remembered" means -- before this existed
+// the write failed, the store was re-read, and the choice vanished on the way
+// back: the control looked dead (guard in __tests__/theme-provider.test.tsx).
+let sessionPreference: ThemePreference | null = null;
+
 function readStored(): ThemePreference {
+  // A choice storage could not take still outranks what storage says.
+  if (sessionPreference) return sessionPreference;
   try {
     const v = localStorage.getItem(STORAGE_KEY);
     return v === 'light' || v === 'dark' ? v : 'system';
@@ -116,9 +125,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     try {
       if (pref === 'system') localStorage.removeItem(STORAGE_KEY);
       else localStorage.setItem(STORAGE_KEY, pref);
+      // Storage holds it now, so the page-lifetime copy is no longer needed --
+      // and must go, or a stale one would outrank what was just written.
+      sessionPreference = null;
     } catch {
-      // Storage unavailable (private mode, blocked): the choice still applies
-      // for this page and simply is not remembered.
+      // Storage unavailable: the choice still applies for this page and simply
+      // is not remembered. `system` is kept too, so a `removeItem` that failed
+      // cannot leave the visitor pinned to the old stored value.
+      sessionPreference = pref;
     }
     notifyPreference();
   }, []);

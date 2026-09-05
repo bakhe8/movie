@@ -151,18 +151,11 @@ describe('ThemeProvider', () => {
     expect(screen.getByTestId('resolved')).toHaveTextContent('dark');
   });
 
-  // FOUND BY THIS GUARD, NOT FIXED HERE. `setPreference` catches the storage
-  // error and then re-reads storage, so with storage blocked the click does
-  // nothing at all: no attribute, no change on screen. theme.tsx's own comment
-  // says the opposite -- "the choice still applies for this page and simply is
-  // not remembered" -- so the code and its stated contract disagree, and the
-  // contract is the right one. In private mode the theme control is dead.
-  //
-  // Left skipped rather than deleted: `app/lib/theme.tsx` belongs to L1
-  // (THEME_MODES §3) and a parallel edit from here is what that split exists
-  // to prevent. Whoever takes L1 turns this back on with a one-line fix --
-  // hold the preference in state when storage refuses it.
-  it.skip('still applies a choice when storage refuses to keep it', async () => {
+  // Private mode, or a browser set to block site data: the page obeys, it
+  // just cannot remember for next time. This guard found the opposite -- the
+  // write threw, the store was re-read, and the choice vanished, leaving the
+  // control dead -- and theme.tsx now keeps a page-lifetime copy.
+  it('still applies a choice when storage refuses to keep it', async () => {
     const user = userEvent.setup();
     const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('storage blocked');
@@ -175,8 +168,35 @@ describe('ThemeProvider', () => {
 
     await user.click(screen.getByRole('button', { name: 'dark' }));
 
-    // Private mode: the page obeys, it just cannot remember for next time.
     expect(attribute()).toBe('dark');
+    expect(screen.getByTestId('preference')).toHaveTextContent('dark');
+
+    // And the way back still works, even though nothing was ever written.
+    await user.click(screen.getByRole('button', { name: 'system' }));
+    expect(attribute()).toBeNull();
+    expect(screen.getByTestId('preference')).toHaveTextContent('system');
+
+    setItem.mockRestore();
+  });
+
+  it('lets storage take over again once it works', async () => {
+    const user = userEvent.setup();
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {
+      throw new Error('storage blocked');
+    });
+    render(
+      <ThemeProvider>
+        <Probe />
+      </ThemeProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'dark' }));
+    await user.click(screen.getByRole('button', { name: 'light' }));
+
+    // The second write succeeded, so the page-lifetime copy steps aside
+    // instead of outranking what is now stored.
+    expect(localStorage.getItem(STORAGE_KEY)).toBe('light');
+    expect(attribute()).toBe('light');
     setItem.mockRestore();
   });
 });
