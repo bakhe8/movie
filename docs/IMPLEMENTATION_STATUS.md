@@ -471,7 +471,7 @@ Still open: implementation (UX-B) — no code changed in this audit.
 
 | Current status | Governing split | Proof |
 |---|---|---|
-| Dark: shipped and preserved. Light: the code still has the old indigo-related palette; the owner-approved white/blue/lime GPT identity is **not implemented or visually accepted** | Preserve dark exactly as its own identity. Light alone targets GPT «طاولة المونتاج». Both use one route/component/state/interaction tree; a single owner freezes the light token bundle before screen owners consume it | [THEME_MODES_2026-09-05.md](THEME_MODES_2026-09-05.md) · ADR-112 · frontend `AGENTS.md` |
+| Dark is implemented, merged and preserved. The approved white/blue/lime «طاولة المونتاج» light foundation was implemented in `919f267` and merged in `971207d`; bounded L2 uses landed in `de4480d` and `df8d396`. L0/L1 design-and-implementation approval is recorded; ADR-112's independent L3 gate was not implied by those checks | Preserve dark exactly as its own colour identity. Light consumes its approved semantic tokens. Both use one route/component/state/interaction tree; `system / light / dark` remains independent of the permanent appearances governed later by ADR-113/115 | [THEME_MODES_2026-09-05.md](THEME_MODES_2026-09-05.md) · [L0 reference and approval](design/light-theme-gpt-2026-09-05/README.md) · ADR-112/113/115 · frontend `AGENTS.md` |
 
 ---
 
@@ -480,6 +480,14 @@ Still open: implementation (UX-B) — no code changed in this audit.
 | Gap | What changed | Proof |
 |---|---|---|
 | Model controls and readiness actions made people start/retry derived work, schema changes asked for unrelated extra rankings, and an empty candidate pool incorrectly asked them to watch more titles | BP §2.4 #13/§4.6 now classifies every interaction; training/read repair/polling are automatic across recommendations, profile and library; readiness actions contain only real user decisions; explicit consent, privacy authority and destructive confirmation remain manual | ADR-114 · full suites: frontend 181/181, backend 647/647 · production builds and both linters pass |
+
+---
+
+## Adopted on 2026-09-06 (permanent appearance evolution — ADR-115)
+
+| Current baseline | Governing decision | Deferred / next gate |
+|---|---|---|
+| `cinema / premiere / montage` are saved, permanent tracks, but their current differences are primarily palette, shape and depth: `Baseline v1 — owner-approved visual baseline; pre-measurement; per-track structural differentiation not yet established` | A saved choice names a continuing track, not a frozen release. One active scoped candidate per track may advance it; adoption becomes its next baseline, rejection removes only the candidate, and the following candidate starts from the latest adopted baseline. Colour preference remains independent and experiments never overwrite the saved track | First establish a structural distinction on one shared core journey and review it formatively. No appearance analytics, consent change, allocator, sample calculation, survey or dashboard was implemented by this decision; production collection requires matching versioned disclosure, consent and enforcement before activation |
 
 ---
 
