@@ -44,7 +44,7 @@ describe('nextRunDelayMs', () => {
 });
 
 describe('PublicQualityRefreshService', () => {
-  const summary = { titlesWithImdbId: 1, notInDump: [], created: 1, unchanged: 0, superseded: 0 };
+  const summary = { titlesWithImdbId: 1, notInDump: [], created: 1, unchanged: 0, superseded: 0, stale: false };
 
   beforeEach(() => {
     vi.useFakeTimers();

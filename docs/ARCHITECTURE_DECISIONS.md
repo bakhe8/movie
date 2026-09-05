@@ -748,6 +748,15 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 
 ---
 
+## ADR-101 — IMDb's dataset dump is out of the critical release path (P0-4, revises ADR-90)
+
+**Context.** `npm run release` (ADR-90) runs `refreshImdbRatings({ fetch: true })` on every deploy, and `fetchDump()` wrote the download straight into the path future runs read from: a network drop mid-download truncated that file in place, destroying the last good ratings rather than merely failing to refresh them, and either way `refreshImdbRatings` threw, which `migrate.ts` let fail the whole release -- a schema migration and the catalog reseed blocked by `datasets.imdbws.com` being unreachable. Railway's filesystem is also ephemeral outside a mounted volume, so a fresh container has no previous dump to fall back to at all.
+**Decision.** `fetchDumpAtomic()` downloads to `<target>.part`, runs `validateDump()` against it (gzip integrity, the expected `tconst/averageRating/numVotes` header, a byte-size and row-count floor sized for the real ~7 MB/1.5 M-row dump), and only then `renameSync`s it onto `target` -- atomic on the same filesystem, so a reader never sees a half-written file. A failed download or a dump that fails validation deletes the `.part` file and keeps whatever is already at `target`, returning `stale: true` (reported via `captureException`) instead of throwing; it rethrows only when there is no previous file at all. `migrate.ts` additionally wraps the whole IMDb step in a try/catch that logs and alerts but never fails the release -- migrations and the catalog seed are the critical path, IMDb ratings are not. A separate, non-corruption coverage check (matched/wanted ratio below 40% on a structurally valid dump) alerts without blocking, catching a format change IMDb makes without discarding good data over it.
+**Consequences.** A release now completes even when IMDb's endpoint is down or serves garbage; ratings are simply stale (or absent, on a truly fresh volume) until the next successful pass -- the periodic in-app refresh (`public-quality-refresh.service.ts`, `IMDB_REFRESH_INTERVAL_HOURS`) or the next deploy. `LoadImdbRatingsSummary.stale` surfaces this in logs and to Sentry; nothing in the read path (`PublicQualityService`) changes. Verified: 11 unit tests on `validateDump`/`fetchDumpAtomic` against a stubbed `fetch` (truncated gzip, wrong header, undersized file, network throw, HTTP error, no-previous-file rethrow); existing `load-imdb-ratings.e2e-spec.ts` unaffected (its functions were not touched).
+**Revisit when.** A persistent volume is mounted for `IMDB_DATASETS_DIR` in production (then "no previous file" stops being the common case on a fresh deploy), or a second dataset source needs the same atomic-download treatment.
+
+---
+
 ## Summary
 
 | # | Decision | Serves | Revisit trigger |
@@ -851,6 +860,7 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 | 98 | Postgres image pinned to `pgvector/pgvector:0.8.6-pg15` (was `ankane/pgvector:latest` = PG 15.4 from 2023) | owner review of external dependencies 2026-09-05 | PG 16+ (dump/restore), or pgvector columns in use |
 | 96 | `pending`/training status name every reason there is no model yet, instead of "still learning" | remediation brief P0-01/P0-03 2026-09-05 | queue item 8 folds this into a full readiness contract |
 | 99 | A completed set of three is never re-asked as new evidence (`purpose`/`countsTowardActivation`), revises ADR-34 | remediation brief P0-04 2026-09-05; `BP §8.1` | a `bridge`/`boundary`/`explore` purpose needs its own activation rule |
+| 101 | IMDb dump download is atomic with validation and stale-fallback; the whole IMDb step can no longer fail `npm run release`, revises ADR-90 | P0-4 2026-09-05; ADR-90 | a persistent `IMDB_DATASETS_DIR` volume, or a second dataset needing the same treatment |
 
 ## How to add a decision
 
