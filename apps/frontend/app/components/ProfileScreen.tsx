@@ -46,20 +46,16 @@ const labels = {
     rounds: 'جولات الترتيب المكتملة',
     watched: 'أفلام مسجّلة كمُشاهَدة',
     model: 'نموذجك',
-    modelNone: 'لم يُدرَّب نموذجك بعد. يُبنى من جولات الترتيب، لا من أي تقييم.',
+    modelNone: 'لم يُبنَ نموذجك بعد. يبدأ بناؤه تلقائيًا عندما تكتمل جولات ترتيب كافية.',
     modelBuilding: 'جارٍ بناء ملفك…',
-    modelBuildingNote: 'يستغرق عادةً بضع دقائق. ستظهر المقترحات عند الانتهاء.',
-    modelRetrain: 'حدّث نموذجي',
-    modelRetraining: 'جارٍ الطلب…',
+    modelBuildingNote: 'يستغرق عادةً بضع دقائق. يمكنك المتابعة؛ ستظهر المقترحات وتتحدّث الصفحة تلقائيًا.',
     modelVersion: 'إصدار النموذج',
     modelFailedInvalid: 'جولاتك محفوظة، لكن الأفلام التي رتّبتها لا تملك بعدُ تحليلًا منشورًا يكفي لبناء نموذج.',
-    modelFailed: 'تعذّر بناء نموذجك في آخر محاولة. اختياراتك محفوظة.',
-    modelNotPublished: 'اكتمل آخر تدريب ولم يُنشر نموذج. اختياراتك محفوظة.',
+    modelFailed: 'تعذّر بناء نموذجك بعد المحاولات التلقائية. اختياراتك محفوظة والخطأ ظاهر للمشغّل؛ لا يلزمك تكرارها.',
+    modelNotPublished: 'اكتمل آخر تدريب ولم يُنشر نموذج. اختياراتك محفوظة والخطأ تشغيلي؛ لا يلزمك إجراء.',
     modelDisabled: 'التدريب غير مفعَّل على هذا الخادم؛ إعداد تشغيلي يعالجه مشغّل الخدمة، لا أنت.',
-    modelUnreachable: 'تعذّر الوصول إلى خدمة النموذج. حاول بعد قليل.',
+    modelUnreachable: 'تعذّر قراءة حالة خدمة النموذج. جولاتك محفوظة وسيواصل النظام المتابعة تلقائيًا.',
     modelSupport: (id: string) => `رمز الدعم: ${id}`,
-    trainFailed: 'تعذّر إرسال طلب التدريب.',
-    trainNeedRounds: 'أكمل جولة ترتيب واحدة على الأقل قبل التدريب.',
     confidence: 'الثقة',
     // Blueprint §5.3 "ملف الذوق": core tendencies, conditional tendencies,
     // unknown areas, exceptions, drift -- none of it exists in the API yet.
@@ -134,20 +130,16 @@ const labels = {
     rounds: 'Completed ranking rounds',
     watched: 'Films marked watched',
     model: 'Your model',
-    modelNone: 'Your model has not been trained yet. It is built from ranking rounds, never from a rating.',
+    modelNone: 'Your model has not been built yet. It starts automatically once enough ranking rounds are complete.',
     modelBuilding: 'Building your profile…',
-    modelBuildingNote: 'Usually takes a few minutes. Recommendations will appear once it is done.',
-    modelRetrain: 'Update my model',
-    modelRetraining: 'Requesting…',
+    modelBuildingNote: 'Usually takes a few minutes. You can carry on; recommendations and this page update automatically.',
     modelVersion: 'Model version',
     modelFailedInvalid: 'Your rounds are saved, but the films you ranked do not yet have enough published analysis to build a model from.',
-    modelFailed: 'Your model could not be built on the last attempt. Your choices are saved.',
-    modelNotPublished: 'The last training run finished but no model was published. Your choices are saved.',
+    modelFailed: 'Your model could not be built after automatic retries. Your choices are saved and the operator can see the failure; you do not need to repeat them.',
+    modelNotPublished: 'The last training run finished but no model was published. Your choices are saved; this is an operational issue and needs no action from you.',
     modelDisabled: 'Training is not enabled on this server; an operational setting for the service operator, not for you.',
-    modelUnreachable: 'The model service could not be reached. Try again in a moment.',
+    modelUnreachable: 'The model-service state could not be read. Your rounds are saved and the system will keep checking automatically.',
     modelSupport: (id: string) => `Support code: ${id}`,
-    trainFailed: 'The training request could not be sent.',
-    trainNeedRounds: 'Complete at least one ranking round before training.',
     confidence: 'Confidence',
     detailPending: 'Stable tendencies, unknown areas and exceptions will appear here once the detailed taste profile is built.',
     privacy: 'Privacy',
@@ -222,10 +214,6 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
   const [rounds, setRounds] = useState<number | null>(null);
   const [watched, setWatched] = useState<number | null>(null);
   const [model, setModel] = useState<ModelStatus>({ kind: 'loading' });
-  const [retraining, setRetraining] = useState(false);
-  // Bumped after a training request so the readiness panel re-reads.
-  const [retrainKey, setRetrainKey] = useState(0);
-  const [retrainError, setRetrainError] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [exportPassword, setExportPassword] = useState('');
@@ -425,33 +413,6 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
       setPauseNotice(t.pauseFailed);
     } finally {
       setPauseBusy(false);
-    }
-  }
-
-  async function retrain() {
-    if (!profileId || retraining || model.kind === 'building') return;
-    setRetraining(true);
-    setRetrainError(null);
-    try {
-      await api.requestTraining(profileId);
-      setModel({ kind: 'building' });
-      setRetrainKey((key) => key + 1);
-    } catch (error) {
-      // Said, not swallowed: the live round of 2026-09-05 pressed this button
-      // and saw nothing at all (brief P0-01). The state stays; the reason the
-      // request was refused is shown under the button.
-      const reason = error instanceof ApiError ? (error.details ?? {}).reason : undefined;
-      setRetrainError(
-        reason === 'model_service_disabled'
-          ? t.modelDisabled
-          : reason === 'model_service_unreachable'
-            ? t.modelUnreachable
-            : reason === 'need_more_triads'
-              ? t.trainNeedRounds
-              : t.trainFailed,
-      );
-    } finally {
-      setRetraining(false);
     }
   }
 
@@ -668,26 +629,14 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
             </div>
           </dl>
         )}
-        {/* Anything the user can retry or start: not while a build runs, and
-            not on a server that has no model service to ask. */}
-        {(model.kind === 'none' || model.kind === 'trained' || model.kind === 'failed' || model.kind === 'not_published' || model.kind === 'unknown') && (
-          <button type="button" className={styles.secondary} onClick={retrain} disabled={retraining}>
-            {retraining ? t.modelRetraining : t.modelRetrain}
-          </button>
-        )}
-        {retrainError && (
-          <p className={styles.error} role="alert">
-            {retrainError}
-          </p>
-        )}
         {/* The four capabilities, straight from the readiness contract
             (ADR-103). It sits under the model block rather than replacing
             it: the block above is what this profile's model *is*, the panel
             is what the product can do for you right now and what it still
             needs -- the question the brief §5.1 said one "trained or not"
-            flag could never answer. `retrainKey` re-reads it after a
-            training request, so the panel and the button never disagree. */}
-        <ReadinessPanel profileId={profileId ?? null} lang={lang} refreshKey={retrainKey} />
+            flag could never answer. Derived work starts and refreshes without
+            presenting a training control to the person (ADR-114). */}
+        <ReadinessPanel profileId={profileId ?? null} lang={lang} />
         <p>{t.detailPending}</p>
         </section>
       )}

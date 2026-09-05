@@ -475,6 +475,14 @@ Still open: implementation (UX-B) — no code changed in this audit.
 
 ---
 
+## Adopted on 2026-09-06 (intent-driven interaction contract — ADR-114)
+
+| Gap | What changed | Proof |
+|---|---|---|
+| Model controls and readiness actions made people start/retry derived work, schema changes asked for unrelated extra rankings, and an empty candidate pool incorrectly asked them to watch more titles | BP §2.4 #13/§4.6 now classifies every interaction; training/read repair/polling are automatic across recommendations, profile and library; readiness actions contain only real user decisions; explicit consent, privacy authority and destructive confirmation remain manual | ADR-114 · full suites: frontend 181/181, backend 647/647 · production builds and both linters pass |
+
+---
+
 ## Project setup
 
 | Item | Built | Blueprint | Evidence / gap |

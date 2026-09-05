@@ -1018,3 +1018,14 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 **Acceptance.** The owner explicitly approved the version through `0f39371` on 2026-09-05 ("اعتمد"). Implementation and evidence are recorded in `CINEMATIC_REDESIGN_2026-09-05.md`; production verification and physical-phone keyboard checks remain separate from that approval.
 
 ---
+
+## ADR-114 — People state intent; the system owns derived work (owner decision, 2026-09-06)
+
+**Context.** Training already triggers after committed ranking thresholds and retries durably, yet Profile/Recommendations still asked a person to “train/update my model”; readiness even told them to fix schema, service and empty-catalogue states.
+**Decision.** BP §2.4 #13 and §4.6 govern every interaction: ask only for a fact, choice, consent or authority the system cannot know. Persistence derived from that act, training, recomputation, synchronization, polling and technical retry are automatic. Consent, pause/resume, deletion and other destructive authority remain explicit.
+**Contract.** `CapabilityReadiness.action` is limited to `mark_watched_titles`, `rank_more_triads`, `resume_processing`, or `null`. Eligible, failed, stale, catalogue-coverage and model-service states are `null`; a CTA may exist only when it executes the named user decision.
+**Implementation.** Readiness and recommendation reads idempotently repair an eligible-but-idle or schema-stale model; Profile, Recommendations and Library poll derived state silently. Normal model controls are removed. `POST /profiles/:id/train` remains compatibility/operator recovery only and must not be surfaced by first-party UI.
+**Failure boundary.** A manual retry remains acceptable only after an attempted read/write of the person’s chosen action, with draft preservation and idempotency; it is never required to advance derived work.
+**Supersedes.** ADR-96’s manual training CTA and ADR-103’s `request_training`/`retry` actions; refines ADR-100/109/113 without weakening their visibility, retry, accessibility or privacy guarantees.
+
+---

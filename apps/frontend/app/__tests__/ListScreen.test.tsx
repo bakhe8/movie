@@ -4,7 +4,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import userEvent from '@testing-library/user-event';
 import { ListScreen, type LibraryViewState } from '../components/ListScreen';
-import { api, type UserTitleState } from '../lib/api';
+import { api, ApiError, type UserTitleState } from '../lib/api';
 import { todayLocal } from '../lib/format';
 
 vi.mock('../lib/api', () => ({
@@ -15,7 +15,7 @@ vi.mock('../lib/api', () => ({
     setTitleState: vi.fn(),
   },
   ApiError: class ApiError extends Error {
-    constructor(public status: number, message: string) { super(message); }
+    constructor(message: string, public status: number) { super(message); }
   },
 }));
 
@@ -48,6 +48,24 @@ beforeEach(() => {
 });
 
 describe('visual library navigation', () => {
+  it('polls a pending personal ranking quietly until the automatic build is ready', async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.getLibraryRanking.mockRejectedValueOnce(new ApiError('pending', 409)).mockResolvedValueOnce([]);
+      render(<ListScreen lang="en" profileId="p1" initialViewState={{ activeSection: 'ranking', filter: '' }} />);
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(mocks.getLibraryRanking).toHaveBeenCalledTimes(1);
+      expect(screen.getByText(/built automatically/)).toBeVisible();
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+      expect(mocks.getLibraryRanking).toHaveBeenCalledTimes(2);
+      expect(screen.getByText('No watched films can be ranked yet.')).toBeVisible();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('restores the selected tab and filter after the film screen unmounts the library', async () => {
     const user = userEvent.setup();
     const contact = { ...film, id: 'contact', titleEn: 'Contact' };

@@ -21,14 +21,18 @@ function trainingStatus(overrides: Partial<TrainingStatus> = {}): TrainingStatus
 function servicesOf(overrides: {
   snapshotState?: 'ready' | 'pending' | 'paused' | 'model_outdated';
   status?: Partial<TrainingStatus>;
+  statusAfterEnsure?: Partial<TrainingStatus>;
   candidatePoolSize?: number;
   firstTriadCount?: number;
   watchedTitles?: number;
   confidenceBand?: 'initial' | 'likely' | 'strong' | 'inconclusive';
 }) {
+  const initialStatus = trainingStatus(overrides.status);
+  const statusAfterEnsure = trainingStatus(overrides.statusAfterEnsure ?? overrides.status);
   const training = {
     firstTriadCount: overrides.firstTriadCount ?? 3,
-    status: vi.fn(async () => trainingStatus(overrides.status)),
+    status: vi.fn().mockResolvedValueOnce(initialStatus).mockResolvedValue(statusAfterEnsure),
+    ensureAutomaticTraining: vi.fn(async () => undefined),
   };
   const recommendations = {
     snapshotState: vi.fn(async () => overrides.snapshotState ?? 'pending'),
@@ -53,18 +57,25 @@ function servicesOf(overrides: {
 // brief's own table names as a distinct, reachable situation.
 describe('ProfileReadinessService', () => {
   it('reports not_ready/insufficient_triads before enough rounds are ranked', async () => {
-    const { service } = servicesOf({ snapshotState: 'pending', status: { state: 'idle', completedTriads: 1 }, firstTriadCount: 3 });
+    const { service } = servicesOf({ snapshotState: 'pending', status: { state: 'idle', completedTriads: 1 }, firstTriadCount: 3, watchedTitles: 0 });
     const result = await service.forProfile('user-1', 'profile-1');
-    expect(result.ordinalModel).toMatchObject({ status: 'not_ready', reason: 'insufficient_triads', action: 'rank_more_triads' });
+    expect(result.ordinalModel).toMatchObject({ status: 'not_ready', reason: 'insufficient_triads', action: 'mark_watched_titles' });
     expect(result.semanticProfile).toEqual(result.ordinalModel);
     // Cannot recommend without a model -- the same situation, not a second one.
     expect(result.recommendation).toEqual(result.ordinalModel);
   });
 
-  it('reports eligible once enough rounds exist but nothing was ever requested', async () => {
-    const { service } = servicesOf({ snapshotState: 'pending', status: { state: 'idle', completedTriads: 5 }, firstTriadCount: 3 });
+  it('repairs an eligible idle profile automatically and reports the queued work with no user action', async () => {
+    const { service, training } = servicesOf({
+      snapshotState: 'pending',
+      status: { state: 'idle', completedTriads: 5 },
+      statusAfterEnsure: { state: 'queued', completedTriads: 5 },
+      firstTriadCount: 3,
+      watchedTitles: 6,
+    });
     const result = await service.forProfile('user-1', 'profile-1');
-    expect(result.ordinalModel).toMatchObject({ status: 'eligible', reason: null, action: 'request_training' });
+    expect(training.ensureAutomaticTraining).toHaveBeenCalledWith('user-1', 'profile-1');
+    expect(result.ordinalModel).toMatchObject({ status: 'queued', reason: null, action: null });
   });
 
   it('reports queued and processing while the job is in flight', async () => {
@@ -93,7 +104,7 @@ describe('ProfileReadinessService', () => {
     expect((await error.forProfile('user-1', 'profile-1')).ordinalModel).toMatchObject({
       status: 'failed',
       reason: 'model_service_error',
-      action: 'retry',
+      action: null,
     });
   });
 
@@ -112,10 +123,15 @@ describe('ProfileReadinessService', () => {
     });
   });
 
-  it('reports stale, not ready, when the snapshot predates a fingerprint-schema change', async () => {
-    const { service } = servicesOf({ snapshotState: 'model_outdated', status: { state: 'succeeded' } });
+  it('schedules a stale snapshot replacement automatically instead of asking for unrelated rankings', async () => {
+    const { service, training } = servicesOf({
+      snapshotState: 'model_outdated',
+      status: { state: 'succeeded', completedTriads: 5 },
+      statusAfterEnsure: { state: 'running', completedTriads: 5 },
+    });
     const result = await service.forProfile('user-1', 'profile-1');
-    expect(result.ordinalModel).toMatchObject({ status: 'stale', reason: 'fingerprint_schema_changed', action: 'rank_more_triads' });
+    expect(training.ensureAutomaticTraining).toHaveBeenCalledWith('user-1', 'profile-1');
+    expect(result.ordinalModel).toMatchObject({ status: 'processing', reason: 'fingerprint_schema_changed', action: null });
   });
 
   it('separates a ready model from an empty candidate pool -- two different reasons for no recommendations', async () => {
@@ -131,9 +147,18 @@ describe('ProfileReadinessService', () => {
     expect(result.recommendation).toMatchObject({
       status: 'not_ready',
       reason: 'insufficient_eligible_candidates',
-      action: 'watch_more_titles',
+      action: null,
       modelVersion: 'plackett-luce-v3',
     });
+  });
+
+  it('asks for a ranking only when enough watched titles make that action possible', async () => {
+    const { service } = servicesOf({
+      snapshotState: 'pending',
+      status: { state: 'idle', completedTriads: 1 },
+      watchedTitles: 3,
+    });
+    expect((await service.forProfile('user-1', 'profile-1')).ordinalModel.action).toBe('rank_more_triads');
   });
 
   it('reports every capability ready with a non-empty pool', async () => {

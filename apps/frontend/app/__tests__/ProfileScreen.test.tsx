@@ -45,7 +45,6 @@ vi.mock('../lib/api', () => ({
     updateProfile: vi.fn().mockResolvedValue({}),
     getTrainingStatus: vi.fn(),
     getReadiness: vi.fn(),
-    requestTraining: vi.fn(),
     getRecommendations: vi.fn(),
     getCompletedTriads: vi.fn().mockResolvedValue([]),
     getWatchedTitles: vi.fn().mockResolvedValue([]),
@@ -190,7 +189,8 @@ describe('ProfileScreen — training state', () => {
 
   it('shows untrained message when no snapshot exists', async () => {
     await renderProfile('ملف الذوق');
-    await waitFor(() => expect(screen.getByText(/لم يُدرَّب نموذجك بعد/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/لم يُبنَ نموذجك بعد/)).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /حدّث|درّب/ })).not.toBeInTheDocument();
   });
 
   it('shows building message while training is running', async () => {
@@ -302,13 +302,9 @@ describe('ProfileScreen — training failures', () => {
     expect(screen.queryByRole('button', { name: /حدّث نموذجي/ })).not.toBeInTheDocument();
   });
 
-  it('shows why a train request was refused instead of staying silent', async () => {
-    const user = userEvent.setup();
-    mockApi.requestTraining.mockRejectedValue(new Error('503'));
+  it('never asks the person to start or retry derived model work', async () => {
     await renderProfile('ملف الذوق');
-    const button = await screen.findByRole('button', { name: /حدّث نموذجي/ });
-    await user.click(button);
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/تعذّر إرسال طلب التدريب/));
-    expect(mockApi.requestTraining).toHaveBeenCalledWith('p1');
+    await screen.findByText(/يبدأ بناؤه تلقائيًا/);
+    expect(screen.queryByRole('button', { name: /حدّث نموذجي|درّب نموذجي/ })).not.toBeInTheDocument();
   });
 });

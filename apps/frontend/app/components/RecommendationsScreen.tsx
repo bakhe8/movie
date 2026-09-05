@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { api, ApiError, type ProfileReadiness, type Recommendation, type RecommendationTrack, type TrainingSummary } from '../lib/api';
+import { api, type ProfileReadiness, type Recommendation, type RecommendationTrack, type TrainingSummary } from '../lib/api';
 import { TRACK_COPY } from '../lib/copy';
 import { formatConfidence, formatNumber, todayLocal, topTraits, type PersonalFitLevel } from '../lib/format';
 import { WorkCard } from './WorkCard';
@@ -41,15 +41,15 @@ const labels = {
     // user cannot see (live round 2026-09-05, brief P0-01/P0-03).
     training: {
       building: { title: 'جارٍ بناء نموذجك', body: 'تُعالَج جولاتك الآن. يستغرق هذا عادةً بضع دقائق، وتتحدّث هذه الصفحة تلقائيًا.' },
-      notStarted: { title: 'جولاتك تكفي للبدء', body: 'اكتملت جولات كافية ولم يبدأ التدريب بعد. اطلبه الآن.' },
+      notStarted: { title: 'جولاتك تكفي للبدء', body: 'اختياراتك محفوظة وسيبدأ بناء النموذج تلقائيًا. لا يلزمك إجراء.' },
       noFingerprints: {
         title: 'جولاتك محفوظة، والنموذج ينتظر تحليل الأفلام',
-        body: 'الأفلام التي رتّبتها لا تملك بعدُ تحليلًا منشورًا يكفي لبناء نموذج. لم يضع شيء من اختياراتك؛ يُعاد التدريب عندما يُنشر التحليل أو عند طلبك.',
+        body: 'الأفلام التي رتّبتها لا تملك بعدُ تحليلًا منشورًا يكفي لبناء نموذج. لم يضع شيء من اختياراتك؛ تتولى الخدمة إعادة البناء عندما يصبح التحليل جاهزًا.',
       },
-      failed: { title: 'تعذّر بناء نموذجك', body: 'حدث خطأ أثناء التدريب. اختياراتك محفوظة.' },
-      notPublished: { title: 'اكتمل التدريب ولم يُنشر النموذج', body: 'اختياراتك محفوظة. أعد المحاولة، وإن تكرّر أرفق رمز الدعم.' },
+      failed: { title: 'تعذّر بناء نموذجك', body: 'استنفدت المحاولات التلقائية. اختياراتك محفوظة والخطأ ظاهر للمشغّل؛ لا يلزمك تكرارها.' },
+      notPublished: { title: 'اكتمل التدريب ولم يُنشر النموذج', body: 'اختياراتك محفوظة. هذه مشكلة تشغيلية يتابعها النظام، ولا يلزمك إجراء.' },
       disabled: { title: 'التدريب غير مفعَّل على هذا الخادم', body: 'جولاتك محفوظة. هذا إعداد تشغيلي يعالجه مشغّل الخدمة، لا أنت.' },
-      unreachable: { title: 'تعذّر الوصول إلى خدمة النموذج', body: 'جولاتك محفوظة. حاول بعد قليل.' },
+      unreachable: { title: 'تعذّر قراءة حالة خدمة النموذج', body: 'جولاتك محفوظة، وستتحقق الصفحة والخدمة منها تلقائيًا.' },
       // Only the readiness contract can tell this apart from "no model"
       // (ADR-103): النموذج جاهز، والحوض فارغ.
       noCandidates: {
@@ -57,16 +57,9 @@ const labels = {
         body: 'كل ما في الكتالوج اليوم إمّا شاهدته أو استبعدته. يتّسع الكتالوج باستمرار، وتظهر اقتراحات جديدة كلما أُضيفت أفلام.',
       },
     },
-    trainNow: 'درّب نموذجي الآن',
-    trainRetry: 'أعد المحاولة',
-    trainRequesting: 'جارٍ الطلب…',
-    trainRequested: 'أُرسل طلب التدريب.',
-    trainFailed: 'تعذّر إرسال طلب التدريب.',
     support: (id: string) => `رمز الدعم: ${id}`,
     pausedTitle: 'المعالجة موقوفة مؤقتًا',
     pausedBody: 'طلبك قيد التنفيذ. يمكنك استئناف المعالجة في إعدادات الخصوصية.',
-    outdatedTitle: 'يحتاج نموذجك تحديثًا',
-    outdatedBody: 'مُخطَّط التدريب تغيّر. رتّب بضعة أفلام إضافية لإعادة البناء.',
     goRank: 'إلى الترتيب',
     goDiscover: 'اختر أفلامًا شاهدتها',
     emptyTrack: 'لا اقتراحات في هذا المسار بعد.',
@@ -113,30 +106,23 @@ const labels = {
     pendingBody: 'Recommendations appear once your model has been trained on enough ranking rounds.',
     training: {
       building: { title: 'Building your model', body: 'Your rounds are being processed. This usually takes a few minutes; this page refreshes on its own.' },
-      notStarted: { title: 'Your rounds are enough to start', body: 'Enough rounds are complete, but training has not started yet. Request it now.' },
+      notStarted: { title: 'Your rounds are enough to start', body: 'Your choices are saved and the model will start building automatically. No action is required.' },
       noFingerprints: {
         title: 'Your rounds are saved; the model is waiting for the films’ analysis',
-        body: 'The films you ranked do not yet have enough published analysis to build a model from. Nothing you chose is lost; training runs again once the analysis is published, or when you ask.',
+        body: 'The films you ranked do not yet have enough published analysis to build a model from. Nothing you chose is lost; the service rebuilds automatically when that analysis is ready.',
       },
-      failed: { title: 'Your model could not be built', body: 'Training hit an error. Your choices are saved.' },
-      notPublished: { title: 'Training finished but no model was published', body: 'Your choices are saved. Try again; if it repeats, quote the support code.' },
+      failed: { title: 'Your model could not be built', body: 'Automatic retries were exhausted. Your choices are saved and the operator can see the failure; you do not need to repeat them.' },
+      notPublished: { title: 'Training finished but no model was published', body: 'Your choices are saved. The system owns this operational issue; no action is required from you.' },
       disabled: { title: 'Training is not enabled on this server', body: 'Your rounds are saved. This is an operational setting for the service operator, not for you.' },
-      unreachable: { title: 'The model service could not be reached', body: 'Your rounds are saved. Try again in a moment.' },
+      unreachable: { title: 'The model-service state could not be read', body: 'Your rounds are saved; the page and service will check again automatically.' },
       noCandidates: {
         title: 'Your model is ready; there is nothing new to suggest',
         body: 'Everything in the catalogue today is either watched or set aside. The catalogue keeps growing, and suggestions appear as films are added.',
       },
     },
-    trainNow: 'Train my model now',
-    trainRetry: 'Try again',
-    trainRequesting: 'Requesting…',
-    trainRequested: 'Training requested.',
-    trainFailed: 'The training request could not be sent.',
     support: (id: string) => `Support code: ${id}`,
     pausedTitle: 'Processing paused',
     pausedBody: 'Your request is in progress. You can resume processing from privacy settings.',
-    outdatedTitle: 'Model needs updating',
-    outdatedBody: 'The training schema changed. Rank a few more films to rebuild.',
     goRank: 'Go to ranking',
     goDiscover: 'Pick films you have watched',
     emptyTrack: 'Nothing on this track yet.',
@@ -176,7 +162,6 @@ type Phase =
   | { kind: 'ready'; readiness: ProfileReadiness | null }
   | { kind: 'pending'; watched: number | null; needed: number; training: TrainingSummary; readiness: ProfileReadiness | null }
   | { kind: 'paused' }
-  | { kind: 'outdated' }
   | { kind: 'failed' };
 
 type PendingSituation =
@@ -272,7 +257,6 @@ function ProfileRecommendations({ lang, profileId, onGoToRank, onGoToDiscover, o
   const pendingRef = useRef(new Set<string>());
   const listOverridesRef = useRef(new Map<string, boolean>());
   const lifetimeRef = useRef(0);
-  const [requesting, setRequesting] = useState(false);
   const [listed, setListed] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<RecommendationTrack>>(new Set());
   // ADR-110: which recommendations this screen has already reported as seen.
@@ -394,10 +378,8 @@ function ProfileRecommendations({ lang, profileId, onGoToRank, onGoToDiscover, o
         const readiness = await readinessOrNull(profileId);
         if (lifetime !== lifetimeRef.current) return;
         setPhase({ kind: 'pending', watched, needed: result.needed, training: result.training, readiness });
-      } else if (result.state === 'paused') {
-        setPhase({ kind: 'paused' });
       } else {
-        setPhase({ kind: 'outdated' });
+        setPhase({ kind: 'paused' });
       }
     } catch {
       if (lifetime !== lifetimeRef.current) return;
@@ -418,47 +400,17 @@ function ProfileRecommendations({ lang, profileId, onGoToRank, onGoToDiscover, o
     return () => window.clearTimeout(timer);
   }, [notice]);
 
-  // While the model service works on the rounds, refresh quietly until it is
-  // done -- the same 5-second poll the profile screen runs.
+  // Derived work and its state repair never require a refresh button. Poll
+  // while a job runs or while the durable reconciler is about to start it.
   useEffect(() => {
-    if (phase.kind !== 'pending') return;
-    const { state } = phase.training;
-    if (state !== 'queued' && state !== 'running') return;
+    const followsSystemWork =
+      phase.kind === 'pending' && ['building', 'notStarted', 'unreachable'].includes(situationFor(phase.needed, phase.training, phase.readiness));
+    if (!followsSystemWork) return;
     const id = window.setInterval(() => {
       void load(true);
     }, 5000);
     return () => window.clearInterval(id);
   }, [phase, load]);
-
-  // The request to train lives where the user waits for its result, not only
-  // under the profile screen, and its refusal is said (brief P0-01: the live
-  // round clicked "update my model" and saw nothing at all).
-  async function trainNow() {
-    const lifetime = lifetimeRef.current;
-    setRequesting(true);
-    try {
-      await api.requestTraining(profileId);
-      if (lifetime !== lifetimeRef.current) return;
-      setNoticeTone('success');
-      setNotice(t.trainRequested);
-      await load(true);
-    } catch (error) {
-      if (lifetime !== lifetimeRef.current) return;
-      setNoticeTone('error');
-      const reason = error instanceof ApiError ? (error.details ?? {}).reason : undefined;
-      setNotice(
-        reason === 'model_service_disabled'
-          ? t.training.disabled.title
-          : reason === 'model_service_unreachable'
-            ? t.training.unreachable.title
-            : reason === 'paused'
-              ? t.pausedTitle
-              : t.trainFailed,
-      );
-    } finally {
-      if (lifetime === lifetimeRef.current) setRequesting(false);
-    }
-  }
 
   async function addToList(rec: Recommendation) {
     const lifetime = beginTitleAction(rec.title.id);
@@ -626,18 +578,8 @@ function ProfileRecommendations({ lang, profileId, onGoToRank, onGoToDiscover, o
       );
     }
     const copy = t.training[situation];
-    // 'building' and 'disabled' offer nothing to press: one is in progress,
-    // the other is not the user's to fix. 'unreachable' re-reads the state;
-    // every failure asks the model service again.
-    const actionLabel =
-      situation === 'notStarted'
-        ? t.trainNow
-        : situation === 'unreachable'
-          ? t.trainRetry
-          : situation === 'failed' || situation === 'noFingerprints' || situation === 'notPublished'
-            ? t.trainRetry
-            : null;
-    const runAction = () => { if (situation === 'unreachable') void load(); else void trainNow(); };
+    // None of these states is a missing user decision: model work, retries,
+    // schema changes and catalogue coverage remain system/operator work.
     const showSupport = phase.training.jobId !== null && situation !== 'building' && situation !== 'notStarted' && situation !== 'noCandidates';
     return (
       <div className={styles.screen}>
@@ -651,11 +593,6 @@ function ProfileRecommendations({ lang, profileId, onGoToRank, onGoToDiscover, o
           {notice && (
             <Toast message={notice} onDismiss={() => setNotice(null)} tone={noticeTone} />
           )}
-          {actionLabel && (
-            <button type="button" className={styles.cta} onClick={runAction} disabled={requesting}>
-              {requesting ? t.trainRequesting : actionLabel}
-            </button>
-          )}
         </div>
       </div>
     );
@@ -668,23 +605,6 @@ function ProfileRecommendations({ lang, profileId, onGoToRank, onGoToDiscover, o
         <div className={styles.pending} role="status">
           <h3>{t.pausedTitle}</h3>
           <p>{t.pausedBody}</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (phase.kind === 'outdated') {
-    return (
-      <div className={styles.screen}>
-        {header}
-        <div className={styles.pending} role="status">
-          <h3>{t.outdatedTitle}</h3>
-          <p>{t.outdatedBody}</p>
-          {onGoToRank && (
-            <button type="button" className={styles.cta} onClick={onGoToRank}>
-              {t.goRank}
-            </button>
-          )}
         </div>
       </div>
     );

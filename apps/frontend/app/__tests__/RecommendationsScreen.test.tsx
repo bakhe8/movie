@@ -15,7 +15,6 @@ vi.mock('../lib/api', () => ({
     getWatchedTitles: vi.fn().mockResolvedValue([]),
     getWatchlist: vi.fn().mockResolvedValue([]),
     getReadiness: vi.fn(),
-    requestTraining: vi.fn(),
     setTitleState: vi.fn(),
     recordWatchEvent: vi.fn(),
     // The ready screen reports what it showed and what was clicked (ADR-110);
@@ -34,7 +33,7 @@ vi.mock('../lib/api', () => ({
   },
 }));
 
-import { api, ApiError } from '../lib/api';
+import { api } from '../lib/api';
 const mockApi = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 
 function deferred<T>() {
@@ -294,15 +293,12 @@ describe('RecommendationsScreen — pending', () => {
     await screen.findByText(/ما زلنا نتعلم ذوقك/);
   });
 
-  it('offers to train now when the rounds are enough and nothing was ever requested, then shows the build', async () => {
-    const user = userEvent.setup();
-    mockApi.getRecommendations.mockResolvedValueOnce(pending(0, { state: 'idle' })).mockResolvedValueOnce(pending(0, { state: 'queued', jobId: 'job-1' }));
-    mockApi.requestTraining.mockResolvedValue({ jobId: 'job-1', status: 'queued', created: true });
+  it('says an eligible model starts automatically and exposes no training control', async () => {
+    mockApi.getRecommendations.mockResolvedValue(pending(0, { state: 'idle' }));
     render(<RecommendationsScreen lang="ar" profileId="p1" />);
     await screen.findByText(/جولاتك تكفي للبدء/);
-    await user.click(screen.getByRole('button', { name: /درّب نموذجي الآن/ }));
-    expect(mockApi.requestTraining).toHaveBeenCalledWith('p1');
-    await screen.findByText(/جارٍ بناء نموذجك/);
+    expect(screen.getByText(/سيبدأ بناء النموذج تلقائيًا/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /درّب|حدّث|أعد المحاولة/ })).not.toBeInTheDocument();
   });
 
   it('names the missing fingerprints, with the support code, when the job failed as invalid', async () => {
@@ -351,21 +347,15 @@ describe('RecommendationsScreen — pending', () => {
     mockApi.getReadiness.mockRejectedValue(new Error('offline'));
     render(<RecommendationsScreen lang="ar" profileId="p1" />);
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/تعذّر الوصول إلى خدمة النموذج/);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/تعذّر قراءة حالة خدمة النموذج/);
   });
 
-  it.each([
-    ['model_service_unreachable', 'تعذّر الوصول إلى خدمة النموذج'],
-    ['model_service_disabled', 'التدريب غير مفعَّل على هذا الخادم'],
-    ['paused', 'المعالجة موقوفة مؤقتًا'],
-  ])('shows %s training refusals as errors', async (reason, message) => {
-    const user = userEvent.setup();
+  it('shows a terminal training failure without turning it into user homework', async () => {
     mockApi.getRecommendations.mockResolvedValue(pending(0, { state: 'failed', errorKind: 'error', jobId: 'job-2' }));
-    mockApi.requestTraining.mockRejectedValue(new ApiError('unavailable', 503, { reason }));
     render(<RecommendationsScreen lang="ar" profileId="p1" />);
-    await user.click(await screen.findByRole('button', { name: /أعد المحاولة/ }));
-    const refusal = await screen.findByText(message);
-    expect(refusal).toHaveAttribute('role', 'alert');
-    expect(refusal.closest('[data-tone]')).toHaveAttribute('data-tone', 'error');
+    const failure = await screen.findByRole('alert');
+    expect(failure).toHaveTextContent(/استنفدت المحاولات التلقائية/);
+    expect(failure).toHaveTextContent(/job-2/);
+    expect(screen.queryByRole('button', { name: /أعد المحاولة|درّب|حدّث/ })).not.toBeInTheDocument();
   });
 });

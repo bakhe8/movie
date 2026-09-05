@@ -153,9 +153,8 @@ export interface TrainingSummary {
   nextTrainingAt: number | null;
 }
 
-// ADR-103 (remediation brief §5.1): four capabilities a single "trained or
-// not" flag used to conflate. `not_ready` before anything qualifies;
-// `eligible` once it does but nothing was requested yet.
+// ADR-103/114: four distinct capabilities. `eligible` means the system can
+// start derived work; it never means the person must request that work.
 export type ReadinessStatus = 'not_ready' | 'eligible' | 'queued' | 'processing' | 'ready' | 'failed' | 'stale';
 export type ReadinessReason =
   | 'model_service_disabled'
@@ -167,7 +166,7 @@ export type ReadinessReason =
   | 'fingerprint_schema_changed'
   | 'no_availability_data_source'
   | null;
-export type ReadinessAction = 'rank_more_triads' | 'watch_more_titles' | 'request_training' | 'resume_processing' | 'retry' | null;
+export type ReadinessAction = 'mark_watched_titles' | 'rank_more_triads' | 'resume_processing' | null;
 export interface CapabilityReadiness {
   status: ReadinessStatus;
   reason: ReadinessReason;
@@ -528,7 +527,6 @@ export const api = {
       | { state: 'ready'; items: Recommendation[] }
       | { state: 'pending'; needed: number; training: TrainingSummary }
       | { state: 'paused' }
-      | { state: 'model_outdated' }
     >(`/profiles/${profileId}/recommendations?limit=${limit}`),
 
   // ADR-110: the items that actually reached the screen. Never blocks a
@@ -567,16 +565,8 @@ export const api = {
       latestSnapshot: { modelVersion: string; trainingTriadCount: number; createdAt: string } | null;
     }>(`/profiles/${profileId}/training`),
 
-  requestTraining: (profileId: string) =>
-    request<{ jobId: string; status: string; created: boolean }>(`/profiles/${profileId}/train`, {
-      method: 'POST',
-    }),
-
-  // ADR-103 (remediation brief §5.1): the four capabilities a single
-  // "trained or not" flag used to conflate, each with its own status,
-  // reason and what the user could do next. Not consumed by any screen
-  // yet -- existing screens keep reading getTrainingStatus/getRecommendations
-  // exactly as before; this is the contract the next redesign reads from.
+  // ADR-103/114: four capabilities with system-owned derived work and only
+  // genuine user decisions in `action`. No first-party training command.
   getReadiness: (profileId: string) => request<ProfileReadiness>(`/profiles/${profileId}/readiness`),
 
   listPrivacyRequests: () =>
