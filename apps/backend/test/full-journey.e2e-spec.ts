@@ -30,7 +30,13 @@ const WORKERS_DIR = resolve(__dirname, '../../../services/workers');
 const SERVICE_PORT = 8098; // not 8001: that is a session's own long-running service
 const SERVICE_URL = `http://127.0.0.1:${SERVICE_PORT}`;
 const SERVICE_TOKEN = 'e2e-full-journey-token';
-const TEST_DATABASE_URL = 'postgresql://movieapp:test_password@127.0.0.1:5544/moviedb_test';
+// The Python service must open the *same* database this suite is using.
+// Hardcoding it drifted: the literal here still said port 5544 long after
+// the test database moved into the dev container on 5433 (C-17), so the
+// service could not connect, the training job sat at `running` for ever,
+// and nothing said why -- the file skips without a Python interpreter, so
+// no one saw it. test/test-db-env.js composes the one true URL.
+const TEST_DATABASE_URL = process.env.DATABASE_URL as string;
 
 const V1 = [
   'pacing', 'rhythmVariance', 'ambiguity', 'psychologicalDepth', 'warmth', 'darkness', 'linearity',
@@ -83,11 +89,14 @@ describe.skipIf(!PYTHON_RUNNABLE)('First-run journey with the real model service
   let service: ChildProcess;
   let token: string;
   let profileId: string;
+  const serviceLog: string[] = [];
 
   beforeAll(async () => {
     service = spawn(SPAWN_COMMAND, SPAWN_ARGS, {
       cwd: WORKERS_DIR,
       shell: true,
+      // Its own process group on POSIX, so the whole tree can be signalled.
+      detached: process.platform !== 'win32',
       env: {
         ...process.env,
         DATABASE_URL: TEST_DATABASE_URL,
@@ -95,8 +104,27 @@ describe.skipIf(!PYTHON_RUNNABLE)('First-run journey with the real model service
         MODEL_SERVICE_TOKEN: SERVICE_TOKEN,
       },
     });
+    // Drain both pipes. Nobody was reading them, and a child whose stdout
+    // pipe fills blocks on its next write -- a training run that logs enough
+    // would simply stop, mid-fit, looking exactly like a slow one. Keeping
+    // the tail also means a failure here can say what the service said.
+    const collect = (chunk: Buffer) => {
+      serviceLog.push(chunk.toString());
+      if (serviceLog.length > 200) serviceLog.splice(0, serviceLog.length - 200);
+    };
+    service.stdout?.on('data', collect);
+    service.stderr?.on('data', collect);
     if (!(await waitForHealth(60_000))) {
-      throw new Error('the real model service did not become healthy');
+      throw new Error(`the real model service did not become healthy; it said:
+${serviceLog.join('').slice(-2000)}`);
+    }
+    // A healthy answer from a process that is not ours is worse than none:
+    // it is what made the failure above look like a hang. If our own child
+    // died or failed to bind, say so here rather than run the journey
+    // against whatever else is on the port.
+    if (service.exitCode !== null || serviceLog.join('').includes('error while attempting to bind')) {
+      throw new Error(`the model service could not take port ${SERVICE_PORT} (an earlier run's orphan still holds it):
+${serviceLog.join('').slice(-2000)}`);
     }
 
     process.env.MODEL_SERVICE_URL = SERVICE_URL;
@@ -150,10 +178,28 @@ describe.skipIf(!PYTHON_RUNNABLE)('First-run journey with the real model service
 
   afterAll(async () => {
     await app?.close();
-    service?.kill();
+    stopService();
     delete process.env.MODEL_SERVICE_URL;
     delete process.env.MODEL_SERVICE_TOKEN;
   });
+
+  // `shell: true` means the child is a shell, and killing it leaves the
+  // Python grandchild running -- on Windows especially. An orphan then holds
+  // SERVICE_PORT, so the *next* run's health check passes against the stale
+  // process while its own service never binds, and training appears to hang
+  // for ever with no error anywhere. Kill the tree.
+  function stopService() {
+    if (!service?.pid) return;
+    if (process.platform === 'win32') {
+      spawnSync('taskkill', ['/pid', String(service.pid), '/t', '/f'], { stdio: 'ignore' });
+    } else {
+      try {
+        process.kill(-service.pid, 'SIGKILL');
+      } catch {
+        service.kill('SIGKILL');
+      }
+    }
+  }
 
   it('trains and then recommends with no manual command anywhere in the loop', async () => {
     for (let round = 0; round < 3; round += 1) {
@@ -171,24 +217,45 @@ describe.skipIf(!PYTHON_RUNNABLE)('First-run journey with the real model service
 
     // The third round triggers training by itself; poll the status route the
     // frontend polls, never a CLI.
-    const deadline = Date.now() + 60_000;
+    // Every 2s, like a client and unlike a hot loop: the throttler allows 60
+    // requests a minute per identity, and the old 500ms poll spent that
+    // budget in half a minute and then failed the run on its own 429 (the
+    // whole file skips without a Python interpreter, so this stayed hidden).
+    // A 429 here is back-pressure, not an answer -- wait and ask again.
+    const POLL_MS = 2_000;
+    // 60s was not enough on a cold machine: the run below reached
+    // `state: 'running'` and timed out while the fit was still going.
+    const deadline = Date.now() + 150_000;
     let status: { state: string; latestSnapshot: { modelVersion: string } | null } | undefined;
     while (Date.now() < deadline) {
       const response = await request(app.getHttpServer())
         .get(`/profiles/${profileId}/training`)
-        .set('Authorization', `Bearer ${token}`)
-        .expect(200);
-      status = response.body;
-      if (status?.state === 'succeeded' || status?.latestSnapshot) {
-        break;
+        .set('Authorization', `Bearer ${token}`);
+      if (response.status !== 429) {
+        if (response.status !== 200) {
+          throw new Error(`training status ${response.status}: ${JSON.stringify(response.body)}`);
+        }
+        status = response.body;
+        if (status?.state === 'succeeded' || status?.latestSnapshot) {
+          break;
+        }
+        if (status?.state === 'failed') {
+          throw new Error(`training failed: ${JSON.stringify(response.body.job)}`);
+        }
       }
-      if (status?.state === 'failed') {
-        throw new Error(`training failed: ${JSON.stringify(response.body.job)}`);
-      }
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, POLL_MS));
     }
 
-    expect(status?.latestSnapshot).toMatchObject({ modelVersion: expect.any(String) });
+    // On a timeout, say what the last status was: "expected null" alone gives
+    // whoever runs this nothing to go on.
+    if (!status?.latestSnapshot) {
+      throw new Error(
+        `no snapshot within the deadline; last training status: ${JSON.stringify(status)}
+model service said:
+${serviceLog.join('').slice(-2000)}`,
+      );
+    }
+    expect(status.latestSnapshot).toMatchObject({ modelVersion: expect.any(String) });
 
     const recommendations = await request(app.getHttpServer())
       .get(`/profiles/${profileId}/recommendations`)
@@ -198,11 +265,16 @@ describe.skipIf(!PYTHON_RUNNABLE)('First-run journey with the real model service
     // Which titles rank top depends on everything else in the shared
     // postgres-test catalog; what this asserts is the journey's own claim --
     // results exist, and they are served by the model this run just trained.
-    expect(recommendations.body.length).toBeGreaterThan(0);
-    expect(recommendations.body[0].modelVersion).toBe(status?.latestSnapshot?.modelVersion);
+    // ADR-81: a discriminated 200, not a bare array. This assertion still
+    // read `body.length` and so could only ever have been `undefined` --
+    // invisible because the file skips without a Python interpreter.
+    expect(recommendations.body.state).toBe('ready');
+    const items = recommendations.body.items as { modelVersion: string; availability: string; watchabilityScore: number | null }[];
+    expect(items.length).toBeGreaterThan(0);
+    expect(items[0].modelVersion).toBe(status.latestSnapshot?.modelVersion);
     // AVL-01: watchability is its own axis and has no data source, so every
     // item says so over real HTTP -- 'unknown', never "unavailable", never 0.
-    expect(recommendations.body[0].availability).toBe('unknown');
-    expect(recommendations.body[0].watchabilityScore).toBeNull();
-  }, 120_000);
+    expect(items[0].availability).toBe('unknown');
+    expect(items[0].watchabilityScore).toBeNull();
+  }, 240_000);
 });
