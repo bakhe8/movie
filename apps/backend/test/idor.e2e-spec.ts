@@ -6,6 +6,7 @@ import request from 'supertest';
 import type { Repository } from 'typeorm';
 import { AppModule } from '../src/modules/app/app.module';
 import { User } from '../src/entities/user.entity';
+import { Title } from '../src/entities/title.entity';
 
 // Exercises the app over real HTTP against a real (disposable) Postgres
 // instance -- see package.json's `test:e2e*` scripts and
@@ -38,6 +39,7 @@ describe('Cross-user access (IDOR) and auth guards', () => {
   let userA: { token: string; email: string };
   let userB: { token: string; email: string };
   let profileAId: string;
+  let catalogTitle: Title;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -48,10 +50,33 @@ describe('Cross-user access (IDOR) and auth guards', () => {
     userA = await registerUser('user-a');
     userB = await registerUser('user-b');
     profileAId = await createProfile(userA.token, `A's taste profile`);
+
+    // This file can run first against CI's empty migrated database. Own the
+    // catalogue fixture instead of relying on privacy/seed-demo to run first;
+    // keep private fields populated so omission assertions exercise real data.
+    catalogTitle = await app.get<Repository<Title>>(getRepositoryToken(Title)).save({
+      internalId: `E2E-IDOR-CATALOG-${unique}`,
+      titleEn: `IDOR catalogue boundary ${unique}`,
+      titleAr: `حدود وصول الكتالوج ${unique}`,
+      externalIds: { imdb: 'tt0000001', wikidata: 'Q1' },
+      fingerprint: {
+        schemaVersion: 'film-fingerprint-v1', pacing: 0.5, rhythmVariance: 0.5,
+        ambiguity: 0.5, psychologicalDepth: 0.5, warmth: 0.5, darkness: 0.5,
+        linearity: 0.5, dialogueDensity: 0.5, actionIntensity: 0.5, plotComplexity: 0.5,
+        visualComplexity: 0.5, soundscapeComplexity: 0.5, colorSaturation: 0.5,
+        themes: ['test fixture'], confidence: {},
+      },
+    });
   }, 20_000);
 
   afterAll(async () => {
-    await app.close();
+    try {
+      if (catalogTitle) {
+        await app.get<Repository<Title>>(getRepositoryToken(Title)).delete({ id: catalogTitle.id });
+      }
+    } finally {
+      await app.close();
+    }
   });
 
   describe('auth guard', () => {
@@ -368,20 +393,23 @@ describe('Cross-user access (IDOR) and auth guards', () => {
 
     it('never returns fingerprint or externalIds, even to an authenticated caller', async () => {
       const listResponse = await request(app.getHttpServer())
-        .get('/titles?limit=1')
+        .get('/titles')
         .set('Authorization', `Bearer ${userA.token}`)
+        .query({ query: catalogTitle.titleEn, limit: 1 })
         .expect(200);
 
-      expect(listResponse.body.items.length).toBeGreaterThan(0);
+      expect(listResponse.body.items).toHaveLength(1);
       const [listed] = listResponse.body.items;
+      expect(listed.id).toBe(catalogTitle.id);
       expect(listed).not.toHaveProperty('fingerprint');
       expect(listed).not.toHaveProperty('externalIds');
 
       const singleResponse = await request(app.getHttpServer())
-        .get(`/titles/${listed.id}`)
+        .get(`/titles/${catalogTitle.id}`)
         .set('Authorization', `Bearer ${userA.token}`)
         .expect(200);
 
+      expect(singleResponse.body.id).toBe(catalogTitle.id);
       expect(singleResponse.body).not.toHaveProperty('fingerprint');
       expect(singleResponse.body).not.toHaveProperty('externalIds');
     });
