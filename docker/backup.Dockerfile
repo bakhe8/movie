@@ -16,7 +16,10 @@ RUN apk add --no-cache openssl aws-cli bash
 
 COPY docker/backup-postgres-to-r2.sh /usr/local/bin/backup-postgres-to-r2.sh
 COPY docker/restore-drill-from-r2.sh /usr/local/bin/restore-drill-from-r2.sh
-RUN chmod +x /usr/local/bin/backup-postgres-to-r2.sh /usr/local/bin/restore-drill-from-r2.sh
+# O-11 (ADR-105): the one-way restore into a new server, run by hand during
+# the cutover window, not by any Cron service.
+COPY docker/restore-into-target-from-r2.sh /usr/local/bin/restore-into-target-from-r2.sh
+RUN chmod +x /usr/local/bin/backup-postgres-to-r2.sh /usr/local/bin/restore-drill-from-r2.sh /usr/local/bin/restore-into-target-from-r2.sh
 
 # Railway Cron sets the command per service (one service for the daily
 # backup, a second for the weekly restore drill, both pointed at this same

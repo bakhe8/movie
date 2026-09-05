@@ -785,6 +785,15 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 
 ---
 
+## ADR-105 — The move to EU-West is a backup-restore cutover, not a database edit (owner decision O-11, 2026-09-05)
+
+**Context.** The four Railway services were provisioned in **US East (Virginia)**, while QUICKSTART §8.2, ADR-88 and the privacy notice all told users the data lives in the EU. Twelve real users and a 300-title catalog is the smallest this data will ever be, so the honest fix is to move rather than to rewrite the promise (owner decision O-11, option (b), 2026-09-05 08:05).
+**Decision.** The move reuses the P0-5 path already proven in production rather than any new mechanism: the daily encrypted `pg_dump` in R2 is the transport, and `docker/restore-into-target-from-r2.sh` — the drill script aimed at a real, empty target instead of a disposable sibling — is the restore. It writes only to `TARGET_DATABASE_URL`, refuses a target that already has tables (`ALLOW_NONEMPTY_TARGET` to override), never drops anything, and prints row counts to compare against the source before the switch. `SKIP_EXTENSIONS=vector` leaves the unused `vector` extension (ADR-2/ADR-57) out of the restore when the target's image does not ship it, by filtering the archive's table of contents — the dump itself is never edited. Order: fresh backup → new **PG 18** Postgres in EU-West with its own Volume → restore → compare counts → announced downtime window → `DATABASE_URL` switched on `backend` and `model-service` → the other services and both Cron services moved → docs and the privacy notice corrected. The old database is **kept for a week** after verification and deleted only by the owner.
+**Consequences.** The cutover is a short announced outage, not a live replication; anything written during the window is lost, so the window is taken when the app is idle and the final backup is the one restored. Verified end to end before any production step: an encrypted dump of the PG 15 dev database restored into a throwaway PG 18 server (33 tables, 300 titles, 12 users, 33 migration rows), and the non-empty guard refused the second run. The version gap between dev/CI (PG 15, ADR-98) and production (PG 18.6) is unchanged by this and stays a separate decision.
+**Revisit when.** Railway offers a Middle East region (latency, not residency, would be the driver), or the data grows past what a dump-and-restore window can carry.
+
+---
+
 ## Summary
 
 | # | Decision | Serves | Revisit trigger |
@@ -892,6 +901,7 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 | 101 | IMDb dump download is atomic with validation and stale-fallback; the whole IMDb step can no longer fail `npm run release`, revises ADR-90 | P0-4 2026-09-05; ADR-90 | a persistent `IMDB_DATASETS_DIR` volume, or a second dataset needing the same treatment |
 | 102 | Automated encrypted `pg_dump` to R2 (own credentials, sha256, `pg_restore --list`), weekly restore drill into a disposable database, retention via the bucket's own S3 lifecycle | P0-5 2026-09-05; O-8 | a second database needing the same treatment, or Railway notifications proving insufficient |
 | 104 | `watchedOn`: a plain `'YYYY-MM-DD'` the client supplies (`todayLocal()`, or the diary's own date), never a timestamp the server derives from its own clock | remediation brief P1-03/DATE-01 2026-09-05 | a profile-level IANA timezone lets the server compute "today" too |
+| 105 | EU-West move is a backup→restore cutover on the P0-5 path (empty-target guard, `SKIP_EXTENSIONS`, announced window, old database kept a week) | owner decision O-11 2026-09-05; ADR-88, ADR-102 | a Middle East region exists, or the data outgrows a dump-and-restore window |
 
 ## How to add a decision
 
