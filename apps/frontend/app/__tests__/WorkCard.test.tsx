@@ -79,6 +79,20 @@ describe('WorkCard', () => {
     expect(hidden.some((text) => text.includes('لا توجد إشارة كافية بعد'))).toBe(true);
   });
 
+  // Owner's addendum 3 (2026-09-05): where the expression is already
+  // understood, the symbol carries it. A star beside a number is the rating
+  // idiom every catalogue uses, so "out of ten" stops being spelled out --
+  // and the number stays a number, because the number is the information.
+  it('shows a rating as a star and a number, without spelling out the scale', () => {
+    const { container } = card();
+
+    expect(container.querySelector('[class*="rating"] svg')).not.toBeNull();
+    expect(container.querySelector('[class*="num"]')?.textContent).toBe('6.6');
+    expect(container.textContent).not.toContain('من 10');
+    // The cell is still named for anyone listening rather than looking.
+    expect(container.querySelector('[class*="srOnly"]')?.textContent).toBe('الملاءمة الشخصية');
+  });
+
   it('says the unknowns once each, as hollow chips rather than sentences', () => {
     const { container } = card();
     const hollow = [...container.querySelectorAll('[class*="hollow"]')].map((el) => el.textContent);

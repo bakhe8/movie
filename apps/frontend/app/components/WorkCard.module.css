@@ -234,7 +234,15 @@
   font-size: var(--fs-12);
 }
 
-/* 2) Public quality: a muted number with its source; never the accent. */
+/* 2) Public quality: a star and a muted number with its source; never the
+   accent, and never the words "out of ten" (addendum 3). */
+.rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--muted);
+}
+
 .num {
   color: var(--text);
   font-weight: var(--w-semibold);

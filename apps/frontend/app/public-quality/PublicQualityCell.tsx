@@ -1,5 +1,6 @@
 import type { Lang } from '../legal/content';
 import { formatDate, formatNumber } from '../lib/format';
+import { RatingStar } from '../components/RatingStar';
 import styles from './PublicQualityCell.module.css';
 import { SOURCE_LABEL, type PublicQuality } from './types';
 
@@ -21,7 +22,6 @@ const copy = {
   ar: {
     label: 'الجودة العامة',
     unknown: 'لا مصدر بعد',
-    outOf: (scale: string) => `من ${scale.split('-')[1] ?? scale}`,
     votes: (n: string) => `${n} تصويت`,
     capturedAt: (d: string) => `بتاريخ ${d}`,
     sources: 'مصادر منفصلة، لا تُدمج',
@@ -29,7 +29,6 @@ const copy = {
   en: {
     label: 'Public quality',
     unknown: 'No source yet',
-    outOf: (scale: string) => `out of ${scale.split('-')[1] ?? scale}`,
     votes: (n: string) => `${n} votes`,
     capturedAt: (d: string) => `as of ${d}`,
     sources: 'Separate sources, never merged',
@@ -52,8 +51,13 @@ export function PublicQualityCell({ quality, lang, headless = false }: { quality
             {sources.map((s) => (
               <div key={s.source} className={styles.source}>
                 <div className={styles.line}>
-                  <span className={styles.num}>{formatNumber(s.value as number, lang)}</span>
-                  {s.scale && <span className={styles.sub}>{t.outOf(s.scale)}</span>}
+                  {/* Star + number: the scale is the star's to say (owner's
+                      addendum 3). The source and the day it was read stay in
+                      words -- they are facts, not decoration. */}
+                  <span className={styles.rating}>
+                    <RatingStar size={15} />
+                    <span className={styles.num}>{formatNumber(s.value as number, lang)}</span>
+                  </span>
                   <span className={styles.sub}>
                     {[
                       SOURCE_LABEL[s.source] ?? s.source,

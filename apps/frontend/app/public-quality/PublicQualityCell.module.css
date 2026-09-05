@@ -60,3 +60,11 @@
   font-weight: var(--w-medium);
   line-height: 1.6;
 }
+
+/* Star + number as one unit (owner's addendum 3). */
+.rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+}

@@ -6,6 +6,7 @@ import { formatConfidence, formatNumber, formatPersonalFit, formatReason, type P
 import { PublicQualityCell } from '../public-quality/PublicQualityCell';
 import type { PublicQuality } from '../public-quality/types';
 import { Poster } from './Poster';
+import { RatingStar } from './RatingStar';
 import styles from './WorkCard.module.css';
 
 type Lang = 'ar' | 'en';
@@ -264,7 +265,11 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
               <dd className={styles.metaValue}>
                 {quality && quality.value !== null ? (
                   <>
-                    <span className={styles.num}>{formatNumber(quality.value, lang)}</span>
+                    {/* Star + number: the scale needs no words (addendum 3). */}
+                    <span className={styles.rating}>
+                      <RatingStar size={14} />
+                      <span className={styles.num}>{formatNumber(quality.value, lang)}</span>
+                    </span>
                     <span className={styles.numSub}>
                       {[quality.votes !== null ? t.votes(formatNumber(quality.votes, lang)) : null, ...quality.sources]
                         .filter(Boolean)
