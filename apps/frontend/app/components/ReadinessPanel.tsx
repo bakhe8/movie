@@ -50,29 +50,27 @@ const copy: Record<Lang, {
     },
     status: {
       not_ready: 'غير جاهز',
-      eligible: 'جاهز للبدء',
+      eligible: 'سيبدأ تلقائيًا',
       queued: 'في الطابور',
       processing: 'قيد العمل',
       ready: 'جاهز',
       failed: 'فشل',
-      stale: 'يحتاج تحديثاً',
+      stale: 'قيد التحديث',
     },
     reason: {
       model_service_disabled: 'خدمة النموذج غير مفعّلة على هذا الخادم؛ إعداد تشغيلي لا شأن لك به.',
       processing_paused: 'المعالجة موقوفة بطلبك في إعدادات الخصوصية.',
       insufficient_triads: 'لم تكتمل جولات ترتيب كافية بعد.',
       insufficient_fingerprint_coverage: 'الأفلام التي رتّبتها لم تُنشر بصماتها بعد.',
-      insufficient_eligible_candidates: 'لا توجد أفلام جديدة كافية خارج ما شاهدته.',
-      model_service_error: 'تعذّر على خدمة النموذج إتمام التدريب.',
-      fingerprint_schema_changed: 'تغيّرت أبعاد البصمة بعد آخر تدريب؛ التدريب التالي يستبدل النموذج.',
+      insufficient_eligible_candidates: 'لا توجد عناوين جديدة مؤهلة في الكتالوج الآن؛ توسيعه مسؤولية الخدمة.',
+      model_service_error: 'تعذّر على خدمة النموذج إتمام التدريب بعد المحاولات التلقائية؛ الخطأ ظاهر للمشغّل.',
+      fingerprint_schema_changed: 'تغيّرت أبعاد البصمة؛ يعيد النظام بناء النموذج تلقائيًا من اختياراتك المحفوظة.',
       no_availability_data_source: 'لا مصدر بيانات للتوفّر بعد: لا نعرف أين يُشاهد، ولا ندّعي أنه غير متاح.',
     },
     action: {
+      mark_watched_titles: 'المطلوب منك: سجّل أفلامًا شاهدتها لفتح أول جولة.',
       rank_more_triads: 'المطلوب منك: جولة ترتيب أخرى.',
-      watch_more_titles: 'المطلوب منك: سجّل أفلاماً شاهدتها.',
-      request_training: 'المطلوب منك: اطلب التدريب من الزر أدناه.',
       resume_processing: 'المطلوب منك: استأنف المعالجة من إعدادات الخصوصية.',
-      retry: 'المطلوب منك: أعد المحاولة من الزر أدناه.',
     },
   },
   en: {
@@ -89,29 +87,27 @@ const copy: Record<Lang, {
     },
     status: {
       not_ready: 'Not ready',
-      eligible: 'Ready to start',
+      eligible: 'Starts automatically',
       queued: 'Queued',
       processing: 'Working',
       ready: 'Ready',
       failed: 'Failed',
-      stale: 'Needs a refresh',
+      stale: 'Updating',
     },
     reason: {
       model_service_disabled: 'The model service is not enabled on this server; an operator setting, not something you can act on.',
       processing_paused: 'Processing is paused at your request, in privacy settings.',
       insufficient_triads: 'Not enough ranking rounds completed yet.',
       insufficient_fingerprint_coverage: 'The films you ranked have no published fingerprint yet.',
-      insufficient_eligible_candidates: 'Not enough unwatched films to choose from.',
-      model_service_error: 'The model service could not finish the training run.',
-      fingerprint_schema_changed: 'The fingerprint dimensions changed after the last run; the next one replaces the model.',
+      insufficient_eligible_candidates: 'There are no new eligible titles in the catalogue right now; expanding it is the service’s responsibility.',
+      model_service_error: 'The model service could not finish after automatic retries; the operator can see the failure.',
+      fingerprint_schema_changed: 'The fingerprint dimensions changed; the system rebuilds the model automatically from your saved choices.',
       no_availability_data_source: 'No availability source yet: we do not know where it plays, and we will not claim it is unavailable.',
     },
     action: {
+      mark_watched_titles: 'What is needed from you: mark films you have watched to unlock the first round.',
       rank_more_triads: 'What is needed from you: one more ranking round.',
-      watch_more_titles: 'What is needed from you: mark some films you have watched.',
-      request_training: 'What is needed from you: ask for training with the button below.',
       resume_processing: 'What is needed from you: resume processing in privacy settings.',
-      retry: 'What is needed from you: try again with the button below.',
     },
   },
 };
@@ -129,15 +125,15 @@ const TONE: Record<ReadinessStatus, 'ready' | 'working' | 'absent'> = {
   stale: 'absent',
 };
 
-export function ReadinessPanel({ profileId, lang, refreshKey = 0 }: { profileId: string | null; lang: Lang; refreshKey?: number }) {
+export function ReadinessPanel({ profileId, lang }: { profileId: string | null; lang: Lang }) {
   const t = copy[lang];
   const [readiness, setReadiness] = useState<ProfileReadiness | null>(null);
   const [state, setState] = useState<'loading' | 'loaded' | 'failed'>('loading');
 
   const load = useCallback(
-    async (stillMounted: () => boolean) => {
+    async (stillMounted: () => boolean, announce = true) => {
       if (!profileId) return;
-      setState('loading');
+      if (announce) setState('loading');
       try {
         const result = await api.getReadiness(profileId);
         if (!stillMounted()) return;
@@ -162,7 +158,25 @@ export function ReadinessPanel({ profileId, lang, refreshKey = 0 }: { profileId:
     return () => {
       cancelled = true;
     };
-  }, [load, refreshKey]);
+  }, [load]);
+
+  // A person never refreshes derived state. While the backend is scheduling,
+  // processing or replacing a model, re-read quietly until the state settles.
+  useEffect(() => {
+    if (!readiness) return;
+    const followsSystemWork = [readiness.ordinalModel, readiness.semanticProfile, readiness.recommendation].some(
+      (capability) => ['eligible', 'queued', 'processing', 'stale'].includes(capability.status),
+    );
+    if (!followsSystemWork) return;
+    let cancelled = false;
+    const id = window.setTimeout(() => {
+      void load(() => !cancelled, false);
+    }, 5000);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(id);
+    };
+  }, [readiness, load]);
 
   if (!profileId) return null;
 

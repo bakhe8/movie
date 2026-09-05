@@ -152,7 +152,7 @@ describe('RecommendationsService', () => {
   let triadsRepository: { count: ReturnType<typeof vi.fn> };
   let posterService: { forTitles: ReturnType<typeof vi.fn> };
   let experimentsService: { armFor: ReturnType<typeof vi.fn> };
-  let trainingService: { firstTriadCount: number; summarize: ReturnType<typeof vi.fn> };
+  let trainingService: { firstTriadCount: number; summarize: ReturnType<typeof vi.fn>; ensureAutomaticTraining: ReturnType<typeof vi.fn> };
   let service: RecommendationsService;
 
   // Every 'ready' assertion below works on the items; the states have their
@@ -190,6 +190,7 @@ describe('RecommendationsService', () => {
     trainingService = {
       firstTriadCount: 3,
       summarize: vi.fn().mockResolvedValue({ state: 'idle', jobId: null, errorKind: null, completedTriads: 0, nextTrainingAt: 3 }),
+      ensureAutomaticTraining: vi.fn().mockResolvedValue(undefined),
     };
     service = new RecommendationsService(
       profilesRepository as unknown as Repository<Profile>,
@@ -428,17 +429,40 @@ describe('RecommendationsService', () => {
     });
   });
 
+  it('repairs an eligible idle model automatically and returns the queued state', async () => {
+    const profile = { id: 'profile-1', userId: 'user-1', pausedAt: null };
+    profilesRepository.findOne.mockResolvedValue(profile);
+    snapshotsRepository.findOne.mockResolvedValue(null);
+    trainingService.summarize
+      .mockResolvedValueOnce({ state: 'idle', jobId: null, errorKind: null, completedTriads: 3, nextTrainingAt: 8 })
+      .mockResolvedValueOnce({ state: 'queued', jobId: 'job-auto', errorKind: null, completedTriads: 3, nextTrainingAt: 8 });
+
+    expect(await service.findForProfile('user-1', 'profile-1', 10)).toMatchObject({
+      state: 'pending',
+      needed: 0,
+      training: { state: 'queued', jobId: 'job-auto' },
+    });
+    expect(trainingService.ensureAutomaticTraining).toHaveBeenCalledWith('user-1', 'profile-1');
+  });
+
   it('reports paused rather than serving a paused profile (PRIVACY.md §4)', async () => {
     profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1', pausedAt: new Date() });
 
     expect(await service.findForProfile('user-1', 'profile-1', 10)).toEqual({ state: 'paused' });
   });
 
-  it('reports model_outdated for a snapshot whose weight vector predates a fingerprint change', async () => {
-    profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+  it('turns a schema-stale snapshot into an automatic pending rebuild', async () => {
+    const profile = { id: 'profile-1', userId: 'user-1', pausedAt: null };
+    profilesRepository.findOne.mockResolvedValue(profile);
     snapshotsRepository.findOne.mockResolvedValue({ weights: [0.1, 0.2], pairwiseAccuracy: 0.5 });
+    trainingService.summarize.mockResolvedValue({ state: 'queued', jobId: 'job-refresh', errorKind: null, completedTriads: 8, nextTrainingAt: 13 });
 
-    expect(await service.findForProfile('user-1', 'profile-1', 10)).toEqual({ state: 'model_outdated' });
+    expect(await service.findForProfile('user-1', 'profile-1', 10)).toMatchObject({
+      state: 'pending',
+      needed: 0,
+      training: { state: 'queued', jobId: 'job-refresh' },
+    });
+    expect(trainingService.ensureAutomaticTraining).toHaveBeenCalledWith('user-1', 'profile-1');
   });
 
   it('scores, ranks descending, and truncates to the requested limit', async () => {

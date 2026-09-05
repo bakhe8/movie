@@ -125,7 +125,31 @@ describe('TrainingService', () => {
     });
   });
 
-  describe('requestTraining (explicit)', () => {
+  describe('ensureAutomaticTraining (derived-state read repair)', () => {
+    it('idempotently schedules an eligible profile without a user command', async () => {
+      await build().ensureAutomaticTraining('user-1', 'profile-1');
+      expect(profiles.findOne).toHaveBeenCalledWith({ where: { id: 'profile-1', userId: 'user-1' } });
+      expect(jobs.enqueue).toHaveBeenCalledExactlyOnceWith('profile-1');
+    });
+
+    it('does not schedule before the evidence threshold, while paused, or while the service is disabled', async () => {
+      triads.count.mockResolvedValueOnce(2);
+      await build().ensureAutomaticTraining('user-1', 'profile-1');
+
+      profiles.findOne.mockResolvedValueOnce({ id: 'profile-1', userId: 'user-1', pausedAt: new Date() });
+      await build().ensureAutomaticTraining('user-1', 'profile-1');
+
+      await build(configMock(), clientMock(false)).ensureAutomaticTraining('user-1', 'profile-1');
+      expect(jobs.enqueue).not.toHaveBeenCalled();
+    });
+
+    it('keeps an enqueue failure operational instead of failing the readiness read', async () => {
+      jobs.enqueue.mockRejectedValueOnce(new Error('database unreachable'));
+      await expect(build().ensureAutomaticTraining('user-1', 'profile-1')).resolves.toBeUndefined();
+    });
+  });
+
+  describe('requestTraining (compatibility/operator recovery)', () => {
     it('404s for a profile the caller does not own', async () => {
       profiles.findOne.mockResolvedValueOnce(null);
       await expect(build().requestTraining('attacker', 'profile-1')).rejects.toBeInstanceOf(NotFoundException);

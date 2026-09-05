@@ -41,7 +41,7 @@ const labels = {
     // every round after the first repeats. Never asked all at once.
     addMore: (n: number) =>
       n === 1 ? 'سجّل فيلمًا آخر في «اكتشف» لتبقى الجولات جديدة.' : 'سجّل فيلمين آخرين في «اكتشف» لتبقى الجولات جديدة.',
-    firstResult: 'اكتملت ثلاث جولات. توصياتك الأولى وترتيب مكتبتك يظهران بعد تدريب نموذجك.',
+    firstResult: 'اكتملت ثلاث جولات. يُبنى نموذجك الآن تلقائيًا؛ ستظهر توصياتك وترتيب مكتبتك عند جاهزيته.',
     dragHandle: 'اسحب لتغيير الترتيب',
     cardMenu: 'استبدال هذا الفيلم',
     moveUp: 'ارفع درجة',
@@ -83,7 +83,7 @@ const labels = {
     repeats: (n: number, formatted: string) =>
       n === 1 ? 'And one repeat round, which counts for nothing: the same films again.' : `And ${formatted} repeat rounds, which count for nothing: the same films again.`,
     addMore: (n: number) => (n === 1 ? 'Mark one more film in Discover to keep the rounds new.' : `Mark ${n} more films in Discover to keep the rounds new.`),
-    firstResult: 'Three rounds done. Your first recommendations and library ranking appear once your model is trained.',
+    firstResult: 'Three rounds done. Your model is now building automatically; recommendations and your library ranking appear when it is ready.',
     dragHandle: 'Drag to reorder',
     cardMenu: 'Replace this film',
     moveUp: 'Move up',
@@ -420,8 +420,8 @@ export function RankScreen({
       }
       buzz(12);
       // The first-training threshold is where a first result becomes
-      // possible (§5.1 step 5); training is still a manual step, hence
-      // "once your model is trained".
+      // possible (§5.1 step 5); the committed round schedules it in the
+      // background, so the person is never asked to start derived work.
       setNotice(next && next.learningRounds === next.firstTrainingAt ? t.firstResult : t.saved);
       await loadTriad();
     } catch {

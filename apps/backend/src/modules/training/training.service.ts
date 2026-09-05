@@ -12,7 +12,7 @@ import { TrainingJobsService } from './training-jobs.service';
 import { everyNTriadsFrom, firstTriadCountFrom } from './training-thresholds';
 
 export type TrainingState =
-  | 'disabled' // MODEL_SERVICE_URL unset: training is the manual CLI only
+  | 'disabled' // MODEL_SERVICE_URL unset: automatic training cannot run
   | 'paused' // profiles.pausedAt set (PRIVACY.md §4 pause_all): nothing trains
   | 'idle' // no job on record for this profile
   | 'queued'
@@ -147,10 +147,39 @@ export class TrainingService {
     }
   }
 
-  // POST /profiles/:profileId/train -- the owner asks explicitly (the
-  // profile screen's "update my model", and the e2e path). Once past the
-  // eligibility checks this always succeeds: a model-service blip is no
-  // longer this request's problem to report, it is the queue's to retry.
+  // Read-repair for derived state (ADR-114). The normal trigger is still the
+  // committed ranking event above, but a profile may become eligible while
+  // the service is restarting, or an old snapshot may become incompatible
+  // after a fingerprint-schema deployment. A screen that observes either
+  // state asks the system to repair it; the person never has to press a
+  // training button. Ownership is checked because readiness/recommendation
+  // routes call this with request-scoped ids. Enqueue is idempotent, and a
+  // failure remains an operational signal rather than a failed page read.
+  async ensureAutomaticTraining(userId: string, profileId: string): Promise<void> {
+    const profile = await this.assertProfileOwnership(userId, profileId);
+    if (!this.client.enabled || profile.pausedAt) {
+      return;
+    }
+    const completed = await this.countCompleted(profileId);
+    if (completed < this.firstTriadCount) {
+      return;
+    }
+    try {
+      const { job, created } = await this.jobs.enqueue(profileId);
+      if (created) {
+        this.logger.log(`automatic training repaired for profile ${profileId} at ${completed} completed triads (job ${job.id})`);
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`automatic training repair skipped for profile ${profileId}: ${reason}`);
+      captureException(error, { profileId, stage: 'training.ensureAutomaticTraining' });
+    }
+  }
+
+  // POST /profiles/:profileId/train is retained as a compatibility and
+  // operator-recovery endpoint, not a normal product interaction (ADR-114).
+  // Once past the eligibility checks it always succeeds: a model-service blip
+  // is the queue's to retry, never something a user-facing screen must fix.
   async requestTraining(userId: string, profileId: string): Promise<TrainingRequestResult> {
     const profile = await this.assertProfileOwnership(userId, profileId);
     if (!this.client.enabled) {
