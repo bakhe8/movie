@@ -146,6 +146,38 @@ export interface TrainingSummary {
   nextTrainingAt: number | null;
 }
 
+// ADR-103 (remediation brief §5.1): four capabilities a single "trained or
+// not" flag used to conflate. `not_ready` before anything qualifies;
+// `eligible` once it does but nothing was requested yet.
+export type ReadinessStatus = 'not_ready' | 'eligible' | 'queued' | 'processing' | 'ready' | 'failed' | 'stale';
+export type ReadinessReason =
+  | 'model_service_disabled'
+  | 'processing_paused'
+  | 'insufficient_triads'
+  | 'insufficient_fingerprint_coverage'
+  | 'insufficient_eligible_candidates'
+  | 'model_service_error'
+  | 'fingerprint_schema_changed'
+  | 'no_availability_data_source'
+  | null;
+export type ReadinessAction = 'rank_more_triads' | 'watch_more_titles' | 'request_training' | 'resume_processing' | 'retry' | null;
+export interface CapabilityReadiness {
+  status: ReadinessStatus;
+  reason: ReadinessReason;
+  action: ReadinessAction;
+  publishedAt: string | null;
+  modelVersion: string | null;
+}
+export interface ProfileReadiness {
+  ordinalModel: CapabilityReadiness;
+  // Today the same value as ordinalModel -- one trainer run produces both;
+  // see ADR-103 for why they are still separate fields.
+  semanticProfile: CapabilityReadiness;
+  recommendation: CapabilityReadiness;
+  // Always not_ready until a real availability data source exists (AVL-01).
+  availability: CapabilityReadiness;
+}
+
 export interface Triad {
   id: string;
   profileId: string;
@@ -470,6 +502,13 @@ export const api = {
     request<{ jobId: string; status: string; created: boolean }>(`/profiles/${profileId}/train`, {
       method: 'POST',
     }),
+
+  // ADR-103 (remediation brief §5.1): the four capabilities a single
+  // "trained or not" flag used to conflate, each with its own status,
+  // reason and what the user could do next. Not consumed by any screen
+  // yet -- existing screens keep reading getTrainingStatus/getRecommendations
+  // exactly as before; this is the contract the next redesign reads from.
+  getReadiness: (profileId: string) => request<ProfileReadiness>(`/profiles/${profileId}/readiness`),
 
   listPrivacyRequests: () =>
     request<{ id: string; type: string; status: string; requestedAt: string; executeAfter: string | null; completedAt: string | null }[]>(

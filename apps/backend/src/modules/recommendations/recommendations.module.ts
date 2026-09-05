@@ -11,12 +11,14 @@ import { ExperimentsModule } from '../experiments/experiments.module';
 import { PublicQualityModule } from '../public-quality/public-quality.module';
 import { TrainingModule } from '../training/training.module';
 import { LibraryController } from './library.controller';
+import { ProfileReadinessController } from './profile-readiness.controller';
+import { ProfileReadinessService } from './profile-readiness.service';
 import { RecommendationsController } from './recommendations.controller';
 import { RecommendationsService } from './recommendations.service';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Profile, Title, UserModelSnapshot, UserTitleState, Recommendation, ModelVersion, Triad]), PublicQualityModule, TrainingModule, ExperimentsModule],
-  controllers: [RecommendationsController, LibraryController],
-  providers: [RecommendationsService],
+  controllers: [RecommendationsController, LibraryController, ProfileReadinessController],
+  providers: [RecommendationsService, ProfileReadinessService],
 })
 export class RecommendationsModule {}

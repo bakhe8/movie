@@ -479,6 +479,28 @@ export class RecommendationsService {
     throw new ConflictException('Recommendations are unavailable until the preference model is trained');
   }
 
+  // ADR-103 (remediation brief §5.1): the same ready/pending/paused/
+  // model_outdated discriminator findForProfile() uses internally, for a
+  // caller (ProfileReadinessService) that needs only the state, never the
+  // expensive scored candidate pipeline.
+  async snapshotState(userId: string, profileId: string): Promise<'ready' | 'pending' | 'paused' | 'model_outdated'> {
+    const outcome = await this.resolveSnapshot(userId, profileId);
+    return outcome.state;
+  }
+
+  // How many unwatched, fingerprinted titles exist to recommend from --
+  // findForProfile()'s own candidate filter, as a count instead of a full
+  // scored list. Zero here is a real distinct state from "no model yet":
+  // the model can be ready while the catalog has nothing left to suggest.
+  async candidatePoolSize(profileId: string): Promise<number> {
+    const excludedTitleIds = await this.watchedTitleIds(profileId);
+    const queryBuilder = this.titlesRepository.createQueryBuilder('title').where('title.fingerprint IS NOT NULL');
+    if (excludedTitleIds.length > 0) {
+      queryBuilder.andWhere('title.id NOT IN (:...excludedTitleIds)', { excludedTitleIds });
+    }
+    return queryBuilder.getCount();
+  }
+
   private async resolveSnapshot(
     userId: string,
     profileId: string,

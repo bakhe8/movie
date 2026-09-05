@@ -108,11 +108,12 @@ function repoMock() {
   };
 }
 
-function queryBuilderMock(titles: Title[]) {
+function queryBuilderMock(titles: Title[], count = titles.length) {
   const builder = {
     where: vi.fn().mockReturnThis(),
     andWhere: vi.fn().mockReturnThis(),
     getMany: vi.fn().mockResolvedValue(titles),
+    getCount: vi.fn().mockResolvedValue(count),
   };
   return builder;
 }
@@ -1288,6 +1289,41 @@ describe('RecommendationsService', () => {
       await recommendItems('user-1', 'profile-1', 10);
 
       expect(recommendationsRepository.insert).toHaveBeenCalledWith([expect.objectContaining({ publicQuality: 6.2 })]);
+    });
+  });
+
+  // ADR-103: the cheap discriminator ProfileReadinessService reads, without
+  // paying for the scored candidate pipeline.
+  describe('snapshotState', () => {
+    it('mirrors findForProfile\'s own discriminator', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1', pausedAt: null });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot());
+      await expect(service.snapshotState('user-1', 'profile-1')).resolves.toBe('ready');
+
+      snapshotsRepository.findOne.mockResolvedValue(null);
+      await expect(service.snapshotState('user-1', 'profile-1')).resolves.toBe('pending');
+
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1', pausedAt: new Date() });
+      await expect(service.snapshotState('user-1', 'profile-1')).resolves.toBe('paused');
+    });
+  });
+
+  describe('candidatePoolSize', () => {
+    it('counts unwatched, fingerprinted titles without scoring them', async () => {
+      statesRepository.find.mockResolvedValue([{ titleId: 'watched-1' }]);
+      const builder = queryBuilderMock([], 7);
+      titlesRepository.createQueryBuilder.mockReturnValue(builder);
+
+      await expect(service.candidatePoolSize('profile-1')).resolves.toBe(7);
+
+      expect(builder.andWhere).toHaveBeenCalledWith('title.id NOT IN (:...excludedTitleIds)', { excludedTitleIds: ['watched-1'] });
+    });
+
+    it('returns 0 rather than throwing when nothing is left to recommend', async () => {
+      statesRepository.find.mockResolvedValue([]);
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock([], 0));
+
+      await expect(service.candidatePoolSize('profile-1')).resolves.toBe(0);
     });
   });
 });
