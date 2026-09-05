@@ -813,6 +813,16 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 
 ---
 
+## ADR-108 — The onboarding round tells the truth about what it is worth (P0-8)
+
+**Context.** Three claims on the ranking path were not true. `GET .../triads/current` answered `needed: 1` whenever resting the previous round's titles left fewer than three, whatever the profile actually had — a hard-coded number presented as a count. That same rule turned a profile with exactly three watched films into a permanent wall: its only set was always "just used", so it was told to mark another film for ever. And `RankScreen` kept its own tally — every completed row, `verify` repeats included, plus an optimistic +1 on save — so the live round of 2026-09-05 read "ten completed rounds" to a profile the backend counted as having one piece of evidence (ADR-99 already excluded repeats from activation; only the screen still added them up).
+**Decision.** `needed` is the real remainder, `3 - watched`, and is returned only for the one state that blocks a round: fewer than three watched films. Fatigue becomes a preference, not a ban — the previous round's titles are rested when the profile has other films and drawn from when it does not, in which case the round is labelled `verify` and counts toward nothing, exactly as ADR-99 defines. The server reports `learningRounds` and `verificationRounds` apart, on `GET .../training` and inside `GET .../readiness`, and every threshold (`nextTrainingAt`, activation) reads the learning count alone; `completedTriads` stays as an alias of `learningRounds` so existing readers do not break. `GET .../readiness` also carries `rounds` — the two counts, `firstTrainingAt`, `nextTrainingAt`, the `triadEligible` `watchedTitles` the rounds are drawn from, and `suggestedWatchedTitles: 9`. `RankScreen` keeps no tally of its own and reads that block.
+**Rationale.** Three watched films make exactly *one* distinct triad; nine make eighty-four. The number is a property of C(n,3), not a tuning knob, which is why nine is a constant in the readiness contract and not configuration. "Three is enough to start" stays the promise on the blocked screen — the ask for seven to nine is progressive, two films at a time, and only after ranking has begun.
+**Consequences.** A repeat round is now visible as a repeat ("and six repeat rounds, which count for nothing: the same films again") rather than inflating a counter. A three-film profile keeps ranking instead of hitting a wall, and is told what would make the next round new. ADR-34's H1 case ("mark another film", never "mark three") is superseded: it described a state that no longer exists.
+**Revisit when.** A purpose beyond `learn`/`verify` (bridge, boundary, explore — ADR-99's own revisit trigger) needs a third count, or the trainer starts weighting a verify round's agreement with the model as evidence of its own.
+
+---
+
 ## Summary
 
 | # | Decision | Serves | Revisit trigger |
@@ -922,6 +932,7 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 | 103 | `GET .../readiness`: four capabilities (ordinal model, semantic profile, recommendation, availability), composed from existing signals, not a fifth "trained or not" flag | remediation brief §5.1 2026-09-05 | the trainer reports per-fit fingerprint coverage, or AVL-01 gets a real data source |
 | 104 | `watchedOn`: a plain `'YYYY-MM-DD'` the client supplies (`todayLocal()`, or the diary's own date), never a timestamp the server derives from its own clock | remediation brief P1-03/DATE-01 2026-09-05 | a profile-level IANA timezone lets the server compute "today" too |
 | 105 | EU-West move is a backup→restore cutover on the P0-5 path (empty-target guard, `SKIP_EXTENSIONS`, announced window, old database kept a week) | owner decision O-11 2026-09-05; ADR-88, ADR-102 | a Middle East region exists, or the data outgrows a dump-and-restore window |
+| 108 | The onboarding round tells the truth: real `needed`, fatigue as a preference not a ban, `learningRounds`/`verificationRounds` reported apart, and the screen's own tally deleted in favour of `readiness.rounds` | P0-8 2026-09-05; ADR-34, ADR-99, ADR-103 | a third triad purpose needs its own count, or a verify round starts to count as evidence |
 | 106 | Catalogue search: both sides folded (Arabic marks stripped from the column too), `unaccent` for Latin, and alternate titles read from `localized_titles`; a 53-case golden set pins it | remediation brief P1-01/SEARCH-01 2026-09-05; ADR-2 | ~10k titles (indexes/FTS), or alternate-title ingestion lands |
 
 ## How to add a decision

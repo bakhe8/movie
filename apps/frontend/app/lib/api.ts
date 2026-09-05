@@ -142,7 +142,11 @@ export interface TrainingSummary {
   state: TrainingState;
   jobId: string | null;
   errorKind: TrainingErrorKind;
+  // Alias of `learningRounds` (ADR-108); the two round counts are optional
+  // here only so a locally constructed summary need not restate them.
   completedTriads: number;
+  learningRounds?: number;
+  verificationRounds?: number;
   nextTrainingAt: number | null;
 }
 
@@ -168,7 +172,22 @@ export interface CapabilityReadiness {
   publishedAt: string | null;
   modelVersion: string | null;
 }
+// ADR-108: where the profile stands, counted by the server. A repeat round
+// (`verify`, ADR-99) is completed but is evidence of nothing, so the two
+// counts are never added together on a screen.
+export interface ReadinessRounds {
+  learningRounds: number;
+  verificationRounds: number;
+  firstTrainingAt: number;
+  nextTrainingAt: number | null;
+  // Watched titles a triad may draw from, and how many make the rounds keep
+  // learning instead of repeating (three films make exactly one set).
+  watchedTitles: number;
+  suggestedWatchedTitles: number;
+}
+
 export interface ProfileReadiness {
+  rounds: ReadinessRounds;
   ordinalModel: CapabilityReadiness;
   // Today the same value as ordinalModel -- one trainer run produces both;
   // see ADR-103 for why they are still separate fields.

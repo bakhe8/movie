@@ -445,17 +445,33 @@ describe('TriadsService', () => {
         expect([...(result as { titleIds: string[] }).titleIds].sort()).toEqual(['t1', 't2', 't3']);
       });
 
-      it('reports "mark another film", not "mark three", when 3+ watched titles exist but all were just used', async () => {
+      // ADR-108, revising ADR-34's H1: resting the last round's titles is a
+      // preference. With exactly three watched films the only thing resting
+      // them can produce is a wall, so the round is drawn anyway -- and
+      // labelled `verify`, so it is worth nothing toward activation.
+      it('draws a verify round, not a wall, when the 3 watched titles were all just used', async () => {
         profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
         triadsRepository.findOne
           .mockResolvedValueOnce(null) // no active triad
           .mockResolvedValueOnce({ titleIds: ['t1', 't2', 't3'] }); // just-completed triad used all 3 watched titles
         statesRepository.find.mockResolvedValue([{ titleId: 't1' }, { titleId: 't2' }, { titleId: 't3' }]);
+        triadsRepository.find.mockResolvedValue([{ setHash: triadSetHash(['t1', 't2', 't3']), titleIds: ['t1', 't2', 't3'] }]);
 
-        expect(await service.getCurrent('user-1', 'profile-1')).toMatchObject({
-          state: 'need_more_watched',
-          message: 'Mark another film as watched to start a new ranking round',
-        });
+        const result = await service.getCurrent('user-1', 'profile-1');
+
+        expect(result).toMatchObject({ state: 'ready', purpose: 'verify' });
+        const [created] = triadsRepository.create.mock.calls[0];
+        expect(created).toMatchObject({ purpose: 'verify', countsTowardActivation: false });
+      });
+
+      // The other half of the same rule: `needed` is a real remainder, so a
+      // profile with one watched film is asked for two, never for a constant.
+      it('reports the real remainder when fewer than three films are watched', async () => {
+        profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+        triadsRepository.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+        statesRepository.find.mockResolvedValue([{ titleId: 't1' }]);
+
+        expect(await service.getCurrent('user-1', 'profile-1')).toMatchObject({ state: 'need_more_watched', needed: 2 });
       });
     });
 

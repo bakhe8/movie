@@ -19,9 +19,21 @@ export type TrainingState =
   | 'failed'
   | 'unknown'; // kept for API compatibility; unreachable since ADR-100 -- see below
 
-export interface TrainingStatus {
+// Completed rounds split by what they are evidence of (ADR-99/ADR-108):
+// `learning` is a set this profile had not answered before and counts
+// toward every threshold; `verification` is a repeat of one it had, which
+// counts toward none. Ten rounds over the same three films are therefore
+// reported as one learning round and nine verification rounds, not ten.
+export interface RoundCounts {
+  learningRounds: number;
+  verificationRounds: number;
+}
+
+export interface TrainingStatus extends RoundCounts {
   state: TrainingState;
   job: ModelServiceJob | null;
+  // Alias of `learningRounds`, kept so existing readers of this field do
+  // not break; it has counted learning rounds only since ADR-99.
   completedTriads: number;
   // The completed-triad count at which the next automatic training fires,
   // or null when the trigger is disabled/paused.
@@ -35,10 +47,11 @@ export interface TrainingStatus {
 // live round of 2026-09-05 saw ten completed rounds and "still learning your
 // taste" with no reason: `pending` carried a rounds-to-go count of 0 and
 // nothing else.
-export interface TrainingSummary {
+export interface TrainingSummary extends RoundCounts {
   state: TrainingState;
   jobId: string | null;
   errorKind: ModelServiceJob['errorKind'];
+  // Alias of `learningRounds`; see TrainingStatus.
   completedTriads: number;
   nextTrainingAt: number | null;
 }
@@ -173,7 +186,7 @@ export class TrainingService {
   // "building your profile" after the third round.
   async status(userId: string, profileId: string): Promise<TrainingStatus> {
     const profile = await this.assertProfileOwnership(userId, profileId);
-    const completed = await this.countCompleted(profileId);
+    const rounds = await this.countRounds(profileId);
     const snapshot = await this.snapshotsRepository.findOne({
       where: { profileId },
       order: { createdAt: 'DESC' },
@@ -183,16 +196,23 @@ export class TrainingService {
       ? { modelVersion: snapshot.modelVersion, trainingTriadCount: snapshot.trainingTriadCount, createdAt: snapshot.createdAt }
       : null;
 
-    const resolved = await this.resolveState(profile, completed);
-    return { ...resolved, completedTriads: completed, latestSnapshot };
+    const resolved = await this.resolveState(profile, rounds.learningRounds);
+    return { ...resolved, ...rounds, completedTriads: rounds.learningRounds, latestSnapshot };
   }
 
   // The state alone, for a caller that owns the profile already. Never
   // throws: nothing here is a live network call any more.
   async summarize(profile: Pick<Profile, 'id' | 'pausedAt'>): Promise<TrainingSummary> {
-    const completed = await this.countCompleted(profile.id);
-    const { state, job, nextTrainingAt } = await this.resolveState(profile, completed);
-    return { state, jobId: job?.id ?? null, errorKind: job?.errorKind ?? null, completedTriads: completed, nextTrainingAt };
+    const rounds = await this.countRounds(profile.id);
+    const { state, job, nextTrainingAt } = await this.resolveState(profile, rounds.learningRounds);
+    return {
+      state,
+      jobId: job?.id ?? null,
+      errorKind: job?.errorKind ?? null,
+      ...rounds,
+      completedTriads: rounds.learningRounds,
+      nextTrainingAt,
+    };
   }
 
   private async resolveState(
@@ -234,8 +254,16 @@ export class TrainingService {
   // Rounds that are evidence: a verify round (a set the profile already
   // answered, ADR-99) is completed but counts toward no threshold, so ten
   // rounds over the same three films never read as ten pieces of evidence.
+  async countRounds(profileId: string): Promise<RoundCounts> {
+    const [learningRounds, verificationRounds] = await Promise.all([
+      this.triadsRepository.count({ where: { profileId, status: 'completed', countsTowardActivation: true } }),
+      this.triadsRepository.count({ where: { profileId, status: 'completed', countsTowardActivation: false } }),
+    ]);
+    return { learningRounds, verificationRounds };
+  }
+
   private async countCompleted(profileId: string): Promise<number> {
-    return this.triadsRepository.count({ where: { profileId, status: 'completed', countsTowardActivation: true } });
+    return (await this.countRounds(profileId)).learningRounds;
   }
 
   // 404 for a profile that is not the caller's, never 403 -- the same

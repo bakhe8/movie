@@ -18,6 +18,9 @@ const capability = (over: Partial<CapabilityReadiness> = {}): CapabilityReadines
 });
 
 const readiness = (over: Partial<ProfileReadiness> = {}): ProfileReadiness => ({
+  // ADR-108: the response also carries the round counts. This panel does not
+  // read them; the fixture keeps the shape whole.
+  rounds: { learningRounds: 0, verificationRounds: 0, firstTrainingAt: 3, nextTrainingAt: 3, watchedTitles: 0, suggestedWatchedTitles: 9 },
   ordinalModel: capability(),
   semanticProfile: capability(),
   recommendation: capability(),

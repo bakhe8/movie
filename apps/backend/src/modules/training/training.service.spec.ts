@@ -210,12 +210,17 @@ describe('TrainingService', () => {
     const profile = { id: 'profile-1', pausedAt: null };
 
     it('reports the latest job with its id and failure kind', async () => {
-      triads.count.mockResolvedValueOnce(10);
+      // ADR-108: the two counts are reported apart -- ten learning rounds
+      // and two repeats are not twelve pieces of evidence, and only the ten
+      // move `nextTrainingAt`.
+      triads.count.mockResolvedValueOnce(10).mockResolvedValueOnce(2);
       jobs.latestForProfile.mockResolvedValueOnce(trainingJob({ id: 'job-9', status: 'failed', errorKind: 'invalid', lastError: 'no fingerprints' }));
       await expect(build().summarize(profile)).resolves.toEqual({
         state: 'failed',
         jobId: 'job-9',
         errorKind: 'invalid',
+        learningRounds: 10,
+        verificationRounds: 2,
         completedTriads: 10,
         nextTrainingAt: 13,
       });

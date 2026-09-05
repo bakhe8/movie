@@ -1,4 +1,7 @@
 import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { UserTitleState } from '../../entities/user-title-state.entity';
 import { TrainingService, TrainingStatus } from '../training/training.service';
 import { RecommendationsService } from './recommendations.service';
 
@@ -34,7 +37,32 @@ export interface CapabilityReadiness {
   modelVersion: string | null;
 }
 
+// How many watched films keep the rounds *learning* rather than repeating.
+// Three is the floor a triad needs and stays the promise on the first
+// screen; three films make exactly one distinct set, so every round after
+// the first is a repeat. Nine make 84, which is more rounds than the first
+// result needs -- so the screens ask, progressively, for seven to nine
+// (ADR-108). Not configuration: it is a property of C(n,3), not a tuning knob.
+export const SUGGESTED_WATCHED_TITLES = 9;
+
+// The counts every screen needs in order to say where the profile stands
+// without keeping its own tally (ADR-108): the honest split of completed
+// rounds, the thresholds they are measured against, and the watched set
+// those rounds are drawn from.
+export interface ReadinessRounds {
+  learningRounds: number;
+  verificationRounds: number;
+  // The learning-round count at which the first training run fires, and
+  // the next one after that (null when training is disabled or paused).
+  firstTrainingAt: number;
+  nextTrainingAt: number | null;
+  // Watched titles this profile has that a triad may draw (`triadEligible`).
+  watchedTitles: number;
+  suggestedWatchedTitles: number;
+}
+
 export interface ProfileReadiness {
+  rounds: ReadinessRounds;
   // Ranking of the profile's own watched titles (Plackett-Luce fit).
   ordinalModel: CapabilityReadiness;
   // Tendencies across narrative/pacing/tone axes with confidence. Today
@@ -69,16 +97,40 @@ export class ProfileReadinessService {
   constructor(
     private readonly trainingService: TrainingService,
     private readonly recommendationsService: RecommendationsService,
+    @InjectRepository(UserTitleState)
+    private readonly statesRepository: Repository<UserTitleState>,
   ) {}
 
   async forProfile(userId: string, profileId: string): Promise<ProfileReadiness> {
-    const [snapshotState, training] = await Promise.all([
+    const [snapshotState, training, watchedTitles] = await Promise.all([
       this.recommendationsService.snapshotState(userId, profileId),
+      // Ownership is checked here (404 for someone else's profile) before
+      // the watched count below is read.
       this.trainingService.status(userId, profileId),
+      this.eligibleWatchedCount(profileId),
     ]);
     const model = this.modelCapability(snapshotState, training);
     const recommendation = await this.recommendationCapability(model, profileId);
-    return { ordinalModel: model, semanticProfile: model, recommendation, availability: NOT_BUILT_AVAILABILITY };
+    return {
+      rounds: {
+        learningRounds: training.learningRounds,
+        verificationRounds: training.verificationRounds,
+        firstTrainingAt: this.trainingService.firstTriadCount,
+        nextTrainingAt: training.nextTrainingAt,
+        watchedTitles,
+        suggestedWatchedTitles: SUGGESTED_WATCHED_TITLES,
+      },
+      ordinalModel: model,
+      semanticProfile: model,
+      recommendation,
+      availability: NOT_BUILT_AVAILABILITY,
+    };
+  }
+
+  // The same set TriadsService draws from: watched, and not excluded from
+  // triads by a "haven't watched"/"don't remember" swap.
+  private async eligibleWatchedCount(profileId: string): Promise<number> {
+    return this.statesRepository.count({ where: { profileId, state: 'watched', triadEligible: true } });
   }
 
   private modelCapability(

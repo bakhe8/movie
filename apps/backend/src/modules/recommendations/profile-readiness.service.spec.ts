@@ -1,4 +1,6 @@
+import type { Repository } from 'typeorm';
 import { describe, expect, it, vi } from 'vitest';
+import type { UserTitleState } from '../../entities/user-title-state.entity';
 import type { TrainingService, TrainingStatus } from '../training/training.service';
 import type { RecommendationsService } from './recommendations.service';
 import { ProfileReadinessService } from './profile-readiness.service';
@@ -8,6 +10,8 @@ function trainingStatus(overrides: Partial<TrainingStatus> = {}): TrainingStatus
     state: 'idle',
     job: null,
     completedTriads: 0,
+    learningRounds: overrides.completedTriads ?? 0,
+    verificationRounds: 0,
     nextTrainingAt: 3,
     latestSnapshot: null,
     ...overrides,
@@ -19,6 +23,7 @@ function servicesOf(overrides: {
   status?: Partial<TrainingStatus>;
   candidatePoolSize?: number;
   firstTriadCount?: number;
+  watchedTitles?: number;
 }) {
   const training = {
     firstTriadCount: overrides.firstTriadCount ?? 3,
@@ -28,10 +33,16 @@ function servicesOf(overrides: {
     snapshotState: vi.fn(async () => overrides.snapshotState ?? 'pending'),
     candidatePoolSize: vi.fn(async () => overrides.candidatePoolSize ?? 0),
   };
+  const states = { count: vi.fn(async () => overrides.watchedTitles ?? 0) };
   return {
     training: training as unknown as TrainingService,
     recommendations: recommendations as unknown as RecommendationsService,
-    service: new ProfileReadinessService(training as unknown as TrainingService, recommendations as unknown as RecommendationsService),
+    states,
+    service: new ProfileReadinessService(
+      training as unknown as TrainingService,
+      recommendations as unknown as RecommendationsService,
+      states as unknown as Repository<UserTitleState>,
+    ),
   };
 }
 
@@ -133,6 +144,27 @@ describe('ProfileReadinessService', () => {
     const result = await service.forProfile('user-1', 'profile-1');
     expect(result.ordinalModel.status).toBe('ready');
     expect(result.recommendation).toMatchObject({ status: 'ready', reason: null, publishedAt: created.toISOString() });
+  });
+
+  // ADR-108: the screens stop keeping their own tally of rounds. The count
+  // they show, the thresholds it is measured against, and the watched set
+  // the rounds are drawn from all come from this one call.
+  it('reports learning and verification rounds apart, with the watched set they are drawn from', async () => {
+    const { service } = servicesOf({
+      status: { state: 'idle', completedTriads: 4, learningRounds: 4, verificationRounds: 6, nextTrainingAt: 8 },
+      firstTriadCount: 3,
+      watchedTitles: 3,
+    });
+    const result = await service.forProfile('user-1', 'profile-1');
+    // Ten completed rounds over three films: four are evidence, six are repeats.
+    expect(result.rounds).toEqual({
+      learningRounds: 4,
+      verificationRounds: 6,
+      firstTrainingAt: 3,
+      nextTrainingAt: 8,
+      watchedTitles: 3,
+      suggestedWatchedTitles: 9,
+    });
   });
 
   // AVL-01: no availability data source exists yet -- reported honestly,

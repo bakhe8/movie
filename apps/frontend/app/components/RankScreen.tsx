@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { api, type ReplacementReason, type Title, type Triad } from '../lib/api';
+import { api, type ReadinessRounds, type ReplacementReason, type Title, type Triad } from '../lib/api';
 import { TRIAD_INSTRUCTION } from '../lib/copy';
 import { formatNumber } from '../lib/format';
 import { Poster } from './Poster';
@@ -25,6 +25,18 @@ const labels = {
     // SPECIFICATION §5.1 step 4: 3–5 seed rounds; the exact count is an open
     // App. C experiment, so this is a range, not a target.
     roundsHint: 'ثلاث إلى خمس جولات تكفي لأول نتيجة، وكل جولة بعدها تحسّنها.',
+    // A repeat round is a real round the user answered; it is simply not
+    // evidence of anything new (ADR-99/108). Said plainly, not hidden.
+    repeats: (n: number, formatted: string) =>
+      n === 1
+        ? 'وجولة تكرار واحدة لا تُحتسب لأنها الأفلام نفسها.'
+        : n === 2
+          ? 'وجولتا تكرار لا تُحتسبان لأنهما الأفلام نفسها.'
+          : `و${formatted} جولات تكرار لا تُحتسب لأنها الأفلام نفسها.`,
+    // The progressive ask (ADR-108): three films make exactly one triad, so
+    // every round after the first repeats. Never asked all at once.
+    addMore: (n: number) =>
+      n === 1 ? 'سجّل فيلمًا آخر في «اكتشف» لتبقى الجولات جديدة.' : 'سجّل فيلمين آخرين في «اكتشف» لتبقى الجولات جديدة.',
     firstResult: 'اكتملت ثلاث جولات. توصياتك الأولى وترتيب مكتبتك يظهران بعد تدريب نموذجك.',
     dragHandle: 'اسحب لتغيير الترتيب',
     moveUp: 'ارفع درجة',
@@ -62,6 +74,9 @@ const labels = {
     saved: 'Saved. Here is a new round.',
     rounds: (n: string) => `Completed rounds: ${n}`,
     roundsHint: 'Three to five rounds are enough for a first result; every round after that improves it.',
+    repeats: (n: number, formatted: string) =>
+      n === 1 ? 'And one repeat round, which counts for nothing: the same films again.' : `And ${formatted} repeat rounds, which count for nothing: the same films again.`,
+    addMore: (n: number) => (n === 1 ? 'Mark one more film in Discover to keep the rounds new.' : `Mark ${n} more films in Discover to keep the rounds new.`),
     firstResult: 'Three rounds done. Your first recommendations and library ranking appear once your model is trained.',
     dragHandle: 'Drag to reorder',
     moveUp: 'Move up',
@@ -143,7 +158,12 @@ export function RankScreen({
   const [replacing, setReplacing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
-  const [completedRounds, setCompletedRounds] = useState<number | null>(null);
+  // Where the profile stands, as the server counts it (ADR-108). The screen
+  // keeps no tally of its own: the old local counter added repeat rounds to
+  // learning rounds and then incremented optimistically on save, so it could
+  // show "10 completed rounds" for a profile the backend treated as having
+  // one piece of evidence.
+  const [rounds, setRounds] = useState<ReadinessRounds | null>(null);
   // Pointer handlers read the live drag state through this ref so they never
   // see a stale closure mid-gesture; `drag` (state) only drives rendering.
   const dragRef = useRef<DragState | null>(null);
@@ -166,6 +186,8 @@ export function RankScreen({
   // profile switch mid-flight cannot be clobbered by the old profile's
   // triad (the same guard DiscoverScreen and WorkScreen apply to their loads).
   const loadSeqRef = useRef(0);
+  // The same guard for the readiness call, which is loaded independently.
+  const roundsSeqRef = useRef(0);
 
   const hydrate = useCallback(async (current: Triad, isCurrent: () => boolean = () => true) => {
     // Cards are shown in the server's displayOrder (randomised independently
@@ -182,20 +204,26 @@ export function RankScreen({
     setPending(null);
   }, []);
 
+  // Rounds so far, and the watched set they are drawn from; independent of
+  // whether a new triad can be drawn right now. Returns them so a save can
+  // read the count it just produced without a second request.
+  const loadRounds = useCallback(async (): Promise<ReadinessRounds | null> => {
+    const seq = ++roundsSeqRef.current;
+    try {
+      const readiness = await api.getReadiness(profileId);
+      if (seq !== roundsSeqRef.current) return null;
+      setRounds(readiness.rounds);
+      return readiness.rounds;
+    } catch {
+      if (seq === roundsSeqRef.current) setRounds(null);
+      return null;
+    }
+  }, [profileId]);
+
   const loadTriad = useCallback(async () => {
     const seq = ++loadSeqRef.current;
     const isCurrent = () => seq === loadSeqRef.current;
     setPhase({ kind: 'loading' });
-    // Rounds so far, shown next to the instruction; independent of whether a
-    // new triad can be drawn right now.
-    api
-      .getCompletedTriads(profileId)
-      .then((completed) => {
-        if (isCurrent()) setCompletedRounds(completed.length);
-      })
-      .catch(() => {
-        if (isCurrent()) setCompletedRounds(null);
-      });
     try {
       // ADR-80: 200 with a state discriminator instead of 400.
       const result = await api.getCurrentTriad(profileId);
@@ -219,6 +247,11 @@ export function RankScreen({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadTriad();
   }, [loadTriad]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadRounds();
+  }, [loadRounds]);
 
   useEffect(() => {
     if (!notice) return;
@@ -313,11 +346,14 @@ export function RankScreen({
       // replays the first attempt's result rather than colliding with it.
       const ranking = order.map((title) => title.id);
       await api.rankTriad(triad.id, ranking, (rankKeyRef.current ??= crypto.randomUUID()));
-      const reached = (completedRounds ?? 0) + 1;
-      setCompletedRounds(reached);
-      // The third round is where a first result becomes possible (§5.1 step
-      // 5); training is still a manual step, hence "once your model is trained".
-      setNotice(reached === 3 ? t.firstResult : t.saved);
+      // What the round was worth is the server's answer, not an increment:
+      // a repeat round moves `verificationRounds`, not the count that
+      // reaches the first training run (ADR-108).
+      const next = await loadRounds();
+      // The first-training threshold is where a first result becomes
+      // possible (§5.1 step 5); training is still a manual step, hence
+      // "once your model is trained".
+      setNotice(next && next.learningRounds === next.firstTrainingAt ? t.firstResult : t.saved);
       await loadTriad();
     } catch {
       setNotice(t.loadFailed);
@@ -352,6 +388,14 @@ export function RankScreen({
 
   // --- Render ----------------------------------------------------------------
 
+  // The progressive ask (ADR-108). Three watched films make exactly one
+  // distinct triad, so a profile that stops at three answers the same round
+  // for ever; nine make eighty-four. "Three is enough to start" stays the
+  // promise on the blocked screen -- this asks for the next couple of films
+  // once ranking has begun, never for the whole gap at once.
+  const ASK_AT_A_TIME = 2;
+  const stillToMark = rounds ? Math.min(ASK_AT_A_TIME, Math.max(0, rounds.suggestedWatchedTitles - rounds.watchedTitles)) : 0;
+
   // A <div>, not <header>: globals.css styles the bare `header` element as
   // the app's 72px top bar, which would squash this block into a flex row.
   const header = (
@@ -359,11 +403,13 @@ export function RankScreen({
       <p className={styles.eyebrow}>{t.eyebrow}</p>
       <h2>{phase.kind === 'blocked' ? t.blockedTitle : t.title}</h2>
       {phase.kind === 'ready' && <p className={styles.hint}>{t.hint}</p>}
-      {completedRounds !== null && (
+      {rounds && (
         <p className={styles.rounds}>
-          <span className={styles.roundsCount}>{t.rounds(formatNumber(completedRounds, lang))}</span>
+          <span className={styles.roundsCount}>{t.rounds(formatNumber(rounds.learningRounds, lang))}</span>
           {' · '}
           {t.roundsHint}
+          {rounds.verificationRounds > 0 && ` ${t.repeats(rounds.verificationRounds, formatNumber(rounds.verificationRounds, lang))}`}
+          {stillToMark > 0 && ` ${t.addMore(stillToMark)}`}
         </p>
       )}
     </div>

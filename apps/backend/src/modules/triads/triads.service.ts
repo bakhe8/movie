@@ -122,30 +122,36 @@ export class TriadsService {
       // the screen can say exactly how many more films to mark, and the
       // browser console stays clean (board B→A; API.md §2.2). 4xx here is
       // reserved for real errors -- 401, or 404 for someone else's profile.
+      //
+      // `needed` is the real remainder, never a constant: three watched
+      // titles are what a triad needs, so what is missing is 3 minus what
+      // the profile has (ADR-108). Below three there is nothing else that
+      // can block a round, so this is the only `need_more_watched` state.
       return {
         state: 'need_more_watched',
         needed: 3 - watchedTitleIds.length,
         message: 'Mark at least three films as watched before starting a ranking round',
       };
     }
+    // Fatigue is a preference, not a ban (ADR-108, revising ADR-34's H1):
+    // resting the titles of the round just completed is worth doing when
+    // the profile has other watched films, and worth nothing when it does
+    // not -- a profile with exactly three watched films was told "mark
+    // another film" forever, which reads as a wall where the honest answer
+    // is a repeat round labelled `verify` that counts toward no threshold.
     const restedTitleIds = watchedTitleIds.filter((id) => !recentlyUsedTitleIds.includes(id));
-    if (restedTitleIds.length < 3) {
-      // H1 (ADR-34), unchanged: 3+ watched, but excluding the triad that was
-      // just completed leaves fewer than 3 -- "mark one more film", never
-      // "mark three" to a user who already has three.
-      return { state: 'need_more_watched', needed: 1, message: 'Mark another film as watched to start a new ranking round' };
-    }
+    const pool = restedTitleIds.length >= 3 ? restedTitleIds : watchedTitleIds;
     const usedSetHashes = await this.completedSetHashes(profileId);
 
     // ALPHA_PLAN 6.2/6.5: the adaptive policy runs only for profiles the
     // `triad-policy` experiment put in that arm; everyone else keeps the
     // random policy as the control, and both record which policy chose them.
-    const adaptive = await this.adaptiveSelection(profileId, restedTitleIds, recentlyUsedTitleIds, usedSetHashes);
+    const adaptive = await this.adaptiveSelection(profileId, pool, recentlyUsedTitleIds, usedSetHashes);
     let selection: TriadSelection;
     if (adaptive) {
       selection = { ...adaptive, purpose: 'learn', reasonForSelection: 'adaptive-uncertainty' };
     } else {
-      const learn = this.findLearnSet(restedTitleIds, usedSetHashes);
+      const learn = this.findLearnSet(pool, usedSetHashes);
       selection = learn
         ? {
             titleIds: learn.titleIds,
@@ -156,12 +162,12 @@ export class TriadsService {
             reasonForSelection: 'random-watched-unranked',
           }
         : {
-            // Every set the fatigue-excluded pool can make is already
-            // answered: still not a permanent ban (BP §8.1's re-testing
-            // function) -- drawn from the same pool, so it never repeats the
-            // triad that was just completed even as a verify round.
-            titleIds: this.shuffle([...restedTitleIds]).slice(0, 3),
-            selectionPropensity: 1 / this.combinations(restedTitleIds.length, 3),
+            // Every set the pool can make is already answered: still not a
+            // permanent ban (BP §8.1's re-testing function). Drawn from the
+            // rested pool when one exists, so it repeats the round just
+            // completed only when nothing else is left to draw.
+            titleIds: this.shuffle([...pool]).slice(0, 3),
+            selectionPropensity: 1 / this.combinations(pool.length, 3),
             purpose: 'verify',
             reasonForSelection: 'random-verify-repeat',
           };

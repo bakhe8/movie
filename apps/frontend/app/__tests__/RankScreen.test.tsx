@@ -38,7 +38,7 @@ vi.mock('../lib/api', () => ({
     replaceTriadItem: vi.fn(),
     rankTriad: vi.fn(),
     getTitleState: vi.fn().mockResolvedValue(null),
-    getCompletedTriads: vi.fn().mockResolvedValue([]),
+    getReadiness: vi.fn(),
   },
   ApiError: class ApiError extends Error {
     constructor(public status: number, message: string) { super(message); }
@@ -46,14 +46,27 @@ vi.mock('../lib/api', () => ({
 }));
 
 import { api } from '../lib/api';
-const mockApi = api as unknown as { getCurrentTriad: ReturnType<typeof vi.fn>; replaceTriadItem: ReturnType<typeof vi.fn>; rankTriad: ReturnType<typeof vi.fn>; getCompletedTriads: ReturnType<typeof vi.fn> };
+const mockApi = api as unknown as { getCurrentTriad: ReturnType<typeof vi.fn>; replaceTriadItem: ReturnType<typeof vi.fn>; rankTriad: ReturnType<typeof vi.fn>; getReadiness: ReturnType<typeof vi.fn> };
+
+// ADR-108: the screen's counter is the server's, so every render needs one.
+const readiness = (rounds: Partial<{ learningRounds: number; verificationRounds: number; watchedTitles: number }> = {}) => ({
+  rounds: {
+    learningRounds: 0,
+    verificationRounds: 0,
+    firstTrainingAt: 3,
+    nextTrainingAt: 3,
+    watchedTitles: 9,
+    suggestedWatchedTitles: 9,
+    ...rounds,
+  },
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockApi.getCurrentTriad.mockResolvedValue(TRIAD_READY);
   mockApi.replaceTriadItem.mockResolvedValue({ ...TRIAD_READY, id: 'triad-2' });
   mockApi.rankTriad.mockResolvedValue({});
-  mockApi.getCompletedTriads.mockResolvedValue([]);
+  mockApi.getReadiness.mockResolvedValue(readiness());
 });
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -213,5 +226,35 @@ describe('RankScreen — stale load guard (M8)', () => {
 
     expect(screen.queryByText('رأس ممحاة')).toBeNull();
     expect(screen.getByText('الكائن الفضائي')).toBeInTheDocument();
+  });
+});
+
+// ADR-108: the live round of 2026-09-05 showed ten completed rounds to a
+// profile the backend counted as having one piece of evidence -- the screen
+// was adding repeats to learning rounds and incrementing its own tally on
+// save. It now shows what the server counted, and asks for the films that
+// would make the next round a new one.
+describe('RankScreen — rounds are the server count', () => {
+  it('shows learning rounds and names the repeats separately', async () => {
+    mockApi.getReadiness.mockResolvedValue(readiness({ learningRounds: 4, verificationRounds: 6, watchedTitles: 3 }));
+    renderRank();
+
+    await waitFor(() => expect(screen.getByText(/جولاتك المكتملة: 4/)).toBeInTheDocument());
+    expect(screen.getByText(/جولات تكرار/)).toBeInTheDocument();
+  });
+
+  it('asks progressively for more films while the watched set makes only repeats', async () => {
+    mockApi.getReadiness.mockResolvedValue(readiness({ learningRounds: 1, watchedTitles: 3 }));
+    renderRank();
+
+    await waitFor(() => expect(screen.getByText(/سجّل فيلمين آخرين/)).toBeInTheDocument());
+  });
+
+  it('does not ask for more once the watched set is large enough', async () => {
+    mockApi.getReadiness.mockResolvedValue(readiness({ learningRounds: 1, watchedTitles: 9 }));
+    renderRank();
+
+    await waitFor(() => expect(screen.getByText(/جولاتك المكتملة: 1/)).toBeInTheDocument());
+    expect(screen.queryByText(/سجّل فيلمين آخرين/)).toBeNull();
   });
 });
