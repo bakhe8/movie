@@ -1,15 +1,15 @@
-/* Work card — four separate values in four visual languages
-   (docs/WORK_CARD_DESIGN_2026-09-03.md; decisions Q13, Q14, Q16, Q17).
-   Tokens only (app/styles/tokens.css): both themes come from the tokens.
-   The only saturated colour on the card is the personal-fit meter. */
+/* Poster-led cards. Values retain their independent meanings, while the
+   shared theme tokens control surface, motion and cinematic depth. */
 
 .card {
+  position: relative;
   display: grid;
   gap: var(--sp-3);
   padding: var(--sp-4) var(--sp-4) var(--sp-3);
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-card);
+  border: 1px solid color-mix(in srgb, var(--line) 34%, transparent);
+  border-radius: 20px;
+  transition: transform 220ms ease, box-shadow 220ms ease;
 }
 
 /* --- Head: position badge, poster (licensed only), titles ----------------- */
@@ -24,6 +24,7 @@
 /* The poster is a second way into the work page, so it gets the pointer and
    nothing else: no border, no focus ring, not in the tab order (the title
    button is). */
+
 .posterButton {
   display: block;
   padding: 0;
@@ -94,6 +95,7 @@
   margin-inline-start: var(--sp-2);
   color: var(--muted);
   font-size: var(--fs-13);
+
   /* One phrase; it wraps as a unit, never mid-phrase. */
   white-space: nowrap;
 }
@@ -127,6 +129,7 @@
 }
 
 /* The bar takes the row's spare width; the word and the position follow. */
+
 .fitValue .meter {
   flex: 1;
   min-width: 64px;
@@ -149,6 +152,7 @@
 }
 
 /* Named for assistive tech, drawn by the shapes themselves. */
+
 .srOnly {
   position: absolute;
   width: 1px;
@@ -162,6 +166,7 @@
 }
 
 /* Kept for the work page, which still lays its values out as cells. */
+
 .cells {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -196,6 +201,7 @@
 /* 1) Personal fit: an unlabelled three-segment meter in the accent, then a
    word, then the position in its track. Confidence is applied to the fill as
    a limit on the claim (paper §3, owner decision 1): not a second value. */
+
 .meter {
   display: flex;
   gap: 3px;
@@ -236,6 +242,7 @@
 
 /* 2) Public quality: a star and a muted number with its source; never the
    accent, and never the words "out of ten" (addendum 3). */
+
 .rating {
   display: inline-flex;
   align-items: center;
@@ -254,6 +261,7 @@
 }
 
 /* 3) Availability: provider chips, no semantic colour. */
+
 .chips {
   display: flex;
   flex-wrap: wrap;
@@ -276,6 +284,7 @@
 }
 
 /* Unknown or absent: hollow, never zero (Q16). */
+
 .hollow {
   border-style: dashed;
   background: transparent;
@@ -283,6 +292,7 @@
 }
 
 /* 4) Confidence: the band word in an outlined chip, then its copy. */
+
 .band {
   display: inline-flex;
   width: max-content;
@@ -305,25 +315,39 @@
    next tile shows at the screen edge and the shelf reads as scrollable. */
 
 .compact {
-  gap: var(--sp-2);
-  padding: var(--sp-2) var(--sp-2) var(--sp-3);
+  gap: 10px;
+  padding: 0 0 4px;
+  border: 0;
+  background: transparent;
+  border-radius: var(--poster-radius, 15px);
 }
 
 .compact .head {
   grid-template-columns: 1fr;
-  gap: var(--sp-2);
-  justify-items: center;
-  text-align: center;
+  gap: 12px;
+  justify-items: stretch;
+  text-align: start;
 }
 
 /* The position badge rides the poster's corner instead of taking a column. */
+
 .compact .head > :first-child {
   grid-row: 1;
   grid-column: 1;
   align-self: start;
   justify-self: start;
   z-index: 1;
-  margin: var(--sp-1);
+  margin: 10px;
+}
+
+.compact .badge {
+  width: 30px;
+  height: 30px;
+  background: var(--cinema-scrim, var(--text));
+  color: var(--cinema-ink, var(--accent-ink));
+  backdrop-filter: blur(16px);
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  box-shadow: 0 3px 12px var(--cinema-shadow-color, transparent);
 }
 
 .compact .posterButton,
@@ -333,12 +357,18 @@
 }
 
 .compact .titles {
-  justify-items: center;
-  text-align: center;
+  justify-items: start;
+  text-align: start;
+  padding-inline: 2px;
 }
 
 .compact .title {
-  font-size: var(--fs-14);
+  font-size: var(--fs-16);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .compact .alt {
@@ -346,8 +376,128 @@
 }
 
 .compact .strip {
-  padding-top: var(--sp-2);
-  gap: var(--sp-1);
+  padding-top: 0;
+  border: 0;
+  padding-inline-end: 8px;
+}
+
+.compact .compactPoster {
+  width: 100%;
+  max-width: none;
+  border: 0;
+  border-radius: var(--poster-radius, 15px);
+  box-shadow: 0 12px 28px var(--cinema-shadow-color, transparent);
+  transition: transform 350ms ease, filter 350ms ease;
+}
+
+.compact .posterButton {
+  width: 100%;
+  border-radius: var(--poster-radius, 15px);
+  overflow: hidden;
+}
+
+.compact .fitValue {
+  gap: 7px;
+  font-size: var(--fs-12);
+}
+
+.compact .fitValue .meter {
+  max-width: 66px;
+  min-width: 32px;
+  height: 4px;
+  flex: 1;
+}
+
+.compact .word {
+  color: var(--muted);
+  font-weight: var(--w-medium);
+}
+
+.compactQuality { min-width: 0; margin-top: -4px; }
+.compactQuality summary { display: flex; align-items: center; gap: 6px; min-height: 44px; width: 100%; border-radius: 9px; list-style: none; cursor: pointer; }
+.compactQuality summary::-webkit-details-marker { display: none; }
+.compactQuality summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sourceLogo { display: block; flex: none; width: 58px; height: 32px; border-radius: 5px; background: var(--cinema-logo-ground); }
+.sourceValue { color: var(--text); font-size: 14px; font-weight: var(--w-semibold); }
+.sourceChevron { width: 15px; height: 15px; margin-inline-start: auto; color: var(--muted); transition: transform 180ms ease; }
+.compactQuality[open] .sourceChevron { transform: rotate(180deg); }
+.sourceDetails { min-width: 0; padding: 11px; border: 1px solid color-mix(in srgb, var(--line) 30%, transparent); border-radius: 12px; background: var(--surface); }
+.sourceDetails dl { margin: 0; }
+.sourceAttribution { margin: 9px 0 0; overflow-wrap: anywhere; font-size: 10px; color: var(--muted); line-height: 1.7; }
+
+.quickActions {
+  position: absolute;
+  top: 7px;
+  inset-inline-end: 7px;
+  z-index: 2;
+  display: grid;
+  gap: 6px;
+}
+
+.quick {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--cinema-ink, var(--accent-ink)) 25%, transparent);
+  border-radius: 50%;
+  background: var(--cinema-scrim, var(--text));
+  color: var(--cinema-ink, var(--accent-ink));
+  backdrop-filter: blur(12px);
+  cursor: pointer;
+  transition: transform 180ms ease, background 180ms ease;
+}
+
+.quick svg {
+  width: 20px;
+  height: 20px;
+}
+
+.quick:hover {
+  transform: scale(1.1);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.quick:active {
+  transform: scale(.88);
+}
+
+.quick:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.quick:disabled {
+  cursor: default;
+  opacity: .6;
+}
+
+.quick.saved:disabled {
+  opacity: 1;
+  background: var(--accent);
+  color: var(--accent-ink);
+  animation: saved 320ms ease;
+}
+
+@keyframes saved {
+
+  50% {
+    transform: scale(1.18);
+  }
+}
+
+@media (hover: hover) {
+
+  .compact:hover .compactPoster {
+    transform: scale(1.055);
+    filter: saturate(1.12);
+  }
+
+  .card:not(.compact):not(.headless):hover {
+    box-shadow: 0 14px 32px var(--cinema-shadow-color, transparent);
+  }
 }
 
 .compact .pos {
@@ -386,8 +536,9 @@
 }
 
 @media (min-width: 900px) {
+
   .compact .compactPoster {
-    width: 128px;
+    width: 100%;
   }
 
   .compact .title {
@@ -400,6 +551,7 @@
 
   /* Four separate values, one row: the card is wide enough to keep each
      cell readable (the library's two-cell variant keeps two). */
+
   .cells {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
@@ -410,18 +562,23 @@
 }
 
 /* Library ranking variant: two cells side by side (position + confidence). */
+
 .cellsTwo {
   grid-template-columns: 1fr 1fr;
 }
 
 /* The title as a button when the card opens the work page: text only, the
    full tap target is the title line, no button chrome. */
+
 .titleButton {
-  /* The whole title line is the control; a tap-height hit area is drawn by
-     ::before so the layout does not move (audit 2026-09-04). */
+
+  /* Reserve the touch target in layout so it cannot overlap the poster or
+     year, including when a short title occupies only one line. */
   position: relative;
   display: block;
   width: 100%;
+  min-width: 44px;
+  min-height: 44px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -429,12 +586,6 @@
   font: inherit;
   text-align: start;
   cursor: pointer;
-}
-
-.titleButton::before {
-  content: "";
-  position: absolute;
-  inset: -11px 0;
 }
 
 .titleButton:hover {
@@ -448,11 +599,27 @@
 }
 
 /* Inside the work page: cells only, no card frame of their own. */
+
 .headless {
   padding: 0;
   border: 0;
   background: transparent;
   border-radius: 0;
+}
+
+.headless .strip {
+  border-top-color: color-mix(in srgb, var(--line) 30%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .card, .compact .compactPoster, .quick {
+    transition: none;
+  }
+
+  .quick.saved:disabled {
+    animation: none;
+  }
 }
 
 .headless .cells {
@@ -461,6 +628,7 @@
 }
 
 /* Track chip (work page only): the track's role hue on its soft wash. */
+
 .trackChip {
   display: inline-flex;
   align-items: center;
@@ -497,6 +665,7 @@
 }
 
 /* "On your list": the later hue, readable even though the button is inert. */
+
 .ghost.later,
 .ghost.later:disabled {
   border-color: var(--role-later);
@@ -505,8 +674,8 @@
   opacity: 1;
 }
 
-
 /* "· 2024" never splits from its separator when the alt title wraps. */
+
 .yearTail {
   white-space: nowrap;
 }

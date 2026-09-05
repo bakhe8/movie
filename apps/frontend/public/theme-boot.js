@@ -15,7 +15,7 @@
       document.head.appendChild(m);
     }
     m.setAttribute('content', dark ? '#06070f' : '#f7f6fc');
-  } catch (e) {
+  } catch {
     // No storage or no matchMedia: the CSS falls back to the system scheme.
   }
 })();

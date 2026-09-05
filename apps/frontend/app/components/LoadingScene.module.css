@@ -1,0 +1,7 @@
+.scene { min-height: 75dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; color: var(--accent); }
+.scene span { font: 600 24px var(--font-display); }
+.frames { display: flex; align-items: center; gap: 8px; height: 64px; }
+.frames i { width: 25px; height: 44px; border-radius: 7px; background: var(--accent); animation: pulse 1.3s ease-in-out infinite alternate; }
+.frames i:nth-child(2) { height: 60px; animation-delay: 150ms; }
+.frames i:nth-child(3) { animation-delay: 300ms; }
+@keyframes pulse { from { opacity: .3; transform: translateY(5px); } to { opacity: 1; transform: translateY(-5px); } }

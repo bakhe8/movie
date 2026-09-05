@@ -1,10 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { api, ApiError, type ProfileReadiness, type Recommendation, type RecommendationTrack, type TrainingSummary } from '../lib/api';
 import { TRACK_COPY } from '../lib/copy';
 import { formatConfidence, formatNumber, todayLocal, topTraits, type PersonalFitLevel } from '../lib/format';
 import { WorkCard } from './WorkCard';
+import { Poster } from './Poster';
+import { genreLabel } from '../lib/genres';
+import { Toast } from '../lib/toast';
 import styles from './RecommendationsScreen.module.css';
 
 type Lang = 'ar' | 'en';
@@ -18,6 +21,9 @@ const labels = {
   ar: {
     eyebrow: 'قرار الليلة',
     title: 'المقترح لك',
+    heroCaption: 'هذه الليلة، حكاية جديدة.',
+    exploreFilm: 'اكتشف الفيلم',
+    personalSelection: 'من اقتراحاتك',
     // The four values are shown, not described (ADR-111): the paragraph that
     // said so is gone, and this strip says what the model has learned so far
     // -- once, at the top, instead of a confidence sentence under every card.
@@ -93,6 +99,9 @@ const labels = {
   en: {
     eyebrow: "Tonight's pick",
     title: 'Recommended for you',
+    heroCaption: 'A new story. Tonight.',
+    exploreFilm: 'Explore the film',
+    personalSelection: 'Picked for you',
     tasteTitle: 'Your taste so far',
     rounds: 'rounds ranked',
     watchedTitles: 'films watched',
@@ -238,26 +247,30 @@ async function readinessOrNull(profileId: string): Promise<ProfileReadiness | nu
   }
 }
 
-export function RecommendationsScreen({
-  lang,
-  profileId,
-  onGoToRank,
-  onGoToDiscover,
-  onOpenTitle,
-}: {
+type RecommendationsScreenProps = {
   lang: Lang;
   profileId: string;
   onGoToRank?: () => void;
   onGoToDiscover?: () => void;
   // Opens the work page with this recommendation as its context (blueprint §5.3).
   onOpenTitle?: (rec: Recommendation, position: number, count: number, listed: boolean) => void;
-}) {
+};
+
+export function RecommendationsScreen(props: RecommendationsScreenProps) {
+  return <ProfileRecommendations key={props.profileId} {...props} />;
+}
+
+function ProfileRecommendations({ lang, profileId, onGoToRank, onGoToDiscover, onOpenTitle }: RecommendationsScreenProps) {
   const t = labels[lang];
   const tracks = TRACK_COPY[lang];
   const [items, setItems] = useState<Recommendation[]>([]);
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   const [notice, setNotice] = useState<string | null>(null);
-  const [busyTitleId, setBusyTitleId] = useState<string | null>(null);
+  const [noticeTone, setNoticeTone] = useState<'success' | 'error'>('success');
+  const [pendingTitles, setPendingTitles] = useState<Set<string>>(new Set());
+  const pendingRef = useRef(new Set<string>());
+  const listOverridesRef = useRef(new Map<string, boolean>());
+  const lifetimeRef = useRef(0);
   const [requesting, setRequesting] = useState(false);
   const [listed, setListed] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<RecommendationTrack>>(new Set());
@@ -265,6 +278,42 @@ export function RecommendationsScreen({
   // A ref, not state: reporting an impression must never cause a render, and
   // the set is read and written inside the same effect that computes it.
   const reportedRef = useRef<Set<string>>(new Set());
+
+  // The keyed profile boundary resets local state. The lifetime also guards
+  // completions after navigation and Strict Mode's discarded effect pass.
+  useEffect(() => {
+    const lifetime = ++lifetimeRef.current;
+    return () => { lifetimeRef.current = lifetime + 1; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void api.getWatchlist(profileId).then((watchlist) => {
+      if (cancelled) return;
+      const saved = new Set(watchlist.map((entry) => entry.titleId));
+      for (const [titleId, listed] of listOverridesRef.current) {
+        if (listed) saved.add(titleId);
+        else saved.delete(titleId);
+      }
+      setListed(saved);
+    }).catch(() => {
+      // Local confirmed saves still work when the persisted list cannot load.
+    });
+    return () => { cancelled = true; };
+  }, [profileId]);
+
+  function beginTitleAction(titleId: string): number | null {
+    if (pendingRef.current.has(titleId)) return null;
+    pendingRef.current.add(titleId);
+    setPendingTitles(new Set(pendingRef.current));
+    return lifetimeRef.current;
+  }
+
+  function finishTitleAction(titleId: string, lifetime: number) {
+    if (lifetime !== lifetimeRef.current) return;
+    pendingRef.current.delete(titleId);
+    setPendingTitles(new Set(pendingRef.current));
+  }
 
   // Exactly the items on screen right now: the preview slice of each track,
   // plus everything in the tracks the reader expanded. An item further down
@@ -298,6 +347,7 @@ export function RecommendationsScreen({
   // `silent` refreshes in place (the poll while a model is being built) --
   // no skeleton flash every few seconds.
   const load = useCallback(async (silent = false) => {
+    const lifetime = lifetimeRef.current;
     if (!silent) {
       setPhase({ kind: 'loading' });
     }
@@ -305,6 +355,7 @@ export function RecommendationsScreen({
       // ADR-80: 200 with a discriminator instead of 409/400.
       // 15 items covers 3–5 per each of the three tracks (blueprint §5.3).
       const result = await api.getRecommendations(profileId, 15);
+      if (lifetime !== lifetimeRef.current) return;
       if (result.state === 'ready' && result.items.length > 0) {
         setItems(result.items);
         // The cards paint first; the taste strip's counts follow. Readiness is
@@ -313,7 +364,7 @@ export function RecommendationsScreen({
         // themselves and nothing is claimed that was not measured.
         setPhase({ kind: 'ready', readiness: null });
         void readinessOrNull(profileId).then((readiness) => {
-          if (!readiness) return;
+          if (!readiness || lifetime !== lifetimeRef.current) return;
           setPhase((current) => (current.kind === 'ready' ? { ...current, readiness } : current));
         });
       } else if (result.state === 'ready') {
@@ -321,12 +372,14 @@ export function RecommendationsScreen({
         // answer, so ask readiness why (ADR-103 -- almost always an empty
         // candidate pool) and say it.
         setItems([]);
+        const readiness = await readinessOrNull(profileId);
+        if (lifetime !== lifetimeRef.current) return;
         setPhase({
           kind: 'pending',
           watched: null,
           needed: 0,
           training: { state: 'succeeded', jobId: null, errorKind: null, completedTriads: 0, nextTrainingAt: null },
-          readiness: await readinessOrNull(profileId),
+          readiness,
         });
       } else if (result.state === 'pending') {
         let watched: number | null = null;
@@ -337,13 +390,16 @@ export function RecommendationsScreen({
             watched = null;
           }
         }
-        setPhase({ kind: 'pending', watched, needed: result.needed, training: result.training, readiness: await readinessOrNull(profileId) });
+        const readiness = await readinessOrNull(profileId);
+        if (lifetime !== lifetimeRef.current) return;
+        setPhase({ kind: 'pending', watched, needed: result.needed, training: result.training, readiness });
       } else if (result.state === 'paused') {
         setPhase({ kind: 'paused' });
       } else {
         setPhase({ kind: 'outdated' });
       }
     } catch {
+      if (lifetime !== lifetimeRef.current) return;
       setPhase({ kind: 'failed' });
     }
   }, [profileId]);
@@ -377,12 +433,17 @@ export function RecommendationsScreen({
   // under the profile screen, and its refusal is said (brief P0-01: the live
   // round clicked "update my model" and saw nothing at all).
   async function trainNow() {
+    const lifetime = lifetimeRef.current;
     setRequesting(true);
     try {
       await api.requestTraining(profileId);
+      if (lifetime !== lifetimeRef.current) return;
+      setNoticeTone('success');
       setNotice(t.trainRequested);
       await load(true);
     } catch (error) {
+      if (lifetime !== lifetimeRef.current) return;
+      setNoticeTone('error');
       const reason = error instanceof ApiError ? (error.details ?? {}).reason : undefined;
       setNotice(
         reason === 'model_service_disabled'
@@ -394,29 +455,36 @@ export function RecommendationsScreen({
               : t.trainFailed,
       );
     } finally {
-      setRequesting(false);
+      if (lifetime === lifetimeRef.current) setRequesting(false);
     }
   }
 
   async function addToList(rec: Recommendation) {
+    const lifetime = beginTitleAction(rec.title.id);
+    if (lifetime === null) return;
     const name = lang === 'ar' ? rec.title.titleAr : rec.title.titleEn;
-    setBusyTitleId(rec.title.id);
     try {
       await api.setTitleState(profileId, rec.title.id, { state: 'watchlist' });
       // The outcome names the recommendation, not just the title (ADR-110).
       void api.recordOutcome(rec.recommendationId, 'saved').catch(() => {});
+      if (lifetime !== lifetimeRef.current) return;
+      listOverridesRef.current.set(rec.title.id, true);
       setListed((current) => new Set(current).add(rec.title.id));
+      setNoticeTone('success');
       setNotice(t.listNotice(name));
     } catch {
+      if (lifetime !== lifetimeRef.current) return;
+      setNoticeTone('error');
       setNotice(t.actionFailed);
     } finally {
-      setBusyTitleId(null);
+      finishTitleAction(rec.title.id, lifetime);
     }
   }
 
   async function markWatched(rec: Recommendation) {
+    const lifetime = beginTitleAction(rec.title.id);
+    if (lifetime === null) return;
     const name = lang === 'ar' ? rec.title.titleAr : rec.title.titleEn;
-    setBusyTitleId(rec.title.id);
     try {
       // A watched title leaves the candidate pool and becomes eligible for
       // later triads (blueprint §4.5) -- no rating is asked, ever (ADR-4).
@@ -429,12 +497,18 @@ export function RecommendationsScreen({
         watchedOn: todayLocal(),
         recommendationId: rec.recommendationId,
       });
+      if (lifetime !== lifetimeRef.current) return;
+      listOverridesRef.current.set(rec.title.id, false);
+      setListed((current) => { const next = new Set(current); next.delete(rec.title.id); return next; });
       setItems((current) => current.filter((item) => item.title.id !== rec.title.id));
+      setNoticeTone('success');
       setNotice(t.watchedNotice(name));
     } catch {
+      if (lifetime !== lifetimeRef.current) return;
+      setNoticeTone('error');
       setNotice(t.actionFailed);
     } finally {
-      setBusyTitleId(null);
+      finishTitleAction(rec.title.id, lifetime);
     }
   }
 
@@ -442,16 +516,21 @@ export function RecommendationsScreen({
   // never about the film (BP §2.4 principle #2). It hides the card and
   // records the outcome; nothing about the title's own state changes.
   async function markNotRelevant(rec: Recommendation) {
+    const lifetime = beginTitleAction(rec.title.id);
+    if (lifetime === null) return;
     const name = lang === 'ar' ? rec.title.titleAr : rec.title.titleEn;
-    setBusyTitleId(rec.title.id);
     try {
       await api.recordOutcome(rec.recommendationId, 'dismissed_not_relevant');
+      if (lifetime !== lifetimeRef.current) return;
       setItems((current) => current.filter((item) => item.title.id !== rec.title.id));
+      setNoticeTone('success');
       setNotice(t.notRelevantNotice(name));
     } catch {
+      if (lifetime !== lifetimeRef.current) return;
+      setNoticeTone('error');
       setNotice(t.actionFailed);
     } finally {
-      setBusyTitleId(null);
+      finishTitleAction(rec.title.id, lifetime);
     }
   }
 
@@ -462,6 +541,16 @@ export function RecommendationsScreen({
   const rounds = phase.kind === 'ready' ? (phase.readiness?.rounds ?? null) : null;
   const band = phase.kind === 'ready' ? (phase.readiness?.recommendation.confidenceBand ?? null) : null;
   const traits = phase.kind === 'ready' ? topTraits(items.map((item) => item.reason), lang) : [];
+  // Choose artwork only from the recommendations already in the visible
+  // shelves. An absent image is never replaced by an invented film still.
+  const featured = items.find((item) => item.title.posterUrl && visibleIds.includes(item.recommendationId)) ?? items[0];
+  const featuredTrack = featured ? items.filter((item) => item.track === featured.track) : [];
+
+  function openFeatured() {
+    if (!featured || !onOpenTitle) return;
+    void api.recordOutcome(featured.recommendationId, 'clicked').catch(() => {});
+    onOpenTitle(featured, featuredTrack.indexOf(featured) + 1, featuredTrack.length, listed.has(featured.title.id));
+  }
 
   const tasteStrip = phase.kind === 'ready' && (rounds || traits.length > 0 || band) && (
     <section className={styles.taste} aria-label={t.tasteTitle}>
@@ -496,7 +585,6 @@ export function RecommendationsScreen({
     <div className={styles.header}>
       <p className={styles.eyebrow}>{t.eyebrow}</p>
       <h2>{t.title}</h2>
-      {tasteStrip}
     </div>
   );
 
@@ -540,14 +628,15 @@ export function RecommendationsScreen({
     // 'building' and 'disabled' offer nothing to press: one is in progress,
     // the other is not the user's to fix. 'unreachable' re-reads the state;
     // every failure asks the model service again.
-    const action =
+    const actionLabel =
       situation === 'notStarted'
-        ? { label: t.trainNow, run: trainNow }
+        ? t.trainNow
         : situation === 'unreachable'
-          ? { label: t.trainRetry, run: () => void load() }
+          ? t.trainRetry
           : situation === 'failed' || situation === 'noFingerprints' || situation === 'notPublished'
-            ? { label: t.trainRetry, run: trainNow }
+            ? t.trainRetry
             : null;
+    const runAction = () => { if (situation === 'unreachable') void load(); else void trainNow(); };
     const showSupport = phase.training.jobId !== null && situation !== 'building' && situation !== 'notStarted' && situation !== 'noCandidates';
     return (
       <div className={styles.screen}>
@@ -559,13 +648,11 @@ export function RecommendationsScreen({
           <p>{copy.body}</p>
           {showSupport && <p className={styles.support}>{t.support(phase.training.jobId as string)}</p>}
           {notice && (
-            <p className={styles.status} role="status">
-              {notice}
-            </p>
+            <Toast message={notice} onDismiss={() => setNotice(null)} tone={noticeTone} />
           )}
-          {action && (
-            <button type="button" className={styles.cta} onClick={action.run} disabled={requesting}>
-              {requesting ? t.trainRequesting : action.label}
+          {actionLabel && (
+            <button type="button" className={styles.cta} onClick={runAction} disabled={requesting}>
+              {requesting ? t.trainRequesting : actionLabel}
             </button>
           )}
         </div>
@@ -619,10 +706,36 @@ export function RecommendationsScreen({
   return (
     <div className={`${styles.screen} ${styles.ready}`}>
       {header}
+      {featured && (
+        <section className={styles.hero} aria-label={t.eyebrow}
+          style={featured.title.posterUrl ? ({ '--hero-image': `url("${featured.title.posterUrl}")` } as CSSProperties) : undefined}>
+          <div className={styles.heroBackdrop} aria-hidden="true" />
+          <div className={styles.heroContent}>
+            <span className={styles.heroKicker}><i aria-hidden="true" />{t.personalSelection}</span>
+            <p className={styles.heroCaption}>{t.heroCaption}</p>
+            <h3 className={styles.heroTitle} dir="auto">{featured.title.titleEn || featured.title.titleAr}</h3>
+            {lang === 'ar' && featured.title.titleAr !== featured.title.titleEn && <p className={styles.heroArabic}>{featured.title.titleAr}</p>}
+            <div className={styles.heroMeta}>
+              {featured.title.releaseYear && <span>{featured.title.releaseYear}</span>}
+              {featured.title.genres?.slice(0, 2).map((genre) => <span key={genre}>{genreLabel(genre, lang)}</span>)}
+              <span>{tracks[featured.track].name}</span>
+            </div>
+            <div className={styles.heroActions}>
+              {onOpenTitle && <button type="button" className={styles.heroPrimary} onClick={openFeatured}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4" /></svg>{t.exploreFilm}
+              </button>}
+              <button type="button" className={styles.heroSave} onClick={() => addToList(featured)} disabled={pendingTitles.has(featured.title.id) || listed.has(featured.title.id)}>
+                <svg viewBox="0 0 24 24" fill={listed.has(featured.title.id) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" aria-hidden="true"><path d="M7 4h10v16l-5-3.5L7 20z" /></svg>
+                {listed.has(featured.title.id) ? t.added : t.addToList}
+              </button>
+            </div>
+          </div>
+          <div className={styles.heroPosterWrap} aria-hidden="true"><Poster title={featured.title} size="lg" className={styles.heroPoster} name={featured.title.titleEn} /></div>
+          <span className={styles.heroEdition} aria-hidden="true">KOLME / TONIGHT</span>
+        </section>
+      )}
       {notice && (
-        <p className={styles.status} role="status">
-          {notice}
-        </p>
+        <Toast message={notice} onDismiss={() => setNotice(null)} tone={noticeTone} />
       )}
       {items.length === 0 && <p className={styles.status}>{t.emptyAll}</p>}
 
@@ -656,7 +769,7 @@ export function RecommendationsScreen({
                       compact={!isExpanded}
                       recommendation={rec}
                       listed={listed.has(rec.title.id)}
-                      busy={busyTitleId === rec.title.id}
+                      busy={pendingTitles.has(rec.title.id)}
                       onAddToList={() => addToList(rec)}
                       onMarkWatched={() => markWatched(rec)}
                       onNotRelevant={() => markNotRelevant(rec)}
@@ -696,6 +809,8 @@ export function RecommendationsScreen({
           </section>
         );
       })}
+
+      {tasteStrip}
 
     </div>
   );

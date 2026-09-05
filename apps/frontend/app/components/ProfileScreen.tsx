@@ -6,8 +6,11 @@ import { api, ApiError, type ConfidenceBand, type PreferredLanguage } from '../l
 import { formatConfidence, formatNumber } from '../lib/format';
 import { MARKETS, PLATFORMS } from '../lib/onboarding-options';
 import { useSession } from '../lib/session';
+import { Toast } from '../lib/toast';
 import { ConsentsPanel } from './ConsentsPanel';
 import { ReadinessPanel } from './ReadinessPanel';
+import { AppearancePicker } from './AppearancePicker';
+import { PlatformMark } from './PlatformMark';
 import styles from './ProfileScreen.module.css';
 
 type Lang = 'ar' | 'en';
@@ -15,7 +18,7 @@ type Lang = 'ar' | 'en';
 const labels = {
   ar: {
     eyebrow: 'الملف الشخصي',
-    title: 'حسابك وملف ذوقك',
+    title: 'مساحتك السينمائية',
     account: 'الحساب',
     logout: 'تسجيل الخروج',
     taste: 'ملف الذوق',
@@ -104,7 +107,7 @@ const labels = {
   },
   en: {
     eyebrow: 'Profile',
-    title: 'Your account and taste profile',
+    title: 'Your cinema space',
     account: 'Account',
     logout: 'Log out',
     taste: 'Taste profile',
@@ -552,7 +555,7 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
         <p className={styles.eyebrow}>{t.eyebrow}</p>
         <h2>{current ? current.name : t.title}</h2>
         {current && (
-          <button type="button" className={styles.back} onClick={() => setOpen(null)}>
+          <button type="button" className={styles.back} onClick={() => setOpen(null)} disabled={saving}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M9 6l6 6-6 6" />
             </svg>
@@ -562,22 +565,30 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
       </div>
 
       {notice && (
-        <p className={notice.error ? `${styles.status} ${styles.error}` : styles.status} role="status">
-          {t[notice.key]}
-        </p>
+        <Toast message={t[notice.key]} tone={notice.error ? 'error' : 'success'} onDismiss={() => setNotice(null)} />
       )}
 
       {!current && (
         <>
           {user && (
             <div className={styles.who}>
-              <span className={styles.strong}>{user.email}</span>
+              <span className={styles.avatar} aria-hidden="true">{(profile?.name || user.email).slice(0, 1).toUpperCase()}</span>
+              <div className={styles.identity}>
+                <strong>{profile?.name || user.email.split('@')[0]}</strong>
+                <bdi>{user.email}</bdi>
+              </div>
+              <svg className={styles.profileArt} viewBox="0 0 100 70" fill="none" aria-hidden="true"><path d="M12 52V30M27 52V15M42 52V35M57 52V8M72 52V22M87 52V37" stroke="currentColor" strokeWidth="7" strokeLinecap="round" /></svg>
             </div>
           )}
+          <dl className={styles.overview}>
+            <div><dt>{t.rounds}</dt><dd>{rounds === null ? '—' : formatNumber(rounds, lang)}</dd></div>
+            <div><dt>{t.watched}</dt><dd>{watched === null ? '—' : formatNumber(watched, lang)}</dd></div>
+          </dl>
+          <AppearancePicker lang={lang} />
           <ul className={styles.hub}>
             {sections.map((section) => (
               <li key={section.id}>
-                <button type="button" className={styles.hubCard} onClick={() => setOpen(section.id)}>
+                <button type="button" className={styles.hubCard} data-section={section.id} onClick={() => setOpen(section.id)}>
                   <svg
                     className={styles.hubIcon}
                     width="22"
@@ -683,14 +694,16 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
 
       {open === 'prefs' && (
         <section className={styles.section} aria-label={t.prefs}>
+        <AppearancePicker lang={lang} />
         <div className={styles.field}>
           <label htmlFor="profile-name">{t.nameLabel}</label>
-          <input id="profile-name" value={name} maxLength={255} onChange={(event) => setName(event.target.value)} />
+          <input id="profile-name" value={name} maxLength={255} onChange={(event) => setName(event.target.value)} disabled={saving} />
         </div>
         <div className={styles.field}>
           <label htmlFor="profile-language">{t.languageLabel}</label>
           <select
             id="profile-language"
+            disabled={saving}
             value={language}
             onChange={(event) => setLanguage(event.target.value as PreferredLanguage)}
           >
@@ -700,7 +713,7 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
         </div>
         <div className={styles.field}>
           <label htmlFor="profile-market">{t.marketLabel}</label>
-          <select id="profile-market" value={market} onChange={(event) => setMarket(event.target.value)}>
+          <select id="profile-market" value={market} onChange={(event) => setMarket(event.target.value)} disabled={saving}>
             <option value="" disabled={market !== ''}>
               {t.marketPlaceholder}
             </option>
@@ -711,7 +724,7 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
             ))}
           </select>
         </div>
-        <fieldset className={`${styles.field} ${styles.fieldset}`}>
+        <fieldset className={`${styles.field} ${styles.fieldset}`} disabled={saving}>
           <legend>{t.platformsLabel}</legend>
           <div className={styles.chips}>
             {PLATFORMS.map((option) => {
@@ -724,7 +737,9 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
                   aria-pressed={on}
                   onClick={() => togglePlatform(option.id)}
                 >
+                  <PlatformMark id={option.id} name={option.en} />
                   {lang === 'ar' ? option.ar : option.en}
+                  {on && <span className={styles.selectedMark} aria-hidden="true">✓</span>}
                 </button>
               );
             })}

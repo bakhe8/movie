@@ -15,7 +15,7 @@ const labels = {
     brand: 'Kolme',
     // The brand sits above as the mark; the heading states the product's one ask.
     welcome: 'ثلاثة أفلام تكفي للبدء',
-    hint: 'ترتّب ما شاهدت حسب إعجابك، فنبدأ بفهم ذوقك. لا نجوم ولا إعجاب.',
+    hint: 'رتّب ما شاهدت. واكتشف ما يستحق ليلتك القادمة.',
     login: 'تسجيل الدخول',
     register: 'إنشاء حساب',
     // terms_privacy: required to use the service (PRIVACY.md §3). Plain text
@@ -46,7 +46,7 @@ const labels = {
   en: {
     brand: 'Kolme',
     welcome: 'Three films are enough to start',
-    hint: 'Rank what you have watched by how much you liked it, and we start learning your taste. No stars, no likes.',
+    hint: 'Rank what you watched. Discover your next great movie night.',
     login: 'Log in',
     register: 'Create account',
     terms: 'I agree to the Terms and Privacy Notice.',
@@ -144,6 +144,18 @@ export function AuthScreen({
 
   return (
     <main className={styles.auth} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+      <section className={styles.hero} aria-labelledby="auth-welcome">
+        <p className={styles.heroBrand}><BrandMark size={30} /> Kolme</p>
+        <h1 id="auth-welcome">{t.welcome}</h1>
+        <p className={styles.heroLead}>{t.hint}</p>
+        <div className={styles.journey} aria-label={lang === 'ar' ? 'اختر، رتّب، اكتشف' : 'Pick, rank, discover'}>
+          <span><b aria-hidden="true">01</b>{lang === 'ar' ? 'اختر' : 'Pick'}</span>
+          <i aria-hidden="true" />
+          <span><b aria-hidden="true">02</b>{lang === 'ar' ? 'رتّب' : 'Rank'}</span>
+          <i aria-hidden="true" />
+          <span><b aria-hidden="true">03</b>{lang === 'ar' ? 'اكتشف' : 'Discover'}</span>
+        </div>
+      </section>
       <section className={styles.panel}>
         {/* The door has the same toggle as the shell: a reader who cannot read
             the current language must be able to switch before signing in. */}
@@ -158,27 +170,9 @@ export function AuthScreen({
           <BrandMark size={18} />
           {t.brand}
         </p>
-        <h1>{mode === 'reset' ? t.resetTitle : t.welcome}</h1>
-        <p className={styles.lead}>{mode === 'reset' ? t.resetHint : t.hint}</p>
+        <h2>{mode === 'reset' ? t.resetTitle : mode === 'login' ? t.login : t.register}</h2>
+        {mode === 'reset' && <p className={styles.lead}>{t.resetHint}</p>}
 
-        {/* The door showed one sentence and a form: nothing of the product it
-            is a door to (UX_AUDIT_MOBILE_2026-09-05 P1 #14; identity decision
-            Q18 makes the triad the first screen's hero). Three numbered slots,
-            not three pretend films -- no invented poster, no licensed image
-            this screen has any right to. */}
-        {mode !== 'reset' && (
-          <div className={styles.triad} aria-hidden="true">
-            <span className={styles.slot} data-rank="2">
-              <b>2</b>
-            </span>
-            <span className={`${styles.slot} ${styles.slotLead}`} data-rank="1">
-              <b>1</b>
-            </span>
-            <span className={styles.slot} data-rank="3">
-              <b>3</b>
-            </span>
-          </div>
-        )}
         {mode === 'reset' && resetSent ? (
           <p className={styles.hint} role="status">
             {t.resetSent}

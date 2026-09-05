@@ -1,264 +1,87 @@
-/* The door (sign in / create account). On app/styles/tokens.css only; both
-   themes from the tokens. No gradient, no shadow: a single panel on the
-   ground, the brand in the accent, one filled button (decision Q6). */
-
+/* A compact mobile entrance; the cinema portrait expands on wider screens. */
 .auth {
   display: grid;
-  place-items: center;
-  min-height: 100vh;
-  padding: var(--sp-6) var(--sp-4);
-  background: var(--bg);
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  align-content: start;
+  gap: 12px;
+  min-height: 100svh;
+  padding: 16px;
+  overflow: clip;
+  background: radial-gradient(ellipse at 10% 30%, var(--ambient-glow, var(--accent-soft)), transparent 60%), var(--bg);
 }
-
-.panel {
+.hero {
   position: relative;
-  display: grid;
-  gap: var(--sp-4);
-  width: min(100%, 440px);
-  padding: var(--sp-8) var(--sp-6);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-card);
-}
-
-/* The language toggle sits at the panel's end corner, same shape as in the shell. */
-.language {
-  position: absolute;
-  inset-block-start: var(--sp-4);
-  inset-inline-end: var(--sp-4);
-  min-height: var(--tap);
-  min-width: 44px;
-  padding: 6px 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-button);
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  font-size: var(--fs-13);
-  font-weight: var(--w-semibold);
-}
-
-.brand {
   display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  margin: 0;
-  color: var(--accent);
-  font-family: var(--font-display);
-  font-size: var(--fs-16);
-  font-weight: var(--w-semibold);
+  flex-direction: column;
+  justify-content: flex-end;
+  width: 100%;
+  min-height: 180px;
+  padding: 18px 22px;
+  border: 1px solid var(--line-soft, var(--line));
+  border-radius: 22px;
+  overflow: hidden;
+  color: var(--cinema-ink);
+  background: linear-gradient(0deg, var(--cinema-scrim), transparent 85%), url('/art/cinema-room.webp') center 58% / cover;
+  box-shadow: var(--cinema-shadow, var(--shadow-float));
 }
-
-.panel h1 {
-  margin: 0;
-  font-size: var(--fs-26);
-  text-wrap: balance;
+.heroBrand { display: flex; align-items: center; gap: 10px; margin: 0 0 auto; padding-bottom: 16px; font-family: var(--font-display); font-size: 23px; font-weight: 700; }
+.heroBrand svg { width: 24px; }
+.hero > * { flex-shrink: 0; }
+.hero h1 { margin: 0; max-width: 400px; font-size: clamp(26px, 7.2vw, 30px); line-height: 1.5; letter-spacing: -.025em; text-wrap: balance; }
+.heroLead { display: none; max-width: 460px; margin: 0; color: var(--cinema-ink); opacity: .8; font-size: 16px; line-height: 1.8; }
+.journey { display: none; align-items: center; gap: 12px; margin-top: 34px; }
+.journey span { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+.journey b { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid color-mix(in srgb, var(--cinema-ink) 24%, transparent); border-radius: 50%; background: color-mix(in srgb, var(--cinema-ink) 10%, transparent); color: var(--cinema-ink); font-variant-numeric: tabular-nums; font-size: 11px; }
+.journey i { flex: 1; max-width: 42px; height: 1px; background: color-mix(in srgb, var(--cinema-ink) 30%, transparent); }
+.panel { position: relative; display: grid; gap: 10px; width: min(100%, 450px); margin-inline: auto; padding: 8px 6px 16px; }
+.language { position: absolute; inset-block-start: 4px; inset-inline-end: 6px; min-height: 44px; min-width: 44px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 100px; background: var(--surface); color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; }
+.brand { display: none; align-items: center; gap: 8px; margin: 0; color: var(--accent); font-family: var(--font-display); font-size: 22px; font-weight: 700; }
+.panel h2 { margin: 0; min-height: 44px; padding-inline-end: 60px; font-size: 24px; line-height: 1.5; }
+.lead, .hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
+.form { display: grid; gap: 14px; margin-top: 0; }
+.field { display: grid; gap: 6px; }
+.field label { color: var(--muted); font-size: 13px; font-weight: 500; }
+.field input { width: 100%; min-width: 0; min-height: 50px; padding: 0 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--text); font: inherit; font-size: 16px; scroll-margin-block: 16px 88px; transition: border-color 180ms, box-shadow 180ms; }
+.field input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+.error { margin: 0; padding: 14px 16px; border-inline-start: 3px solid var(--muted); border-radius: 12px; background: var(--well); font-size: 14px; }
+.submit { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 54px; border: 0; border-radius: 100px; background: var(--accent); color: var(--accent-ink); font: inherit; font-size: 16px; font-weight: 600; box-shadow: 0 8px 28px var(--accent-soft); transition: transform 180ms, box-shadow 180ms; }
+.submit:disabled { opacity: .5; }
+.submit:not(:disabled):hover { transform: translateY(-2px); box-shadow: 0 12px 36px var(--accent-soft); }
+.submit:not(:disabled):active { transform: scale(.98); }
+.switch { min-height: 44px; padding: 0; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 500; }
+.switch:hover { color: var(--accent); }
+.adults { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.terms { display: grid; gap: 4px; }
+.termsAgree { display: flex; align-items: flex-start; gap: 8px; min-height: 44px; color: var(--text); font-size: 14px; line-height: 1.7; cursor: pointer; }
+.termsAgree input { flex: none; width: 20px; height: 20px; margin: 2px 0 0; accent-color: var(--accent); }
+.termsLinks { margin: 0; padding-inline-start: 28px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.docLink { color: var(--accent); font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }
+.field input:focus-visible, .termsAgree input:focus-visible, .language:focus-visible, .submit:focus-visible, .switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media (prefers-reduced-motion: no-preference) {
+  .hero, .panel { animation: entrance 650ms both; }
+  .panel { animation-delay: 100ms; }
+  @keyframes entrance { from { opacity: 0; translate: 0 18px; } to { opacity: 1; translate: 0 0; } }
 }
-
-.lead {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--fs-14);
-  line-height: var(--lh-body);
+@media (max-width: 760px) {
+  /* Make room for the software keyboard without changing or hiding fields. */
+  .auth:has(.form:focus-within) .hero { min-height: 60px; padding-block: 12px; }
+  .auth:has(.form:focus-within) .heroBrand { margin: 0; padding: 0; }
+  .auth:has(.form:focus-within) .hero h1 { display: none; }
 }
-
-/* --- Form ----------------------------------------------------------------- */
-
-.form {
-  display: grid;
-  gap: var(--sp-4);
-  margin-top: var(--sp-2);
-}
-
-.two {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--sp-3);
-}
-
-.field {
-  display: grid;
-  gap: var(--sp-1);
-}
-
-.field label {
-  color: var(--muted);
-  font-size: var(--fs-13);
-  font-weight: var(--w-medium);
-}
-
-.field input {
-  min-height: 48px;
-  padding: 0 var(--sp-3);
-  border: 1px solid var(--line);
-  border-radius: var(--r-button);
-  background: var(--bg);
-  color: var(--text);
-  font: inherit;
-  font-size: var(--fs-16);
-}
-
-.field input:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.hint {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--fs-13);
-  line-height: var(--lh-body);
-}
-
-.error {
-  margin: 0;
-  padding: var(--sp-3) var(--sp-4);
-  border-inline-start: 3px solid var(--muted);
-  border-radius: var(--r-chip);
-  background: var(--well);
-  font-size: var(--fs-14);
-}
-
-.submit {
-  min-height: 48px;
-  border: 0;
-  border-radius: var(--r-button);
-  background: var(--accent);
-  color: var(--accent-ink);
-  font: inherit;
-  font-size: var(--fs-16);
-  font-weight: var(--w-semibold);
-}
-
-.submit:disabled {
-  opacity: 0.5;
-}
-
-.switch {
-  min-height: 44px;
-  border: 0;
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  font-size: var(--fs-14);
-  font-weight: var(--w-medium);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.adults {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--fs-12);
-  line-height: var(--lh-body);
-}
-
-.language:focus-visible,
-.submit:focus-visible,
-.switch:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-@media (max-width: 420px) {
-  .two {
-    grid-template-columns: 1fr;
-  }
-
-  .panel {
-    padding: var(--sp-8) var(--sp-4) var(--sp-6);
-  }
-}
-
-/* The terms agreement: a native checkbox in the accent; the whole label is
-   the tap target. Plain text until the pages it names exist. */
-.terms {
-  display: grid;
-  gap: var(--sp-1);
-}
-
-/* The agreement is one sentence with one target; the documents sit under it
-   on their own line so the whole paragraph does not read as a link. */
-.termsAgree {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--sp-2);
-  min-height: var(--tap);
-  color: var(--text);
-  font-size: var(--fs-14);
-  line-height: var(--lh-body);
-  cursor: pointer;
-}
-
-.termsLinks {
-  margin: 0;
-  padding-inline-start: calc(20px + var(--sp-2));
-  color: var(--muted);
-  font-size: var(--fs-13);
-  line-height: var(--lh-ui);
-}
-
-.termsAgree input {
-  flex: none;
-  width: 20px;
-  height: 20px;
-  margin: 2px 0 0;
-  accent-color: var(--accent);
-}
-
-.termsAgree input:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.docLink {
-  color: var(--accent);
-  font-weight: var(--w-medium);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-/* --- What the door is a door to -------------------------------------------
-   Three ranked slots: the product's one question, drawn rather than
-   described, and drawn as empty frames because this screen has no film to
-   show and will not invent one (UX_AUDIT_MOBILE_2026-09-05 P1 #14). */
-
-.triad {
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  gap: var(--sp-2);
-  margin: var(--sp-2) 0 var(--sp-1);
-}
-
-.slot {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 62px;
-  height: 93px;
-  border: 1px dashed var(--line);
-  border-radius: var(--r-chip);
-  background: var(--well);
-}
-
-/* The first place stands taller, so the order is the picture. */
-.slotLead {
-  width: 74px;
-  height: 111px;
-  border-style: solid;
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-
-.slot b {
-  font-family: var(--font-display);
-  font-size: var(--fs-20);
-  font-weight: var(--w-bold);
-  color: var(--muted);
-}
-
-.slotLead b {
-  font-size: var(--fs-26);
-  color: var(--accent);
+@media (min-width: 761px) {
+  .auth { grid-template-columns: minmax(0, 1.25fr) minmax(320px, .75fr); align-items: center; align-content: normal; gap: clamp(28px, 5vw, 80px); padding: clamp(20px, 3vw, 48px); }
+  .hero { min-height: min(760px, calc(100svh - 64px)); padding: clamp(30px, 4vw, 64px); border-radius: 32px; background-position: center; }
+  .heroBrand { font-size: 30px; padding-bottom: 180px; }
+  .heroBrand svg { width: 30px; }
+  .hero h1 { max-width: 590px; margin: 16px 0; font-size: clamp(38px, 4.2vw, 66px); line-height: 1.25; }
+  .heroLead { display: block; }
+  .journey { display: flex; }
+  .panel { gap: 18px; padding: 40px 24px; }
+  .brand { display: flex; }
+  .panel h2 { margin-top: 16px; padding-inline-end: 0; font-size: 30px; }
+  .language { inset-block-start: 20px; inset-inline-end: 20px; }
+  .form { gap: 20px; margin-top: 12px; }
+  .field { gap: 8px; }
+  .field input { min-height: 54px; }
 }

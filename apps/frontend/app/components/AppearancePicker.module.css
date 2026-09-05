@@ -1,0 +1,54 @@
+.picker { min-width: 0; }
+.heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.heading h3 { margin: 0; font-size: 1rem; font-weight: 600; }
+.status { font-size: .74rem; color: var(--muted); }
+.options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.option { min-width: 0; padding: 4px; border: 1px solid var(--line); border-radius: 18px; color: var(--text); background: var(--surface); cursor: pointer; text-align: start; transition: transform 220ms ease, border-color 220ms ease, box-shadow 220ms ease; }
+.option:hover { transform: translateY(-4px); box-shadow: 0 10px 28px color-mix(in srgb, var(--accent) 15%, transparent); }
+.option[aria-checked='true'] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 8px 24px color-mix(in srgb, var(--accent) 12%, transparent); }
+.option:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+.scene { display: block; height: 94px; overflow: hidden; position: relative; isolation: isolate; border-radius: 13px; background: var(--preview-ground); }
+.cinema { --preview-ground: var(--appearance-cinema-ground); --preview-light: var(--appearance-cinema-light); --preview-accent: var(--appearance-cinema-accent); }
+.premiere { --preview-ground: var(--appearance-premiere-ground); --preview-light: var(--appearance-premiere-light); --preview-accent: var(--appearance-premiere-accent); }
+.montage { --preview-ground: var(--appearance-montage-ground); --preview-light: var(--appearance-montage-light); --preview-accent: var(--appearance-montage-accent); }
+.orbit { position: absolute; inset-inline-start: 18%; top: -28%; width: 85%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle, var(--preview-light), transparent 70%); opacity: .75; filter: blur(8px); }
+.horizon { position: absolute; width: 140%; height: 110%; inset-inline-start: -20%; bottom: -95%; border-radius: 50%; box-shadow: 0 -5px 30px var(--preview-accent); background: var(--preview-ground); transform: rotate(-18deg); }
+.film { position: absolute; display: flex; gap: 5px; inset-inline-start: 14%; bottom: 8px; transform: rotate(-9deg); }
+.film i { width: 22px; height: 34px; border-radius: 4px; background: linear-gradient(145deg, var(--preview-accent), var(--preview-ground)); border: 1px solid color-mix(in srgb, var(--preview-light) 55%, transparent); box-shadow: 0 5px 15px color-mix(in srgb, var(--preview-ground) 30%, transparent); }
+.film i:nth-child(2) { transform: translateY(-5px); }
+.sceneMark { position: absolute; inset-inline-end: 13%; top: 11%; color: var(--preview-light); font-family: var(--font-display); font-size: 34px; font-weight: 700; font-style: italic; }
+.premiere .orbit { top: -40%; inset-inline-start: -15%; width: 110%; }
+.premiere .horizon { transform: rotate(16deg); bottom: -80%; }
+.premiere .film { transform: rotate(8deg); inset-inline-start: 12%; }
+.montage .orbit { width: 70%; top: 6%; inset-inline-start: 50%; background: var(--preview-accent); filter: none; opacity: 1; }
+.montage .horizon { display: none; }
+.montage .film { transform: rotate(-18deg); bottom: 18px; }
+.montage .film i { width: 24px; height: 32px; background: var(--preview-light); border-radius: 1px; border-color: var(--preview-ground); }
+.montage .sceneMark { top: 0; inset-inline-end: 18%; }
+.caption { display: flex; justify-content: space-between; align-items: center; gap: 5px; padding: 10px 7px 7px; }
+.caption strong { display: block; font-size: .84rem; font-weight: 600; }
+.caption small { display: block; margin-top: 2px; font-size: .67rem; color: var(--muted); }
+.check { display: grid; place-items: center; flex-shrink: 0; width: 19px; height: 19px; border: 1px solid var(--line); border-radius: 50%; font-size: 12px; }
+.option[aria-checked='true'] .check { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+.retry { min-height: 44px; background: none; border: 0; color: var(--accent); cursor: pointer; text-decoration: underline; }
+.compact .heading { margin-bottom: 10px; }
+.compact .heading h3 { font-size: .8rem; }
+.compact .options { gap: 8px; }
+.compact .scene { height: 54px; border-radius: 9px; }
+.compact .option { border-radius: 12px; }
+.compact .caption { padding: 6px 3px 4px; }
+.compact .caption strong { font-size: .72rem; }
+.compact .sceneMark { font-size: 24px; }
+.compact .film i { width: 14px; height: 22px; }
+@media (max-width: 430px) {
+  .options { gap: 8px; }
+  .heading { flex-wrap: wrap; gap: 4px; }
+  .scene { height: 78px; }
+  .caption { padding-inline: 3px; }
+  .caption strong { font-size: .77rem; }
+  .caption small { font-size: .61rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .option { transition: none; }
+  .option:hover { transform: none; }
+}

@@ -107,10 +107,8 @@ type Shared = {
   onOpen?: () => void;
   // Inside the work page: the cells only (the page owns the head and the actions).
   headless?: boolean;
-  // On a shelf (ADR-111): poster, title and the fit bar only -- no reason and
-  // no action buttons, so three shelves fit the screen the audit measured at
-  // 6065px. Everything the compact form drops stays one tap away on the work
-  // page, and the full card returns when the reader opens the track.
+  // The shelf keeps its imagery prominent, with immediate save/watched
+  // controls so these frequent actions do not require opening another view.
   compact?: boolean;
   // The host renders Public Quality itself (the work page, with the source's
   // attribution and date); skip the card's transitional quality cell.
@@ -159,6 +157,9 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
 
   // Public quality: contract object when present, else the transitional number.
   const fullQuality = rec?.publicQuality ?? null;
+  // The source mark may speak only for a measured value from that source,
+  // never the aggregate or the transitional unattributed score.
+  const imdbSource = fullQuality?.sources.find((source) => source.source === 'imdb' && source.value !== null);
   const quality = rec && !fullQuality && rec.publicQualityScore !== null ? { value: rec.publicQualityScore, votes: null, sources: [] as string[] } : null;
   // Availability: contract object when present, else the transitional number
   // (> 0 read as available; 0 as not; null as unknown).
@@ -325,6 +326,24 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
         )}
       </dl>
 
+      {compact && !isRanking && !withoutQuality && imdbSource && (
+        <details className={styles.compactQuality}>
+          <summary aria-label={`${t.quality}: IMDb ${formatNumber(imdbSource.value as number, lang)}`}>
+            {/* Official, unmodified artwork with its original clear space. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className={styles.sourceLogo} src="/brand/imdb.svg" alt="IMDb" width={58} height={32} />
+            <span className={styles.sourceValue}>{formatNumber(imdbSource.value as number, lang)}</span>
+            <svg className={styles.sourceChevron} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="m5 7 5 5 5-5" /></svg>
+          </summary>
+          <div className={styles.sourceDetails}>
+            <dl>
+              <PublicQualityCell quality={{ value: imdbSource.value, votes: imdbSource.votes, sources: [imdbSource] }} lang={lang} />
+            </dl>
+            {imdbSource.attribution && <p className={styles.sourceAttribution} dir="auto">{imdbSource.attribution}</p>}
+          </div>
+        </details>
+      )}
+
       {!isRanking && !headless && !compact && (
         <div className={styles.actions}>
           <button
@@ -341,6 +360,24 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
           {props.onNotRelevant && (
             <button type="button" className={styles.ghost} onClick={props.onNotRelevant} disabled={props.busy}>
               {t.notRelevant}
+            </button>
+          )}
+        </div>
+      )}
+
+      {!isRanking && !headless && compact && (props.onAddToList || props.onMarkWatched) && (
+        <div className={styles.quickActions}>
+          {props.onAddToList && (
+            <button type="button" className={props.listed ? `${styles.quick} ${styles.saved}` : styles.quick}
+              aria-label={props.listed ? t.added : t.addToList} title={props.listed ? t.added : t.addToList}
+              onClick={props.onAddToList} disabled={props.busy || props.listed}>
+              <svg viewBox="0 0 24 24" fill={props.listed ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true"><path d="M7 4h10v16l-5-3.5L7 20z" /></svg>
+            </button>
+          )}
+          {props.onMarkWatched && (
+            <button type="button" className={styles.quick} aria-label={t.markWatched} title={t.markWatched}
+              onClick={props.onMarkWatched} disabled={props.busy}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>
             </button>
           )}
         </div>

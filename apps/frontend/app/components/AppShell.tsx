@@ -150,18 +150,21 @@ export function AppShell({
   lang,
   onToggleLanguage,
   view,
+  sceneKey,
   onNavigate,
   children,
 }: {
   lang: Lang;
   onToggleLanguage: () => void;
   view?: View;
+  sceneKey?: string;
   onNavigate?: (view: View) => void;
   children: ReactNode;
 }) {
   const t = labels[lang];
   const [menuOpen, setMenuOpen] = useState(false);
   const menuId = useId();
+  const menuTrigger = useRef<HTMLButtonElement>(null);
   const hasNav = Boolean(view && onNavigate);
 
   // Moving between sections replaces everything under the header, but a
@@ -170,12 +173,14 @@ export function AppShell({
   // the new content on every section change, skipping the first render so
   // page load keeps the browser's own starting point (AUDIT_2026-09-05 §4).
   const mainRef = useRef<HTMLElement>(null);
-  const shownView = useRef(view);
+  const currentScene = sceneKey ?? view;
+  const shownView = useRef(currentScene);
   useEffect(() => {
-    if (shownView.current === view) return;
-    shownView.current = view;
-    mainRef.current?.focus();
-  }, [view]);
+    if (shownView.current === currentScene) return;
+    shownView.current = currentScene;
+    mainRef.current?.focus({ preventScroll: true });
+    mainRef.current?.scrollIntoView?.({ block: 'start', behavior: 'instant' });
+  }, [currentScene]);
 
   // The drawer closes with the action taken from it or from the bar: moving
   // to a section, or flipping the language (the header it belonged to moves on).
@@ -188,12 +193,20 @@ export function AppShell({
     onToggleLanguage();
   }
 
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') { setMenuOpen(false); menuTrigger.current?.focus(); } };
+    window.addEventListener('keydown', close);
+    return () => window.removeEventListener('keydown', close);
+  }, [menuOpen]);
+
   return (
     <div className={hasNav ? `${styles.shell} ${styles.withNav}` : styles.shell} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
       <a href="#main-content" className={styles.skipNav}>{t.skip}</a>
       <header className={styles.header}>
         <div className={styles.bar}>
           <button
+            ref={menuTrigger}
             type="button"
             className={`${styles.iconButton} ${styles.menuButton}`}
             aria-label={menuOpen ? t.close : t.menu}
@@ -260,11 +273,12 @@ export function AppShell({
             <ThemeToggle lang={lang} />
             <LanguageToggle lang={lang} onToggle={toggleLanguage} className={styles.language} />
           </div>
+          {hasNav && <button type="button" className={styles.appearanceLink} onClick={() => go('profile')}><span aria-hidden="true">◐</span> {lang === 'ar' ? 'اختر مظهر تجربتك' : 'Make it your own'}</button>}
         </div>
       </header>
 
       <main id="main-content" ref={mainRef} tabIndex={-1} className={styles.content}>
-        {children}
+        <div key={currentScene} className={styles.scene}>{children}</div>
       </main>
 
       {hasNav && (

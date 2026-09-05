@@ -467,3 +467,77 @@
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* Mobile proportions keep appearance choices and all four tools in reach.
+   Wider screens add room to the same identity, cards and controls. */
+.screen { width: min(100%, 960px); gap: 12px; }
+.header { gap: 4px; }
+.header .eyebrow { display: none; }
+.header h2 { font-size: 28px; letter-spacing: -.025em; }
+.who { display: flex; align-items: center; gap: 12px; min-height: 72px; padding: 12px 14px; border-radius: 20px; border: 1px solid var(--line-soft, var(--line)); background: radial-gradient(ellipse at 85% 20%, var(--ambient-glow, var(--accent-soft)), transparent 70%), var(--surface); box-shadow: var(--cinema-shadow, var(--shadow-float)); overflow: hidden; }
+.avatar { flex: none; display: grid; place-items: center; width: 46px; aspect-ratio: 1; border: 1px solid var(--accent); border-radius: 15px 15px 15px 6px; background: var(--accent-soft); color: var(--accent); font-size: 27px; font-weight: 700; }
+.identity { min-width: 0; display: grid; gap: 2px; }
+.identity strong { color: var(--text); font-size: 17px; line-height: 1.55; overflow-wrap: anywhere; }
+.identity bdi { font-size: 13px; overflow-wrap: anywhere; }
+.profileArt { display: none; }
+.overview { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 2px 0; }
+.overview > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-inline-start: 2px solid var(--line); padding-inline-start: 10px; }
+.overview dt { color: var(--muted); font-size: 12px; line-height: 1.5; max-width: 130px; }
+.overview dd { margin: 0; color: var(--accent); font-family: var(--font-display); font-size: 27px; font-weight: 700; line-height: 1.5; font-variant-numeric: tabular-nums; }
+.hub { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.hubCard { grid-template-columns: auto minmax(0, 1fr); min-height: 72px; padding: 12px; gap: 8px; border-radius: 18px; border-color: var(--line-soft, var(--line)); box-shadow: var(--cinema-shadow, var(--shadow-float)); transition: transform 200ms, border-color 200ms; }
+.hubCard:active { transform: scale(.98); }
+.hubCard[data-section="taste"] { background: linear-gradient(130deg, var(--accent-soft), var(--surface) 80%); }
+.hubIcon { grid-column: 1; grid-row: 1; width: 36px; height: 36px; padding: 8px; border-radius: 12px; background: var(--accent-soft); }
+.hubCard[data-section="prefs"] .hubIcon { color: var(--role-discovery); background: color-mix(in srgb, var(--role-discovery) 12%, transparent); }
+.hubCard[data-section="account"] .hubIcon { color: var(--role-outside); background: color-mix(in srgb, var(--role-outside) 12%, transparent); }
+.hubCard[data-section="privacy"] .hubIcon { color: var(--muted); background: var(--well); }
+.hubName { grid-column: 2; grid-row: 1; font-size: 15px; line-height: 1.5; }
+.hubHint, .hubChevron { display: none; }
+.section { gap: 16px; padding: 16px; border-radius: 20px; border-color: var(--line-soft, var(--line)); box-shadow: var(--cinema-shadow, var(--shadow-float)); }
+.field { gap: 6px; }
+.field input, .field select { min-width: 0; min-height: 48px; border-radius: 12px; }
+.chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.chipToggle { display: flex; position: relative; align-items: center; gap: 10px; padding: 10px; min-height: 60px; border-radius: 15px; text-align: start; font-size: 13px; transition: transform 160ms, border-color 160ms, background 160ms; }
+.chipOn { box-shadow: 0 0 0 1px var(--accent); }
+.selectedMark { position: absolute; inset-inline-end: 6px; inset-block-start: 4px; font-size: 11px; color: var(--accent); }
+.stat { padding: 16px; border-radius: 18px; background: linear-gradient(135deg, var(--accent-soft), var(--well)); }
+.stat dd { font-size: 28px; }
+.primary, .secondary { border-radius: 100px; }
+.primary { min-width: 150px; box-shadow: 0 8px 24px var(--accent-soft); }
+.back { margin-block-start: 0; }
+.back svg { transform: scaleX(1); }
+:global([dir="ltr"]) .back svg { transform: scaleX(-1); }
+@media (hover: hover) {
+  .hubCard:hover { transform: translateY(-3px); border-color: var(--accent); }
+  .chipToggle:hover { transform: translateY(-2px); border-color: var(--accent); }
+}
+@media (min-width: 600px) {
+  .screen { gap: 24px; }
+  .header .eyebrow { display: block; }
+  .header h2 { font-size: clamp(32px, 3.6vw, 42px); }
+  .who { gap: 18px; padding: 28px; border-radius: 26px; }
+  .avatar { width: 72px; border-radius: 24px 24px 24px 8px; font-size: 36px; }
+  .identity { gap: 5px; }
+  .identity strong { font-size: clamp(21px, 2.6vw, 28px); }
+  .profileArt { display: block; width: 130px; flex: none; margin-inline-start: auto; color: var(--accent); opacity: .4; }
+  .overview { gap: 20px; padding: 8px 16px; }
+  .overview > div { gap: 16px; padding-inline-start: 16px; }
+  .overview dt { font-size: 13px; }
+  .overview dd { font-size: 36px; }
+  .hub { gap: 16px; }
+  .hubCard { grid-template-columns: auto minmax(0, 1fr) auto; min-height: 132px; padding: 22px; gap: 8px 14px; border-radius: 22px; }
+  .hubIcon { grid-row: 1 / span 2; width: 46px; height: 46px; padding: 11px; border-radius: 16px; }
+  .hubName { font-size: 18px; }
+  .hubHint { display: block; grid-column: 2; grid-row: 2; font-size: 12px; line-height: 1.6; }
+  .hubChevron { display: block; grid-column: 3; grid-row: 1 / span 2; width: 16px; }
+  .section { gap: 20px; padding: 28px; border-radius: 24px; }
+  .chips { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .chipToggle { padding: 12px; min-height: 65px; }
+  .stat { padding: 22px; }
+  .stat dd { font-size: 32px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .section, .hub, .who { animation: profileEnter 320ms both; }
+  @keyframes profileEnter { from { opacity: 0; translate: 0 10px; } to { opacity: 1; translate: 0 0; } }
+}

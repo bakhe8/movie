@@ -1,5 +1,5 @@
 import { ArrayMaxSize, IsArray, IsIn, IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
-import { PreferredLanguage } from '../../../entities/profile.entity';
+import { PreferredAppearance, PreferredLanguage } from '../../../entities/profile.entity';
 
 export class UpdateProfileDto {
   // @IsOptional() means the field may be absent, not that it may be an empty
@@ -13,6 +13,10 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsIn(['ar', 'en'])
   preferredLanguage?: PreferredLanguage;
+
+  @IsOptional()
+  @IsIn(['cinema', 'premiere', 'montage'])
+  preferredAppearance?: PreferredAppearance | null;
 
   // ISO 3166-1 alpha-2 (blueprint §4.1); display and Watchability only.
   @IsOptional()

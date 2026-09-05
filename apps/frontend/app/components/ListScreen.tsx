@@ -1,8 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { api, ApiError, type LibraryRankingItem, type Title, type UserTitleState } from '../lib/api';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { api, ApiError, type LibraryRankingItem, type Title, type TitleState, type UserTitleState } from '../lib/api';
 import { formatNumber, formatWatchedOn, todayLocal } from '../lib/format';
+import { Toast } from '../lib/toast';
 import { Poster } from './Poster';
 import styles from './ListScreen.module.css';
 import { WorkCard } from './WorkCard';
@@ -16,9 +17,10 @@ const labels = {
   ar: {
     eyebrow: 'المكتبة',
     title: 'قائمتي',
-    hint: 'ما حفظته للمشاهدة، وكيف يرتّب نموذجك ما شاهدته، وسجل مشاهداتك.',
+    openFilm: 'افتح الفيلم',
+    hint: 'أفلام لليلة القادمة. وذكريات تستحق العودة.',
     filterLabel: 'تصفية بالاسم',
-    filterPlaceholder: 'اكتب جزءًا من الاسم',
+    filterPlaceholder: 'ابحث في مكتبتك',
     watchlist: 'للمشاهدة لاحقًا',
     watchlistEmpty: 'لم تحفظ شيئًا بعد. من التوصيات أو اكتشف اضغط «لاحقًا».',
     ranking: 'ترتيبك الشخصي',
@@ -54,9 +56,10 @@ const labels = {
   en: {
     eyebrow: 'Library',
     title: 'My list',
-    hint: 'What you saved to watch, how your model orders what you have watched, and your watch history.',
+    openFilm: 'Open film',
+    hint: 'Your next movie night. Your favourite memories.',
     filterLabel: 'Filter by name',
-    filterPlaceholder: 'Type part of a name',
+    filterPlaceholder: 'Find a film in your library',
     watchlist: 'To watch later',
     watchlistEmpty: 'Nothing saved yet. Press “Later” on a recommendation or in Discover.',
     ranking: 'Your personal ranking',
@@ -92,35 +95,71 @@ const labels = {
 
 type Phase = { kind: 'loading' } | { kind: 'ready' } | { kind: 'failed' };
 type Ranking = { kind: 'loading' } | { kind: 'ready'; items: LibraryRankingItem[] } | { kind: 'pending' } | { kind: 'failed' };
+export type LibraryViewState = { activeSection: 'watchlist' | 'ranking' | 'timeline'; filter: string };
 
 export function ListScreen({
   lang,
   profileId,
   onOpenTitle,
+  onOpenCatalogTitle,
+  initialViewState,
+  onViewStateChange,
 }: {
   lang: Lang;
   profileId: string;
   // Opens the work page with this ranking row as its context (blueprint §5.3).
   onOpenTitle?: (item: LibraryRankingItem, count: number) => void;
+  onOpenCatalogTitle?: (title: Title, state: TitleState) => void;
+  initialViewState?: LibraryViewState;
+  onViewStateChange?: (state: LibraryViewState) => void;
 }) {
   const t = labels[lang];
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   const [watched, setWatched] = useState<UserTitleState[]>([]);
   const [watchlist, setWatchlist] = useState<UserTitleState[]>([]);
   const [ranking, setRanking] = useState<Ranking>({ kind: 'loading' });
-  const [filter, setFilter] = useState('');
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [filter, setFilter] = useState(initialViewState?.filter ?? '');
+  const [activeSection, setActiveSection] = useState<LibraryViewState['activeSection']>(initialViewState?.activeSection ?? 'watchlist');
+  const mutationLocks = useRef(new Set<string>());
+  const [pendingTitles, setPendingTitles] = useState<ReadonlySet<string>>(new Set());
+  const rankingRequest = useRef(0);
   const [notice, setNotice] = useState<string | null>(null);
   // The diary editor open on one timeline item: date as yyyy-mm-dd, notes as typed.
   const [diary, setDiary] = useState<{ titleId: string; date: string; notes: string } | null>(null);
 
+  function changeSection(next: LibraryViewState['activeSection']) {
+    setActiveSection(next);
+    onViewStateChange?.({ activeSection: next, filter });
+  }
+
+  function changeFilter(next: string) {
+    setFilter(next);
+    onViewStateChange?.({ activeSection, filter: next });
+  }
+
+  // A synchronous lock prevents a second write before React renders, and a
+  // separate set keeps every pending film disabled while others remain usable.
+  function beginMutation(titleId: string) {
+    if (mutationLocks.current.has(titleId)) return false;
+    mutationLocks.current.add(titleId);
+    setPendingTitles(new Set(mutationLocks.current));
+    return true;
+  }
+
+  function finishMutation(titleId: string) {
+    mutationLocks.current.delete(titleId);
+    setPendingTitles(new Set(mutationLocks.current));
+  }
+
   const loadRanking = useCallback(async () => {
+    const request = ++rankingRequest.current;
     setRanking({ kind: 'loading' });
     try {
-      setRanking({ kind: 'ready', items: await api.getLibraryRanking(profileId) });
+      const items = await api.getLibraryRanking(profileId);
+      if (request === rankingRequest.current) setRanking({ kind: 'ready', items });
     } catch (err) {
       // 409 = no trained snapshot yet, the same honest answer recommendations give.
-      setRanking(err instanceof ApiError && err.status === 409 ? { kind: 'pending' } : { kind: 'failed' });
+      if (request === rankingRequest.current) setRanking(err instanceof ApiError && err.status === 409 ? { kind: 'pending' } : { kind: 'failed' });
     }
   }, [profileId]);
 
@@ -159,6 +198,26 @@ export function ListScreen({
     return alt && alt !== nameOf(title, '') ? alt : null;
   }
 
+  function catalogPoster(state: UserTitleState, size: 'md' | 'lg', className?: string) {
+    const poster = <Poster title={state.title} size={size} name={nameOf(state.title, '')} className={className} />;
+    const title = state.title;
+    return title && onOpenCatalogTitle ? (
+      <button type="button" className={styles.posterOpen} aria-label={`${t.openFilm}: ${nameOf(title, '')}`} onClick={() => onOpenCatalogTitle(title, state.state)}>
+        {poster}
+      </button>
+    ) : poster;
+  }
+
+  function catalogHeading(state: UserTitleState) {
+    const title = state.title;
+    const name = nameOf(title, state.titleId);
+    return (
+      <h4 className={styles.title}>
+        {title && onOpenCatalogTitle ? <button type="button" className={styles.titleOpen} onClick={() => onOpenCatalogTitle(title, state.state)}>{name}</button> : name}
+      </h4>
+    );
+  }
+
   function matches(title: Title | undefined) {
     const needle = filter.trim().toLowerCase();
     if (!needle || !title) return true;
@@ -167,27 +226,27 @@ export function ListScreen({
 
   // Only exposure/list states are ever written here -- never a rating (ADR-4).
   async function markWatched(state: UserTitleState) {
+    if (!beginMutation(state.titleId)) return;
     const name = nameOf(state.title, state.titleId);
-    setBusyId(state.titleId);
     try {
       // ADR-104: the device's own local day, never the server's UTC clock.
       const updated = await api.setTitleState(profileId, state.titleId, { state: 'watched', watchedOn: todayLocal() });
       setWatchlist((current) => current.filter((item) => item.titleId !== state.titleId));
-      setWatched((current) => [{ ...updated, title: state.title }, ...current]);
+      setWatched((current) => [{ ...updated, title: state.title }, ...current.filter((item) => item.titleId !== state.titleId)]);
       setNotice(t.watchedNotice(name));
       // The watched set changed, so the model's ordering of it may too.
       await loadRanking();
     } catch {
       setNotice(t.actionFailed);
     } finally {
-      setBusyId(null);
+      finishMutation(state.titleId);
     }
   }
 
   // Back to "exposure unknown" -- never a negative signal (blueprint §2.4 #3).
   async function clearState(state: UserTitleState, noticeFor: (name: string) => string) {
+    if (!beginMutation(state.titleId)) return;
     const name = nameOf(state.title, state.titleId);
-    setBusyId(state.titleId);
     try {
       await api.setTitleState(profileId, state.titleId, { state: 'not_watched' });
       setWatchlist((current) => current.filter((item) => item.titleId !== state.titleId));
@@ -198,11 +257,12 @@ export function ListScreen({
     } catch {
       setNotice(t.actionFailed);
     } finally {
-      setBusyId(null);
+      finishMutation(state.titleId);
     }
   }
 
   function openDiary(state: UserTitleState) {
+    if (mutationLocks.current.has(state.titleId)) return;
     setDiary({
       titleId: state.titleId,
       date: state.watchedOn ?? todayLocal(),
@@ -214,9 +274,8 @@ export function ListScreen({
   // an already-watched title. Free text and a date -- never a rating, and
   // never read by training (ADR-4).
   async function saveDiary(state: UserTitleState) {
-    if (!diary) return;
+    if (!diary || diary.titleId !== state.titleId || !beginMutation(state.titleId)) return;
     const name = nameOf(state.title, state.titleId);
-    setBusyId(state.titleId);
     try {
       const notes = diary.notes.trim();
       // ADR-104: the date field's own value, verbatim -- never reconstructed
@@ -228,20 +287,27 @@ export function ListScreen({
         notes: notes.length > 0 ? notes : null,
       });
       setWatched((current) => current.map((item) => (item.titleId === state.titleId ? { ...updated, title: state.title } : item)));
-      setDiary(null);
+      setDiary((current) => current?.titleId === state.titleId ? null : current);
       setNotice(t.diarySaved(name));
     } catch {
       setNotice(t.actionFailed);
     } finally {
-      setBusyId(null);
+      finishMutation(state.titleId);
     }
   }
 
   const header = (
     <div className={styles.header}>
+      <div className={styles.headerCopy}>
       <p className={styles.eyebrow}>{t.eyebrow}</p>
       <h2>{t.title}</h2>
       <p className={styles.hint}>{t.hint}</p>
+      </div>
+      <div className={styles.posterFan} aria-hidden="true">
+        {(watchlist.length ? watchlist : watched).slice(0, 3).map((state) => (
+          <Poster key={state.id} title={state.title} name={nameOf(state.title, '')} size="md" className={styles.fanPoster} />
+        ))}
+      </div>
     </div>
   );
 
@@ -285,24 +351,48 @@ export function ListScreen({
     <div className={styles.screen}>
       {header}
       {notice && (
-        <p className={styles.status} role="status">
-          {notice}
-        </p>
+        <Toast message={notice} tone={notice === t.actionFailed ? 'error' : 'success'} onDismiss={() => setNotice(null)} />
       )}
+
+      <div className={styles.libraryTabs} role="tablist" aria-label={t.eyebrow}>
+        {([
+          { id: 'watchlist', label: t.watchlist, count: watchlist.length, path: 'M6 3h12v18l-6-4-6 4z' },
+          { id: 'ranking', label: t.ranking, count: ranking.kind === 'ready' ? ranking.items.length : null, path: 'M4 20V10h4v10M10 20V4h4v16M16 20v-7h4v7' },
+          { id: 'timeline', label: t.timeline, count: watched.length, path: 'M12 8v5l3 2M21 12a9 9 0 1 1-3-6.7M21 3v6h-6' },
+        ] as const).map((tab) => (
+          <button key={tab.id} id={`library-tab-${tab.id}`} type="button" role="tab" aria-selected={activeSection === tab.id} aria-controls={`library-${tab.id}`} tabIndex={activeSection === tab.id ? 0 : -1} onClick={() => changeSection(tab.id)}
+            onKeyDown={(event) => {
+              const ids = ['watchlist', 'ranking', 'timeline'] as const;
+              const nextKey = lang === 'ar' ? 'ArrowLeft' : 'ArrowRight';
+              const previousKey = lang === 'ar' ? 'ArrowRight' : 'ArrowLeft';
+              if (![nextKey, previousKey, 'Home', 'End'].includes(event.key)) return;
+              event.preventDefault();
+              const index = ids.indexOf(tab.id);
+              const next = event.key === 'Home' ? ids[0] : event.key === 'End' ? ids[2] : ids[(index + (event.key === nextKey ? 1 : 2)) % 3];
+              changeSection(next);
+              document.getElementById(`library-tab-${next}`)?.focus();
+            }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={tab.path} /></svg>
+            <span>{tab.label}</span>
+            {tab.count !== null && <b>{formatNumber(tab.count, lang)}</b>}
+          </button>
+        ))}
+      </div>
 
       <div className={styles.filter}>
         <label htmlFor="library-filter">{t.filterLabel}</label>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg>
         <input
           id="library-filter"
           type="search"
           placeholder={t.filterPlaceholder}
           value={filter}
-          onChange={(event) => setFilter(event.target.value)}
+          onChange={(event) => changeFilter(event.target.value)}
           autoComplete="off"
         />
       </div>
 
-      <section className={styles.section} data-role="later" aria-label={t.watchlist}>
+      <section id="library-watchlist" role="tabpanel" aria-labelledby="library-tab-watchlist" hidden={activeSection !== 'watchlist'} className={styles.section} data-role="later">
         <div className={styles.sectionHeader}>
           <h3>
             {t.watchlist}
@@ -314,26 +404,27 @@ export function ListScreen({
         ) : visibleWatchlist.length === 0 ? (
           <p className={styles.empty}>{t.noMatch}</p>
         ) : (
-          <ul className={styles.list}>
+          <ul className={`${styles.list} ${styles.posterGrid}`}>
             {visibleWatchlist.map((state) => {
               const meta = state.title?.releaseYear ? String(state.title.releaseYear) : '';
-              const busy = busyId === state.titleId;
+              const busy = pendingTitles.has(state.titleId);
               return (
                 <li key={state.id} className={styles.card}>
                   <div className={styles.cardHead}>
-                    <Poster title={state.title} size="md" />
+                    {catalogPoster(state, 'lg', styles.libraryPoster)}
                     <div className={styles.cardBody}>
-                      <h4 className={styles.title}>{nameOf(state.title, state.titleId)}</h4>
+                      {catalogHeading(state)}
                       {altOf(state.title) && <p className={styles.alt}>{altOf(state.title)}</p>}
                       {meta && <p className={styles.meta}>{meta}</p>}
                     </div>
                   </div>
                   <div className={styles.actions}>
                     <button type="button" className={styles.ghost} onClick={() => markWatched(state)} disabled={busy}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>
                       {t.watched}
                     </button>
-                    <button type="button" className={styles.ghost} onClick={() => clearState(state, t.removedNotice)} disabled={busy}>
-                      {t.remove}
+                    <button type="button" className={`${styles.ghost} ${styles.iconAction}`} aria-label={`${t.remove}: ${nameOf(state.title, state.titleId)}`} onClick={() => clearState(state, t.removedNotice)} disabled={busy}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg>
                     </button>
                   </div>
                 </li>
@@ -343,7 +434,7 @@ export function ListScreen({
         )}
       </section>
 
-      <section className={styles.section} aria-label={t.ranking}>
+      <section id="library-ranking" role="tabpanel" aria-labelledby="library-tab-ranking" hidden={activeSection !== 'ranking'} className={styles.section}>
         <div className={styles.sectionHeader}>
           <h3>{t.ranking}</h3>
           <p>{t.rankingNote}</p>
@@ -384,7 +475,7 @@ export function ListScreen({
           ))}
       </section>
 
-      <section className={styles.section} aria-label={t.timeline}>
+      <section id="library-timeline" role="tabpanel" aria-labelledby="library-tab-timeline" hidden={activeSection !== 'timeline'} className={styles.section} data-role="history">
         <div className={styles.sectionHeader}>
           <h3>
             {t.timeline}
@@ -398,14 +489,14 @@ export function ListScreen({
         ) : (
           <ul className={styles.list}>
             {visibleWatched.map((state) => {
-              const busy = busyId === state.titleId;
+              const busy = pendingTitles.has(state.titleId);
               const editing = diary?.titleId === state.titleId;
               return (
                 <li key={state.id} className={editing ? `${styles.card} ${styles.cardEditing}` : styles.card}>
                   <div className={styles.cardHead}>
-                    <Poster title={state.title} size="md" />
+                    {catalogPoster(state, 'md')}
                     <div className={styles.cardBody}>
-                      <h4 className={styles.title}>{nameOf(state.title, state.titleId)}</h4>
+                      {catalogHeading(state)}
                       {altOf(state.title) && <p className={styles.alt}>{altOf(state.title)}</p>}
                       <p className={styles.meta}>{state.watchedOn ? formatWatchedOn(state.watchedOn, lang) : t.noDate}</p>
                       {!editing && state.notes && <p className={styles.noteText}>{state.notes}</p>}
@@ -424,6 +515,7 @@ export function ListScreen({
                         <input
                           id={`diary-date-${state.titleId}`}
                           type="date"
+                          disabled={busy}
                           value={diary.date}
                           max={todayLocal()}
                           onChange={(event) => setDiary({ ...diary, date: event.target.value })}
@@ -437,6 +529,7 @@ export function ListScreen({
                           value={diary.notes}
                           maxLength={1000}
                           rows={3}
+                          disabled={busy}
                           onChange={(event) => setDiary({ ...diary, notes: event.target.value })}
                         />
                         <p className={styles.note}>{t.diaryHint}</p>

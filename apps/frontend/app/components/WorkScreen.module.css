@@ -1,31 +1,29 @@
-/* Work page (blueprint §5.3 "صفحة العمل": content fingerprint, the reason for
-   the fit, public quality and availability, kept separate). On
-   app/styles/tokens.css only; both themes from the tokens. The backdrop
-   image with its gradient (decision Q21) waits for a licensed image field. */
+/* A film owns its screen: its supplied artwork forms a cover, with immediate
+   state actions and the source material below. Theme variants share this tree. */
 
 .screen {
   display: grid;
-  gap: var(--sp-6);
-  width: min(100%, 720px);
+  gap: 16px;
+  width: min(100%, 1160px);
+  min-width: 0;
   margin-inline: auto;
+  animation: enter 340ms ease both;
 }
-
-/* --- Back ----------------------------------------------------------------- */
 
 .back {
   display: inline-flex;
   align-items: center;
-  gap: var(--sp-2);
+  gap: 8px;
   width: max-content;
-  min-height: var(--tap);
-  padding: 0 var(--sp-3) 0 var(--sp-2);
-  border: 1px solid var(--line);
-  border-radius: var(--r-button);
-  background: transparent;
+  min-height: 44px;
+  padding: 0 15px;
+  border: 1px solid color-mix(in srgb, var(--line) 28%, transparent);
+  border-radius: 30px;
+  background: var(--surface);
   color: var(--text);
   font: inherit;
-  font-size: var(--fs-14);
-  font-weight: var(--w-medium);
+  font-size: 13px;
+  cursor: pointer;
 }
 
 .back svg {
@@ -33,182 +31,196 @@
   height: 18px;
 }
 
-/* A chevron is a reading-direction arrow: it mirrors in RTL (decision Q22). */
-[dir="rtl"] .back svg {
+[dir='rtl'] .back svg {
   transform: scaleX(-1);
 }
 
-/* --- Header --------------------------------------------------------------- */
-
 .header {
   position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: grid;
-  grid-template-columns: auto 1fr;
-  grid-template-areas:
-    "poster text"
-    "below below";
-  gap: var(--sp-3) var(--sp-4);
-  align-items: start;
+  grid-template-columns: minmax(0, 1fr) 72px;
+  grid-template-areas: 'text poster' 'actions actions' 'below below';
+  gap: 12px 14px;
+  align-content: end;
+  align-items: end;
+  min-height: 370px;
+  padding: 90px 18px 14px;
+  border-radius: var(--scene-radius, 28px);
+  background: var(--cinema-scrim, var(--text));
+  color: var(--cinema-ink, var(--accent-ink));
+  box-shadow: 0 24px 65px var(--cinema-shadow-color, transparent);
+}
+
+.header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -3;
+  background: var(--hero-image) center 32% / cover no-repeat;
+  opacity: .87;
+  transform: scale(1.025);
+  background-position: center 22%;
+}
+
+.header::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background: linear-gradient(0deg, var(--cinema-scrim, var(--text)) 4%, color-mix(in srgb, var(--cinema-scrim, var(--text)) 82%, transparent) 48%, color-mix(in srgb, var(--cinema-scrim, var(--text)) 10%, transparent) 100%);
+}
+
+[dir='rtl'] .header::after {
+  transform: none;
 }
 
 .headerPoster {
   grid-area: poster;
+  width: 72px;
+  max-width: 100%;
+  border-radius: var(--poster-radius, 8px);
+  border-color: color-mix(in srgb, var(--cinema-ink, var(--accent-ink)) 20%, transparent);
+  box-shadow: 0 26px 40px var(--cinema-shadow-color, transparent);
+  transform: rotate(3deg);
+  align-self: center;
 }
 
 .headerText {
   grid-area: text;
   display: grid;
-  gap: var(--sp-2);
+  gap: 7px;
   min-width: 0;
 }
 
 .headerBelow {
   grid-area: below;
-  display: grid;
-  gap: var(--sp-2);
   min-width: 0;
+  border-top: 1px solid color-mix(in srgb, var(--cinema-ink, var(--accent-ink)) 18%, transparent);
 }
 
 .headerBelow:empty {
   display: none;
 }
 
-/* Q21: the poster, blurred, as the backdrop, fading into the ground. */
-.withImage {
-  padding: var(--sp-4);
-  border-radius: var(--r-card);
-  overflow: hidden;
-  isolation: isolate;
-}
-
-.withImage::before {
-  content: "";
-  position: absolute;
-  inset: -40px;
-  z-index: -2;
-  background: var(--hero-image) center / cover no-repeat;
-  filter: blur(28px) saturate(0.8);
-  opacity: 0.35;
-}
-
-.withImage::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: linear-gradient(to top, var(--bg) 0%, transparent 75%);
-}
-
-
 .eyebrow {
-  margin: 0;
-  color: var(--accent);
-  font-size: var(--fs-13);
-  font-weight: var(--w-semibold);
+  margin: 0 0 5px;
+  color: inherit;
+  opacity: .72;
+  font-size: 12px;
+  font-weight: var(--w-medium);
+  display: none;
 }
 
 .header h2 {
   margin: 0;
-  font-size: var(--fs-26);
+  font-family: var(--font-display);
+  font-size: clamp(26px, 7.4vw, 32px);
+  line-height: 1.3;
   text-wrap: balance;
+  letter-spacing: -.035em;
+  overflow-wrap: anywhere;
 }
 
 .alt {
   margin: 0;
-  color: var(--muted);
-  font-size: var(--fs-14);
+  color: inherit;
+  opacity: .8;
+  font-size: 13px;
+  font-family: var(--font-display);
   font-weight: var(--w-medium);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .genres {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--sp-2);
-  margin: var(--sp-1) 0 0;
+  gap: 5px;
+  margin: 2px 0 0;
   padding: 0;
   list-style: none;
 }
 
 .genres li {
-  padding: 2px var(--sp-2);
-  border: 1px solid var(--line);
-  border-radius: var(--r-chip);
-  background: var(--well);
-  color: var(--muted);
-  font-size: var(--fs-13);
-  font-weight: var(--w-medium);
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--cinema-ink, var(--accent-ink)) 22%, transparent);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--cinema-ink, var(--accent-ink)) 7%, transparent);
+  color: inherit;
+  font-size: 10px;
+  backdrop-filter: blur(10px);
 }
 
 .desc {
   margin: 0;
-  max-width: 65ch;
+  max-width: 72ch;
   text-align: start;
-  color: var(--text);
-  font-size: var(--fs-16);
-  line-height: var(--lh-body);
+  color: inherit;
+  opacity: .87;
+  font-size: 14px;
+  line-height: 1.9;
 }
 
-/* --- Sections ------------------------------------------------------------- */
-
-/* One column that can shrink: an `auto` track would grow to a long English
-   sentence's max-content width and push the page past the viewport. */
 .section {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--sp-3);
-  padding: var(--sp-4);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-card);
+  gap: 12px;
+  min-width: 0;
+  padding: 4px 2px 20px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 25%, transparent);
 }
 
 .section h3 {
+  display: flex;
+  align-items: center;
+  gap: 11px;
   margin: 0;
-  font-size: var(--fs-20);
+  font-size: 21px;
+  letter-spacing: -.025em;
+}
+
+.section h3::before {
+  content: '';
+  width: 5px;
+  height: 20px;
+  border-radius: 4px;
+  background: var(--accent);
 }
 
 .sectionNote {
   margin: 0;
   color: var(--muted);
-  font-size: var(--fs-13);
+  font-size: 13px;
   line-height: var(--lh-body);
 }
 
-.reason {
-  margin: 0;
-  font-size: var(--fs-16);
-  line-height: var(--lh-body);
-}
-
-.reasonSource {
-  display: inline-block;
-  margin-inline-start: var(--sp-2);
-  color: var(--muted);
-  font-size: var(--fs-13);
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
   white-space: nowrap;
+  border: 0;
 }
 
-/* Unknown or not yet published: hollow, never zero (decision Q16). A block
-   that wraps: these are sentences, not chips. */
 .hollow {
   display: block;
   width: fit-content;
   max-width: 100%;
-  padding: 2px var(--sp-2);
-  border: 1px dashed var(--line);
-  border-radius: var(--r-chip);
   color: var(--muted);
-  font-size: var(--fs-13);
-  font-weight: var(--w-medium);
-  line-height: 1.6;
+  font-size: 13px;
+  line-height: 1.7;
 }
-
-/* --- Fingerprint (13 reviewed dimensions, as levels, never numbers) -------- */
 
 .dims {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--sp-3) var(--sp-4);
+  gap: 18px 20px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -216,141 +228,292 @@
 
 .dim {
   display: grid;
-  gap: var(--sp-1);
+  gap: 6px;
   min-width: 0;
 }
 
 .dimName {
   color: var(--muted);
-  font-size: var(--fs-12);
-  font-weight: var(--w-medium);
+  font-size: 12px;
 }
 
 .dimWord {
-  font-size: var(--fs-14);
-  font-weight: var(--w-semibold);
+  font-size: 14px;
+  font-weight: var(--w-medium);
 }
 
 .meter {
   display: flex;
-  gap: 3px;
-  height: 6px;
+  gap: 4px;
+  height: 5px;
 }
 
 .meter i {
   flex: 1;
-  border-radius: 3px;
-  background: var(--line);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--line) 25%, transparent);
 }
 
-/* Content descriptors are not predictions: they take the text colour, and
-   the accent stays reserved for personal fit. */
 .meter i.on {
   background: var(--muted);
 }
 
-/* --- State actions -------------------------------------------------------- */
+.stateSection {
+  grid-area: actions;
+  align-self: start;
+  margin-top: 2px;
+}
+
+.stateSection .hollow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--cinema-ink, var(--accent-ink));
+}
+
+.stateSection .hollow::before {
+  content: '✓';
+  font-size: 20px;
+}
 
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--sp-2);
+  gap: 8px;
 }
 
-.primary,
-.ghost {
+.primary, .ghost {
   display: inline-flex;
   align-items: center;
-  gap: var(--sp-2);
+  justify-content: center;
+  gap: 9px;
   min-height: 44px;
-  padding: 0 var(--sp-3);
-  border-radius: var(--r-button);
+  padding: 8px 10px;
+  border-radius: 14px;
   font: inherit;
-  font-size: var(--fs-14);
-  font-weight: var(--w-medium);
+  font-size: 13px;
+  font-weight: var(--w-semibold);
+  cursor: pointer;
+  transition: transform 170ms ease, box-shadow 170ms ease, background 170ms ease;
+  flex: 1;
+  min-width: 0;
 }
 
 .primary {
   border: 1px solid var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-weight: var(--w-semibold);
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 0 8px 23px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 .ghost {
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--cinema-ink, var(--accent-ink)) 32%, transparent);
+  background: color-mix(in srgb, var(--cinema-ink, var(--accent-ink)) 8%, transparent);
+  color: inherit;
+  backdrop-filter: blur(12px);
 }
 
-.primary:disabled,
-.ghost:disabled {
-  color: var(--muted);
-  opacity: 0.7;
+.primary:disabled, .ghost:disabled {
+  opacity: .65;
+  cursor: default;
 }
 
-.status {
-  margin: 0;
-  padding: var(--sp-3) var(--sp-4);
-  border-inline-start: 3px solid var(--accent);
-  border-radius: var(--r-chip);
-  background: var(--surface);
-  font-size: var(--fs-14);
-}
-
-.back:focus-visible,
-.primary:focus-visible,
-.ghost:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-@media (min-width: 900px) {
-  .screen {
-    gap: var(--sp-8);
-  }
-
-  .header h2 {
-    font-size: var(--fs-34);
-  }
-
-  .dims {
-    grid-template-columns: 1fr 1fr 1fr;
-  }
-}
-
-/* "On your list" (decision 27): the later hue on its soft wash. */
-.ghost.later,
-.ghost.later:disabled {
-  border-color: var(--role-later);
-  background: var(--role-later-soft);
-  color: var(--role-later);
+.ghost.later, .ghost.later:disabled {
   opacity: 1;
+  background: color-mix(in srgb, var(--cinema-ink, var(--accent-ink)) 18%, transparent);
+  color: inherit;
+  animation: saved 300ms ease;
 }
 
-/* Public Quality section: the cell brings its own layout; the list only
-   resets the definition-list margin. */
+.back:focus-visible, .primary:focus-visible, .ghost:focus-visible, .synopsis summary:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 4px;
+}
+
 .qualityList {
   margin: 0;
 }
-
 
 .yearTail {
   white-space: nowrap;
 }
 
-/* A synopsis in a language the reader did not choose folds away behind its
-   own name (ADR-111): present, never leading. */
 .synopsis summary {
-  min-height: var(--tap);
+  min-height: 44px;
   display: flex;
   align-items: center;
-  color: var(--muted);
-  font-size: var(--fs-14);
+  gap: 10px;
+  padding-block: 8px;
+  color: inherit;
+  font-size: 13px;
   cursor: pointer;
+  list-style: none;
 }
 
-.synopsis summary:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+.synopsis summary::-webkit-details-marker {
+  display: none;
+}
+
+.synopsis summary::before {
+  content: '+';
+  display: grid;
+  place-items: center;
+  width: 23px;
+  height: 23px;
+  border: 1px solid color-mix(in srgb, var(--cinema-ink, var(--accent-ink)) 30%, transparent);
+  border-radius: 50%;
+  font-size: 17px;
+}
+
+.synopsis[open] summary::before {
+  content: '−';
+}
+
+.synopsis[open] .desc {
+  animation: enter 200ms ease both;
+}
+
+@keyframes enter {
+
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes saved {
+
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+@media (hover: hover) {
+
+  .primary:hover, .ghost:hover {
+    transform: translateY(-3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .screen, .ghost.later, .ghost.later:disabled, .synopsis[open] .desc {
+    animation: none;
+  }
+
+  .primary, .ghost {
+    transition: none;
+  }
+}
+
+@media (min-width: 768px) {
+
+  .screen {
+    gap: 24px;
+  }
+
+  .header {
+    grid-template-columns: minmax(0, 1fr) 180px;
+    grid-template-areas: 'text poster' 'actions poster' 'below below';
+    gap: 22px 36px;
+    min-height: 460px;
+    padding: 36px;
+  }
+
+  .header::before {
+    background-position: center 32%;
+  }
+
+  .header::after {
+    background: linear-gradient(90deg, var(--cinema-scrim, var(--text)), color-mix(in srgb, var(--cinema-scrim, var(--text)) 73%, transparent) 50%, color-mix(in srgb, var(--cinema-scrim, var(--text)) 35%, transparent)), linear-gradient(0deg, var(--cinema-scrim, var(--text)), transparent 80%);
+  }
+
+  [dir='rtl'] .header::after {
+    transform: scaleX(-1);
+  }
+
+  .headerPoster {
+    width: 180px;
+    align-self: end;
+  }
+
+  .headerText {
+    gap: 12px;
+  }
+
+  .eyebrow {
+    display: block;
+  }
+
+  .header h2 {
+    font-size: clamp(36px, 5.3vw, 65px);
+    line-height: 1.15;
+  }
+
+  .alt {
+    font-size: clamp(15px, 2.4vw, 26px);
+  }
+
+  .genres {
+    gap: 7px;
+    margin: 7px 0 0;
+  }
+
+  .genres li {
+    font-size: 12px;
+    padding: 4px 12px;
+  }
+
+  .section {
+    gap: 16px;
+    padding: 4px 26px 24px;
+  }
+
+  .section h3 {
+    font-size: 23px;
+  }
+
+  .dims {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 20px 28px;
+  }
+
+  .actions {
+    gap: 10px;
+  }
+
+  .primary, .ghost {
+    flex: initial;
+    min-height: 49px;
+    padding: 10px 23px;
+    font-size: 14px;
+  }
+
+  .synopsis summary {
+    min-height: 48px;
+    padding-block: 12px;
+  }
+}
+
+@media (min-width: 1050px) {
+
+  .screen {
+    gap: 26px;
+  }
+
+  .header {
+    grid-template-columns: minmax(0, 1fr) 220px;
+    gap: 22px 50px;
+    min-height: 560px;
+    padding: 54px;
+  }
+
+  .headerPoster {
+    width: 220px;
+  }
 }

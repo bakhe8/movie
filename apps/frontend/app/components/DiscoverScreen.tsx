@@ -1,9 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, type Title, type TitleState } from '../lib/api';
 import { formatNumber, todayLocal } from '../lib/format';
 import { Poster } from './Poster';
+import { genreLabel } from '../lib/genres';
+import { Toast } from '../lib/toast';
 import styles from './DiscoverScreen.module.css';
 
 type Lang = 'ar' | 'en';
@@ -17,10 +19,10 @@ const STARTER_SIZE = 12;
 const labels = {
   ar: {
     eyebrow: 'اكتشف',
-    title: 'ماذا شاهدت؟',
+    title: 'شاهدته؟ لمسة واحدة.',
     // Blueprint §4.2: quick picks from known titles, plus search; the start
     // must not become a long data-entry task.
-    hint: 'اختر بسرعة من عناوين معروفة أو ابحث عنها. ثلاثة أفلام تكفي للبدء، وتوسّع سجلك لاحقًا أثناء الاستخدام.',
+    hint: 'المس صور ثلاثة أفلام شاهدتها. ثم نبدأ حكاية ذوقك.',
     searchLabel: 'ابحث بالاسم العربي أو الإنجليزي',
     searchPlaceholder: 'مثال: الوصول، Arrival',
     progress: (count: string) => `سجّلت ${count} كمُشاهَدة`,
@@ -30,7 +32,7 @@ const labels = {
     unlocked: 'الترتيب متاح. كل فيلم إضافي يحسّن جولاتك.',
     goRank: 'إلى الترتيب',
     starter: 'عناوين للبدء',
-    starterHint: 'مختارة لتنويع الأنواع والسنوات، لا بحسب ذوقك، فلا نعرفه بعد.',
+    starterHint: 'بدايات متنوعة، قبل أن نتعرّف على ذوقك.',
     browseAll: 'تصفّح الكتالوج كاملًا',
     catalogue: (count: string) => `الكتالوج كاملًا: ${count}`,
     backToStarter: 'العودة إلى عناوين البدء',
@@ -56,8 +58,8 @@ const labels = {
   },
   en: {
     eyebrow: 'Discover',
-    title: 'What have you watched?',
-    hint: 'Pick quickly from known titles or search for them. Three films are enough to start; you can grow your log later as you go.',
+    title: 'Seen it? Just tap it.',
+    hint: 'Tap three films you have seen. Your taste story starts here.',
     searchLabel: 'Search by Arabic or English title',
     searchPlaceholder: 'e.g. Arrival, الوصول',
     progress: (count: string) => `You have marked ${count} as watched`,
@@ -66,7 +68,7 @@ const labels = {
     unlocked: 'Ranking is unlocked. Every extra film improves your rounds.',
     goRank: 'Go to ranking',
     starter: 'Titles to start with',
-    starterHint: 'Picked to spread genres and years, not by your taste -- we do not know it yet.',
+    starterHint: 'A diverse starting point, before we get to know your taste.',
     browseAll: 'Browse the whole catalogue',
     catalogue: (count: string) => `Whole catalogue: ${count}`,
     backToStarter: 'Back to the starter titles',
@@ -93,33 +95,42 @@ const labels = {
 
 type Phase = { kind: 'loading' } | { kind: 'ready' } | { kind: 'failed' };
 
+export type DiscoverViewState = { query: string; browseAll: boolean; genre: string | null; pagesLoaded?: number };
+
 export function DiscoverScreen({
   lang,
   profileId,
   onGoToRank,
   onOpenTitle,
+  initialViewState,
 }: {
   lang: Lang;
   profileId: string;
   onGoToRank?: () => void;
   // Opens the work page for a catalogue title (no fit context here).
-  onOpenTitle?: (title: Title, state: TitleState | null) => void;
+  onOpenTitle?: (title: Title, state: TitleState | null, viewState: DiscoverViewState) => void;
+  initialViewState?: DiscoverViewState;
 }) {
   const t = labels[lang];
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   // The profile's existing marks, so a returning user sees what they already
   // logged instead of a blank slate (previously marks reset per session).
   const [states, setStates] = useState<Map<string, TitleState>>(new Map());
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(initialViewState?.query ?? '');
   const [results, setResults] = useState<Title[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pagesToRestore, setPagesToRestore] = useState(initialViewState?.pagesLoaded ?? 1);
   const [searching, setSearching] = useState(false);
   // With an empty query: the diverse starter list (default) or the whole
   // paginated catalogue, at the user's choice.
-  const [browseAll, setBrowseAll] = useState(false);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [browseAll, setBrowseAll] = useState(initialViewState?.browseAll ?? false);
+  const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [notice, setNotice] = useState<string | null>(null);
+  const [noticeTone, setNoticeTone] = useState<'success' | 'error'>('success');
+  const [genre, setGenre] = useState<string | null>(initialViewState?.genre ?? null);
+  const searchRevision = useRef(0);
+  const pendingPage = useRef<number | null>(null);
 
   const loadStates = useCallback(async () => {
     setPhase({ kind: 'loading' });
@@ -144,26 +155,29 @@ export function DiscoverScreen({
   // Debounced search. An empty query shows the genre-diverse starter list
   // from the server (blueprint §4.2 "اختيار سريع من عناوين معروفة ومتنوعة"),
   // or the whole paginated catalogue when the user asks for it. Page 1 on
-  // every new query.
+  // every new query. Returning from a film re-reads every previously loaded
+  // page so a restored genre can still find films beyond the first page.
   useEffect(() => {
     let cancelled = false;
+    const revision = ++searchRevision.current;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSearching(true);
     const trimmed = query.trim();
     const timer = window.setTimeout(() => {
       const load =
         trimmed || browseAll
-          ? api.listTitles(trimmed, 1, PAGE_SIZE).then((result) => ({ items: result.items, total: result.total }))
-          : api.getStarterTitles(STARTER_SIZE).then((items) => ({ items, total: items.length }));
+          ? Promise.all(Array.from({ length: pagesToRestore }, (_, index) => api.listTitles(trimmed, index + 1, PAGE_SIZE)))
+            .then((pages) => ({ items: pages.flatMap((result) => result.items), total: pages[0].total, page: pages.length }))
+          : api.getStarterTitles(STARTER_SIZE).then((items) => ({ items, total: items.length, page: 1 }));
       load
         .then((result) => {
           if (cancelled) return;
           setResults(result.items);
           setTotal(result.total);
-          setPage(1);
+          setPage(result.page);
         })
         .catch(() => {
-          if (!cancelled) setNotice(t.loadFailed);
+          if (!cancelled) { setNoticeTone('error'); setNotice(t.loadFailed); }
         })
         .finally(() => {
           if (!cancelled) setSearching(false);
@@ -171,9 +185,10 @@ export function DiscoverScreen({
     }, 250);
     return () => {
       cancelled = true;
+      searchRevision.current = revision + 1;
       window.clearTimeout(timer);
     };
-  }, [query, browseAll, t.loadFailed]);
+  }, [query, browseAll, pagesToRestore, t.loadFailed]);
 
   useEffect(() => {
     if (!notice) return;
@@ -182,17 +197,25 @@ export function DiscoverScreen({
   }, [notice]);
 
   async function loadMore() {
+    const revision = searchRevision.current;
+    if (pendingPage.current === revision) return;
+    pendingPage.current = revision;
     const nextPage = page + 1;
     setSearching(true);
     try {
       const result = await api.listTitles(query.trim(), nextPage, PAGE_SIZE);
+      // Changing the search invalidates pagination as well as its first read.
+      if (revision !== searchRevision.current) return;
       setResults((current) => [...current, ...result.items]);
       setTotal(result.total);
       setPage(nextPage);
     } catch {
+      if (revision !== searchRevision.current) return;
+      setNoticeTone('error');
       setNotice(t.loadFailed);
     } finally {
-      setSearching(false);
+      if (pendingPage.current === revision) pendingPage.current = null;
+      if (revision === searchRevision.current) setSearching(false);
     }
   }
 
@@ -200,7 +223,8 @@ export function DiscoverScreen({
   // rating of any kind (blueprint §2.4 #2, ADR-4).
   async function setState(title: Title, state: TitleState, noticeFor: (name: string) => string) {
     const name = lang === 'ar' ? title.titleAr : title.titleEn;
-    setBusyId(title.id);
+    if (busyIds.has(title.id)) return;
+    setBusyIds((current) => new Set(current).add(title.id));
     try {
       // ADR-104: the device's own local day, never the server's UTC clock,
       // and only when actually marking watched right now.
@@ -211,23 +235,32 @@ export function DiscoverScreen({
         else next.set(title.id, state);
         return next;
       });
+      setNoticeTone('success');
       setNotice(noticeFor(name));
     } catch {
+      setNoticeTone('error');
       setNotice(t.actionFailed);
     } finally {
-      setBusyId(null);
+      setBusyIds((current) => { const next = new Set(current); next.delete(title.id); return next; });
     }
   }
 
   const watchedCount = [...states.values()].filter((state) => state === 'watched').length;
   const remaining = Math.max(0, UNLOCK_COUNT - watchedCount);
   const isSearch = query.trim().length > 0;
+  const genres = [...new Set(results.flatMap((title) => title.genres ?? []))].slice(0, 8);
+  const visibleResults = genre ? results.filter((title) => title.genres?.includes(genre)) : results;
 
   const header = (
     <div className={styles.header}>
-      <p className={styles.eyebrow}>{t.eyebrow}</p>
-      <h2>{t.title}</h2>
-      <p className={styles.hint}>{t.hint}</p>
+      <div className={styles.headerCopy}>
+        <p className={styles.eyebrow}><span aria-hidden="true">✦</span> {t.eyebrow}</p>
+        <h2>{t.title}</h2>
+        <p className={styles.hint}>{t.hint}</p>
+      </div>
+      <div className={styles.filmFan} aria-hidden="true">
+        {results.slice(0, 4).map((title) => <Poster key={title.id} title={title} name={title.titleEn} className={styles.fanPoster} />)}
+      </div>
     </div>
   );
 
@@ -260,7 +293,7 @@ export function DiscoverScreen({
       {header}
 
       {/* Progress toward the three watched titles that unlock ranking. */}
-      <div className={styles.progress} role="status">
+      <div className={remaining === 0 ? `${styles.progress} ${styles.progressReady}` : styles.progress} role="status">
         <div className={styles.progressRow}>
           <p className={styles.progressText}>{t.progress(t.progressUnit(watchedCount))}</p>
           <div className={styles.dots} aria-hidden="true">
@@ -277,39 +310,41 @@ export function DiscoverScreen({
         )}
       </div>
 
-      {notice && (
-        <p className={styles.status} role="status">
-          {notice}
-        </p>
-      )}
+      {notice && <Toast message={notice} tone={noticeTone} onDismiss={() => setNotice(null)} />}
 
       <div className={styles.search}>
         <label htmlFor="discover-search">{t.searchLabel}</label>
+        <span className={styles.searchIcon} aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" /></svg></span>
         <input
           id="discover-search"
           type="search"
           placeholder={t.searchPlaceholder}
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => { setQuery(event.target.value); setGenre(null); setPagesToRestore(1); }}
           autoComplete="off"
         />
       </div>
 
+      {(genres.length > 1 || genre) && <div className={styles.filters} role="group" aria-label={lang === 'ar' ? 'تصفية العناوين المعروضة' : 'Filter the titles shown'}>
+        <button type="button" aria-pressed={!genre} onClick={() => setGenre(null)}>{lang === 'ar' ? 'الكل' : 'All'}</button>
+        {genres.map((item) => <button key={item} type="button" aria-pressed={genre === item} onClick={() => setGenre(genre === item ? null : item)}><span className={styles.genreDot} aria-hidden="true" />{genreLabel(item, lang)}</button>)}
+      </div>}
+
       <h3 className={styles.sectionTitle}>
-        {isSearch ? t.results(formatNumber(total, lang)) : browseAll ? t.catalogue(formatNumber(total, lang)) : t.starter}
+        {genre ? `${genreLabel(genre, lang)} · ${formatNumber(visibleResults.length, lang)} ${lang === 'ar' ? 'من المعروض' : 'shown'}` : isSearch ? t.results(formatNumber(total, lang)) : browseAll ? t.catalogue(formatNumber(total, lang)) : t.starter}
       </h3>
       {!isSearch && !browseAll && <p className={styles.progressNote}>{t.starterHint}</p>}
 
-      {results.length === 0 && !searching ? (
+      {visibleResults.length === 0 && !searching ? (
         <p className={styles.empty}>{t.noResults}</p>
       ) : (
         <ul className={styles.grid} aria-busy={searching}>
-          {results.map((title) => {
+          {visibleResults.map((title) => {
             const name = lang === 'ar' ? title.titleAr : title.titleEn;
             const state = states.get(title.id);
             const watched = state === 'watched';
             const listed = state === 'watchlist';
-            const busy = busyId === title.id;
+            const busy = busyIds.has(title.id);
 
             return (
               <li key={title.id} className={styles.cell}>
@@ -328,6 +363,7 @@ export function DiscoverScreen({
                     disabled={busy}
                   >
                     <Poster title={title} size="md" className={styles.poster} name={name} />
+                    <span className={styles.pickHint} aria-hidden="true">{busy ? '…' : watched ? '✓' : <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg> {t.watched}</>}</span>
                     {watched && (
                       <span className={styles.check} aria-hidden="true">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round">
@@ -356,7 +392,7 @@ export function DiscoverScreen({
 
                 <h4 className={styles.title}>
                   {onOpenTitle ? (
-                    <button type="button" className={styles.titleButton} onClick={() => onOpenTitle(title, state ?? null)}>
+                    <button type="button" className={styles.titleButton} onClick={() => onOpenTitle(title, state ?? null, { query, browseAll, genre, pagesLoaded: page })}>
                       {name}
                     </button>
                   ) : (
@@ -382,7 +418,7 @@ export function DiscoverScreen({
         <button
           type="button"
           className={`${styles.ghost} ${styles.more}`}
-          onClick={() => setBrowseAll((current) => !current)}
+          onClick={() => { setBrowseAll((current) => !current); setGenre(null); setPagesToRestore(1); }}
           disabled={searching}
         >
           {browseAll ? t.backToStarter : t.browseAll}
