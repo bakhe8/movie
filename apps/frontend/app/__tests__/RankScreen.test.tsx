@@ -85,6 +85,24 @@ describe('RankScreen — ready state', () => {
     expect(screen.getByText('البريق')).toBeInTheDocument();
   });
 
+  // ADR-111: the three slots sit side by side, so each card's controls live
+  // behind one menu -- at 375px a column is about 105px wide.
+  it("keeps every card control behind that card's own menu", async () => {
+    const user = userEvent.setup();
+    render(<RankScreen lang="ar" profileId="p1" />);
+    await screen.findByText('رأس ممحاة');
+
+    const menus = screen.getAllByLabelText('خيارات هذه البطاقة');
+    expect(menus).toHaveLength(3);
+    // Closed until asked: the summary is the only control the row shows.
+    expect(menus[0].closest('details')).not.toHaveAttribute('open');
+
+    await user.click(menus[0]);
+
+    expect(menus[0].closest('details')).toHaveAttribute('open');
+    expect(screen.getAllByRole('button', { name: 'لم أشاهده' }).length).toBeGreaterThan(0);
+  });
+
   it('move-up button moves a title higher in the ranking', async () => {
     const user = userEvent.setup();
     renderRank();

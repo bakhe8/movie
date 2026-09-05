@@ -17,7 +17,7 @@ const labels = {
     title: TRIAD_INSTRUCTION.ar,
     // Blocked: there are no films to rank yet, so the instruction would lie.
     blockedTitle: 'قبل أول ثلاثية',
-    hint: 'اسحب من المقبض أو استخدم الأسهم. البطاقة الأولى هي الأكثر إعجابًا.',
+    hint: 'اسحب البطاقة أو افتح قائمتها. البطاقة الأولى هي الأكثر إعجابًا.',
     save: 'حفظ الترتيب',
     saving: 'جارٍ الحفظ…',
     saved: 'تم الحفظ. هذه جولة جديدة.',
@@ -39,6 +39,7 @@ const labels = {
       n === 1 ? 'سجّل فيلمًا آخر في «اكتشف» لتبقى الجولات جديدة.' : 'سجّل فيلمين آخرين في «اكتشف» لتبقى الجولات جديدة.',
     firstResult: 'اكتملت ثلاث جولات. توصياتك الأولى وترتيب مكتبتك يظهران بعد تدريب نموذجك.',
     dragHandle: 'اسحب لتغيير الترتيب',
+    cardMenu: 'خيارات هذه البطاقة',
     moveUp: 'ارفع درجة',
     moveDown: 'أنزل درجة',
     position: (n: number) => `الترتيب ${n}`,
@@ -68,7 +69,7 @@ const labels = {
     eyebrow: 'Triad',
     title: TRIAD_INSTRUCTION.en,
     blockedTitle: 'Before your first triad',
-    hint: 'Drag by the handle or use the arrows. The first card is the one you liked most.',
+    hint: 'Drag a card or open its menu. The first card is the one you liked most.',
     save: 'Save ranking',
     saving: 'Saving…',
     saved: 'Saved. Here is a new round.',
@@ -79,6 +80,7 @@ const labels = {
     addMore: (n: number) => (n === 1 ? 'Mark one more film in Discover to keep the rounds new.' : `Mark ${n} more films in Discover to keep the rounds new.`),
     firstResult: 'Three rounds done. Your first recommendations and library ranking appear once your model is trained.',
     dragHandle: 'Drag to reorder',
+    cardMenu: 'Options for this card',
     moveUp: 'Move up',
     moveDown: 'Move down',
     position: (n: number) => `Position ${n}`,
@@ -118,7 +120,8 @@ interface DragState {
   // Slot the lifted card lands in on release.
   to: number;
   // Pointer travel since pointerdown, in px; the lifted card follows it.
-  dy: number;
+  // Horizontal since ADR-111: the three slots sit side by side.
+  dx: number;
 }
 
 interface PendingReplacement {
@@ -126,15 +129,13 @@ interface PendingReplacement {
   reason: ReplacementReason;
 }
 
-function GripIcon() {
+// Three dots: a menu, not a grip -- the card itself is what you drag now.
+function MoreIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <circle cx="9" cy="5" r="1.8" />
-      <circle cx="9" cy="12" r="1.8" />
-      <circle cx="9" cy="19" r="1.8" />
-      <circle cx="15" cy="5" r="1.8" />
-      <circle cx="15" cy="12" r="1.8" />
-      <circle cx="15" cy="19" r="1.8" />
+      <circle cx="5" cy="12" r="1.8" />
+      <circle cx="12" cy="12" r="1.8" />
+      <circle cx="19" cy="12" r="1.8" />
     </svg>
   );
 }
@@ -167,7 +168,7 @@ export function RankScreen({
   // Pointer handlers read the live drag state through this ref so they never
   // see a stale closure mid-gesture; `drag` (state) only drives rendering.
   const dragRef = useRef<DragState | null>(null);
-  const startYRef = useRef(0);
+  const startXRef = useRef(0);
   const cardRefs = useRef<(HTMLLIElement | null)[]>([]);
   // The three guards below are refs, not state, because each is read and
   // written synchronously inside the handler that needs it -- a state flag
@@ -282,18 +283,20 @@ export function RankScreen({
   }
 
   // The slot the lifted card lands in: how many *other* cards' midpoints the
-  // pointer has passed.
-  function dropIndexFor(clientY: number, from: number): number {
+  // pointer has passed. The row reads start-to-end, so in Arabic slot 1 is the
+  // rightmost card and passing a midpoint means moving left.
+  function dropIndexFor(clientX: number, from: number): number {
+    const rtl = lang === 'ar';
     let index = 0;
     cardRefs.current.forEach((card, i) => {
       if (!card || i === from) return;
-      const rect = card.getBoundingClientRect();
-      if (clientY > rect.top + rect.height / 2) index += 1;
+      const middle = card.getBoundingClientRect().left + card.getBoundingClientRect().width / 2;
+      if (rtl ? clientX < middle : clientX > middle) index += 1;
     });
     return index;
   }
 
-  function onHandlePointerDown(event: ReactPointerEvent<HTMLButtonElement>, index: number) {
+  function onHandlePointerDown(event: ReactPointerEvent<HTMLElement>, index: number) {
     if (busy) return;
     try {
       // Keeps pointermove/up coming to the handle even when the finger
@@ -303,22 +306,22 @@ export function RankScreen({
     } catch {
       // no capture available for this pointer
     }
-    startYRef.current = event.clientY;
-    updateDrag({ from: index, to: index, dy: 0 });
+    startXRef.current = event.clientX;
+    updateDrag({ from: index, to: index, dx: 0 });
   }
 
-  function onHandlePointerMove(event: ReactPointerEvent<HTMLButtonElement>) {
+  function onHandlePointerMove(event: ReactPointerEvent<HTMLElement>) {
     const current = dragRef.current;
     if (!current) return;
     event.preventDefault();
     updateDrag({
       from: current.from,
-      to: dropIndexFor(event.clientY, current.from),
-      dy: event.clientY - startYRef.current,
+      to: dropIndexFor(event.clientX, current.from),
+      dx: event.clientX - startXRef.current,
     });
   }
 
-  function onHandlePointerUp(event: ReactPointerEvent<HTMLButtonElement>) {
+  function onHandlePointerUp(event: ReactPointerEvent<HTMLElement>) {
     const current = dragRef.current;
     if (!current) return;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
@@ -403,6 +406,16 @@ export function RankScreen({
       <p className={styles.eyebrow}>{t.eyebrow}</p>
       <h2>{phase.kind === 'blocked' ? t.blockedTitle : t.title}</h2>
       {phase.kind === 'ready' && <p className={styles.hint}>{t.hint}</p>}
+      {/* Five dots for the five rounds that make a first result (SPEC §5.1
+          step 4): the reader can see how far along they are without reading
+          the sentence (ADR-111). */}
+      {rounds && (
+        <p className={styles.progress} aria-hidden="true">
+          {[0, 1, 2, 3, 4].map((slot) => (
+            <i key={slot} className={slot < Math.min(rounds.learningRounds, 5) ? styles.dotOn : styles.dot} />
+          ))}
+        </p>
+      )}
       {rounds && (
         <p className={styles.rounds}>
           <span className={styles.roundsCount}>{t.rounds(formatNumber(rounds.learningRounds, lang))}</span>
@@ -475,22 +488,17 @@ export function RankScreen({
           {notice}
         </p>
       )}
-      <ol className={drag ? `${styles.list} ${styles.dragging}` : styles.list}>
+      {/* The three slots side by side, in one screen with the save button
+          (ADR-111; UX_AUDIT_MOBILE_2026-09-05 P0 #2, where the first card
+          started at 399px and the button sat at 1125px in an 812px viewport).
+          The card itself is the drag surface, and everything else it can do
+          lives in its own menu so three columns fit 375px. */}
+      <ol className={drag ? `${styles.row} ${styles.dragging}` : styles.row}>
         {order.map((title, index) => {
           const name = lang === 'ar' ? title.titleAr : title.titleEn;
-          // The other language's title helps recognise a film known under a
-          // different name (same as Discover and the library).
-          const alt = lang === 'ar' ? title.titleEn : title.titleAr;
           const lifted = drag?.from === index;
           const isTarget = drag !== null && drag.to !== drag.from && drag.to === index;
-          const isPending = pending?.titleId === title.id;
-          // Card content is poster (when licensed), title and year only --
-          // no critic scores, no genres, no synopsis (blueprint §4.3; decisions
-          // Q17). The other-language title shares the year's muted line (Q13).
-          const showAlt = Boolean(alt && alt !== name);
-          const className = [styles.card, styles.withPoster, lifted && styles.lifted, isTarget && styles.target]
-            .filter(Boolean)
-            .join(' ');
+          const className = [styles.card, lifted && styles.lifted, isTarget && styles.target].filter(Boolean).join(' ');
 
           return (
             <li
@@ -499,84 +507,59 @@ export function RankScreen({
                 cardRefs.current[index] = element;
               }}
               className={className}
-              style={lifted && drag ? { transform: `translateY(${drag.dy}px)` } : undefined}
+              style={lifted && drag ? { transform: `translateX(${drag.dx}px)` } : undefined}
               aria-label={t.position(index + 1)}
             >
-              <span className={styles.badge} aria-hidden="true">
-                {formatNumber(index + 1, lang)}
-              </span>
-              {/* The poster slot is always present (owner decision 2026-09-04); hollow until licensed. */}
-              <Poster title={title} size="sm" className={styles.poster} />
-              <div className={styles.body}>
-                <h3 className={styles.title}>{name}</h3>
-                {(showAlt || title.releaseYear) && (
-                  <p className={styles.alt}>
-                    {showAlt && <bdi>{alt}</bdi>}
-                    {/* A year is an identifier, not a quantity: no grouping separator.
-                        The separator and the year wrap as one unit (audit 2026-09-04). */}
-                    {title.releaseYear && (
-                      <span className={styles.yearTail}>
-                        {showAlt ? ' · ' : ''}
-                        {String(title.releaseYear)}
-                      </span>
-                    )}
-                  </p>
-                )}
-              </div>
-              <div className={styles.controls}>
-                {/* Not focusable on purpose: the arrows are the keyboard path. */}
-                <button
-                  type="button"
-                  className={styles.handle}
-                  tabIndex={-1}
-                  aria-label={t.dragHandle}
-                  onPointerDown={(event) => onHandlePointerDown(event, index)}
-                  onPointerMove={onHandlePointerMove}
-                  onPointerUp={onHandlePointerUp}
-                  onPointerCancel={onHandlePointerCancel}
-                >
-                  <GripIcon />
-                </button>
-                <button
-                  type="button"
-                  className={styles.arrow}
-                  aria-label={t.moveUp}
-                  onClick={() => move(index, index - 1)}
-                  disabled={busy || index === 0}
-                >
-                  ↑
-                </button>
-                <button
-                  type="button"
-                  className={styles.arrow}
-                  aria-label={t.moveDown}
-                  onClick={() => move(index, index + 1)}
-                  disabled={busy || index === order.length - 1}
-                >
-                  ↓
-                </button>
-              </div>
+              {/* Not focusable on purpose: the menu is the keyboard path. */}
+              <button
+                type="button"
+                className={styles.dragSurface}
+                tabIndex={-1}
+                aria-label={t.dragHandle}
+                onPointerDown={(event) => onHandlePointerDown(event, index)}
+                onPointerMove={onHandlePointerMove}
+                onPointerUp={onHandlePointerUp}
+                onPointerCancel={onHandlePointerCancel}
+              >
+                <span className={styles.badge} aria-hidden="true">
+                  {formatNumber(index + 1, lang)}
+                </span>
+                {/* The poster slot is always present (owner decision 2026-09-04); hollow until licensed. */}
+                <Poster title={title} size="md" className={styles.poster} />
+              </button>
 
-              {/* Two separate, neutral controls (blueprint §4.3, ADR-17). A
-                  one-step confirmation replaces a modal: it says what will
-                  happen and that it is not an opinion about the film. */}
-              {isPending && pending ? (
-                <div className={styles.confirm} role="group">
-                  <p>{pending.reason === 'not_watched' ? t.confirmNotWatched(name) : t.confirmNotRemembered(name)}</p>
-                  <div className={styles.confirmActions}>
-                    <button type="button" className={styles.primarySmall} onClick={confirmReplacement} disabled={replacing}>
-                      {replacing ? t.replacing : t.confirm}
-                    </button>
-                    <button type="button" className={styles.ghost} onClick={() => setPending(null)} disabled={replacing}>
-                      {t.cancel}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className={styles.replaceRow}>
+              <h3 className={styles.title}>{name}</h3>
+              {title.releaseYear && <p className={styles.alt}>{String(title.releaseYear)}</p>}
+
+              {/* One control per card instead of four: at 375px each column is
+                  about 105px wide. Native disclosure, so it needs no state and
+                  closes itself. */}
+              <details className={styles.menu}>
+                <summary className={styles.menuButton} aria-label={t.cardMenu}>
+                  <MoreIcon />
+                </summary>
+                <div className={styles.menuPanel}>
                   <button
                     type="button"
-                    className={styles.ghost}
+                    className={styles.menuItem}
+                    onClick={() => move(index, index - 1)}
+                    disabled={busy || index === 0}
+                  >
+                    {t.moveUp}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.menuItem}
+                    onClick={() => move(index, index + 1)}
+                    disabled={busy || index === order.length - 1}
+                  >
+                    {t.moveDown}
+                  </button>
+                  {/* Two separate, neutral controls (blueprint §4.3, ADR-17):
+                      neither is an opinion about the film. */}
+                  <button
+                    type="button"
+                    className={styles.menuItem}
                     onClick={() => setPending({ titleId: title.id, reason: 'not_watched' })}
                     disabled={busy}
                   >
@@ -584,19 +567,42 @@ export function RankScreen({
                   </button>
                   <button
                     type="button"
-                    className={styles.ghost}
+                    className={styles.menuItem}
                     onClick={() => setPending({ titleId: title.id, reason: 'not_remembered' })}
                     disabled={busy}
                   >
                     {t.notRemembered}
                   </button>
                 </div>
-              )}
+              </details>
             </li>
           );
         })}
       </ol>
-      <button type="button" className={styles.cta} onClick={submitRanking} disabled={busy}>
+
+      {/* The confirmation is about one card but reads across the row, so it
+          sits under it: a one-step replacement for a modal that says what will
+          happen. */}
+      {pending &&
+        (() => {
+          const title = order.find((item) => item.id === pending.titleId);
+          const name = title ? (lang === 'ar' ? title.titleAr : title.titleEn) : '';
+          return (
+            <div className={styles.confirm} role="group">
+              <p>{pending.reason === 'not_watched' ? t.confirmNotWatched(name) : t.confirmNotRemembered(name)}</p>
+              <div className={styles.confirmActions}>
+                <button type="button" className={styles.primarySmall} onClick={confirmReplacement} disabled={replacing}>
+                  {replacing ? t.replacing : t.confirm}
+                </button>
+                <button type="button" className={styles.ghost} onClick={() => setPending(null)} disabled={replacing}>
+                  {t.cancel}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+
+      <button type="button" className={`${styles.cta} ${styles.stickyCta}`} onClick={submitRanking} disabled={busy}>
         {saving ? t.saving : t.save}
       </button>
     </div>

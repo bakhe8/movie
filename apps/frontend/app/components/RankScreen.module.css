@@ -96,13 +96,6 @@
     border-color 150ms ease;
 }
 
-.withPoster {
-  grid-template-columns: auto auto 1fr auto;
-  grid-template-areas:
-    "badge poster body controls"
-    "replace replace replace replace";
-}
-
 /* The lifted card follows the pointer (inline transform) and is marked by
    the accent border, not a shadow (Q8). */
 .lifted {
@@ -152,14 +145,6 @@
   background: var(--well);
 }
 
-.body {
-  grid-area: body;
-  display: grid;
-  align-content: center;
-  gap: 2px;
-  min-width: 0;
-}
-
 /* The film title is UI text, not a display heading. */
 .title {
   margin: 0;
@@ -179,59 +164,7 @@
   line-height: var(--lh-ui);
 }
 
-.controls {
-  grid-area: controls;
-  display: grid;
-  align-content: center;
-  gap: var(--sp-1);
-}
-
-.handle,
-.arrow {
-  min-height: var(--tap);
-  display: grid;
-  place-items: center;
-  min-width: var(--tap);
-  height: 36px;
-  padding: 0;
-  border-radius: var(--r-chip);
-  font: inherit;
-  line-height: 1;
-}
-
-.handle {
-  min-height: var(--tap);
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  cursor: grab;
-  touch-action: none;
-}
-
-.lifted .handle {
-  color: var(--accent);
-  cursor: grabbing;
-}
-
-.arrow {
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--text);
-  font-size: var(--fs-16);
-}
-
-.arrow:disabled {
-  opacity: 0.35;
-}
-
 /* --- Replace controls (neutral, ADR-17) ------------------------------------ */
-
-.replaceRow {
-  grid-area: replace;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-}
 
 .ghost {
   min-height: var(--tap);
@@ -326,8 +259,7 @@
 
 /* --- Focus ---------------------------------------------------------------- */
 
-.handle:focus-visible,
-.arrow:focus-visible,
+.dragSurface:focus-visible,
 .ghost:focus-visible,
 .primarySmall:focus-visible,
 .cta:focus-visible,
@@ -355,4 +287,191 @@
 /* "· 1995" never splits from its separator when the alt title wraps. */
 .yearTail {
   white-space: nowrap;
+}
+
+/* --- The triad as one row (ADR-111) ---------------------------------------
+   Three slots side by side so the whole question, and the button that
+   answers it, fit one phone screen (UX_AUDIT_MOBILE_2026-09-05 P0 #2). */
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-2);
+  margin: 0;
+  padding: var(--sp-3) var(--sp-2);
+  list-style: none;
+  background: var(--well);
+  border-radius: var(--r-card);
+}
+
+.row .card {
+  display: grid;
+  gap: var(--sp-1);
+  justify-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: center;
+  touch-action: pan-y;
+}
+
+/* The card follows the finger, and the slot it would land in lifts to meet it. */
+.row .lifted {
+  position: relative;
+  z-index: 2;
+  opacity: 0.92;
+}
+
+.row .target {
+  outline: 2px dashed var(--accent);
+  outline-offset: 4px;
+  border-radius: var(--r-card);
+}
+
+.dragSurface {
+  position: relative;
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: grab;
+  touch-action: none;
+}
+
+.row .badge {
+  position: absolute;
+  inset-block-start: 4px;
+  inset-inline-start: 4px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: var(--fs-13);
+  font-weight: var(--w-semibold);
+}
+
+.row .poster {
+  width: 96px;
+}
+
+.row .title {
+  margin: 0;
+  font-size: var(--fs-13);
+  font-weight: var(--w-semibold);
+  line-height: var(--lh-ui);
+  overflow-wrap: anywhere;
+}
+
+.row .alt {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-12);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- One menu per card ---------------------------------------------------- */
+
+.menu {
+  position: relative;
+}
+
+.menuButton {
+  display: grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  border-radius: var(--r-button);
+  color: var(--muted);
+  cursor: pointer;
+  list-style: none;
+}
+
+/* Safari draws its own marker on summary. */
+.menuButton::-webkit-details-marker {
+  display: none;
+}
+
+.menuButton:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* In flow, not a popover: a floating panel anchored to a 105px column would
+   hang off the screen at the row's edges. The open card grows the row for as
+   long as the menu is open, and the save button stays reachable because it
+   sticks. */
+.menuPanel {
+  display: grid;
+  width: 100%;
+  padding: var(--sp-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+.menuItem {
+  min-height: var(--tap);
+  padding: 0 var(--sp-2);
+  border: 0;
+  border-radius: var(--r-button);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-13);
+  line-height: var(--lh-ui);
+  text-align: start;
+}
+
+.menuItem:disabled {
+  color: var(--muted);
+}
+
+/* --- Round progress ------------------------------------------------------- */
+
+.progress {
+  display: flex;
+  gap: var(--sp-1);
+  margin: 0;
+}
+
+.dot,
+.dotOn {
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+}
+
+.dotOn {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+/* --- The answer stays in reach -------------------------------------------- */
+
+/* Sticks above the shell's bottom tabs, which reserve the same height
+   (AppShell.module.css `.withNav`). */
+.stickyCta {
+  position: sticky;
+  bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  z-index: 2;
+}
+
+@media (min-width: 900px) {
+  .row {
+    gap: var(--sp-4);
+    padding: var(--sp-4);
+  }
+
+  .row .poster {
+    width: 120px;
+  }
+
+  .stickyCta {
+    position: static;
+  }
 }
