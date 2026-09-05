@@ -23,6 +23,7 @@
     "admin:grant": "npm run build && node dist/scripts/grant-admin.js",
     "perf:load": "npm run build && node dist/perf/load-test.js",
     "imdb:load": "npm run build && node dist/scripts/load-imdb-ratings.js",
+    "canary": "npm run build && node dist/scripts/canary.js",
     "start": "node dist/main.js",
     "lint": "eslint src/",
     "test": "vitest run -c vitest.config.ts",

@@ -64,9 +64,15 @@ export class AnalyticsService {
   private async consented(profileId: string): Promise<boolean> {
     const profile = await this.profilesRepository.findOne({
       where: { id: profileId },
-      select: { id: true, userId: true },
+      // ADR-107: the canary's own consents are real (it runs the same
+      // onboarding), so the flag on its account is the only thing that can
+      // keep its every-six-hours journey out of a reported funnel. Joined
+      // here rather than fetched separately: this runs on the hot path of
+      // every recorded event.
+      select: { id: true, userId: true, user: { id: true, isCanary: true } },
+      relations: { user: true },
     });
-    if (!profile) {
+    if (!profile || profile.user?.isCanary) {
       return false;
     }
     const consent = await this.consentsRepository.findOne({

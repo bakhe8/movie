@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Repository } from 'typeorm';
 import { Consent } from '../../entities/consent.entity';
 import { Profile } from '../../entities/profile.entity';
+import { User } from '../../entities/user.entity';
 import { ConsentsService } from './consents.service';
 
 function repoMock() {
@@ -16,14 +17,18 @@ function repoMock() {
 describe('ConsentsService', () => {
   let consentsRepository: ReturnType<typeof repoMock>;
   let profilesRepository: ReturnType<typeof repoMock>;
+  let usersRepository: ReturnType<typeof repoMock>;
   let service: ConsentsService;
 
   beforeEach(() => {
     consentsRepository = repoMock();
     profilesRepository = repoMock();
+    usersRepository = repoMock();
+    usersRepository.find.mockResolvedValue([]);
     service = new ConsentsService(
       consentsRepository as unknown as Repository<Consent>,
       profilesRepository as unknown as Repository<Profile>,
+      usersRepository as unknown as Repository<User>,
     );
   });
 
@@ -48,6 +53,20 @@ describe('ConsentsService', () => {
       profilesRepository.find.mockResolvedValue([{ id: 'p1', userId: 'someone' }] as Profile[]);
 
       expect(await service.pooledEligibleProfileIds()).toEqual(['p1']);
+    });
+
+    // ADR-107: the canary grants every consent a person grants, so consent
+    // alone would pool a script that ranks the same way every six hours.
+    it('excludes a canary account even though it revoked nothing', async () => {
+      consentsRepository.find.mockResolvedValue([]);
+      usersRepository.find.mockResolvedValue([{ id: 'canary-user' }] as User[]);
+      profilesRepository.find.mockResolvedValue([
+        { id: 'p-person', userId: 'person' },
+        { id: 'p-canary', userId: 'canary-user' },
+      ] as Profile[]);
+
+      expect(await service.pooledEligibleProfileIds()).toEqual(['p-person']);
+      expect(usersRepository.find).toHaveBeenCalledWith(expect.objectContaining({ where: { isCanary: true } }));
     });
   });
 

@@ -14,6 +14,7 @@ import { User } from '../../entities/user.entity';
 import { AuditService } from '../audit/audit.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { isCanaryEmail } from './canary-account';
 
 // What JwtStrategy.validate() puts on req.user for every guarded route --
 // the password hash must never travel with it (see validateUser below).
@@ -67,6 +68,10 @@ export class AuthService {
       firstName,
       lastName,
       active: true,
+      // ADR-107: derived from the address, never from the request body --
+      // the canary registers through this same route, and no caller may
+      // hand itself the flag that takes it out of analytics.
+      isCanary: isCanaryEmail(email),
     });
 
     // The findOne check above doesn't stop two concurrent registrations of
@@ -199,6 +204,7 @@ export class AuthService {
       lastName: user.lastName,
       active: user.active,
       role: user.role,
+      isCanary: user.isCanary,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };

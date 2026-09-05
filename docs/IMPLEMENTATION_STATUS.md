@@ -433,6 +433,16 @@ Still open (design, not spec): the visual direction itself (dark cinematic vs. l
 
 ---
 
+## Closed on 2026-09-05 (P0-6 — a post-deploy canary walks the whole journey, ADR-107)
+
+| Gap | What changed | Proof |
+|---|---|---|
+| Nothing answered "can a person who signs in now reach a recommendation": every outage of 2026-09-05 (model service undeployed, boot refused a renamed env var, catalog never loaded, empty starter list) passed `/api/health` | `npm run canary` (`src/scripts/canary.ts` + `canary.lib.ts`): sign in → profile and consents → mark the starter films watched → rank to the activation threshold → poll readiness with exponential backoff under the throttler → require `recommendation.status = ready` and non-empty `/recommendations` → delete the profile it made, keeping the account. Non-zero exit + `captureException` naming the step that broke; `--accounts N` for a 20-journey readiness pass. Railway Cron `canary` every six hours (QUICKSTART §8.2). `users.isCanary` (additive migration, stamped at registration from the address) excludes those rows from the pooled retrain and from first-party analytics | 17 new unit tests (`canary.lib.spec.ts` walks a fake deployment: happy journey, cleanup of the profile and of a crashed run's leftovers, model-never-ready, model-failed, catalog too small, 429 as back-pressure, one failed account among three; `canary-account.spec.ts`) + canary cases in `auth.service.spec.ts`, `consents.service.spec.ts`, `analytics.service.spec.ts`; `tsc`/`eslint` clean |
+
+Still open: the canary accounts and their Cron service are the owner's one-time setup (QUICKSTART §8.2 step 9); nothing runs until `CANARY_PASSWORD` is set.
+
+---
+
 ## Audited on 2026-09-05 (UX-A — mobile audit at `cd31d86`, design direction ADR-111)
 
 | Gap | What changed | Proof |

@@ -45,6 +45,17 @@ describe('AnalyticsService', () => {
     expect(events.insert).not.toHaveBeenCalled();
   });
 
+  // ADR-107: the canary runs the same onboarding and grants the same
+  // consents every six hours; without this its journey would be counted as
+  // twenty real users a week in every reported funnel.
+  it('writes nothing for a canary account, consent or not', async () => {
+    profiles.findOne.mockResolvedValue({ id: 'profile-1', userId: 'canary-user', user: { id: 'canary-user', isCanary: true } });
+
+    await service.record('profile-1', 'triad_answered', { durationMs: 1 });
+
+    expect(events.insert).not.toHaveBeenCalled();
+  });
+
   it('writes nothing for a profile that no longer exists', async () => {
     profiles.findOne.mockResolvedValue(null);
 

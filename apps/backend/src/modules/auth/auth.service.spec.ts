@@ -87,6 +87,22 @@ describe('AuthService', () => {
       expect(result.user).not.toHaveProperty('password');
     });
 
+    // ADR-107: the flag is derived from the address at registration, so the
+    // canary is out of pooling and analytics from the moment it exists --
+    // and no request body can ask for it.
+    it.each([
+      ['canary@kolme.app', true],
+      ['canary+7@kolme.app', true],
+      ['new@example.com', false],
+    ])('stamps isCanary=%s for %s', async (email, isCanary) => {
+      usersRepository.findOne.mockResolvedValue(null);
+      vi.mocked(bcrypt.hash).mockResolvedValue('hashed-password' as never);
+
+      await service.register({ email: email as string, password: 'x', firstName: 'A', lastName: 'B' });
+
+      expect(usersRepository.create).toHaveBeenCalledWith(expect.objectContaining({ isCanary }));
+    });
+
     it('rejects registering an email that already exists', async () => {
       usersRepository.findOne.mockResolvedValue({ id: 'existing-user' });
 

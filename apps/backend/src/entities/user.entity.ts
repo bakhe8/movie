@@ -25,6 +25,16 @@ export class User {
   @Column({ type: 'varchar', default: 'user' })
   role: 'user' | 'admin';
 
+  // ADR-107: this account is the post-deploy canary, not a person. Set once
+  // at registration from the address (modules/auth/canary-account.ts) and
+  // never from a request body. Everything that pools users reads it and
+  // leaves the row out -- the shared-space retrain (ConsentsService
+  // .pooledEligibleProfileIds) and first-party analytics (AnalyticsService)
+  // -- so a synthetic taste never trains on real users and a synthetic
+  // funnel never lands in a reported number.
+  @Column({ type: 'boolean', default: false })
+  isCanary: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 

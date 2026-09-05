@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Consent } from '../../entities/consent.entity';
 import { Profile } from '../../entities/profile.entity';
+import { User } from '../../entities/user.entity';
 import { subjectKeyFor } from '../privacy/privacy.service';
 import { ConsentGrantDto } from './dto/update-consents.dto';
 
@@ -13,6 +14,8 @@ export class ConsentsService {
     private readonly consentsRepository: Repository<Consent>,
     @InjectRepository(Profile)
     private readonly profilesRepository: Repository<Profile>,
+    @InjectRepository(User)
+    private readonly usersRepository: Repository<User>,
   ) {}
 
   // PRIVACY.md §4's `no_pooled`: revoking `personalization_pooled` excludes
@@ -31,6 +34,14 @@ export class ConsentsService {
       select: { userId: true },
     });
     const excludedUserIds = new Set(revoked.map((row) => row.userId).filter((id): id is string => id !== null));
+    // ADR-107: the canary's rankings are a fixed script run every six hours,
+    // not a taste. It never revokes anything -- it grants the same consents
+    // a real onboarding does -- so consent alone would let it in; the flag
+    // is what keeps a synthetic profile out of the pooled fit.
+    const canaries = await this.usersRepository.find({ where: { isCanary: true }, select: { id: true } });
+    for (const canary of canaries) {
+      excludedUserIds.add(canary.id);
+    }
     const profiles = await this.profilesRepository.find({ select: { id: true, userId: true } });
     return profiles.filter((profile) => !excludedUserIds.has(profile.userId)).map((profile) => profile.id);
   }
