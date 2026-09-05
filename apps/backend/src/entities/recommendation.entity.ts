@@ -47,7 +47,7 @@ export class Recommendation {
   @Column({ type: 'real', nullable: true })
   watchability: number | null;
 
-  @Column()
+  @Column({ type: 'varchar' })
   confidenceBand: string;
 
   // Internal until calibrated (BP §7.2) -- never shown to the user directly.
@@ -57,16 +57,16 @@ export class Recommendation {
   @Column({ type: 'json' })
   reason: Record<string, unknown>;
 
-  @Column({ default: 'individual' })
+  @Column({ type: 'varchar', default: 'individual' })
   evidenceSource: string;
 
   @Column({ type: 'varchar', nullable: true })
   candidateSource: string | null;
 
-  @Column()
+  @Column({ type: 'varchar' })
   modelVersion: string;
 
-  @Column()
+  @Column({ type: 'varchar' })
   policyVersion: string;
 
   @Column({ type: 'varchar', nullable: true })

@@ -20,7 +20,7 @@ export class AvailabilitySnapshot {
   @Column({ type: 'varchar', length: 2 })
   market: string;
 
-  @Column()
+  @Column({ type: 'varchar' })
   provider: string;
 
   @Column({ type: 'varchar', nullable: true })

@@ -18,7 +18,7 @@ export class ContentFeature {
   @Column({ type: 'uuid' })
   titleId: string;
 
-  @Column()
+  @Column({ type: 'varchar' })
   featureKey: string;
 
   @Column({ type: 'real', nullable: true })
@@ -33,7 +33,7 @@ export class ContentFeature {
   @Column('text', { array: true, default: '{}' })
   sourceIds: string[];
 
-  @Column()
+  @Column({ type: 'varchar' })
   extractorVersion: string;
 
   @Column({ type: 'varchar' })

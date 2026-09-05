@@ -14,7 +14,7 @@ export class LibraryImport {
   @Column({ type: 'uuid' })
   profileId: string;
 
-  @Column()
+  @Column({ type: 'varchar' })
   status: string;
 
   @Column({ type: 'varchar', nullable: true })
@@ -26,7 +26,7 @@ export class LibraryImport {
   @Column({ type: 'integer', nullable: true })
   matchedCount: number | null;
 
-  @Column()
+  @Column({ type: 'varchar' })
   consentVersion: string;
 
   @Column({ type: 'timestamp', nullable: true })

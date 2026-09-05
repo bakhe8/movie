@@ -6,16 +6,16 @@ export class Title {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ unique: true })
+  @Column({ type: 'varchar', unique: true })
   internalId: string;
 
-  @Column()
+  @Column({ type: 'varchar' })
   titleEn: string;
 
-  @Column()
+  @Column({ type: 'varchar' })
   titleAr: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   description: string;
 
   @Column({ type: 'integer', nullable: true })

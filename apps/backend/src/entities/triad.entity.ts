@@ -17,7 +17,7 @@ export class Triad {
   @JoinColumn({ name: 'profileId' })
   profile: Profile;
 
-  @Column()
+  @Column({ type: 'uuid' })
   profileId: string;
 
   @Column('uuid', { array: true })
@@ -75,7 +75,7 @@ export class Triad {
   @Column({ type: 'varchar', nullable: true })
   experimentId: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   sessionId: string;
 
   @Column({ type: 'json', nullable: true })

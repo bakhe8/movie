@@ -16,16 +16,16 @@ export class AuditLog {
   @Column({ type: 'varchar', nullable: true })
   actorRole: string | null;
 
-  @Column()
+  @Column({ type: 'varchar' })
   action: string;
 
-  @Column()
+  @Column({ type: 'varchar' })
   resource: string;
 
   @Column({ type: 'uuid', nullable: true })
   resourceId: string | null;
 
-  @Column()
+  @Column({ type: 'varchar' })
   status: string;
 
   @Column({ type: 'varchar', length: 500, nullable: true })

@@ -2,13 +2,13 @@ import { Column, CreateDateColumn, Entity, PrimaryColumn } from 'typeorm';
 
 @Entity('model_versions')
 export class ModelVersion {
-  @PrimaryColumn()
+  @PrimaryColumn({ type: 'varchar' })
   version: string;
 
-  @Column()
+  @Column({ type: 'varchar' })
   rankerType: string;
 
-  @Column()
+  @Column({ type: 'varchar' })
   fingerprintSchemaVersion: string;
 
   @Column({ type: 'varchar', nullable: true })
@@ -27,7 +27,7 @@ export class ModelVersion {
   @Column({ type: 'json', nullable: true })
   evalReport: Record<string, unknown> | null;
 
-  @Column({ default: false })
+  @Column({ type: 'boolean', default: false })
   active: boolean;
 
   @CreateDateColumn()

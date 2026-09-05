@@ -17,7 +17,7 @@ export class LocalizedTitle {
   @Column({ type: 'uuid' })
   titleId: string;
 
-  @Column()
+  @Column({ type: 'varchar' })
   title: string;
 
   @Column({ type: 'varchar', length: 5 })

@@ -38,7 +38,7 @@ export class PrivacyRequest {
   @Column({ type: 'varchar' })
   status: PrivacyRequestStatus;
 
-  @Column()
+  @Column({ type: 'timestamp' })
   requestedAt: Date;
 
   @Column({ type: 'timestamp', nullable: true })

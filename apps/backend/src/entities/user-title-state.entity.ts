@@ -14,14 +14,14 @@ export class UserTitleState {
   @JoinColumn({ name: 'profileId' })
   profile: Profile;
 
-  @Column()
+  @Column({ type: 'uuid' })
   profileId: string;
 
   @ManyToOne(() => Title, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'titleId' })
   title: Title;
 
-  @Column()
+  @Column({ type: 'uuid' })
   titleId: string;
 
   @Column({ type: 'varchar' })

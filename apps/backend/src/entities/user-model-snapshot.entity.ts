@@ -23,7 +23,7 @@ export class UserModelSnapshot {
   @JoinColumn({ name: 'profileId' })
   profile: Profile;
 
-  @Column()
+  @Column({ type: 'uuid' })
   profileId: string;
 
   @Column('real', { array: true })
@@ -32,7 +32,7 @@ export class UserModelSnapshot {
   @Column({ type: 'json', nullable: true })
   biasTerms: Record<string, number>;
 
-  @Column()
+  @Column({ type: 'varchar' })
   modelVersion: string;
 
   @Column({ type: 'integer' })

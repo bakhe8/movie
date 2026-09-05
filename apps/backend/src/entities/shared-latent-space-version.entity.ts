@@ -7,7 +7,7 @@ import { Column, CreateDateColumn, Entity, PrimaryColumn } from 'typeorm';
 // must be 'commercial_allowed' for a version to be activated.
 @Entity('shared_latent_space_versions')
 export class SharedLatentSpaceVersion {
-  @PrimaryColumn()
+  @PrimaryColumn({ type: 'varchar' })
   version: string;
 
   @Column({ type: 'integer', nullable: true })
@@ -22,7 +22,7 @@ export class SharedLatentSpaceVersion {
   @Column({ type: 'json', nullable: true })
   acceptanceGateMetrics: Record<string, unknown> | null;
 
-  @Column({ default: false })
+  @Column({ type: 'boolean', default: false })
   active: boolean;
 
   @CreateDateColumn()

@@ -24,7 +24,7 @@ export class Credit {
   @Column({ type: 'uuid' })
   personId: string;
 
-  @Column()
+  @Column({ type: 'varchar' })
   role: string;
 
   @Column({ type: 'integer', nullable: true })

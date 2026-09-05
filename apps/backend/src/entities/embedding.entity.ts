@@ -11,13 +11,13 @@ export class Embedding {
   title: Title;
 
   @Index('IDX_embeddings_titleId')
-  @Column()
+  @Column({ type: 'uuid' })
   titleId: string;
 
   @Column('real', { array: true })
   vector: number[];
 
-  @Column()
+  @Column({ type: 'varchar' })
   modelVersion: string;
 
   @Column({ type: 'varchar' })

@@ -21,13 +21,13 @@ export class SourceRecord {
   @Column({ type: 'uuid', nullable: true })
   titleId: string | null;
 
-  @Column()
+  @Column({ type: 'varchar' })
   fieldName: string;
 
   @Column({ type: 'text', nullable: true })
   value: string | null;
 
-  @Column()
+  @Column({ type: 'varchar' })
   source: string;
 
   @Column({ type: 'varchar', nullable: true })

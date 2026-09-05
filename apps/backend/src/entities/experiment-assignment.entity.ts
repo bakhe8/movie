@@ -8,7 +8,7 @@ export class ExperimentAssignment {
   @JoinColumn({ name: 'experimentId' })
   experiment: Experiment;
 
-  @PrimaryColumn()
+  @PrimaryColumn({ type: 'varchar' })
   experimentId: string;
 
   @ManyToOne(() => Profile, { onDelete: 'CASCADE' })
@@ -18,7 +18,7 @@ export class ExperimentAssignment {
   @PrimaryColumn('uuid')
   profileId: string;
 
-  @Column()
+  @Column({ type: 'varchar' })
   arm: string;
 
   @Column({ type: 'timestamp', nullable: true })

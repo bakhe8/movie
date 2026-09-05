@@ -17,7 +17,7 @@ export class PublicQualitySource {
   @Column({ type: 'uuid' })
   titleId: string;
 
-  @Column()
+  @Column({ type: 'varchar' })
   source: string;
 
   @Column({ type: 'varchar', length: 2, nullable: true })

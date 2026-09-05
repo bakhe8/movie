@@ -40,13 +40,13 @@ export class Consent {
   @Column({ type: 'varchar' })
   purpose: ConsentPurpose;
 
-  @Column()
+  @Column({ type: 'varchar' })
   version: string;
 
-  @Column()
+  @Column({ type: 'boolean' })
   granted: boolean;
 
-  @Column()
+  @Column({ type: 'timestamp' })
   grantedAt: Date;
 
   @Column({ type: 'timestamp', nullable: true })
