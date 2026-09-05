@@ -40,7 +40,7 @@
 | 3 | ~~ADR يعدّل ADR-34: `setHash` + `purpose` + `countTowardActivation`؛ العتبة بالمجموعات الفريدة~~ | TRIAD-01 · ACT-01 | **منجز** (ADR-99) |
 | 4 | ~~`watchedOn DATE` + حفظ اليومية لا يمسّ التاريخ~~ | DATE-01 | **منجز** (ADR-104) |
 | 5 | ~~أجناس عربية + `capturedAt` + عنصر نائب للملصق~~ | L10N-01 | **منجز** (movie-p1): قاموس `app/lib/genres.ts` (29 جنساً، مفردات `mapGenres` المغلقة) يُستهلك في `WorkScreen` و`DiscoverScreen`، ومفتاح غير معروف يسقط إلى المفتاح نفسه · `PublicQualityCell` يعرض «بتاريخ …» من `capturedAt` · `Poster` يرسم إطاراً منقّطاً بعلامة محايدة بدل الفراغ. لا ADR (نصوص عرض لا قرار) |
-| 6 | مجموعة البحث الذهبية + `unaccent` + `localized_titles` | SEARCH-01 | متوسط |
+| 6 | ~~مجموعة البحث الذهبية + `unaccent` + `localized_titles`~~ | SEARCH-01 | **منجز** (movie-p1، ADR-106): 53 حالة ذهبية على HTTP وPostgres حقيقيين · `unaccent` (هجرة غير قاتلة + فحص `pg_extension`) · `EXISTS` على `localized_titles` بنفس الطيّ · **عيبان حقيقيان كشفتهما المجموعة**: التشكيل والتطويل كانا يُجرَّدان من الاستعلام فقط لا من العمود. **باقٍ**: لا شيء يملأ `localized_titles` — الإدخال على خط أنابيب الكتالوج |
 | 7 | اختبار عقد الفصل + `availability: unknown` صريح | AVL-01 | صغير |
 | 8 | ~~حالات الجاهزية الأربع (§5.1 في المذكرة) كعقد API واحد تقرأه الواجهة~~ | TRAIN-01 · REC-01 | **منجز** (ADR-103): `GET /profiles/:id/readiness` يعيد `ordinalModel`/`semanticProfile`/`recommendation`/`availability`، كل واحدة `{status, reason, action, publishedAt, modelVersion}`. لم تستهلكه أي شاشة بعد — العقد جاهز لإعادة تصميم الواجهة القادمة. `semanticProfile` يطابق `ordinalModel` اليوم (نموذج واحد ينتج الاثنين)؛ فصلهما فعلياً ينتظر أن يقرّر المدرِّب تغطية البصمات لكل جولة. `availability` دوماً `not_ready` حتى يوجد مصدر بيانات حقيقي (AVL-01) |
 

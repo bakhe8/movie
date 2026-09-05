@@ -7,7 +7,7 @@ import { AttributionService, TextSource } from '../public-quality/attribution.se
 import { PosterService, PosterSource } from '../public-quality/poster.service';
 import { PublicQuality, PublicQualityService } from '../public-quality/public-quality.service';
 import { ListTitlesQueryDto } from './dto/list-titles-query.dto';
-import { ARABIC_FOLD_FROM, ARABIC_FOLD_TO, diversify, foldArabic } from './starter';
+import { ARABIC_FOLD_FROM, ARABIC_FOLD_TO, ARABIC_STRIP, diversify, foldArabic } from './starter';
 
 // The starter list is drawn from at most this many catalogue rows (by
 // title): enough to be diverse, bounded so it never scans a large catalogue.
@@ -104,19 +104,51 @@ export class TitlesService {
       const searchTerm = `%${query.query}%`;
       // Arabic folding on both sides (see ./starter foldArabic): the column
       // is folded with translate() over the same character map, so «احلام»
-      // finds «أحلام» and «مدرسه» finds «مدرسة». Alternate titles
-      // (localized_titles, FTS) are still the M3 gap.
+      // finds «أحلام» and «مدرسه» finds «مدرسة».
       const foldedTerm = `%${foldArabic(query.query)}%`;
+      const accentInsensitive = await this.hasUnaccent();
+      const parameters = {
+        searchTerm,
+        foldedTerm,
+        foldFrom: ARABIC_FOLD_FROM,
+        foldTo: ARABIC_FOLD_TO,
+        strip: ARABIC_STRIP,
+      };
+      // The stored side of the fold: tashkeel and tatweel are removed with
+      // translate(col, strip, '') -- translate drops any character with no
+      // counterpart -- before the letter map is applied. foldArabic() does
+      // both to the query.
+      const folded = (column: string) => `translate(translate(${column}, :strip, ''), :foldFrom, :foldTo)`;
       queryBuilder.where(
         new Brackets((where) => {
           where
-            .where('title.titleEn ILIKE :searchTerm', { searchTerm })
-            .orWhere('title.titleAr ILIKE :searchTerm', { searchTerm })
-            .orWhere('translate(title.titleAr, :foldFrom, :foldTo) ILIKE :foldedTerm', {
-              foldFrom: ARABIC_FOLD_FROM,
-              foldTo: ARABIC_FOLD_TO,
-              foldedTerm,
-            });
+            .where('title.titleEn ILIKE :searchTerm', parameters)
+            .orWhere('title.titleAr ILIKE :searchTerm', parameters)
+            .orWhere(`${folded('title.titleAr')} ILIKE :foldedTerm`, parameters);
+          // The Latin half of the same idea (SEARCH-01): «Amelie» finds
+          // «Amélie», «Rashomon» finds «Rashômon». Left out entirely when the
+          // extension is not installed rather than failing the request.
+          if (accentInsensitive) {
+            where.orWhere('unaccent(title.titleEn) ILIKE unaccent(:searchTerm)', parameters);
+          }
+          // Alternate titles (SCHEMA.md §2.2 `localized_titles`): the
+          // original-language title, the official release title in another
+          // market, and transliterations, each on its own row. Searched with
+          // the same folding as the two columns above, so one query reaches
+          // every name a film is known by. EXISTS, not a join: a title with
+          // ten alternates is still one result.
+          where.orWhere(
+            `EXISTS (
+              SELECT 1 FROM "localized_titles" "lt"
+              WHERE "lt"."titleId" = title.id
+                AND (
+                  "lt"."title" ILIKE :searchTerm
+                  OR ${folded('"lt"."title"')} ILIKE :foldedTerm
+                  ${accentInsensitive ? 'OR unaccent("lt"."title") ILIKE unaccent(:searchTerm)' : ''}
+                )
+            )`,
+            parameters,
+          );
         }),
       );
     }
@@ -169,6 +201,20 @@ export class TitlesService {
     ]);
     const [withPoster] = await this.posterService.attach([title as unknown as PublicTitle]);
     return { ...withPoster, publicQuality, descriptionSource, fingerprintSummary } as WorkPageTitle;
+  }
+
+  // Whether `unaccent` is installed in this database. Probed once per
+  // process and cached: the answer cannot change under a running deployment,
+  // and the migration that installs it is deliberately non-fatal (see
+  // AddUnaccentForSearch), so the search path has to work either way.
+  private unaccentAvailable: Promise<boolean> | null = null;
+
+  private hasUnaccent(): Promise<boolean> {
+    this.unaccentAvailable ??= this.titlesRepository
+      .query(`SELECT 1 FROM pg_extension WHERE extname = 'unaccent'`)
+      .then((rows: unknown[]) => rows.length > 0)
+      .catch(() => false);
+    return this.unaccentAvailable;
   }
 
   // One entry per reviewed dimension, newest extractor version per key, in

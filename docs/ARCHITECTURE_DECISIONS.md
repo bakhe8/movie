@@ -804,6 +804,15 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 
 ---
 
+## ADR-106 — Catalogue search folds both sides and reads alternate titles from `localized_titles` (remediation brief P1-01/SEARCH-01)
+
+**Context.** The brief's evidence was «Anora» returning nothing where «أنورا» returned one row. The map could not reproduce it from the code (`ILIKE` is case-insensitive), which is the real finding: there was no fixed set of queries with known answers, so nobody could say what search did. Three gaps were real: Latin diacritics were matched byte for byte («Amelie» missed «Amélie»), the Arabic fold stripped tashkeel and tatweel from the *query* only, so a title stored as «الرِّسالة» or «الــبلبل» was unreachable, and `localized_titles` — the table SCHEMA.md §2.2 created for alternate titles, and ADR-2 named as the search target — was never read.
+**Decision.** One predicate, all four sources: `titleEn`/`titleAr` by `ILIKE`; `titleAr` folded on both sides, now with `translate(col, ARABIC_STRIP, '')` removing tashkeel, shadda, the dagger alef and tatweel from the column exactly as `foldArabic()` removes them from the query; `unaccent(titleEn)` for the Latin half; and an `EXISTS` over `localized_titles` with the same folding, so one query reaches the original-language title, an official title in another market, and a transliteration. `EXISTS`, not a join: a film with ten alternates is still one result. The `unaccent` migration is deliberately non-fatal and `TitlesService` probes `pg_extension` once — a deployment whose role cannot install a contrib extension boots and searches accent-sensitively rather than failing (boot contract, incident `f23ec48`).
+**Consequences.** `test/titles-search-golden.e2e-spec.ts` is the golden set the brief asked for: 53 pinned cases over real HTTP and real Postgres — the other language, the wrong hamza, the missing accent, the wrong case, a fragment, and the name a film is known by elsewhere. It found the two folding bugs above, which no unit test could (the fold lives in SQL). Nothing populates `localized_titles` yet: the search path and its contract are proven by the test, and the ingestion of alternate titles belongs to the catalogue pipeline (SEARCH-01 follow-up), not here. No index is used for the folded or unaccented comparisons; at 384 titles this is a sequential scan by design, and the GIN FTS index the table already carries is the escape hatch when the catalogue is large enough to need it.
+**Revisit when.** The catalogue passes roughly ten thousand titles (then the folded expressions need their own immutable-wrapper indexes, or the FTS index takes over), or alternate-title ingestion lands and ranking between a primary and an alternate match starts to matter.
+
+---
+
 ## Summary
 
 | # | Decision | Serves | Revisit trigger |
@@ -913,6 +922,7 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 | 103 | `GET .../readiness`: four capabilities (ordinal model, semantic profile, recommendation, availability), composed from existing signals, not a fifth "trained or not" flag | remediation brief §5.1 2026-09-05 | the trainer reports per-fit fingerprint coverage, or AVL-01 gets a real data source |
 | 104 | `watchedOn`: a plain `'YYYY-MM-DD'` the client supplies (`todayLocal()`, or the diary's own date), never a timestamp the server derives from its own clock | remediation brief P1-03/DATE-01 2026-09-05 | a profile-level IANA timezone lets the server compute "today" too |
 | 105 | EU-West move is a backup→restore cutover on the P0-5 path (empty-target guard, `SKIP_EXTENSIONS`, announced window, old database kept a week) | owner decision O-11 2026-09-05; ADR-88, ADR-102 | a Middle East region exists, or the data outgrows a dump-and-restore window |
+| 106 | Catalogue search: both sides folded (Arabic marks stripped from the column too), `unaccent` for Latin, and alternate titles read from `localized_titles`; a 53-case golden set pins it | remediation brief P1-01/SEARCH-01 2026-09-05; ADR-2 | ~10k titles (indexes/FTS), or alternate-title ingestion lands |
 
 ## How to add a decision
 

@@ -52,13 +52,21 @@ export function diversify<T extends StarterCandidate>(titles: readonly T[], limi
 
 // Arabic search folding: hamza forms of alef, taa marbuta and alef maqsura
 // are typed interchangeably, and tashkeel/tatweel never matter for search.
-// Applied to the query here and to the column in SQL (same character map,
+// Applied to the query here and to the column in SQL (same character maps,
 // see TitlesService) so «احلام» finds «أحلام» and «مدرسه» finds «مدرسة».
 export const ARABIC_FOLD_FROM = 'أإآةى';
 export const ARABIC_FOLD_TO = 'اااهي';
 
+// Marks that carry no search meaning and are removed from both sides:
+// tanween, harakat, shadda, sukun, the dagger alef, and tatweel. The SQL
+// side removes them with translate(col, ARABIC_STRIP, '') -- until the
+// golden set (test/titles-search-golden.e2e-spec.ts) only the *query* was
+// stripped, so a title stored as «الرِّسالة» or «الــبلبل» could not be
+// found by anyone typing it plainly (SEARCH-01).
+export const ARABIC_STRIP = 'ًٌٍَُِّْٰـ';
+
 export function foldArabic(text: string): string {
-  const stripped = text.replace(/[ً-ْـ]/g, '');
+  const stripped = text.replace(/[ً-ْٰـ]/g, '');
   let folded = '';
   for (const char of stripped) {
     const index = ARABIC_FOLD_FROM.indexOf(char);

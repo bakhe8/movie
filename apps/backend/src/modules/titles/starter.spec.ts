@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { diversify, foldArabic } from './starter';
+import { ARABIC_STRIP, diversify, foldArabic } from './starter';
 
 const title = (titleEn: string, releaseYear: number | null, genres: string[] | null) => ({ titleEn, releaseYear, genres });
 
@@ -51,6 +51,17 @@ describe('foldArabic (search folding)', () => {
     expect(foldArabic('مصطفى')).toBe('مصطفي');
     expect(foldArabic('مُحَمَّد')).toBe('محمد');
     expect(foldArabic('الـوصـول')).toBe('الوصول');
+  });
+
+  // Every mark ARABIC_STRIP removes on the SQL side must vanish here too, or
+  // the two sides of the fold disagree and a stored diacritic hides a title
+  // (SEARCH-01, caught by the golden set).
+  it('strips every mark the column side strips, including the dagger alef', () => {
+    for (const mark of ARABIC_STRIP) {
+      expect(foldArabic(`ا${mark}ب`)).toBe('اب');
+    }
+    expect(foldArabic('الرِّسالة')).toBe('الرساله');
+    expect(foldArabic('الــبلبل')).toBe('البلبل');
   });
 
   it('leaves non-Arabic text untouched', () => {
