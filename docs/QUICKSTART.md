@@ -166,15 +166,15 @@ Backup and restore (`docker/backup-postgres.sh`, `docker/restore-postgres.sh`) a
 
 ### 8.2 Hosting: Railway + Cloudflare (ALPHA_PLAN 7.2, board C-18, owner decision O-2)
 
-Compute on Railway (owner's account), domain `kolme.app` fronted by Cloudflare (TLS + WAF), staging on `alpha.kolme.app`. Full reasoning and constraints: ADR-88 in [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md). **Nothing below has been deployed yet — it is a plan for the owner to execute and approve, per board C-18.**
+Compute on Railway (owner's account), domain `kolme.app` fronted by Cloudflare (TLS + WAF). No separate staging environment during Alpha: the post-deploy canary (P0-6) runs synthetic journeys against production with canary accounts instead; the former `alpha.kolme.app` DNS records were removed on 2026-09-05 (O-13). Full reasoning and constraints: ADR-88 in [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md). **Nothing below has been deployed yet — it is a plan for the owner to execute and approve, per board C-18.**
 
 Four Railway services (live, `backend` and `frontend` are built by Railway's Railpack from the workspace, not from the Dockerfiles — those remain the self-host/compose path):
 
 | Service | Config-as-code path | Public domain | Notes |
 |---|---|---|---|
 | `postgres` | — (Railway-managed Postgres, **18.6**, verified 2026-09-05 by the first `backup-postgres` Cron run; it is *not* the `pgvector/pgvector:0.8.6-pg15` image the dev/CI compose files pin (ADR-98 correction), and no pgvector column exists to need one (ADR-57) — do not "align" the live service to PG 15, that would be a downgrade of real user data) | none (private) | Volume attached at `/var/lib/postgresql/data`. Region: **EU-West**, as moved on 2026-09-05 by the ADR-105 cutover (it was provisioned in US East (Virginia) and ran there until then; Railway has no Middle East region). Backups are `docker/backup-postgres-to-r2.sh` on a Railway Cron service (ADR-102), whose image must carry a client >= 18 |
-| `backend` | `apps/backend/railway.json` | `api.kolme.app` / `api.alpha.kolme.app` | Root directory = repo root. **Pre-deploy command** `npm run release --workspace=@movie/backend` (Settings → Deploy): migrations, then the catalog seed (`seed-demo --catalog-only`, no persona accounts), the rights-registry rows and the IMDb ratings, in the same image before every deployment — idempotent, and a failure stops the deploy (ADR-90). The catalog is never a separate manual step |
-| `frontend` | `apps/frontend/railway.json` | `kolme.app` / `alpha.kolme.app` | Root directory = repo root |
+| `backend` | `apps/backend/railway.json` | `api.kolme.app` | Root directory = repo root. **Pre-deploy command** `npm run release --workspace=@movie/backend` (Settings → Deploy): migrations, then the catalog seed (`seed-demo --catalog-only`, no persona accounts), the rights-registry rows and the IMDb ratings, in the same image before every deployment — idempotent, and a failure stops the deploy (ADR-90). The catalog is never a separate manual step |
+| `frontend` | `apps/frontend/railway.json` | `kolme.app` | Root directory = repo root |
 | `model-service` (workers) | `services/workers/railway.json` | none (private, reached via `MODEL_SERVICE_URL`) | Root directory = repo root |
 
 **Environment variables** (Railway "Variables", not files — unlike `docker-compose.prod.yml`'s file-based secrets, which target a generic self-host, not Railway. The `<NAME>_FILE` convention in the existing images is a no-op when the plain `<NAME>` variable is already set, so no Dockerfile changes were needed):
@@ -183,7 +183,7 @@ Four Railway services (live, `backend` and `frontend` are built by Railway's Rai
 |---|---|---|
 | `DATABASE_URL` | `backend`, `model-service` | `postgresql://movieapp:<password>@${{postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/moviedb` — build with Railway's `${{ServiceName.VAR}}` reference picker in the dashboard; A-14 made `DATABASE_URL` win over `DB_*` in `database.config.ts`, so this one variable is enough for the backend too now |
 | `MODEL_SERVICE_URL` | `backend` | `http://${{model-service.RAILWAY_PRIVATE_DOMAIN}}:8001` |
-| `NEXT_PUBLIC_API_URL` | `frontend` | `https://api.kolme.app/api` (prod) / `https://api.alpha.kolme.app/api` (staging) |
+| `NEXT_PUBLIC_API_URL` | `frontend` | `https://api.kolme.app/api` |
 | `JWT_SECRET`, `MODEL_SERVICE_TOKEN`, `AUDIT_IP_SALT` | `backend` (as needed) | generate fresh values — never reuse `.env`'s dev placeholders. `ANTHROPIC_API_KEY`/`TMDB_API_KEY` are catalog-pipeline secrets that run from a developer machine; the live backend never reads them (P1-1, `runtime-secrets.spec.ts`) — do not set them on Railway |
 | `POSTGRES_PASSWORD`, `POSTGRES_USER`, `POSTGRES_DB` | `postgres` | generate a fresh password; `movieapp` / `moviedb` |
 | `API_PORT`, `PORT`, `MODEL_SERVICE_PORT` | each service | `3101` / `3110` / `8001` (Railway also injects its own `PORT`; keep these explicit since the app code reads them by these names) |
