@@ -160,6 +160,25 @@ export function AuthScreen({
         </p>
         <h1>{mode === 'reset' ? t.resetTitle : t.welcome}</h1>
         <p className={styles.lead}>{mode === 'reset' ? t.resetHint : t.hint}</p>
+
+        {/* The door showed one sentence and a form: nothing of the product it
+            is a door to (UX_AUDIT_MOBILE_2026-09-05 P1 #14; identity decision
+            Q18 makes the triad the first screen's hero). Three numbered slots,
+            not three pretend films -- no invented poster, no licensed image
+            this screen has any right to. */}
+        {mode !== 'reset' && (
+          <div className={styles.triad} aria-hidden="true">
+            <span className={styles.slot} data-rank="2">
+              <b>2</b>
+            </span>
+            <span className={`${styles.slot} ${styles.slotLead}`} data-rank="1">
+              <b>1</b>
+            </span>
+            <span className={styles.slot} data-rank="3">
+              <b>3</b>
+            </span>
+          </div>
+        )}
         {mode === 'reset' && resetSent ? (
           <p className={styles.hint} role="status">
             {t.resetSent}

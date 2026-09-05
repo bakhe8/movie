@@ -217,3 +217,48 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+/* --- What the door is a door to -------------------------------------------
+   Three ranked slots: the product's one question, drawn rather than
+   described, and drawn as empty frames because this screen has no film to
+   show and will not invent one (UX_AUDIT_MOBILE_2026-09-05 P1 #14). */
+
+.triad {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: var(--sp-2);
+  margin: var(--sp-2) 0 var(--sp-1);
+}
+
+.slot {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 62px;
+  height: 93px;
+  border: 1px dashed var(--line);
+  border-radius: var(--r-chip);
+  background: var(--well);
+}
+
+/* The first place stands taller, so the order is the picture. */
+.slotLead {
+  width: 74px;
+  height: 111px;
+  border-style: solid;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.slot b {
+  font-family: var(--font-display);
+  font-size: var(--fs-20);
+  font-weight: var(--w-bold);
+  color: var(--muted);
+}
+
+.slotLead b {
+  font-size: var(--fs-26);
+  color: var(--accent);
+}

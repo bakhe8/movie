@@ -453,6 +453,16 @@ Still open: implementation (UX-B) — no code changed in this audit.
 
 ---
 
+## Shipped on 2026-09-05 (UX-B — the mobile audit's nine screens, ADR-111 + the owner's interaction addendum)
+
+| Gap | What changed | Proof |
+|---|---|---|
+| The audit's 20 findings, screen by screen: a 6065px home under an explanatory paragraph, a triad whose save button sat off-screen, a 113px two-row header, "Reel" on a kolme.app domain, English paragraphs leading Arabic cards, a 3714px profile, four registration fields, Next's English 404 | Ten batches: indigo tokens + the Kolme triad mark + a 56px header · the card's value strip and 96px poster · home as three shelves under one "your taste so far" line · the triad in one screen, then back to a vertical drag with visible arrows when the owner's addendum landed · the film page in the reader's vocabulary with a folded foreign synopsis · discover as a poster grid · the profile as a hub of four · the door reduced to two fields with the triad drawn on it · joining in two steps · an Arabic 404 and a poster fallback that names its film | `717ddbf` `22e3c20` `5e32141` `46a9333` `68e9348` `6343e0f` `2025572` `9234614` `5380262` `62fb728` `3c17c8f` `6f3d4e9` `4d31c7b` · 85 frontend tests, 626 backend |
+
+Still open: the interaction prototype at 360/390/430 (the addendum's closing deliverable, after the owner picks a direction from `docs/design/interaction-2026-09-05/`), and step 2's consent copy, which is approved disclosure text and needs the owner to shorten.
+
+---
+
 ## Project setup
 
 | Item | Built | Blueprint | Evidence / gap |
