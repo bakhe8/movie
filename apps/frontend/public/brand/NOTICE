@@ -1,0 +1,35 @@
+IMDb wordmark
+=============
+
+File: imdb.svg
+Downloaded: 2026-09-05, on the owner's explicit instruction.
+
+Source
+------
+IMDb's own public brand page, https://brand.imdb.com/ , which offers a single
+download, the IMDb Brand Toolkit:
+
+  https://m.media-amazon.com/images/G/01/IMDb/brand/guidelines/imdb/IMDb_BrandToolkit_061925.zip
+  (14,071,329 bytes, application/zip)
+
+`imdb.svg` is one file taken from inside that archive, byte for byte:
+
+  IMDb/IMDb SVG/IMDb_PrimaryLogo_Gold.svg
+
+Nothing in the artwork was edited -- not the paths, not the viewBox, not the
+colour (#F5C518). The archive also ships the usage guidelines as PDFs beside
+the artwork (IMDb/IMDb PDF/), which is where the conditions live.
+
+How it is used here
+-------------------
+Beside a rating the API attributes to IMDb, on the film page, at a size that
+leaves the mark itself around 16px tall. The file keeps the clear space the
+toolkit draws around the wordmark, so the rendered box is taller than the ink
+-- that is deliberate, not padding to trim.
+
+The mark is never used for a rating whose source the API has not named: a card
+showing a bare number still shows a neutral star, because claiming a source we
+were not given would be a lie about where the number came from.
+
+IMDb is a trademark of IMDb.com, Inc. Its appearance here identifies the source
+of a rating and implies no endorsement.

@@ -68,3 +68,11 @@
   gap: 4px;
   color: var(--muted);
 }
+
+/* The artwork carries IMDb's clear space, so the ink is 51% of the box: 32px
+   here leaves the wordmark itself just over the 16px floor. */
+.mark {
+  display: block;
+  height: 32px;
+  width: auto;
+}

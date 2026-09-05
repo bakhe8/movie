@@ -55,12 +55,25 @@ export function PublicQualityCell({ quality, lang, headless = false }: { quality
                       addendum 3). The source and the day it was read stay in
                       words -- they are facts, not decoration. */}
                   <span className={styles.rating}>
-                    <RatingStar size={15} />
+                    {/* A source with a mark of its own wears it instead of its
+                        name (owner's addenda 3 and 4, and their explicit
+                        instruction to use the official artwork). The file is
+                        IMDb's own, unedited, with its clear space -- which is
+                        why the box is taller than the ink; provenance in
+                        public/brand/NOTICE. A source with no mark keeps the
+                        neutral star. */}
+                    {s.source === 'imdb' ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img className={styles.mark} src="/brand/imdb.svg" alt="IMDb" width={58} height={32} />
+                    ) : (
+                      <RatingStar size={15} />
+                    )}
                     <span className={styles.num}>{formatNumber(s.value as number, lang)}</span>
                   </span>
                   <span className={styles.sub}>
                     {[
-                      SOURCE_LABEL[s.source] ?? s.source,
+                      // Only for a source the mark cannot speak for.
+                      s.source === 'imdb' ? null : (SOURCE_LABEL[s.source] ?? s.source),
                       s.votes !== null ? t.votes(formatNumber(s.votes, lang)) : null,
                       // A public score is a reading taken on a day, not a
                       // standing fact: the day it was captured is shown with

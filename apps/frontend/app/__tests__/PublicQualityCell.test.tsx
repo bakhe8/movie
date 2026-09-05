@@ -26,4 +26,27 @@ describe('PublicQualityCell', () => {
     expect(screen.getByText('لا مصدر بعد')).toBeInTheDocument();
     expect(screen.queryByText(/بتاريخ/)).toBeNull();
   });
+
+  // The owner's addenda 3 and 4, and their explicit instruction: a source with
+  // a mark of its own wears it instead of its name. The artwork is IMDb's own
+  // file, unedited (public/brand/NOTICE).
+  it("wears the source's own mark instead of writing its name", () => {
+    const { container } = render(<PublicQualityCell quality={quality} lang="ar" />);
+    const mark = container.querySelector('img[alt="IMDb"]');
+
+    expect(mark).not.toBeNull();
+    expect(mark).toHaveAttribute('src', '/brand/imdb.svg');
+    // The name is the mark's to say now; the votes and the date still read.
+    expect(container.textContent).not.toContain('IMDb');
+    expect(container.textContent).toContain('250,000');
+  });
+
+  it('keeps a neutral star for a source with no mark of its own', () => {
+    const other = { value: 74, votes: 12, sources: [{ source: 'other', value: 74, scale: '0-100', votes: 12, capturedAt: null, attribution: null }] };
+    const { container } = render(<PublicQualityCell quality={other} lang="ar" />);
+
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.querySelector('svg')).not.toBeNull();
+    expect(container.textContent).toContain('other');
+  });
 });
