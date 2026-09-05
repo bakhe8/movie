@@ -8,8 +8,12 @@ import { useSession } from '../lib/session';
 import styles from './OnboardingScreen.module.css';
 
 type Lang = 'ar' | 'en';
-type Step = 1 | 2 | 3;
-const STEP_COUNT = 3;
+type Step = 1 | 2;
+// Two steps (UX_AUDIT_MOBILE_2026-09-05 P0 #8, owner's interaction addendum):
+// the third only described the loop the next screen makes the reader do, and
+// it stood between them and the first poster. About 250 words used to come
+// before a single film was visible.
+const STEP_COUNT = 2;
 
 const labels = {
   ar: {
@@ -57,15 +61,7 @@ const labels = {
         toggle: 'تحليلات المنتج',
       },
     ],
-    understood: 'فهمت، متابعة',
     // Step 3: the loop ahead
-    step3Title: 'ثلاث خطوات لأول نتيجة',
-    step3Lead: 'الانضمام قصير عمدًا. سجّلك يتوسع لاحقًا أثناء الاستخدام.',
-    loop: [
-      'سجّل ثلاثة أفلام شاهدتها على الأقل، بالبحث أو من قائمة البداية.',
-      'رتّب ثلاث إلى خمس ثلاثيات قصيرة حسب إعجابك الشخصي.',
-      'تظهر توصياتك الأولى وترتيب مكتبتك بثقة «أولية» تتحسن مع كل جولة.',
-    ],
     start: 'ابدأ بتسجيل ما شاهدت',
     // With three watched titles already logged, the loop's first step is done.
     startRanking: 'ابدأ الترتيب',
@@ -110,14 +106,6 @@ const labels = {
         body: 'We use operational events on our own systems only — no third party, no advertising — to measure and improve recommendation quality. Opt in or skip now, and change your choice later from your profile.',
         toggle: 'Product analytics',
       },
-    ],
-    understood: 'Understood, continue',
-    step3Title: 'Three steps to a first result',
-    step3Lead: 'Onboarding is short on purpose. Your log grows later as you go.',
-    loop: [
-      'Mark at least three films you have watched, by search or from the starter list.',
-      'Rank three to five short rounds by how much you personally liked each film.',
-      'Your first recommendations and library ranking appear with “initial” confidence that improves every round.',
     ],
     start: 'Start marking what you watched',
     startRanking: 'Start ranking',
@@ -224,7 +212,7 @@ export function OnboardingScreen({
         { purpose: 'personalization_pooled', version: CONSENT_VERSION, granted: optional.personalization_pooled },
         { purpose: 'analytics_first_party', version: CONSENT_VERSION, granted: optional.analytics_first_party },
       ]);
-      setStep(3);
+      onDone(destination);
     } catch (err) {
       setConsentError(err instanceof ApiError ? t.saveFailed : t.saveFailed);
     } finally {
@@ -352,7 +340,7 @@ export function OnboardingScreen({
         )}
         <div className={styles.actions}>
           <button type="button" className={styles.primary} onClick={acknowledgeAndContinue} disabled={consentSaving}>
-            {consentSaving ? t.saving : t.understood}
+            {consentSaving ? t.saving : destination === 'rank' ? t.startRanking : t.start}
           </button>
           <button type="button" className={styles.ghost} onClick={() => setStep(1)}>
             {t.back}
@@ -362,26 +350,7 @@ export function OnboardingScreen({
     );
   }
 
-  return (
-    <div className={styles.screen}>
-      {progress}
-      <div className={styles.header}>
-        <h2>{t.step3Title}</h2>
-        <p className={styles.lead}>{t.step3Lead}</p>
-      </div>
-      <ol className={styles.steps}>
-        {t.loop.map((line) => (
-          <li key={line}>{line}</li>
-        ))}
-      </ol>
-      <div className={styles.actions}>
-        <button type="button" className={styles.primary} onClick={() => onDone(destination)}>
-          {destination === 'rank' ? t.startRanking : t.start}
-        </button>
-        <button type="button" className={styles.ghost} onClick={() => setStep(2)}>
-          {t.back}
-        </button>
-      </div>
-    </div>
-  );
+  // Steps 1 and 2 are the whole of it; anything after this would be a
+  // description of the next screen rather than the screen.
+  return null;
 }
