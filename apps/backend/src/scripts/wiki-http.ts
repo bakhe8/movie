@@ -20,7 +20,11 @@ const REQUEST_DELAY_MS = 250;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export async function cachedGet(url: string): Promise<{ status: number; body: string }> {
+// `headers` is for credentials that must not travel in the URL (P1-1): the
+// cache key, every error message here, and any proxy log in between all carry
+// the URL, so a key in a query string is a key written to all three. Keeping
+// it in a header also means the cache does not miss when the key is rotated.
+export async function cachedGet(url: string, headers: Record<string, string> = {}): Promise<{ status: number; body: string }> {
   await mkdir(CACHE_DIR, { recursive: true });
   const cachePath = path.join(CACHE_DIR, `${createHash('sha1').update(url).digest('hex')}.json`);
   if (existsSync(cachePath)) {
@@ -30,7 +34,7 @@ export async function cachedGet(url: string): Promise<{ status: number; body: st
   for (let attempt = 0; attempt < 4; attempt += 1) {
     try {
       await sleep(REQUEST_DELAY_MS);
-      const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' } });
+      const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json', ...headers } });
       const body = await response.text();
       if (response.status === 429 || response.status >= 500) {
         lastError = new Error(`HTTP ${response.status} for ${url}`);

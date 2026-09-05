@@ -85,7 +85,11 @@ The LLM provider is Anthropic's Messages API (owner's decision, recorded in [DEM
 
 ### 6.2 Catalog and availability providers
 
-Provider data is content data, not personal data. Contracts are tracked in [DATA_LICENSING.md](DATA_LICENSING.md). No user data is sent to providers.
+Provider data is content data, not personal data. Contracts are tracked in [DATA_LICENSING.md](DATA_LICENSING.md). No user data is *sent* to providers.
+
+**One exception, stated because it is true (P1-1):** poster images are loaded by the browser directly from `image.tmdb.org`. There is no same-origin proxy, so TMDB receives the viewer's IP address and user-agent for every poster shown, exactly as any embedded third-party image would. Two things bound it: the app sends `Referrer-Policy: no-referrer` (a document header in `next.config.ts`, plus `referrerPolicy="no-referrer"` on the element), so TMDB is not also told which page — and a page path names a film, which is a taste signal; and a poster URL carries no identifier of ours. A proxy would end even the IP exposure, and is deliberately **not** built yet: proxying would make us the redistributor of TMDB's images, which is an open licensing question (ADR-72, DATA_LICENSING §4), not a technical one. Revisit when that is settled.
+
+The two credentials this catalogue work needs — `ANTHROPIC_API_KEY` (enrichment) and the TMDB key — are read only by offline tooling (`services/workers`, `apps/backend/src/scripts`), never on a request path, and so are not set in the deployed backend's environment. `apps/backend/src/runtime-secrets.spec.ts` fails if any service file starts reading one.
 
 ### 6.3 Infrastructure
 

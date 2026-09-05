@@ -15,5 +15,8 @@ describe('Poster', () => {
     const { container } = render(<Poster title={{ posterUrl: 'https://image.tmdb.org/t/p/w342/x.jpg' }} />);
     expect(container.querySelector('img')?.getAttribute('src')).toBe('https://image.tmdb.org/t/p/w342/x.jpg');
     expect(container.querySelector('svg')).toBeNull();
+    // P1-1: the image host is asked directly, so it must not also be told
+    // which page of ours the viewer was reading.
+    expect(container.querySelector('img')?.getAttribute('referrerpolicy')).toBe('no-referrer');
   });
 });

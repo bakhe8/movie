@@ -20,8 +20,15 @@ export function Poster({ title, size = 'sm', className }: { title?: Pick<Title, 
   const classes = [styles.poster, styles[size], className].filter(Boolean).join(' ');
   const url = title?.posterUrl ?? null;
   if (url) {
+    // The browser fetches this from the image host itself (TMDB today), so
+    // that host sees the request. `no-referrer` keeps it from also learning
+    // which page of ours the viewer was on -- the page path is the part that
+    // says something about the person (P1-1). The response header set in
+    // next.config.ts covers the CSS backdrop the work page paints from the
+    // same URL; this attribute keeps the guarantee on the element itself,
+    // wherever the markup is served from.
     // eslint-disable-next-line @next/next/no-img-element
-    return <img className={classes} src={url} alt="" loading="lazy" decoding="async" />;
+    return <img className={classes} src={url} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" />;
   }
   // The empty slot is drawn, not left blank (remediation brief P1-05 /
   // L10N-01): a dashed 2:3 frame with a neutral film mark, so a title with no

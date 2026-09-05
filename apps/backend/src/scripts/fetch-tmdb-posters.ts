@@ -44,10 +44,20 @@ function parseArgs(argv: string[]): { fixture: string; force: boolean; only: Set
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+  // TMDB accepts a v4 read access token as a bearer header on the v3
+  // endpoints, and that is the form to use (P1-1): a key in the query string
+  // is a key in the cache filename, in this script's own error text, and in
+  // any log between here and TMDB. The older v3 key has no header form at
+  // all, so it still goes in the query -- with a warning, so nobody assumes
+  // the credential is being kept out of URLs when it is not.
+  const readToken = process.env.TMDB_READ_ACCESS_TOKEN;
   const apiKey = process.env.TMDB_API_KEY;
-  if (!apiKey) {
-    console.error('TMDB_API_KEY is required (root .env)');
+  if (!readToken && !apiKey) {
+    console.error('TMDB_READ_ACCESS_TOKEN (preferred, sent as a header) or TMDB_API_KEY (v3, query string only) is required (root .env)');
     process.exit(2);
+  }
+  if (!readToken) {
+    console.warn('note: using the v3 TMDB_API_KEY, which TMDB only accepts in the query string; a v4 TMDB_READ_ACCESS_TOKEN travels in a header instead');
   }
 
   const raw = JSON.parse(await readFile(args.fixture, 'utf8')) as (PosterEntry & Record<string, unknown>)[] | { entries: (PosterEntry & Record<string, unknown>)[] };
@@ -58,8 +68,9 @@ async function main(): Promise<void> {
   let found = 0;
   let none = 0;
   for (const entry of candidates) {
-    const url = `https://api.themoviedb.org/3/movie/${encodeURIComponent(entry.externalIds!.tmdb!)}?api_key=${apiKey}`;
-    const { status, body } = await cachedGet(url);
+    const base = `https://api.themoviedb.org/3/movie/${encodeURIComponent(entry.externalIds!.tmdb!)}`;
+    const url = readToken ? base : `${base}?api_key=${apiKey}`;
+    const { status, body } = await cachedGet(url, readToken ? { Authorization: `Bearer ${readToken}` } : {});
     entry.posterPath = parsePosterResponse(status, body);
     if (entry.posterPath) {
       found += 1;
