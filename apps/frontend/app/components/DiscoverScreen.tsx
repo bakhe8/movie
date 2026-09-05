@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, type Title, type TitleState } from '../lib/api';
 import { formatNumber, todayLocal } from '../lib/format';
-import { genreLabel } from '../lib/genres';
 import { Poster } from './Poster';
 import styles from './DiscoverScreen.module.css';
 
@@ -39,6 +38,11 @@ const labels = {
     noResults: 'لا نتائج. جرّب اسمًا آخر أو الاسم بلغة أخرى.',
     more: 'عرض المزيد',
     watched: 'شاهدته',
+    // A tile has no room for words, so each target says its own name.
+    markWatchedOf: (name: string) => `شاهدت «${name}»`,
+    watchedOf: (name: string) => `«${name}» مسجَّل كمُشاهَد — المس للتراجع`,
+    laterOf: (name: string) => `احفظ «${name}» لاحقًا`,
+    onListOf: (name: string) => `«${name}» في قائمتك`,
     later: 'لاحقًا',
     onList: 'في قائمتك',
     watchedChip: 'مُشاهَد',
@@ -70,6 +74,10 @@ const labels = {
     noResults: 'No results. Try another name, or the name in the other language.',
     more: 'Show more',
     watched: 'Watched it',
+    markWatchedOf: (name: string) => `Watched ${name}`,
+    watchedOf: (name: string) => `${name} is marked watched — tap to undo`,
+    laterOf: (name: string) => `Save ${name} for later`,
+    onListOf: (name: string) => `${name} is on your list`,
     later: 'Later',
     onList: 'On your list',
     watchedChip: 'Watched',
@@ -295,76 +303,69 @@ export function DiscoverScreen({
       {results.length === 0 && !searching ? (
         <p className={styles.empty}>{t.noResults}</p>
       ) : (
-        <ul className={styles.list} aria-busy={searching}>
+        <ul className={styles.grid} aria-busy={searching}>
           {results.map((title) => {
             const name = lang === 'ar' ? title.titleAr : title.titleEn;
-            // The other language's title helps recognise a film the user knows
-            // under a different name (alternate-title search is a backend gap).
-            const alt = lang === 'ar' ? title.titleEn : title.titleAr;
-            const meta = [title.releaseYear, title.genres?.map((genre) => genreLabel(genre, lang)).join(' · ')].filter(Boolean).join(' · ');
             const state = states.get(title.id);
+            const watched = state === 'watched';
+            const listed = state === 'watchlist';
             const busy = busyId === title.id;
 
             return (
-              <li key={title.id} className={state === 'watched' ? `${styles.card} ${styles.cardWatched}` : styles.card}>
-                <div className={styles.cardHead}>
-                  <Poster title={title} size="md" />
-                  <div className={styles.cardBody}>
-                  <h4 className={styles.title}>
-                    {onOpenTitle ? (
-                      <button type="button" className={styles.titleButton} onClick={() => onOpenTitle(title, state ?? null)}>
-                        {name}
-                      </button>
-                    ) : (
-                      name
+              <li key={title.id} className={styles.cell}>
+                {/* The poster is the answer to "ماذا شاهدت؟": one tap marks it,
+                    the same tap again takes it back (UX_AUDIT_MOBILE_2026-09-05
+                    P1 #16 -- this screen used to ask a visual question with
+                    text cards and English paragraphs). A toggle, so assistive
+                    tech reads the state rather than guessing from a tick. */}
+                <div className={styles.tile}>
+                  <button
+                    type="button"
+                    className={watched ? `${styles.pick} ${styles.picked}` : styles.pick}
+                    aria-pressed={watched}
+                    aria-label={watched ? t.watchedOf(name) : t.markWatchedOf(name)}
+                    onClick={() => setState(title, watched ? 'not_watched' : 'watched', watched ? t.undoNotice : t.watchedNotice)}
+                    disabled={busy}
+                  >
+                    <Poster title={title} size="md" className={styles.poster} />
+                    {watched && (
+                      <span className={styles.check} aria-hidden="true">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M5 12l5 5 9-10" />
+                        </svg>
+                      </span>
                     )}
-                  </h4>
-                  {alt && alt !== name && <p className={styles.alt}>{alt}</p>}
-                  {meta && <p className={styles.meta}>{meta}</p>}
-                  {/* Catalogue descriptions arrive in their own language: direction from the text. */}
-                  {title.description && (
-                    <p className={styles.desc} dir="auto">
-                      {title.description}
-                    </p>
-                  )}
-                  </div>
+                  </button>
+
+                  {/* Saving for later is a second, smaller intent; it keeps its
+                      own target rather than hiding behind a long press, which
+                      the interaction addendum rules out. */}
+                  <button
+                    type="button"
+                    className={listed ? `${styles.saveLater} ${styles.saved}` : styles.saveLater}
+                    aria-pressed={listed}
+                    aria-label={listed ? t.onListOf(name) : t.laterOf(name)}
+                    onClick={() => setState(title, listed ? 'not_watched' : 'watchlist', listed ? t.undoNotice : t.laterNotice)}
+                    disabled={busy || watched}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill={listed ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round">
+                      <path d="M7 4h10v16l-5-3.5L7 20z" />
+                    </svg>
+                  </button>
                 </div>
-                <div className={styles.actions}>
-                  {state === 'watched' ? (
-                    <>
-                      <span className={styles.chip}>{t.watchedChip}</span>
-                      {/* Undo returns the title to "exposure unknown" -- never
-                          a negative signal (blueprint §2.4 #3). */}
-                      <button
-                        type="button"
-                        className={styles.ghost}
-                        onClick={() => setState(title, 'not_watched', t.undoNotice)}
-                        disabled={busy}
-                      >
-                        {t.undo}
-                      </button>
-                    </>
+
+                <h4 className={styles.title}>
+                  {onOpenTitle ? (
+                    <button type="button" className={styles.titleButton} onClick={() => onOpenTitle(title, state ?? null)}>
+                      {name}
+                    </button>
                   ) : (
-                    <>
-                      <button
-                        type="button"
-                        className={styles.primary}
-                        onClick={() => setState(title, 'watched', t.watchedNotice)}
-                        disabled={busy}
-                      >
-                        {t.watched}
-                      </button>
-                      <button
-                        type="button"
-                        className={state === 'watchlist' ? `${styles.ghost} ${styles.later}` : styles.ghost}
-                        onClick={() => setState(title, 'watchlist', t.laterNotice)}
-                        disabled={busy || state === 'watchlist'}
-                      >
-                        {state === 'watchlist' ? t.onList : t.later}
-                      </button>
-                    </>
+                    name
                   )}
-                </div>
+                </h4>
+                {/* A year identifies; the other-language title and the synopsis
+                    belong to the film's own page, which the title opens. */}
+                {title.releaseYear && <p className={styles.year}>{String(title.releaseYear)}</p>}
               </li>
             );
           })}
