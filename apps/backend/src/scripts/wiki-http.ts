@@ -20,6 +20,14 @@ const REQUEST_DELAY_MS = 250;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// A credential that has to travel in a query string (TMDB's v3 key has no
+// header form) must not travel on into an error message, a stack trace or a
+// terminal scrollback with it. Every URL this module quotes goes through
+// here first (P1-1).
+export function redactUrl(url: string): string {
+  return url.replace(/([?&](?:api_key|apikey|access_token|token|key)=)[^&]*/gi, '$1REDACTED');
+}
+
 // `headers` is for credentials that must not travel in the URL (P1-1): the
 // cache key, every error message here, and any proxy log in between all carry
 // the URL, so a key in a query string is a key written to all three. Keeping
@@ -37,7 +45,7 @@ export async function cachedGet(url: string, headers: Record<string, string> = {
       const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json', ...headers } });
       const body = await response.text();
       if (response.status === 429 || response.status >= 500) {
-        lastError = new Error(`HTTP ${response.status} for ${url}`);
+        lastError = new Error(`HTTP ${response.status} for ${redactUrl(url)}`);
         // Honour Retry-After when Wikimedia sends one; otherwise back off hard (5 s, 15 s, 45 s).
         const retryAfter = Number(response.headers.get('retry-after'));
         await sleep(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 5000 * 3 ** attempt);
@@ -54,7 +62,7 @@ export async function cachedGet(url: string, headers: Record<string, string> = {
       await sleep(1000 * 3 ** attempt);
     }
   }
-  throw lastError instanceof Error ? lastError : new Error(`request failed: ${url}`);
+  throw lastError instanceof Error ? lastError : new Error(`request failed: ${redactUrl(url)}`);
 }
 
 export async function getJson<T>(url: string): Promise<T | null> {
@@ -63,7 +71,7 @@ export async function getJson<T>(url: string): Promise<T | null> {
     return null;
   }
   if (status !== 200) {
-    throw new Error(`HTTP ${status} for ${url}`);
+    throw new Error(`HTTP ${status} for ${redactUrl(url)}`);
   }
   return JSON.parse(body) as T;
 }

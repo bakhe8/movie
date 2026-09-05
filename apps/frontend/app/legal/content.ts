@@ -198,7 +198,7 @@ export const LEGAL: Record<LegalKind, Record<Lang, LegalDocument>> = {
           head: 'من يعالج البيانات غيرنا',
           paragraphs: [
             'نستخدم مزوّد نماذج لغوية لوصف الأفلام وإعادة صياغة التفسيرات، ولا يُرسل إليه إلا أدلة عن الأفلام: لا معرّفات مستخدمين، ولا بريد، ولا ترتيبات، ولا تفضيلات، ولا سجل مشاهدة، ولا نص من ملفك.',
-            'مزوّدو بيانات الأفلام والتوفر يستقبلون بيانات محتوى لا بيانات شخصية، باستثناء واحد نذكره صراحة: ملصقات الأفلام تُطلَب من خادم TMDB (image.tmdb.org) بمتصفّحك مباشرة ولا تمرّ بخوادمنا، فيرى TMDB عنوان IP الخاص بك ونوع متصفّحك كأي موقع تفتحه. لا نرسل إليه هويتك ولا صفحتك: المتصفّح مضبوط على ألا يمرّر عنوان الصفحة (no-referrer)، والملصق لا يحمل معرّفك.',
+            'مزوّدو بيانات الأفلام والتوفر يستقبلون بيانات محتوى لا بيانات شخصية، باستثناء واحد نذكره صراحة: ملصقات الأفلام تُطلَب من خادم TMDB (image.tmdb.org) بمتصفّحك مباشرة ولا تمرّ بخوادمنا، فيرى TMDB عنوان IP الخاص بك ونوع متصفّحك كأي موقع تفتحه. لا نرسل إليه هويتك: الملصق لا يحمل معرّفك، ونطلب من المتصفّح ألا يمرّر عنوان الصفحة مع الصورة (no-referrer). في مواضع قليلة تُرسم فيها الصورة نفسها خلفيةً بـCSS يمرّر المتصفّح اسم نطاقنا وحده بحكم إعداده الافتراضي، لا مسار الصفحة.',
             'لم نضع وسيطاً للصور على نطاقنا لأنه يجعلنا ننقل صور TMDB بأنفسنا، وذلك قرار ترخيص لم يُحسم بعد. سنعيد النظر فيه عند حسمه.',
             'الاستضافة على Railway (الخوادم وقاعدة البيانات في أوروبا الغربية) خلف Cloudflare، والنسخ الاحتياطية مشفّرة في حاوية أوروبية خاصة.',
           ],
@@ -271,7 +271,7 @@ export const LEGAL: Record<LegalKind, Record<Lang, LegalDocument>> = {
           head: 'Who else processes data',
           paragraphs: [
             'We use a language-model provider to describe films and rephrase explanations; only film evidence is sent: no user ids, emails, rankings, preferences, watch history or profile text.',
-            'Film data and availability providers receive content data, not personal data, with one exception we state plainly: film posters are fetched by your browser straight from TMDB (image.tmdb.org) and never pass through our servers, so TMDB sees your IP address and your browser type, as any site you open does. It is not told who you are or what you were reading: the browser is set to send no page address (no-referrer), and a poster URL carries no identifier of yours.',
+            'Film data and availability providers receive content data, not personal data, with one exception we state plainly: film posters are fetched by your browser straight from TMDB (image.tmdb.org) and never pass through our servers, so TMDB sees your IP address and your browser type, as any site you open does. It is not told who you are: a poster URL carries no identifier of yours, and the image is requested with no-referrer, so no page address goes with it. In the few places the same image is painted as a CSS backdrop, the browser’s own default sends our domain name and never the page path.',
             'We did not put an image proxy on our own domain because that would make us the ones redistributing TMDB’s images, a licensing question that is not settled. We will revisit it when it is.',
             'Hosting is Railway (servers and database in EU West) behind Cloudflare, with encrypted backups in a private European bucket.',
           ],
