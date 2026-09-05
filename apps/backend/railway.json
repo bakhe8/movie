@@ -1,11 +1,12 @@
 {
   "$schema": "https://railway.app/railway.schema.json",
-  "//": "Board C-18 (ADR-87). Point this Railway service's root directory at the REPO ROOT (not apps/backend) -- the Dockerfile needs the whole npm workspace for its build context, same as docker/docker-compose.prod.yml. Set this file as the service's config-as-code path in the Railway dashboard.",
+  "//": "Board C-18 (ADR-88), release step (ADR-90). Reference copy only: the live service has no config-as-code path (Railway deprecated it) and is built by Railpack, not this Dockerfile. What runs is set under Settings -> Deploy: start command `npm run start --workspace=@movie/backend`, pre-deploy command `npm run release --workspace=@movie/backend` (migrations, then the catalog seed and everything derived from it, in the same image, before every deployment -- the catalog is never a separate manual step, owner rule 2026-09-05). Root directory: repo root.",
   "build": {
     "builder": "DOCKERFILE",
     "dockerfilePath": "apps/backend/Dockerfile"
   },
   "deploy": {
+    "preDeployCommand": "npm run release --workspace=@movie/backend",
     "numReplicas": 1,
     "healthcheckPath": "/api/health",
     "healthcheckTimeout": 30,
