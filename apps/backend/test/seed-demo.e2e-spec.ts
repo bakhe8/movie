@@ -18,7 +18,8 @@ import { cleanDemo, loadFixtures, resolveFixturesDir, seedDemo } from '../src/sc
 describe('seed-demo (postgres-test)', () => {
   let dataSource: DataSource;
   const fixturesDir = resolveFixturesDir();
-  const { personas } = loadFixtures(fixturesDir);
+  const { catalog, personas } = loadFixtures(fixturesDir);
+  const catalogTitleCount = catalog.length;
   const now = new Date('2026-09-03T12:00:00Z');
 
   beforeAll(async () => {
@@ -59,10 +60,10 @@ describe('seed-demo (postgres-test)', () => {
     await cleanDemo(dataSource.manager, personas.emailDomain);
     const summary = await seedDemo(dataSource, { fixturesDir, now, catalogOnly: true });
 
-    expect(summary.titlesUpserted).toBe(300);
+    expect(summary.titlesUpserted).toBe(catalogTitleCount);
     expect(summary.contentFeatureRows).toBeGreaterThan(0);
     expect(summary).toMatchObject({ demoUsersRemoved: 0, personas: [] });
-    expect(await dataSource.getRepository(Title).count()).toBeGreaterThanOrEqual(300);
+    expect(await dataSource.getRepository(Title).count()).toBeGreaterThanOrEqual(catalogTitleCount);
     const users = await dataSource
       .getRepository(User)
       .find({ where: personas.personas.map((p) => ({ email: `${p.slug}@${personas.emailDomain}` })) });
@@ -73,7 +74,7 @@ describe('seed-demo (postgres-test)', () => {
     const first = await seedDemo(dataSource, { fixturesDir, now });
     const firstRows = await snapshot();
 
-    expect(first.titlesUpserted).toBe(300);
+    expect(first.titlesUpserted).toBe(catalogTitleCount);
     expect(firstRows.users).toHaveLength(4);
     expect(firstRows.profiles).toHaveLength(4);
     expect(firstRows.profiles.every((profile) => profile.market === 'SA' && profile.preferredLanguage === 'ar')).toBe(true);

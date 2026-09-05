@@ -61,8 +61,12 @@ describe('Admin board API (role-gated)', () => {
     userToken = plain.access_token;
 
     const titles = app.get<Repository<Title>>(getRepositoryToken(Title));
+    // "0-" sorts before every catalog internalId ("DEMO...") under the
+    // missing-fingerprints endpoint's `ORDER BY internalId ASC` -- so this
+    // row is always on page 1 regardless of how large the catalog grows,
+    // instead of depending on `limit` outrunning the catalog's own count.
     const title = await titles.save({
-      internalId: `E2E-ADMIN-${suffix}`,
+      internalId: `0-E2E-ADMIN-${suffix}`,
       titleEn: 'Admin Check',
       titleAr: 'فحص الإدارة',
       fingerprint: { schemaVersion: 'film-fingerprint-v1', pacing: 0.5 } as never,
