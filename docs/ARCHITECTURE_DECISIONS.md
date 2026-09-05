@@ -823,6 +823,16 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 
 ---
 
+## ADR-109 — The training queue leases its rows and reconciles the profiles it lost (P0-9)
+
+**Context.** ADR-100 made the queue durable but not self-healing. Three holes were left. A row could stay `running` for ever: `poll()` returned immediately when `modelServiceJobId` was null (the state a crash between dispatch and the recorded id leaves), and a model service that answered "running" for ever was believed for ever. Nothing prevented double execution across processes: the only guard was an in-process `sweeping` flag, so a second replica -- or the Railway Cron the queue is heading for -- would dispatch the same `queued` row and fit the same profile twice. And a profile whose enqueue was lost (the model service unreachable when the round was ranked, or training switched on afterwards) waited for its next completed round to land exactly on a threshold, which for a profile that stopped ranking because nothing appeared never comes.
+**Decision.** Claiming a row is a lease, taken with one statement -- `UPDATE training_jobs SET status='running', attempts=attempts+1, startedAt=now WHERE id=? AND status='queued'` -- and only the worker whose update affected a row dispatches it. The lease expires after ten minutes: a row still `running` past it goes back to the queue through the ordinary backoff, so it either succeeds later or fails visibly after `MAX_ATTEMPTS`. A reconciler runs each sweep and enqueues profiles that qualify, have no job row at all and have no snapshot, excluding paused ones; a profile that has a `failed` row is left alone, because a failure is the operator's to see rather than something to loop on. Every catch in the sweep now reports through `captureException` and no longer takes the tick down with it. No transactional outbox: the enqueue and the ranking write are not the same transaction, and the reconciler is the cheaper answer to the same gap.
+**Rationale.** All three are the same fix -- state that only one actor may own, for a bounded time, with a way back. The lease needs no new column: `status` is the lock and `startedAt` its stamp, so this ships without a migration (boot contract, incident `f23ec48`).
+**Consequences.** `startedAt` now means "when the current attempt was claimed", not "when the row was first tried" (`createdAt` is that). `runDue()` reports a fourth number, `reconciled`. The reconciler's predicate is SQL over three tables, so it is proven in `test/training.e2e-spec.ts` against real Postgres, not against the in-memory fake.
+**Revisit when.** A second replica sweeps concurrently often enough that `SELECT ... FOR UPDATE SKIP LOCKED` beats one conditional update per row, or the model service starts pushing job completions instead of being polled.
+
+---
+
 ## Summary
 
 | # | Decision | Serves | Revisit trigger |
@@ -932,6 +942,7 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 | 103 | `GET .../readiness`: four capabilities (ordinal model, semantic profile, recommendation, availability), composed from existing signals, not a fifth "trained or not" flag | remediation brief §5.1 2026-09-05 | the trainer reports per-fit fingerprint coverage, or AVL-01 gets a real data source |
 | 104 | `watchedOn`: a plain `'YYYY-MM-DD'` the client supplies (`todayLocal()`, or the diary's own date), never a timestamp the server derives from its own clock | remediation brief P1-03/DATE-01 2026-09-05 | a profile-level IANA timezone lets the server compute "today" too |
 | 105 | EU-West move is a backup→restore cutover on the P0-5 path (empty-target guard, `SKIP_EXTENSIONS`, announced window, old database kept a week) | owner decision O-11 2026-09-05; ADR-88, ADR-102 | a Middle East region exists, or the data outgrows a dump-and-restore window |
+| 109 | The training queue leases each row with one conditional UPDATE, expires the lease after ten minutes back into the queue, and reconciles eligible profiles that have no job and no model | P0-9 2026-09-05; ADR-100 | a second sweeping replica needs `SKIP LOCKED`, or the model service pushes completions |
 | 108 | The onboarding round tells the truth: real `needed`, fatigue as a preference not a ban, `learningRounds`/`verificationRounds` reported apart, and the screen's own tally deleted in favour of `readiness.rounds` | P0-8 2026-09-05; ADR-34, ADR-99, ADR-103 | a third triad purpose needs its own count, or a verify round starts to count as evidence |
 | 106 | Catalogue search: both sides folded (Arabic marks stripped from the column too), `unaccent` for Latin, and alternate titles read from `localized_titles`; a 53-case golden set pins it | remediation brief P1-01/SEARCH-01 2026-09-05; ADR-2 | ~10k titles (indexes/FTS), or alternate-title ingestion lands |
 

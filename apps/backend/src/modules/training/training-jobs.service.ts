@@ -2,9 +2,11 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, LessThan, LessThanOrEqual, Repository } from 'typeorm';
+import { Triad } from '../../entities/triad.entity';
 import { TrainingJob, TrainingJobErrorKind, TrainingJobStatus } from '../../entities/training-job.entity';
 import { captureException } from '../../observability/observability';
 import { ModelServiceClient, ModelServiceError } from './model-service.client';
+import { firstTriadCountFrom } from './training-thresholds';
 
 export interface TrainingJobSummaryRow {
   id: string;
@@ -37,6 +39,16 @@ const SWEEP_BATCH = 20;
 // the stored error is sanitized) -- kept longer than mail's 7 days since
 // there is no privacy reason to shorten it, only storage hygiene.
 const RETENTION_DAYS = 30;
+// How long a row may stay `running` before the sweep takes it back. A claim
+// (see claim()) is a lease, not a permanent assignment: the worker that took
+// the row can die between claiming it and recording the model service's job
+// id, and the model service itself can accept a job and never finish it.
+// Either way the row returns to the queue with a backoff and its attempt
+// counted -- so it either succeeds on a later attempt or fails visibly after
+// MAX_ATTEMPTS, instead of sitting `running` for ever (P0-9). Longer than any
+// fit this trainer performs (a profile's Plackett-Luce fit is seconds), short
+// enough that a stuck job is caught inside one user's session.
+const RUNNING_LEASE_MS = 10 * 60 * 1000;
 const LAST_ERROR_MAX = 500;
 
 // Text a raw exception or a model-service error body could plausibly carry
@@ -72,14 +84,19 @@ export class TrainingJobsService implements OnModuleInit, OnModuleDestroy {
   private sweepTimer: NodeJS.Timeout | null = null;
   private sweeping = false;
 
+  private readonly firstTriadCount: number;
+
   constructor(
     @InjectRepository(TrainingJob)
     private readonly rows: Repository<TrainingJob>,
+    @InjectRepository(Triad)
+    private readonly triads: Repository<Triad>,
     private readonly client: ModelServiceClient,
     private readonly config: ConfigService,
   ) {
     const raw = Number(config.get<string>('TRAINING_JOBS_SWEEP_INTERVAL_MS'));
     this.sweepIntervalMs = Number.isInteger(raw) && raw >= 0 ? raw : DEFAULT_SWEEP_INTERVAL_MS;
+    this.firstTriadCount = firstTriadCountFrom(config);
   }
 
   // Disabled under test so suites drive runDue() by hand; disabled with
@@ -90,7 +107,8 @@ export class TrainingJobsService implements OnModuleInit, OnModuleDestroy {
     }
     this.sweepTimer = setInterval(() => {
       void this.runDue().catch((error: unknown) => {
-        this.logger.error(`training-jobs sweep failed: ${error instanceof Error ? error.message : String(error)}`);
+        this.logger.error(`training-jobs sweep failed: ${this.describe(error)}`);
+        captureException(error, { stage: 'training-jobs.sweep' });
       });
     }, this.sweepIntervalMs);
     this.sweepTimer.unref();
@@ -136,15 +154,17 @@ export class TrainingJobsService implements OnModuleInit, OnModuleDestroy {
   // Every running row polled, every queued row whose backoff has elapsed
   // dispatched, then the retention purge -- one unit of the sweep's work,
   // also callable directly (tests, an external scheduler).
-  async runDue(now: Date = new Date()): Promise<{ polled: number; dispatched: number; purged: number }> {
+  async runDue(now: Date = new Date()): Promise<{ polled: number; dispatched: number; reconciled: number; purged: number }> {
     if (this.sweeping) {
-      return { polled: 0, dispatched: 0, purged: 0 };
+      return { polled: 0, dispatched: 0, reconciled: 0, purged: 0 };
     }
     this.sweeping = true;
     try {
       const running = await this.rows.find({ where: { status: 'running' }, order: { updatedAt: 'ASC' }, take: SWEEP_BATCH });
       for (const row of running) {
-        await this.poll(row, now);
+        // One row's failure is not the sweep's: the rest of the batch, the
+        // reconciler and the purge all still run.
+        await this.guard(`poll ${row.id}`, () => this.poll(row, now));
       }
       const due = await this.rows.find({
         where: { status: 'queued', nextAttemptAt: LessThanOrEqual(now) },
@@ -152,13 +172,63 @@ export class TrainingJobsService implements OnModuleInit, OnModuleDestroy {
         take: SWEEP_BATCH,
       });
       for (const row of due) {
-        await this.dispatch(row);
+        await this.guard(`dispatch ${row.id}`, () => this.dispatch(row, now));
       }
+      const reconciled = (await this.guard('reconcile', () => this.reconcile(), 0)) ?? 0;
       const cutoff = new Date(now.getTime() - RETENTION_DAYS * 24 * 60 * 60 * 1000);
       const purged = await this.rows.delete({ status: In(['succeeded', 'failed']), updatedAt: LessThan(cutoff) });
-      return { polled: running.length, dispatched: due.length, purged: purged.affected ?? 0 };
+      return { polled: running.length, dispatched: due.length, reconciled, purged: purged.affected ?? 0 };
     } finally {
       this.sweeping = false;
+    }
+  }
+
+  // Profiles that qualify for training, have no job at all, and have no
+  // model: the state a lost enqueue leaves behind (the model service was
+  // unreachable when the round was answered, the process died between the
+  // ranking and the enqueue, or training was switched on after the rounds
+  // were already ranked). Without this, such a profile waits for its next
+  // completed round to land exactly on a threshold -- which, for a profile
+  // that stopped ranking because nothing ever appeared, never comes. Paused
+  // profiles are excluded (PRIVACY.md section 4), and a profile that has any
+  // job row -- including a permanently failed one -- is not resurrected
+  // here: a failure is the operator's to see, not something to loop on.
+  async reconcile(limit = SWEEP_BATCH): Promise<number> {
+    if (!this.client.enabled) {
+      return 0;
+    }
+    const rows = await this.triads
+      .createQueryBuilder('t')
+      .select('t.profileId', 'profileId')
+      .innerJoin('profiles', 'p', 'p.id = t."profileId" AND p."pausedAt" IS NULL')
+      .where('t.status = :completed', { completed: 'completed' })
+      .andWhere('t."countsTowardActivation" = true')
+      .andWhere('NOT EXISTS (SELECT 1 FROM training_jobs j WHERE j."profileId" = t."profileId")')
+      .andWhere('NOT EXISTS (SELECT 1 FROM user_model_snapshots s WHERE s."profileId" = t."profileId")')
+      .groupBy('t.profileId')
+      .having('COUNT(*) >= :threshold', { threshold: this.firstTriadCount })
+      .limit(limit)
+      .getRawMany<{ profileId: string }>();
+    let enqueued = 0;
+    for (const { profileId } of rows) {
+      const { created } = await this.enqueue(profileId);
+      if (created) {
+        enqueued += 1;
+        this.logger.log(`[training-jobs] reconciler enqueued profile ${profileId}: eligible, no job, no model`);
+      }
+    }
+    return enqueued;
+  }
+
+  // Runs one step of the sweep so that a failure in it is reported rather
+  // than either crashing the tick or vanishing.
+  private async guard<T>(what: string, step: () => Promise<T>, fallback?: T): Promise<T | undefined> {
+    try {
+      return await step();
+    } catch (error) {
+      this.logger.error(`[training-jobs] ${what} failed: ${this.describe(error)}`);
+      captureException(error, { stage: `training-jobs.${what.split(' ')[0]}` });
+      return fallback;
     }
   }
 
@@ -189,18 +259,34 @@ export class TrainingJobsService implements OnModuleInit, OnModuleDestroy {
   // One dispatch attempt: ask the model service to start (or resume
   // tracking) this profile's training. A network-level failure here is
   // exactly as transient as a poll-time one, so it shares the same backoff.
-  private async dispatch(row: TrainingJob): Promise<TrainingJob> {
-    const attempts = row.attempts + 1;
-    try {
-      const job = await this.client.requestTraining(row.profileId);
-      await this.rows.update(
-        { id: row.id },
-        { status: 'running', attempts, modelServiceJobId: job.id, startedAt: row.startedAt ?? new Date() },
-      );
-      return { ...row, status: 'running', attempts, modelServiceJobId: job.id, startedAt: row.startedAt ?? new Date() };
-    } catch (error) {
-      return this.retryOrFail(row, attempts, 'error', this.describe(error));
+  private async dispatch(row: TrainingJob, now: Date = new Date()): Promise<TrainingJob> {
+    const claimed = await this.claim(row, now);
+    if (!claimed) {
+      // Another worker (or another tick) took this row between the read and
+      // here. Not an error and not a retry: exactly one of us dispatches it.
+      return row;
     }
+    try {
+      const job = await this.client.requestTraining(claimed.profileId);
+      await this.rows.update({ id: claimed.id }, { modelServiceJobId: job.id });
+      return { ...claimed, modelServiceJobId: job.id };
+    } catch (error) {
+      return this.retryOrFail(claimed, claimed.attempts, 'error', this.describe(error), now);
+    }
+  }
+
+  // The lease. One statement -- UPDATE ... WHERE id = ? AND status =
+  // 'queued' -- so two sweeps racing for the same row produce exactly one
+  // winner, whatever process each runs in: the in-process `sweeping` flag
+  // only ever guarded one replica, and the model service would have been
+  // asked to fit the same profile twice. `startedAt` is stamped by every
+  // claim because it is what the lease expires against (see poll()), not a
+  // record of when the row was first tried -- `createdAt` is that.
+  private async claim(row: TrainingJob, now: Date): Promise<TrainingJob | null> {
+    const attempts = row.attempts + 1;
+    const claimed = { status: 'running' as const, attempts, startedAt: now, modelServiceJobId: null };
+    const result = await this.rows.update({ id: row.id, status: 'queued' }, claimed);
+    return result.affected === 1 ? { ...row, ...claimed } : null;
   }
 
   // Read the model service's job the row is waiting on. Terminal states end
@@ -209,6 +295,12 @@ export class TrainingJobsService implements OnModuleInit, OnModuleDestroy {
   // almost always a restart) is treated the same as a transient failure.
   private async poll(row: TrainingJob, now: Date): Promise<void> {
     if (!row.modelServiceJobId) {
+      // Claimed, then nothing: the worker died between the claim and the
+      // model service's answer. Until the lease expires the request may
+      // still be in flight, so this waits rather than sending a second one.
+      if (this.leaseExpired(row, now)) {
+        await this.retryOrFail(row, row.attempts, 'error', 'The training attempt stopped before the model service accepted it', now);
+      }
       return;
     }
     let job;
@@ -223,6 +315,15 @@ export class TrainingJobsService implements OnModuleInit, OnModuleDestroy {
       return;
     }
     if (job.status === 'queued' || job.status === 'running') {
+      if (this.leaseExpired(row, now)) {
+        await this.retryOrFail(
+          row,
+          row.attempts,
+          'error',
+          `The model service was still working on this job after ${Math.round(RUNNING_LEASE_MS / 60_000)} minutes`,
+          now,
+        );
+      }
       return;
     }
     if (job.status === 'succeeded') {
@@ -273,6 +374,13 @@ export class TrainingJobsService implements OnModuleInit, OnModuleDestroy {
       { status: 'queued', attempts, errorKind, lastError, nextAttemptAt, modelServiceJobId: null },
     );
     return { ...row, status: 'queued', attempts, errorKind, lastError, nextAttemptAt, modelServiceJobId: null };
+  }
+
+  // `startedAt` is stamped on every claim; `updatedAt` covers a row written
+  // before the column was used that way.
+  private leaseExpired(row: TrainingJob, now: Date): boolean {
+    const since = row.startedAt ?? row.updatedAt;
+    return since ? now.getTime() - since.getTime() >= RUNNING_LEASE_MS : false;
   }
 
   private describe(error: unknown): string {

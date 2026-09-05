@@ -9,6 +9,8 @@ import request from 'supertest';
 import type { Repository } from 'typeorm';
 import { AppModule } from '../src/modules/app/app.module';
 import { Title } from '../src/entities/title.entity';
+import { TrainingJob } from '../src/entities/training-job.entity';
+import { TrainingJobsService } from '../src/modules/training/training-jobs.service';
 
 // A stand-in for services/workers/src/model_service.py that records every
 // request and answers with the same job shape. The Python service has its
@@ -235,6 +237,23 @@ describe('Training trigger and status (ADR-25, real HTTP, real DB, fake model se
       .expect(202);
     expect(response.body).toMatchObject({ status: 'running', created: false });
     expect(response.body.jobId).toEqual(expect.any(String));
+  });
+
+  // P0-9: the reconciler's predicate is pure SQL (a GROUP BY with two NOT
+  // EXISTS over other tables), so only a real database can say whether it
+  // selects what it claims to. The profile below is exactly the state a lost
+  // enqueue leaves: rounds ranked, no job row, no snapshot.
+  it('reconciles a profile with enough rounds but no job and no model', async () => {
+    const jobsRepository = app.get<Repository<TrainingJob>>(getRepositoryToken(TrainingJob));
+    await waitFor(() => trainRequests().length > 0, 'the owner to have a job at all');
+    await jobsRepository.delete({ profileId: ownerProfileId });
+    const before = trainRequests().length;
+
+    const enqueued = await app.get(TrainingJobsService).reconcile();
+
+    expect(enqueued).toBeGreaterThanOrEqual(1);
+    expect(await jobsRepository.count({ where: { profileId: ownerProfileId } })).toBe(1);
+    expect(trainRequests().length).toBeGreaterThan(before);
   });
 
   it('hides the profile from anyone else (404, never 403)', async () => {

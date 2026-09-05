@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ConfigService } from '@nestjs/config';
 import type { Repository } from 'typeorm';
-import { TrainingJob } from '../../entities/training-job.entity';
+import { Triad } from '../../entities/triad.entity';
+import { TrainingJob, TrainingJobStatus } from '../../entities/training-job.entity';
 import { ModelServiceClient, ModelServiceError, ModelServiceJob } from './model-service.client';
 import { MAX_ATTEMPTS, TrainingJobsService, sanitizeError } from './training-jobs.service';
 
@@ -37,8 +38,15 @@ class FakeRepo {
     this.rows.set(row.id, row);
     return row;
   });
-  update = vi.fn(async (where: { id: string }, patch: Partial<TrainingJob>) => {
-    Object.assign(this.rows.get(where.id)!, patch, { updatedAt: new Date() });
+  // The claim (P0-9) updates on `{ id, status: 'queued' }`, so the fake has
+  // to answer `affected: 0` when the row no longer matches -- that zero is
+  // the whole lock.
+  update = vi.fn(async (where: { id: string; status?: TrainingJobStatus }, patch: Partial<TrainingJob>) => {
+    const row = this.rows.get(where.id);
+    if (!row || (where.status !== undefined && row.status !== where.status)) {
+      return { affected: 0 };
+    }
+    Object.assign(row, patch, { updatedAt: new Date() });
     return { affected: 1 };
   });
   findOne = vi.fn(async (options: { where: { profileId?: string; id?: string; status?: { value: string[] } } }) => {
@@ -82,6 +90,20 @@ class FakeRepo {
   });
 }
 
+// Only what reconcile() calls: a chainable builder returning the profile
+// ids the fake was primed with.
+class FakeTriadsRepo {
+  eligible: { profileId: string }[] = [];
+  createQueryBuilder = vi.fn(() => {
+    const builder: Record<string, unknown> = {};
+    for (const method of ['select', 'innerJoin', 'where', 'andWhere', 'groupBy', 'having', 'limit']) {
+      builder[method] = vi.fn(() => builder);
+    }
+    builder.getRawMany = vi.fn(async () => this.eligible);
+    return builder;
+  });
+}
+
 const configOf = (values: Record<string, string> = {}) => ({ get: (key: string) => values[key] }) as unknown as ConfigService;
 
 function clientOf(overrides: Partial<Record<'requestTraining' | 'getJob', ReturnType<typeof vi.fn>>> = {}) {
@@ -108,13 +130,20 @@ describe('sanitizeError', () => {
 
 describe('TrainingJobsService', () => {
   let repo: FakeRepo;
+  let triads: FakeTriadsRepo;
   let client: ReturnType<typeof clientOf>;
   let service: TrainingJobsService;
 
   beforeEach(() => {
     repo = new FakeRepo();
+    triads = new FakeTriadsRepo();
     client = clientOf();
-    service = new TrainingJobsService(repo as unknown as Repository<TrainingJob>, client, configOf({ NODE_ENV: 'test' }));
+    service = new TrainingJobsService(
+      repo as unknown as Repository<TrainingJob>,
+      triads as unknown as Repository<Triad>,
+      client,
+      configOf({ NODE_ENV: 'test' }),
+    );
   });
 
   describe('enqueue', () => {
@@ -293,15 +322,84 @@ describe('TrainingJobsService', () => {
 
   it('reads the sweep interval from configuration and never arms a timer under test or with no service configured', () => {
     expect(service.sweepIntervalMs).toBe(30_000);
-    const custom = new TrainingJobsService(repo as unknown as Repository<TrainingJob>, client, configOf({ TRAINING_JOBS_SWEEP_INTERVAL_MS: '5000' }));
+    const custom = new TrainingJobsService(repo as unknown as Repository<TrainingJob>, triads as unknown as Repository<Triad>, client, configOf({ TRAINING_JOBS_SWEEP_INTERVAL_MS: '5000' }));
     expect(custom.sweepIntervalMs).toBe(5000);
 
     service.onModuleInit();
     expect((service as unknown as { sweepTimer: unknown }).sweepTimer).toBeNull();
 
     const disabledClient = { ...clientOf(), enabled: false } as unknown as ModelServiceClient;
-    const disabled = new TrainingJobsService(repo as unknown as Repository<TrainingJob>, disabledClient, configOf());
+    const disabled = new TrainingJobsService(repo as unknown as Repository<TrainingJob>, triads as unknown as Repository<Triad>, disabledClient, configOf());
     disabled.onModuleInit();
     expect((disabled as unknown as { sweepTimer: unknown }).sweepTimer).toBeNull();
+  });
+
+  // P0-9: three ways a durable queue stops being durable -- a row that stays
+  // `running` for ever, two workers dispatching the same row, and a profile
+  // whose enqueue was lost so no row exists at all.
+  describe('P0-9: stuck rows, double execution, and profiles with no job', () => {
+    const LEASE_MS = 10 * 60 * 1000;
+
+    it('returns a job the model service never finished to the queue when its lease expires', async () => {
+      const { job: row } = await service.enqueue('profile-1');
+      client.getJob.mockResolvedValue({ id: 'python-job-1', profileId: 'profile-1', status: 'running', requestedAt: '', startedAt: null, finishedAt: null, errorKind: null, error: null, result: null });
+
+      // Still inside the lease: nothing happens, the fit may simply be slow.
+      await service.runDue(new Date(Date.now() + LEASE_MS - 1000));
+      expect(repo.rows.get(row.id)!.status).toBe('running');
+
+      await service.runDue(new Date(Date.now() + LEASE_MS + 1000));
+      const requeued = repo.rows.get(row.id)!;
+      expect(requeued.status).toBe('queued');
+      expect(requeued.modelServiceJobId).toBeNull();
+      expect(requeued.lastError).toMatch(/still working/);
+    });
+
+    it('returns a row claimed but never dispatched -- the worker died mid-attempt', async () => {
+      const { job: row } = await service.enqueue('profile-1');
+      // What a crash between claim() and the model service's answer leaves.
+      repo.rows.get(row.id)!.modelServiceJobId = null;
+
+      await service.runDue(new Date(Date.now() + LEASE_MS + 1000));
+
+      expect(repo.rows.get(row.id)!.status).toBe('queued');
+      expect(repo.rows.get(row.id)!.lastError).toMatch(/stopped before the model service accepted it/);
+    });
+
+    it('claims atomically: a row another worker already took is not dispatched twice', async () => {
+      const { job: row } = await service.enqueue('profile-1');
+      // Back to queued, as a retry would leave it...
+      Object.assign(repo.rows.get(row.id)!, { status: 'queued', modelServiceJobId: null, nextAttemptAt: new Date(0) });
+      client.requestTraining.mockClear();
+      // ...but another replica claims it between this sweep's read and its
+      // dispatch: the conditional UPDATE matches nothing, so we stand down.
+      const stale = { ...repo.rows.get(row.id)!, status: 'queued' as const };
+      repo.rows.get(row.id)!.status = 'running';
+
+      await service['dispatch'](stale, new Date());
+
+      expect(client.requestTraining).not.toHaveBeenCalled();
+    });
+
+    it('reconciles a profile that qualifies but has no job and no model', async () => {
+      triads.eligible = [{ profileId: 'profile-lost' }];
+
+      const result = await service.runDue();
+
+      expect(result.reconciled).toBe(1);
+      expect(client.requestTraining).toHaveBeenCalledWith('profile-lost');
+      expect([...repo.rows.values()].some((r) => r.profileId === 'profile-lost')).toBe(true);
+    });
+
+    it('does not enqueue twice for a profile the reconciler picks up again', async () => {
+      triads.eligible = [{ profileId: 'profile-lost' }];
+      await service.runDue();
+      client.requestTraining.mockClear();
+
+      const second = await service.runDue();
+
+      expect(second.reconciled).toBe(0);
+      expect(client.requestTraining).not.toHaveBeenCalled();
+    });
   });
 });

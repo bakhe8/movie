@@ -6,8 +6,10 @@ import { Profile } from '../../entities/profile.entity';
 import { Triad } from '../../entities/triad.entity';
 import { TrainingJob } from '../../entities/training-job.entity';
 import { UserModelSnapshot } from '../../entities/user-model-snapshot.entity';
+import { captureException } from '../../observability/observability';
 import { ModelServiceClient, ModelServiceJob } from './model-service.client';
 import { TrainingJobsService } from './training-jobs.service';
+import { everyNTriadsFrom, firstTriadCountFrom } from './training-thresholds';
 
 export type TrainingState =
   | 'disabled' // MODEL_SERVICE_URL unset: training is the manual CLI only
@@ -94,13 +96,8 @@ export class TrainingService {
     private readonly jobs: TrainingJobsService,
     config: ConfigService,
   ) {
-    this.firstTriadCount = TrainingService.positiveInt(config.get<string>('TRAINING_FIRST_TRIAD_COUNT'), 3);
-    this.everyNTriads = TrainingService.positiveInt(config.get<string>('TRAINING_EVERY_N_TRIADS'), 5);
-  }
-
-  private static positiveInt(raw: string | undefined, fallback: number): number {
-    const value = Number(raw);
-    return Number.isInteger(value) && value > 0 ? value : fallback;
+    this.firstTriadCount = firstTriadCountFrom(config);
+    this.everyNTriads = everyNTriadsFrom(config);
   }
 
   // True exactly at the counts 3, 3+N, 3+2N, ... (with the defaults).
@@ -143,6 +140,10 @@ export class TrainingService {
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       this.logger.warn(`automatic training skipped for profile ${profileId}: ${reason}`);
+      // Swallowed so a ranking response is never delayed or failed by it --
+      // but never silent: this is the path that leaves a profile eligible
+      // with no job, which the reconciler then has to catch (P0-9).
+      captureException(error, { profileId, stage: 'training.onTriadCompleted' });
     }
   }
 
