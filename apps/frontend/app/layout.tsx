@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Script from "next/script";
-import { IBM_Plex_Sans_Arabic, Readex_Pro } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import "./styles/tokens.css";
 import { SessionProvider } from "./lib/session";
@@ -13,18 +13,26 @@ export const metadata: Metadata = {
 };
 
 // Fonts (docs/IDENTITY_DECISIONS_2026-09-03.md Q9): one bilingual family for
-// the UI, a display face for large headings only. Self-hosted by next/font;
-// exposed as CSS variables that styles/tokens.css turns into --font-ui and
+// the UI, a display face for large headings only. The files live in
+// app/fonts/ with their OFL licence text, so a build needs no network:
+// next/font/google fetched them from Google at every build (ADR-94). Exposed
+// as CSS variables that styles/tokens.css turns into --font-ui and
 // --font-display.
-const plexArabic = IBM_Plex_Sans_Arabic({
-  subsets: ["arabic", "latin"],
-  weight: ["400", "500", "600", "700"],
+const plexArabic = localFont({
+  src: [
+    { path: "./fonts/ibm-plex-sans-arabic/IBMPlexSansArabic-Regular.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/ibm-plex-sans-arabic/IBMPlexSansArabic-Medium.woff2", weight: "500", style: "normal" },
+    { path: "./fonts/ibm-plex-sans-arabic/IBMPlexSansArabic-SemiBold.woff2", weight: "600", style: "normal" },
+    { path: "./fonts/ibm-plex-sans-arabic/IBMPlexSansArabic-Bold.woff2", weight: "700", style: "normal" },
+  ],
   variable: "--font-plex-arabic",
   display: "swap",
 });
-const readex = Readex_Pro({
-  subsets: ["arabic", "latin"],
-  weight: ["500", "600", "700"],
+// One variable file, instanced to the 500-700 range Q9 uses (HEXP pinned).
+const readex = localFont({
+  src: "./fonts/readex-pro/ReadexPro-VF.woff2",
+  weight: "500 700",
+  style: "normal",
   variable: "--font-readex",
   display: "swap",
 });

@@ -694,6 +694,15 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 
 ---
 
+## ADR-94 — UI fonts ship in the repository, not fetched from Google at build time (owner review of external dependencies, 2026-09-05)
+
+**Context.** `next/font/google` downloaded IBM Plex Sans Arabic and Readex Pro from Google Fonts on every build, so the frontend could not be built offline or while Google was unreachable, and the exact bytes served depended on what Google returned that day. Runtime was already first-party (next/font self-hosts what it fetched).
+**Decision.** `next/font/local` with the files in `apps/frontend/app/fonts/`: the four Plex weights Q9 uses as the upstream woff2 files from IBM's repository, and Readex Pro as one variable woff2 instanced with fontTools to the 500–700 range with HEXP pinned (60 KB instead of the 200 KB upstream TTF). Both are SIL OFL 1.1; the licence texts sit beside the files, which the OFL requires for redistribution.
+**Consequences.** Builds need no network for fonts and are reproducible byte for byte; ~360 KB of font files in git. Google's per-subset split (Arabic and Latin as separate files per weight) is gone: each file carries both scripts, which is what this bilingual UI loads anyway. Updating a font is a deliberate file change, not a silent upstream drift.
+**Revisit when.** A weight or script outside 400–700 Arabic/Latin is needed, or Next changes `next/font/local`'s contract.
+
+---
+
 ## Summary
 
 | # | Decision | Serves | Revisit trigger |
@@ -791,6 +800,7 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 | 91 | Constraint names follow `FK_<table>_<column>`, derived by `ConventionNamingStrategy`; seven legacy hashes renamed | AUDIT_2026-09-05 follow-up; SCHEMA.md §1 | a second engine/schema, or TypeORM models index sort direction |
 | 92 | Below the 5-triad floor the strongest regularization serves, not the weakest | AUDIT_2026-09-05 H5; owner decision 2026-09-05; `BP §7.1` | `§16` early-round quality data, or a retuned grid |
 | 93 | No Redis in any environment until a `BP §12.3` consumer exists | owner review of external dependencies 2026-09-05; ADR-10/25/46/88 | a `§12.3` trigger, or a multi-replica shared throttler store |
+| 94 | UI fonts ship in the repository (`next/font/local`), not fetched from Google at build time | owner review of external dependencies 2026-09-05; IDENTITY Q9 | a new weight/script, or a `next/font/local` contract change |
 
 ## How to add a decision
 
