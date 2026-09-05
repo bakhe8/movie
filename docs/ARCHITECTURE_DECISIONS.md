@@ -667,6 +667,15 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 
 ---
 
+## ADR-91 — Constraint names follow one convention, derived by a naming strategy (AUDIT_2026-09-05 follow-up)
+
+**Context.** Every migration since M1 named its foreign keys `FK_<table>_<column>` by hand, while TypeORM's default derives a hash from table and columns. The entities therefore expected different names from the ones the database carries, and `schema:log` proposed dropping and recreating 35 foreign keys on every run -- noise that hid the two real drifts beside it (`outcomes.occurredAt`'s default, the `recommendations` index shape). Seven constraints from `InitialSchema` still carried hashes that no longer even matched TypeORM's own derivation, because M1 renamed `user_title_state` to `user_title_states`.
+**Decision.** `ConventionNamingStrategy` (`config/naming-strategy.ts`) makes `FK_<table>_<column>` the derived name on every DataSource built from `getConnectionOptions()`; unique constraints, indexes and primary keys keep TypeORM's defaults, and the hand-named ones are declared explicitly on their entities. Migration `RenameLegacyConstraintsToConvention` renames the seven legacy constraints (catalog-only, reversible). The check is `npm run typeorm -- schema:log` against a migrated database: it must print no statements, and a future `migration:generate` produces convention names without anyone typing `foreignKeyConstraintName`.
+**Consequences.** Entities are again a truthful description of the schema, so drift is visible the moment it appears. Renaming constraints changes nothing about behaviour or data; a rollback restores the hashes.
+**Revisit when.** A second schema or database engine needs different naming, or TypeORM's schema comparison starts modelling index sort direction (the `recommendations` index's `DESC` lives in the migration only).
+
+---
+
 ## Summary
 
 | # | Decision | Serves | Revisit trigger |
@@ -761,6 +770,7 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 | 88 | Railway + Cloudflare hosting, kolme.app | ALPHA_PLAN 7.2; owner decision O-2 | managed Postgres available (PITR), or Railway config-as-code improves |
 | 89 | Rate limit keyed by user identity, by address only when anonymous | ALPHA_PLAN 7.6; `BP §21.3` | per-plan or per-route-family limits, or a shared throttle store for multi-instance deploys |
 | 90 | Catalog ships with the schema: `npm run release` = migrate + seed + rights + IMDb | `BP §12.1`; owner rule 2026-09-05 | a production catalog editor, or Railway pre-deploy on `backend` |
+| 91 | Constraint names follow `FK_<table>_<column>`, derived by `ConventionNamingStrategy`; seven legacy hashes renamed | AUDIT_2026-09-05 follow-up; SCHEMA.md §1 | a second engine/schema, or TypeORM models index sort direction |
 
 ## How to add a decision
 

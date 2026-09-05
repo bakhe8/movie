@@ -33,6 +33,6 @@ export class Outcome {
   @Column({ type: 'integer', nullable: true })
   rankPosition: number | null;
 
-  @Column({ type: 'timestamp' })
+  @Column({ type: 'timestamp', default: () => 'now()' })
   occurredAt: Date;
 }

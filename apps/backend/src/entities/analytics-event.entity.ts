@@ -64,6 +64,9 @@ export class AnalyticsEvent {
   // Numbers and short enums only -- see AnalyticsService, which strips
   // anything else before this row is built. Never free text, never an id
   // belonging to a person.
-  @Column({ type: 'jsonb', default: () => "'{}'::jsonb" })
+  // Stated without the ::jsonb cast: TypeORM strips casts when it reads a
+  // default back from Postgres, so the cast form never compared equal and
+  // schema:log proposed re-setting this default on every run.
+  @Column({ type: 'jsonb', default: () => "'{}'" })
   properties: Record<string, number | string | boolean>;
 }

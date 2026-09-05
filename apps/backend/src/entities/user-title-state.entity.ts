@@ -5,7 +5,7 @@ import { Title } from './title.entity';
 export type TitleState = 'watched' | 'not_watched' | 'watchlist' | 'interested';
 
 @Entity('user_title_states')
-@Unique(['profileId', 'titleId'])
+@Unique('UQ_user_title_states_profileId_titleId', ['profileId', 'titleId'])
 export class UserTitleState {
   @PrimaryGeneratedColumn('uuid')
   id: string;

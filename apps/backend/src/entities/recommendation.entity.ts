@@ -10,6 +10,10 @@ import { Title } from './title.entity';
 export type RecommendationTrack = 'safe' | 'discovery' | 'outside_usual';
 
 @Entity('recommendations')
+// (profileId, createdAt DESC) per the M5 DDL: newest-first reads for one
+// profile. Declared at class level so both columns are part of the index
+// TypeORM expects; the sort direction lives in the migration only.
+@Index('IDX_recommendations_profileId_createdAt', ['profileId', 'createdAt'])
 export class Recommendation {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -21,7 +25,6 @@ export class Recommendation {
   @JoinColumn({ name: 'profileId' })
   profile: Profile;
 
-  @Index('IDX_recommendations_profileId_createdAt')
   @Column({ type: 'uuid' })
   profileId: string;
 

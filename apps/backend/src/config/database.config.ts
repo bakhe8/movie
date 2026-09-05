@@ -1,7 +1,8 @@
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
-import { DataSourceOptions } from 'typeorm';
+import { DataSourceOptions, NamingStrategyInterface } from 'typeorm';
 import { config } from 'dotenv';
 import { resolve } from 'node:path';
+import { ConventionNamingStrategy } from './naming-strategy';
 import { AnalyticsEvent } from '../entities/analytics-event.entity';
 import { AuditLog } from '../entities/audit-log.entity';
 import { AvailabilitySnapshot } from '../entities/availability-snapshot.entity';
@@ -82,6 +83,7 @@ interface ConnectionOptions {
   password: string;
   database: string;
   entities: DataSourceOptions['entities'];
+  namingStrategy?: NamingStrategyInterface;
 }
 
 // DATABASE_URL wins when it is set. It has to: `services/workers/*.py` and
@@ -163,7 +165,7 @@ export function getConnectionOptions(): ConnectionOptions {
   }
   if (fromUrl) {
     assertNotLoopbackWhenDeployed(fromUrl.host, fromUrl.port, 'DATABASE_URL');
-    return { type: 'postgres', ...fromUrl, password, entities: ENTITIES };
+    return { type: 'postgres', ...fromUrl, password, entities: ENTITIES, namingStrategy: new ConventionNamingStrategy() };
   }
 
   const host = process.env.DB_HOST || 'localhost';
@@ -178,6 +180,7 @@ export function getConnectionOptions(): ConnectionOptions {
     password,
     database: process.env.POSTGRES_DB || 'moviedb',
     entities: ENTITIES,
+    namingStrategy: new ConventionNamingStrategy(),
   };
 }
 

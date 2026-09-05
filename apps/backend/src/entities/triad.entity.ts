@@ -90,6 +90,13 @@ export class Triad {
   // Append-only correction (blueprint §13.2): points at the triad this one
   // corrects, instead of ever updating that triad's own row. NULL for every
   // triad today -- no correction flow is built yet (M1, SCHEMA.md §2.4).
+  // The relation the M1 DDL carries (FK_triads_correctsTriadId, NO ACTION):
+  // declared so the entity describes the constraint that exists, instead of
+  // TypeORM proposing to drop it on every schema comparison (ADR-91).
+  @ManyToOne(() => Triad, { nullable: true })
+  @JoinColumn({ name: 'correctsTriadId' })
+  correctsTriad: Triad | null;
+
   @Column({ type: 'uuid', nullable: true })
   correctsTriadId: string | null;
 
