@@ -121,14 +121,30 @@ export function parseCanaryArgs(argv: string[]): { accounts: number } {
   return { accounts };
 }
 
+/**
+ * The canary has not been given what it needs to run. Distinct from a
+ * failure because it means "nobody has set this up yet", not "the product is
+ * broken": the Cron service can exist before the owner has set
+ * `CANARY_PASSWORD`, and paging someone over that would train them to ignore
+ * the alert that matters. Warned about and exited cleanly (CLAUDE.md §3's
+ * boot contract, applied to this script: a missing variable is a warning,
+ * never a refusal).
+ */
+export class CanaryNotConfigured extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CanaryNotConfigured';
+  }
+}
+
 export function canarySettingsFrom(env: NodeJS.ProcessEnv, argv: string[]): CanarySettings {
   const baseUrl = (env.API_BASE_URL ?? '').trim().replace(/\/+$/, '');
   if (!baseUrl) {
-    throw new Error('API_BASE_URL is required: the canary drives the deployed API over HTTP, not this process');
+    throw new CanaryNotConfigured('API_BASE_URL is not set: the canary drives a deployed API over HTTP, not this process');
   }
   const password = env.CANARY_PASSWORD ?? '';
   if (!password) {
-    throw new Error('CANARY_PASSWORD is required (set on the canary Cron service, never in the repository)');
+    throw new CanaryNotConfigured('CANARY_PASSWORD is not set (set it on the canary Cron service, never in the repository)');
   }
   return { ...DEFAULT_CANARY_SETTINGS, ...parseCanaryArgs(argv), baseUrl, password };
 }
@@ -248,6 +264,46 @@ interface Readiness {
 }
 
 /**
+ * Sign in, registering the account the first time it is used.
+ *
+ * The account is created once and then reused for ever: registration is
+ * bucketed at five a minute per address, so a canary that signed up on every
+ * run would throttle itself out of its own journey (and leave a trail of
+ * accounts behind). A 401 means either "no such account" or "wrong
+ * password", and the two are deliberately indistinguishable from outside --
+ * so the canary tries to register, and a 409 is the answer that tells them
+ * apart: the account exists and CANARY_PASSWORD is not its password.
+ */
+async function signIn(client: CanaryClient, email: string, settings: CanarySettings): Promise<string> {
+  const login = await client.request<{ access_token?: string }>(
+    'login',
+    'POST',
+    '/auth/login',
+    { email, password: settings.password },
+    { allow: [401] },
+  );
+  if (login?.access_token) {
+    return login.access_token;
+  }
+
+  const registered = await client.request<{ access_token?: string }>(
+    'register',
+    'POST',
+    '/auth/register',
+    { email, password: settings.password, firstName: 'Canary', lastName: 'Journey' },
+    { allow: [409] },
+  );
+  if (!registered?.access_token) {
+    throw new CanaryFailure(
+      'login',
+      `could not sign in as ${email}: the account exists and CANARY_PASSWORD is not its password`,
+      registered,
+    );
+  }
+  return registered.access_token;
+}
+
+/**
  * One account's whole journey. Every step is the route a screen calls, in
  * the order a person meets it.
  */
@@ -255,14 +311,8 @@ export async function runJourney(email: string, settings: CanarySettings, deps: 
   const startedAt = deps.now();
   const client = new CanaryClient(settings, deps);
 
-  const login = await client.request<{ access_token?: string }>('login', 'POST', '/auth/login', {
-    email,
-    password: settings.password,
-  });
-  if (!login?.access_token) {
-    throw new CanaryFailure('login', `signing in as ${email} returned no access token`, login);
-  }
-  client.setToken(login.access_token);
+  const token = await signIn(client, email, settings);
+  client.setToken(token);
 
   // A previous run that died mid-journey leaves a profile behind, and its
   // watched films would make this run's rounds look like progress they are

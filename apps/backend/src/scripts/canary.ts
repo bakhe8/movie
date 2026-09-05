@@ -21,10 +21,22 @@
  * fires; the same failure is sent to Sentry when a DSN is configured.
  */
 import { initObservability, captureException } from '../observability/observability';
-import { CanaryFailure, canarySettingsFrom, runCanary } from './canary.lib';
+import { CanaryFailure, CanaryNotConfigured, canarySettingsFrom, runCanary } from './canary.lib';
 
 async function main(): Promise<void> {
-  const settings = canarySettingsFrom(process.env, process.argv.slice(2));
+  let settings;
+  try {
+    settings = canarySettingsFrom(process.env, process.argv.slice(2));
+  } catch (error) {
+    // Not yet set up is not a failure: the Cron service may exist before the
+    // owner has set CANARY_PASSWORD, and an alert nobody can act on is an
+    // alert everyone learns to ignore.
+    if (error instanceof CanaryNotConfigured) {
+      console.warn(`canary: skipped -- ${error.message}`);
+      return;
+    }
+    throw error;
+  }
   await initObservability();
 
   const result = await runCanary(settings, {

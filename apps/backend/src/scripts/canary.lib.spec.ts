@@ -3,6 +3,7 @@ import {
   backoffDelays,
   canarySettingsFrom,
   CanaryFailure,
+  CanaryNotConfigured,
   DEFAULT_CANARY_SETTINGS,
   parseCanaryArgs,
   runCanary,
@@ -23,6 +24,10 @@ interface FakeOptions {
   failWith?: string;
   /** Profiles the previous run left behind. */
   leftoverProfiles?: string[];
+  /** The account does not exist yet: login 401s until it is registered. */
+  unregistered?: boolean;
+  /** The account exists under another password: login 401s, register 409s. */
+  wrongPassword?: boolean;
   /** Titles the starter list offers. */
   starterTitles?: number;
   /** How many times each of these `METHOD /path` answers 429 first. */
@@ -67,6 +72,15 @@ function fakeDeployment(options: FakeOptions = {}) {
       return new Response('{"message":"ThrottlerException: Too Many Requests"}', { status: 429 });
     }
     if (key === 'POST /auth/login') {
+      if (options.unregistered || options.wrongPassword) {
+        return json({ message: 'Invalid email or password' }, 401);
+      }
+      return json({ access_token: 'canary-token', user: { id: 'u1' } }, 201);
+    }
+    if (key === 'POST /auth/register') {
+      if (options.wrongPassword) {
+        return json({ message: 'Email already registered' }, 409);
+      }
       return json({ access_token: 'canary-token', user: { id: 'u1' } }, 201);
     }
     if (key === 'GET /profiles') {
@@ -148,8 +162,12 @@ describe('canary arguments and settings', () => {
     expect(() => parseCanaryArgs(['--dry-run'])).toThrow(/unknown argument/);
   });
 
-  it('requires both the target and the password, and trims a trailing slash', () => {
+  it('reports an unset target or password as "not configured", never as a failure', () => {
+    // The Cron service can exist before the owner sets the variable; the
+    // runner turns this into a warning and exit 0, not a page.
+    expect(() => canarySettingsFrom({}, [])).toThrow(CanaryNotConfigured);
     expect(() => canarySettingsFrom({}, [])).toThrow(/API_BASE_URL/);
+    expect(() => canarySettingsFrom({ API_BASE_URL: 'https://api.kolme.app' }, [])).toThrow(CanaryNotConfigured);
     expect(() => canarySettingsFrom({ API_BASE_URL: 'https://api.kolme.app' }, [])).toThrow(/CANARY_PASSWORD/);
     const settings = canarySettingsFrom({ API_BASE_URL: 'https://api.kolme.app/', CANARY_PASSWORD: 'x' }, ['--accounts', '3']);
     expect(settings.baseUrl).toBe('https://api.kolme.app');
@@ -233,27 +251,41 @@ describe('the canary journey', () => {
     expect(report.recommendations).toBe(5);
   });
 
+  it('registers the account the first time it is used, then walks the journey', async () => {
+    const fake = fakeDeployment({ unregistered: true });
+    const report = await runJourney('canary@kolme.app', SETTINGS, deps(fake.fetchImpl));
+
+    expect(fake.calls).toContain('POST /auth/register');
+    expect(report.recommendations).toBe(5);
+  });
+
+  it('says so plainly when the account exists under another password', async () => {
+    const fake = fakeDeployment({ wrongPassword: true });
+    const error = await runJourney('canary@kolme.app', SETTINGS, deps(fake.fetchImpl)).catch((caught: unknown) => caught);
+
+    expect((error as CanaryFailure).step).toBe('login');
+    expect((error as CanaryFailure).message).toMatch(/CANARY_PASSWORD is not its password/);
+    // Never a second registration attempt: the address is bucketed at 5/min.
+    expect(fake.calls.filter((call) => call === 'POST /auth/register')).toHaveLength(1);
+  });
+
   it('fails at the step that answered, when the answer is not back-pressure', async () => {
-    const fetchImpl = (async () => new Response('{"message":"Unauthorized"}', { status: 401 })) as unknown as typeof globalThis.fetch;
+    const fetchImpl = (async () => new Response('{"message":"Not Found"}', { status: 404 })) as unknown as typeof globalThis.fetch;
     const error = await runJourney('canary@kolme.app', SETTINGS, deps(fetchImpl)).catch((caught: unknown) => caught);
 
     expect((error as CanaryFailure).step).toBe('login');
-    expect((error as CanaryFailure).message).toMatch(/answered 401/);
+    expect((error as CanaryFailure).message).toMatch(/answered 404/);
   });
 });
 
 describe('runCanary', () => {
   it('walks one numbered account per journey and keeps going after a failure', async () => {
     const good = fakeDeployment();
-    let journey = 0;
-    const fetchImpl = (async (url: string, init: { method: string }) => {
-      if (String(url).endsWith('/auth/login')) {
-        journey += 1;
-      }
-      // The second account cannot sign in: a wrong CANARY_PASSWORD on one
-      // account must not hide the other journeys' results.
-      if (journey === 2 && String(url).endsWith('/auth/login')) {
-        return new Response('{"message":"Invalid email or password"}', { status: 401 });
+    const fetchImpl = (async (url: string, init: { method: string; body?: string }) => {
+      // The second account is broken all the way down: one journey that
+      // cannot start must not hide the other journeys' results.
+      if (String(url).endsWith('/auth/login') && String(init.body).includes('canary+2@kolme.app')) {
+        return new Response('{"message":"Internal Server Error"}', { status: 500 });
       }
       return good.fetchImpl(url as never, init as never);
     }) as unknown as typeof globalThis.fetch;
