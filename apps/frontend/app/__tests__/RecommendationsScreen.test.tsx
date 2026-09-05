@@ -16,6 +16,10 @@ vi.mock('../lib/api', () => ({
     getReadiness: vi.fn(),
     requestTraining: vi.fn(),
     setTitleState: vi.fn(),
+    // The ready screen reports what it showed and what was clicked (ADR-110);
+    // both are fire-and-forget, so the mock only has to exist.
+    recordImpressions: vi.fn().mockResolvedValue(undefined),
+    recordOutcome: vi.fn().mockResolvedValue(undefined),
   },
   ApiError: class ApiError extends Error {
     constructor(
@@ -54,6 +58,91 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockApi.getWatchedTitles.mockResolvedValue([]);
   mockApi.getReadiness.mockRejectedValue(new Error('not mocked in this case'));
+  mockApi.recordImpressions.mockResolvedValue(undefined);
+  mockApi.recordOutcome.mockResolvedValue(undefined);
+});
+
+// UX_AUDIT_MOBILE_2026-09-05 P0 #1, #4 and #15: the ready screen was 6065px
+// of stacked cards under a paragraph explaining the four values, with the
+// confidence sentence repeated on all thirteen. ADR-111 turns the tracks into
+// shelves of tiles and says what the model learned once, at the top.
+const title = (id: string, ar: string) => ({
+  id,
+  internalId: `i-${id}`,
+  titleEn: 'Divine Intervention',
+  titleAr: ar,
+  description: null,
+  releaseYear: 2002,
+  genres: null,
+  posterUrl: null,
+});
+
+const item = (id: string, ar: string, track: string) => ({
+  recommendationId: `r-${id}`,
+  title: title(id, ar),
+  personalFitScore: 0.9,
+  publicQualityScore: 6.6,
+  watchabilityScore: null,
+  availability: 'unknown',
+  confidenceBand: 'inconclusive',
+  fingerprintCoverage: 1,
+  track,
+  modelVersion: 'test-v1',
+  reason: { features: [{ key: 'ambiguity', direction: 'higher' }], evidenceSource: 'individual' },
+});
+
+const readyReadiness = {
+  rounds: { learningRounds: 3, verificationRounds: 0, firstTrainingAt: 3, nextTrainingAt: null, watchedTitles: 7, suggestedWatchedTitles: 9 },
+  ordinalModel: capability({ status: 'ready' }),
+  semanticProfile: capability({ status: 'ready' }),
+  recommendation: capability({ status: 'ready', confidenceBand: 'initial' }),
+  availability: capability({ reason: 'no_availability_data_source' }),
+};
+
+describe('RecommendationsScreen — ready', () => {
+  beforeEach(() => {
+    mockApi.getRecommendations.mockResolvedValue({
+      state: 'ready',
+      items: [item('a', 'يد إلهية', 'safe'), item('b', 'لا بلد للعجائز', 'safe'), item('c', 'اشتباك', 'discovery')],
+    });
+    mockApi.getReadiness.mockResolvedValue(readyReadiness);
+  });
+
+  it('says what the model learned once, instead of explaining the four values', async () => {
+    const { container } = render(<RecommendationsScreen lang="ar" profileId="p1" />);
+    await screen.findByLabelText('ذوقك حتى الآن');
+
+    // The paragraph that described the values is gone; the values show themselves.
+    expect(screen.queryByText(/لكل فيلم أربع قيم منفصلة/)).toBeNull();
+    // The counts come from the readiness contract, not from this screen.
+    await waitFor(() => expect(screen.getByText('جولات رتّبتها')).toBeInTheDocument());
+    expect(screen.getByText('أفلام شاهدتها')).toBeInTheDocument();
+    // The band is stated once for the whole screen.
+    expect(container.querySelectorAll('[class*="confidenceOnce"]')).toHaveLength(1);
+  });
+
+  it('leans on the traits the items agree on', async () => {
+    render(<RecommendationsScreen lang="ar" profileId="p1" />);
+
+    await waitFor(() => expect(screen.getByText('غموض مقصود')).toBeInTheDocument());
+  });
+
+  it('shows each track as a shelf, and gives the full cards back when it is opened', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<RecommendationsScreen lang="ar" profileId="p1" />);
+    await screen.findByLabelText('ذوقك حتى الآن');
+
+    // A shelf carries tiles: no action buttons and no reason line on them.
+    expect(container.querySelectorAll('[class*="rail"]').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: 'أضف إلى قائمتي' })).toBeNull();
+
+    // Every track opens, not only the ones with items left over: the tiles
+    // carry no actions, so the way in must always be there.
+    await user.click(screen.getAllByRole('button', { name: 'افتح المسار' })[0]);
+
+    expect(container.querySelectorAll('[class*="rail"]').length).toBeLessThan(3);
+    expect(screen.getAllByRole('button', { name: 'أضف إلى قائمتي' }).length).toBeGreaterThan(0);
+  });
 });
 
 describe('RecommendationsScreen — pending', () => {

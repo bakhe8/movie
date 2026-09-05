@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError, type ProfileReadiness, type Recommendation, type RecommendationTrack, type TrainingSummary } from '../lib/api';
 import { TRACK_COPY } from '../lib/copy';
-import { formatNumber, todayLocal, type PersonalFitLevel } from '../lib/format';
+import { formatConfidence, formatNumber, todayLocal, topTraits, type PersonalFitLevel } from '../lib/format';
 import { WorkCard } from './WorkCard';
 import styles from './RecommendationsScreen.module.css';
 
@@ -18,7 +18,15 @@ const labels = {
   ar: {
     eyebrow: 'قرار الليلة',
     title: 'المقترح لك',
-    hint: 'لكل فيلم أربع قيم منفصلة: الملاءمة الشخصية، الجودة العامة، التوفر، والثقة. لا نجمعها في رقم واحد.',
+    // The four values are shown, not described (ADR-111): the paragraph that
+    // said so is gone, and this strip says what the model has learned so far
+    // -- once, at the top, instead of a confidence sentence under every card.
+    tasteTitle: 'ذوقك حتى الآن',
+    rounds: 'جولات رتّبتها',
+    watchedTitles: 'أفلام شاهدتها',
+    traits: 'ما تعلّمناه',
+    traitsPending: 'ما زلنا نجمع سماتك.',
+    confidenceOnce: (band: string) => `الثقة: ${band}`,
     pendingTitle: 'ما زلنا نتعلم ذوقك',
     pendingBody: 'التوصيات تظهر بعد أن يُدرَّب نموذجك على جولات ترتيب كافية.',
     // Once the rounds are enough, the backend says what became of them; each
@@ -70,6 +78,9 @@ const labels = {
     reasonSource: 'من اختياراتك أنت',
     reasonWeak: 'والدليل ما زال قليلًا.',
     showMore: (n: string) => `عرض ${n} أخرى`,
+    // A shelf of tiles has no action buttons, so every track needs a way in --
+    // not only the ones with items left over (ADR-111).
+    openTrack: 'افتح المسار',
     showLess: 'عرض أقل',
     addToList: 'أضف إلى قائمتي',
     added: 'في قائمتك',
@@ -83,7 +94,12 @@ const labels = {
   en: {
     eyebrow: "Tonight's pick",
     title: 'Recommended for you',
-    hint: 'Each film shows four separate values: personal fit, public quality, availability and confidence. They are never merged into one number.',
+    tasteTitle: 'Your taste so far',
+    rounds: 'rounds ranked',
+    watchedTitles: 'films watched',
+    traits: 'what we learned',
+    traitsPending: 'Still gathering your traits.',
+    confidenceOnce: (band: string) => `Confidence: ${band}`,
     pendingTitle: 'Still learning your taste',
     pendingBody: 'Recommendations appear once your model has been trained on enough ranking rounds.',
     training: {
@@ -130,6 +146,7 @@ const labels = {
     reasonSource: 'from your own choices',
     reasonWeak: 'The evidence is still thin.',
     showMore: (n: string) => `Show ${n} more`,
+    openTrack: 'Open the track',
     showLess: 'Show less',
     addToList: 'Add to my list',
     added: 'On your list',
@@ -148,7 +165,7 @@ const labels = {
 // which of the situations below the user is actually in.
 type Phase =
   | { kind: 'loading' }
-  | { kind: 'ready' }
+  | { kind: 'ready'; readiness: ProfileReadiness | null }
   | { kind: 'pending'; watched: number | null; needed: number; training: TrainingSummary; readiness: ProfileReadiness | null }
   | { kind: 'paused' }
   | { kind: 'outdated' }
@@ -292,7 +309,15 @@ export function RecommendationsScreen({
       const result = await api.getRecommendations(profileId, 15);
       if (result.state === 'ready' && result.items.length > 0) {
         setItems(result.items);
-        setPhase({ kind: 'ready' });
+        // The cards paint first; the taste strip's counts follow. Readiness is
+        // a second request (ADR-103) and the list must not wait on it -- if it
+        // never answers, the strip shows the traits it can read from the items
+        // themselves and nothing is claimed that was not measured.
+        setPhase({ kind: 'ready', readiness: null });
+        void readinessOrNull(profileId).then((readiness) => {
+          if (!readiness) return;
+          setPhase((current) => (current.kind === 'ready' ? { ...current, readiness } : current));
+        });
       } else if (result.state === 'ready') {
         // A ready model that returned nothing: an empty list is not an
         // answer, so ask readiness why (ADR-103 -- almost always an empty
@@ -432,11 +457,48 @@ export function RecommendationsScreen({
     }
   }
 
+  // What the model has learned, said once at the top (ADR-111, audit P0 #4
+  // and #15): the counts come from the readiness contract, the traits from
+  // the reasons of the very items below, and the confidence band is the
+  // model's own -- so nothing here is a number this screen invented.
+  const rounds = phase.kind === 'ready' ? (phase.readiness?.rounds ?? null) : null;
+  const band = phase.kind === 'ready' ? (phase.readiness?.recommendation.confidenceBand ?? null) : null;
+  const traits = phase.kind === 'ready' ? topTraits(items.map((item) => item.reason), lang) : [];
+
+  const tasteStrip = phase.kind === 'ready' && (rounds || traits.length > 0 || band) && (
+    <section className={styles.taste} aria-label={t.tasteTitle}>
+      {rounds && (
+        <dl className={styles.counts}>
+          <div>
+            <dd>{formatNumber(rounds.learningRounds, lang)}</dd>
+            <dt>{t.rounds}</dt>
+          </div>
+          <div>
+            <dd>{formatNumber(rounds.watchedTitles, lang)}</dd>
+            <dt>{t.watchedTitles}</dt>
+          </div>
+        </dl>
+      )}
+      <div className={styles.traitRow}>
+        {traits.length > 0 ? (
+          traits.map((trait) => (
+            <span key={trait} className={styles.trait}>
+              {trait}
+            </span>
+          ))
+        ) : (
+          <span className={styles.traitsPending}>{t.traitsPending}</span>
+        )}
+        {band && <span className={styles.confidenceOnce}>{t.confidenceOnce(formatConfidence(band, lang).label)}</span>}
+      </div>
+    </section>
+  );
+
   const header = (
     <div className={styles.header}>
       <p className={styles.eyebrow}>{t.eyebrow}</p>
       <h2>{t.title}</h2>
-      {phase.kind === 'ready' && <p className={styles.hint}>{t.hint}</p>}
+      {tasteStrip}
     </div>
   );
 
@@ -583,7 +645,7 @@ export function RecommendationsScreen({
               <p className={styles.empty}>{t.emptyTrack}</p>
             ) : (
               <>
-              <ol className={styles.list}>
+              <ol className={isExpanded ? styles.list : styles.rail}>
                 {shown.map((rec, index) => (
                   <li key={rec.title.id} className={styles.item}>
                     {/* The work card owns the four values and the reason
@@ -593,6 +655,9 @@ export function RecommendationsScreen({
                       lang={lang}
                       position={index + 1}
                       count={trackItems.length}
+                      // A shelf shows tiles; opening the track gives the full
+                      // cards back, with the reason and the three actions.
+                      compact={!isExpanded}
                       recommendation={rec}
                       listed={listed.has(rec.title.id)}
                       busy={busyTitleId === rec.title.id}
@@ -614,7 +679,7 @@ export function RecommendationsScreen({
                   </li>
                 ))}
               </ol>
-              {(hidden > 0 || isExpanded) && (
+              {(
                 <button
                   type="button"
                   className={styles.more}
@@ -627,7 +692,7 @@ export function RecommendationsScreen({
                     })
                   }
                 >
-                  {isExpanded ? t.showLess : t.showMore(formatNumber(hidden, lang))}
+                  {isExpanded ? t.showLess : hidden > 0 ? t.showMore(formatNumber(hidden, lang)) : t.openTrack}
                 </button>
               )}
               </>

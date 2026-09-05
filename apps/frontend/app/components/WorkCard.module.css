@@ -292,6 +292,60 @@
   line-height: var(--lh-body);
 }
 
+/* --- Compact: the card as a shelf tile (ADR-111) --------------------------
+   Poster over title over the fit bar, in a column narrow enough that the
+   next tile shows at the screen edge and the shelf reads as scrollable. */
+
+.compact {
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-2) var(--sp-3);
+}
+
+.compact .head {
+  grid-template-columns: 1fr;
+  gap: var(--sp-2);
+  justify-items: center;
+  text-align: center;
+}
+
+/* The position badge rides the poster's corner instead of taking a column. */
+.compact .head > :first-child {
+  grid-row: 1;
+  grid-column: 1;
+  align-self: start;
+  justify-self: start;
+  z-index: 1;
+  margin: var(--sp-1);
+}
+
+.compact .posterButton,
+.compact .head > [class*="poster"] {
+  grid-row: 1;
+  grid-column: 1;
+}
+
+.compact .titles {
+  justify-items: center;
+  text-align: center;
+}
+
+.compact .title {
+  font-size: var(--fs-14);
+}
+
+.compact .alt {
+  font-size: var(--fs-12);
+}
+
+.compact .strip {
+  padding-top: var(--sp-2);
+  gap: var(--sp-1);
+}
+
+.compact .pos {
+  display: none;
+}
+
 /* --- Actions -------------------------------------------------------------- */
 
 .actions {

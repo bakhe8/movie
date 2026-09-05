@@ -38,6 +38,69 @@
   line-height: var(--lh-body);
 }
 
+/* --- "Your taste so far" (ADR-111) ----------------------------------------
+   The screen's one statement about the model: two counts, the traits it is
+   leaning on, and the confidence band -- once, instead of a sentence under
+   each of thirteen cards (UX_AUDIT_MOBILE_2026-09-05 P0 #4, #15). */
+
+.taste {
+  display: grid;
+  gap: var(--sp-3);
+  margin-top: var(--sp-1);
+  padding: var(--sp-3);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+}
+
+.counts {
+  display: flex;
+  gap: var(--sp-6);
+  margin: 0;
+}
+
+.counts dd {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-20);
+  font-weight: var(--w-semibold);
+  line-height: var(--lh-heading);
+}
+
+.counts dt {
+  color: var(--muted);
+  font-size: var(--fs-12);
+  line-height: var(--lh-ui);
+}
+
+.traitRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.trait {
+  padding: 2px var(--sp-2);
+  border-radius: var(--r-chip);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--fs-12);
+  line-height: 1.6;
+}
+
+.traitsPending,
+.confidenceOnce {
+  color: var(--muted);
+  font-size: var(--fs-12);
+  line-height: 1.6;
+}
+
+/* The band sits at the row's end, away from the traits it qualifies. */
+.confidenceOnce {
+  margin-inline-start: auto;
+}
+
 /* --- Status and empty states ---------------------------------------------- */
 
 .status {
@@ -129,6 +192,38 @@
 /* Wrapper for the work card (components/WorkCard.tsx); the card styles itself. */
 .item {
   list-style: none;
+}
+
+/* --- The shelf (ADR-111) --------------------------------------------------
+   A track's preview is a row of tiles that scrolls sideways, so three tracks
+   fit a phone screen instead of thirteen stacked cards over 6065px. Opening
+   the track swaps this for `.list` and the full cards. */
+
+.rail {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 132px;
+  gap: var(--sp-3);
+  margin: 0;
+  padding: var(--sp-3);
+  list-style: none;
+  background: var(--well);
+  border-radius: var(--r-card);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  /* Logical: in RTL the shelf starts at the right and scrolls left. */
+  scroll-padding-inline-start: var(--sp-3);
+}
+
+.rail > li {
+  scroll-snap-align: start;
+}
+
+@media (min-width: 900px) {
+  .rail {
+    grid-auto-columns: 148px;
+  }
 }
 
 .more {

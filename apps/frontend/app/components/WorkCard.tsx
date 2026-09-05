@@ -106,6 +106,11 @@ type Shared = {
   onOpen?: () => void;
   // Inside the work page: the cells only (the page owns the head and the actions).
   headless?: boolean;
+  // On a shelf (ADR-111): poster, title and the fit bar only -- no reason and
+  // no action buttons, so three shelves fit the screen the audit measured at
+  // 6065px. Everything the compact form drops stays one tap away on the work
+  // page, and the full card returns when the reader opens the track.
+  compact?: boolean;
   // The host renders Public Quality itself (the work page, with the source's
   // attribution and date); skip the card's transitional quality cell.
   withoutQuality?: boolean;
@@ -139,7 +144,10 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
 
   const name = lang === 'ar' ? title.titleAr : title.titleEn;
   const alt = lang === 'ar' ? title.titleEn : title.titleAr;
-  const showAlt = Boolean(alt && alt !== name);
+  // A tile is 132px wide: the original title would take two more lines there
+  // and push the values off the shelf. It stays on the full card and on the
+  // work page, which the tile opens.
+  const showAlt = Boolean(alt && alt !== name) && !props.compact;
 
   // Relative forms only (ADR-33 §3): level + position, never the score.
   const fit = formatPersonalFit(position, count);
@@ -165,10 +173,13 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
     </div>
   );
 
-  const { onOpen, headless, withoutQuality } = props;
+  const { onOpen, headless, withoutQuality, compact } = props;
 
   return (
-    <article className={headless ? `${styles.card} ${styles.headless}` : styles.card} aria-label={name}>
+    <article
+      className={[styles.card, headless ? styles.headless : null, compact ? styles.compact : null].filter(Boolean).join(' ')}
+      aria-label={name}
+    >
       {!headless && (
         <div className={styles.head}>
           <span className={position === 1 ? `${styles.badge} ${styles.first}` : styles.badge} aria-label={t.position(position)}>
@@ -218,7 +229,7 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
         <span className={`${styles.trackChip} ${styles[`track_${rec.track}`]}`}>{TRACK_COPY[lang][rec.track].name}</span>
       )}
 
-      {reason && (
+      {reason && !compact && (
         <p className={styles.reason}>
           {reason} {weak && t.reasonWeak}
           <span className={styles.reasonSource}>{t.reasonSource}</span>
@@ -290,7 +301,7 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
             </div>
           )}
 
-          <div className={styles.meta}>
+          <div className={compact ? `${styles.meta} ${styles.srOnly}` : styles.meta}>
             <dt className={styles.srOnly}>{t.confidence}</dt>
             <dd className={styles.metaValue}>
               {/* The word alone. Its sentence used to repeat on every card --
@@ -307,7 +318,7 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
         </div>
       </dl>
 
-      {!isRanking && !headless && (
+      {!isRanking && !headless && !compact && (
         <div className={styles.actions}>
           <button
             type="button"

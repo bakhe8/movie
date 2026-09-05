@@ -47,6 +47,31 @@ export function formatReason(reason: RecommendationReason | undefined, lang: Lan
   return lang === 'ar' ? `ما يقرّبه من ذوقك: ${phrases.join('، ')}.` : `What brings it close to your taste: ${phrases.join(', ')}.`;
 }
 
+// The traits a whole list agrees on (ADR-111): the phrases that drive the
+// most items, so the screen can say what it learned once at the top instead
+// of repeating a reason under every card. Same copy and the same spoiler
+// filter as formatReason -- this only counts what that would have printed.
+export function topTraits(reasons: (RecommendationReason | undefined)[], lang: Lang, max = 2): string[] {
+  const copy = FEATURE_REASON_COPY[lang] as Partial<Record<string, { higher: string; lower: string }>>;
+  const counts = new Map<string, number>();
+  for (const reason of reasons) {
+    // One vote per item per phrase: a film that leans the same way twice
+    // must not outweigh two films that agree.
+    const seen = new Set<string>();
+    for (const feature of reason?.features ?? []) {
+      if (SPOILER_DIMENSIONS.has(feature.key)) continue;
+      const phrase = copy[feature.key]?.[feature.direction];
+      if (!phrase || seen.has(phrase)) continue;
+      seen.add(phrase);
+      counts.set(phrase, (counts.get(phrase) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, max)
+    .map(([phrase]) => phrase);
+}
+
 // One numeral system in both languages: Latin digits (identity decision Q12,
 // docs/IDENTITY_DECISIONS_2026-09-03.md -- 9 of 9 measured Arabic-language
 // film/streaming sites, Gulf and Egypt, use Latin digits; our data sources are

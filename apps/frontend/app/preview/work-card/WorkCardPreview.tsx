@@ -1,6 +1,7 @@
 'use client';
 
 import { WorkCard } from '../../components/WorkCard';
+import home from '../../components/RecommendationsScreen.module.css';
 import type { Recommendation, Title } from '../../lib/api';
 import styles from './preview.module.css';
 
@@ -50,6 +51,26 @@ const STATES: { name: string; rec: Recommendation; position: number; count: numb
 export function WorkCardPreview({ lang }: { lang: 'ar' | 'en' }) {
   return (
     <>
+      <section aria-label="shelf of tiles" className={styles.slot}>
+        <p className={styles.name}>shelf (compact tiles, as the home screen shows a track)</p>
+        <ol className={home.rail}>
+          {STATES.map((state) => (
+            <li key={`tile-${state.name}`}>
+              <WorkCard
+                lang={lang}
+                position={state.position}
+                count={state.count}
+                compact
+                recommendation={state.rec}
+                listed={false}
+                busy={false}
+                onOpen={() => {}}
+              />
+            </li>
+          ))}
+        </ol>
+      </section>
+
       {STATES.map((state) => (
         <section key={state.name} aria-label={state.name} className={styles.slot}>
           <p className={styles.name}>{state.name}</p>
