@@ -46,6 +46,15 @@ const FINGERPRINT_DIMENSIONS = [...FINGERPRINT_V1_DIMENSIONS, ...FINGERPRINT_V2_
 export type ConfidenceBand = 'initial' | 'likely' | 'strong' | 'inconclusive';
 export type RecommendationTrack = 'safe' | 'discovery' | 'outside_usual';
 
+// Watchability as its own axis (blueprint §6, §11.3; remediation brief
+// P1-04/AVL-01). `unknown` is the honest value and the only one this build
+// ever sends: `availability_snapshots` has no data source behind it, and a
+// missing fact is unknown, never "unavailable" and never a 0. Stated as a
+// field rather than left to be inferred from `watchabilityScore: null`, so a
+// client renders "we don't know" on purpose instead of by accident.
+export type AvailabilityState = 'unknown' | 'available' | 'unavailable';
+const AVAILABILITY_UNKNOWN: AvailabilityState = 'unknown';
+
 // Why a title ranks where it does (blueprint §9.4, ADR-20): only the
 // fingerprint dimensions that actually raised its score, as keys and a
 // direction -- the client owns the wording. `evidenceSource` is always
@@ -137,6 +146,11 @@ export interface RecommendationResult {
   publicQualityScore: number | null;
   publicQuality: PublicQuality | null;
   watchabilityScore: number | null;
+  // Always 'unknown' today (AVL-01). Personal Fit is computed with no market
+  // and no platform input at all -- see the contract test in
+  // test/availability-separation.e2e-spec.ts -- so this field can never
+  // reorder anything; it is display, kept beside the fit, never merged in.
+  availability: AvailabilityState;
   confidenceBand: ConfidenceBand;
   // Fraction (0-1) of fingerprint dimensions actually known for this title.
   // Unknown dimensions are imputed with the candidate-pool mean, never zero, and
@@ -262,6 +276,7 @@ export class RecommendationsService {
         publicQualityScore: publicQuality?.value ?? null,
         publicQuality,
         watchabilityScore: null,
+        availability: AVAILABILITY_UNKNOWN,
         confidenceBand: item.confidenceBand,
         fingerprintCoverage: item.fingerprintCoverage,
         track: item.track,

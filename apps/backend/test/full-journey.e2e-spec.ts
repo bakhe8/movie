@@ -200,5 +200,9 @@ describe.skipIf(!PYTHON_RUNNABLE)('First-run journey with the real model service
     // results exist, and they are served by the model this run just trained.
     expect(recommendations.body.length).toBeGreaterThan(0);
     expect(recommendations.body[0].modelVersion).toBe(status?.latestSnapshot?.modelVersion);
+    // AVL-01: watchability is its own axis and has no data source, so every
+    // item says so over real HTTP -- 'unknown', never "unavailable", never 0.
+    expect(recommendations.body[0].availability).toBe('unknown');
+    expect(recommendations.body[0].watchabilityScore).toBeNull();
   }, 120_000);
 });

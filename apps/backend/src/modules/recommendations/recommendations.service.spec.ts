@@ -417,6 +417,47 @@ describe('RecommendationsService', () => {
     expect(result[0].modelVersion).toBe('test-v1');
   });
 
+  // AVL-01, the separation contract (blueprint §4.4, §6): Personal Fit is a
+  // taste ordering; where a film can be watched is a different axis and must
+  // never touch it. The code has no market or platform input at all, which is
+  // the right design and exactly the kind of property that erodes silently --
+  // so it is pinned here rather than left to be re-read out of the source.
+  describe('availability is separate from fit (AVL-01)', () => {
+    async function rankUnderMarket(market: string | null) {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1', market });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot());
+      statesRepository.find.mockResolvedValue([]);
+      titlesRepository.createQueryBuilder.mockReturnValue(
+        queryBuilderMock([
+          { id: 'low-warmth', fingerprint: zeroFingerprint({ warmth: 0.1 }) },
+          { id: 'high-warmth', fingerprint: zeroFingerprint({ warmth: 0.9 }) },
+          { id: 'mid-warmth', fingerprint: zeroFingerprint({ warmth: 0.5 }) },
+        ] as unknown as Title[]),
+      );
+      return recommendItems('user-1', 'profile-1', 3);
+    }
+
+    it('gives the same order and the same fit scores in every market', async () => {
+      const sa = await rankUnderMarket('SA');
+      const ae = await rankUnderMarket('AE');
+      const none = await rankUnderMarket(null);
+
+      const shape = (items: Awaited<ReturnType<typeof rankUnderMarket>>) =>
+        items.map((item) => [item.title.id, item.personalFitScore, item.track, item.confidenceBand]);
+      expect(shape(ae)).toEqual(shape(sa));
+      expect(shape(none)).toEqual(shape(sa));
+      expect(shape(sa)[0][0]).toBe('high-warmth');
+    });
+
+    it('states availability as unknown on every item, rather than leaving it to be inferred', async () => {
+      const items = await rankUnderMarket('SA');
+      expect(items.map((item) => item.availability)).toEqual(['unknown', 'unknown', 'unknown']);
+      // Unknown is not "unavailable" and not 0 (BP §11.3): the separate
+      // numeric axis stays null too.
+      expect(items.every((item) => item.watchabilityScore === null)).toBe(true);
+    });
+  });
+
   // Blueprint gap 4: without a persisted row, the post-watch loop (§4.5)
   // has nothing to close and §16 has nothing to read.
   describe('persistence (blueprint gap 4)', () => {

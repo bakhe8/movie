@@ -250,11 +250,17 @@ export interface RecommendationReason {
   evidenceSource: 'individual' | 'population_enriched';
 }
 
+// Watchability as its own axis (blueprint §6, §11.3; AVL-01). 'unknown' is
+// what the API sends today and what the screen must render honestly -- a
+// missing fact, never "not available" and never a zero.
+export type AvailabilityState = 'unknown' | 'available' | 'unavailable';
+
 export interface Recommendation {
   title: Title;
   personalFitScore: number;
   publicQualityScore: number | null;
   watchabilityScore: number | null;
+  availability: AvailabilityState;
   confidenceBand: ConfidenceBand;
   // Fraction (0-1) of fingerprint dimensions known for this title; unknown ones
   // are imputed, never zero, and cost one confidence band (ADR-19).

@@ -209,11 +209,16 @@ export interface RecommendationReason {
   evidenceSource: 'individual' | 'population_enriched';
 }
 
+/** Watchability as its own axis (§6, §11.3, AVL-01): `unknown` until a real availability source exists -- never "unavailable", never 0. */
+export type AvailabilityState = 'unknown' | 'available' | 'unavailable';
+
 export interface Recommendation {
   title: Title;
   personalFitScore: number;
   publicQualityScore: number | null;
   watchabilityScore: number | null;
+  /** Always 'unknown' today; Personal Fit is computed without market or platform input, so this never reorders anything. */
+  availability: AvailabilityState;
   confidenceBand: ConfidenceBand;
   fingerprintCoverage: number;
   track: RecommendationTrack;
