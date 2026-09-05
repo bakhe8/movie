@@ -1008,6 +1008,25 @@ describe('RecommendationsService', () => {
       expect(items.filter((item) => item.track === 'outside_usual').map((item) => item.title.id)).toEqual(['t6']);
     });
 
+    // Board 15 (the A-13 observation, re-verified 2026-09-05): a live round
+    // of 7 came back all-`safe` with both other tracks empty. With history to
+    // cross, 7 shown at share 0.2 is floor(1.4) = 1 exploration slot -- so an
+    // all-safe 7 is only ever the no-history case above, never the share
+    // silently not applying. Pinned here at the screen's own limit.
+    it('gives a round of 7 exactly one outside_usual slot when the profile has history', async () => {
+      const titles = Array.from({ length: 30 }, (_, index) =>
+        titleWith(`t${index}`, (30 - index) / 30, ['Drama'], 'ar'),
+      );
+      titlesRepository.createQueryBuilder.mockReturnValue(queryBuilderMock(titles));
+
+      const items = await recommendItems('user-1', 'profile-1', 7);
+
+      expect(items).toHaveLength(7);
+      expect(items.slice(0, 6).map((item) => item.track)).toEqual(Array(6).fill('safe'));
+      // The one exploration slot comes from the tail of the full ranking.
+      expect(items[6]).toMatchObject({ track: 'outside_usual', title: { id: 't29' } });
+    });
+
     // The floor still applies: with four candidates, 20% is 0.8 of a slot and
     // no title is promoted to a track it did not earn.
     it('spends nothing when the share does not add up to a whole slot', async () => {
