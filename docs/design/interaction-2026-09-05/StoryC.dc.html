@@ -1,0 +1,119 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Readex+Pro:wght@500;600;700&display=swap">
+  <style>
+    body { margin: 0; background: #06070f; color: #eef0ff; font-family: 'IBM Plex Sans Arabic','Segoe UI',sans-serif; font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+    a { color: #8b7cff; } a:hover { color: #a99dff; }
+    .disp { font-family: 'Readex Pro','IBM Plex Sans Arabic',sans-serif; line-height: 1.3; }
+    .num { font-variant-numeric: tabular-nums; }
+    .frame { width: 176px; height: 250px; border: 1px solid #232853; border-radius: 10px; background: #0b0d1e; padding: 10px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; position: relative; overflow: hidden; }
+    .pick { height: 72px; border-radius: 8px; border: 1px solid #232853; background: #10132a; display: flex; align-items: center; gap: 8px; padding: 0 8px; }
+    .sw { width: 34px; height: 52px; border-radius: 4px; flex: none; }
+    .line { flex: 1; height: 6px; border-radius: 3px; background: #232853; }
+    .cap { font-size: 12px; color: #9aa0c8; line-height: 1.55; }
+    .step { display: flex; flex-direction: column; gap: 8px; width: 176px; }
+    .tick { font-family: 'Readex Pro',sans-serif; font-size: 12px; color: #8b7cff; }
+    .dot { width: 16px; height: 4px; border-radius: 2px; background: #232853; }
+    .dotOn { width: 16px; height: 4px; border-radius: 2px; background: #8b7cff; }
+    .finger { position: absolute; width: 26px; height: 26px; border-radius: 13px; background: rgba(255,255,255,.22); border: 1px solid rgba(255,255,255,.4); }
+    .or { display: flex; align-items: center; gap: 6px; font-size: 10px; color: #9aa0c8; }
+    .or i { flex: 1; height: 1px; background: #232853; }
+  </style>
+</helmet>
+<div style="width: 1060px; height: 420px; box-sizing: border-box; padding: 22px 24px; background: #06070f; direction: rtl; display: flex; flex-direction: column; gap: 14px;">
+
+  <div style="display: flex; align-items: baseline; justify-content: space-between;">
+    <h1 class="disp" style="margin: 0; font-size: 20px; font-weight: 600;">اتجاه ج · حركة المقارنة الثنائية</h1>
+    <span style="font-size: 12px; color: #9aa0c8;">لمسة واحدة لكل سؤال · لا سحب إطلاقًا · الترتيب يُعرض ليُؤكَّد لا ليُفترض</span>
+  </div>
+
+  <div style="display: flex; gap: 16px;">
+
+    <div class="step">
+      <div class="frame">
+        <div style="font-size: 11px; color: #9aa0c8;">السؤال 1 من 2</div>
+        <div class="pick"><span class="sw" style="background: linear-gradient(160deg,#b0532e,#171b38);"></span><span class="line"></span></div>
+        <div class="or"><i></i>أم<i></i></div>
+        <div class="pick"><span class="sw" style="background: linear-gradient(160deg,#d08a3a,#171b38);"></span><span class="line"></span></div>
+        <div style="margin-top: auto; display: flex; gap: 6px;">
+          <span style="flex: 1; height: 24px; border-radius: 5px; border: 1px solid #232853; font-size: 10px; color: #9aa0c8; display: grid; place-items: center;">متساويان</span>
+          <span style="flex: 1; height: 24px; border-radius: 5px; border: 1px solid #232853; font-size: 10px; color: #9aa0c8; display: grid; place-items: center;">لم أشاهد</span>
+        </div>
+      </div>
+      <div class="tick">1 · السؤال</div>
+      <div class="cap">فيلمان فقط، أحدهما فوق الآخر. «متساويان» و«لم أشاهد» مخرجان صادقان: غير المشاهَد مجهول لا مرفوض.</div>
+    </div>
+
+    <div class="step">
+      <div class="frame">
+        <div style="font-size: 11px; color: #9aa0c8;">السؤال 1 من 2</div>
+        <div class="pick" style="border-color: #8b7cff; transform: scale(1.03);"><span class="sw" style="background: linear-gradient(160deg,#b0532e,#171b38);"></span><span class="line" style="background: #8b7cff;"></span></div>
+        <div class="or"><i></i>أم<i></i></div>
+        <div class="pick" style="opacity: .45;"><span class="sw" style="background: linear-gradient(160deg,#d08a3a,#171b38);"></span><span class="line"></span></div>
+        <span class="finger" style="inset-inline-end: 20px; top: 44px;"></span>
+      </div>
+      <div class="tick">2 · اللمسة · 120 مللي</div>
+      <div class="cap">المختار يكبر 3% وتمتلئ علامته، والآخر يخفت إلى 45%. لا شيء يُرمى ولا شيء يُرفض: أحدهما فقط تقدّم.</div>
+    </div>
+
+    <div class="step">
+      <div class="frame">
+        <div style="font-size: 11px; color: #9aa0c8;">السؤال 1 من 2</div>
+        <div class="pick" style="transform: translateY(-18px); opacity: .25;"><span class="sw" style="background: linear-gradient(160deg,#b0532e,#171b38);"></span><span class="line"></span></div>
+        <div class="pick" style="transform: translateY(-18px); opacity: .15;"><span class="sw" style="background: linear-gradient(160deg,#d08a3a,#171b38);"></span><span class="line"></span></div>
+        <div style="margin-top: auto; text-align: center; font-size: 10px; color: #9aa0c8;">يخرجان معًا إلى الأعلى</div>
+      </div>
+      <div class="tick">3 · الخروج · 180 مللي</div>
+      <div class="cap">البطاقتان تخرجان معًا إلى الأعلى، لا واحدة يمينًا وأخرى يسارًا: الخروج الجانبي يقول قبول ورفض، وهذا ليس ما حدث.</div>
+    </div>
+
+    <div class="step">
+      <div class="frame">
+        <div style="font-size: 11px; color: #8b7cff;">السؤال 2 من 2</div>
+        <div class="pick" style="transform: translateY(4px);"><span class="sw" style="background: linear-gradient(160deg,#d08a3a,#171b38);"></span><span class="line"></span></div>
+        <div class="or"><i></i>أم<i></i></div>
+        <div class="pick" style="transform: translateY(4px);"><span class="sw" style="background: linear-gradient(160deg,#c94f8a,#171b38);"></span><span class="line"></span></div>
+        <div style="margin-top: auto; height: 4px; border-radius: 2px; background: #232853; overflow: hidden;"><i style="display: block; width: 50%; height: 100%; background: #8b7cff;"></i></div>
+      </div>
+      <div class="tick">4 · السؤال التالي · 180 مللي</div>
+      <div class="cap">الزوج التالي يدخل من الأسفل. الشريط يتقدّم نصفًا واحدًا لأن سؤالًا واحدًا أُجيب فعلًا: لا تقدّم قبل عمل.</div>
+    </div>
+
+    <div class="step">
+      <div class="frame">
+        <div style="font-size: 11px; color: #9aa0c8;">الترتيب الناتج</div>
+        <div style="display: flex; align-items: center; gap: 6px;"><span class="num" style="font-size: 11px; color: #8b7cff;">1</span><span class="sw" style="width: 24px; height: 36px; background: linear-gradient(160deg,#b0532e,#171b38);"></span><span class="line"></span></div>
+        <div style="display: flex; align-items: center; gap: 6px;"><span class="num" style="font-size: 11px; color: #8b7cff;">2</span><span class="sw" style="width: 24px; height: 36px; background: linear-gradient(160deg,#d08a3a,#171b38);"></span><span class="line"></span></div>
+        <div style="display: flex; align-items: center; gap: 6px;"><span class="num" style="font-size: 11px; color: #8b7cff;">3</span><span class="sw" style="width: 24px; height: 36px; background: linear-gradient(160deg,#c94f8a,#171b38);"></span><span class="line"></span></div>
+        <div style="margin-top: auto; height: 30px; border-radius: 6px; background: #8b7cff; color: #12093d; display: grid; place-items: center; font-size: 11px; font-weight: 600;">هذا ترتيبي</div>
+      </div>
+      <div class="tick">5 · التأكيد · 60 مللي لكل سطر</div>
+      <div class="cap">الأسطر الثلاثة تظهر تباعًا فيُقرأ الترتيب المستنتج، ويبقى قابلًا للتعديل بالسحب قبل التأكيد. الاستنتاج يُعرض، لا يُفرض.</div>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 24px; padding-top: 2px; border-top: 1px solid #232853;">
+    <div style="flex: 1; padding-top: 10px;">
+      <div style="font-size: 12px; color: #eef0ff; font-weight: 600;">حركة مخفّضة</div>
+      <div class="cap">الأزواج تتبدّل فورًا بلا انزلاق، والأسطر الثلاثة تظهر دفعة واحدة.</div>
+    </div>
+    <div style="flex: 1; padding-top: 10px;">
+      <div style="font-size: 12px; color: #eef0ff; font-weight: 600;">التراجع</div>
+      <div class="cap">«تراجع عن آخر إجابة» ظاهر دائمًا أسفل الشاشة، وقبل التأكيد يمكن تعديل الترتيب المستنتج مباشرة.</div>
+    </div>
+    <div style="flex: 1; padding-top: 10px;">
+      <div style="font-size: 12px; color: #eef0ff; font-weight: 600;">الثمن</div>
+      <div class="cap">شاشتان بدل واحدة، ولا يرى المستخدم الثلاثة معًا إلا في التأكيد. مقابل ذلك: لمستان فقط، بلا سحب، بيد واحدة.</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

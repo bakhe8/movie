@@ -1,0 +1,116 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Readex+Pro:wght@500;600;700&display=swap">
+  <style>
+    body { margin: 0; background: #06070f; color: #eef0ff; font-family: 'IBM Plex Sans Arabic','Segoe UI',sans-serif; font-size: 16px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+    a { color: #8b7cff; } a:hover { color: #a99dff; }
+    .disp { font-family: 'Readex Pro','IBM Plex Sans Arabic',sans-serif; line-height: 1.3; }
+    .num { font-variant-numeric: tabular-nums; }
+    .tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 12px; color: #9aa0c8; }
+    .tab.on { color: #8b7cff; }
+    .pick { position: relative; display: flex; align-items: center; gap: 14px; padding: 12px; border-radius: 12px; background: #10132a; border: 1px solid #232853; }
+    .poster { position: relative; width: 92px; height: 138px; border-radius: 8px; flex: none; overflow: hidden; }
+    .ini { position: absolute; inset: 0; display: grid; place-items: center; font-family: 'Readex Pro',sans-serif; font-weight: 700; font-size: 38px; color: rgba(255,255,255,0.16); }
+    .ttl { font-family: 'Readex Pro',sans-serif; font-size: 18px; font-weight: 600; line-height: 1.3; }
+    .yr { font-size: 13px; color: #9aa0c8; direction: ltr; text-align: right; }
+    .badge { position: absolute; inset-block-start: 10px; inset-inline-start: 10px; height: 28px; padding: 0 10px; border-radius: 14px; display: grid; place-items: center; font-size: 12px; }
+  </style>
+</helmet>
+<div style="position: relative; width: 390px; height: 844px; overflow: hidden; background: #06070f; direction: rtl;">
+
+  <div style="position: absolute; inset-inline: 0; top: 0; height: 4px; background: #8b7cff;"></div>
+
+  <header style="height: 56px; display: flex; align-items: center; justify-content: space-between; padding: 4px 6px 0 6px; border-bottom: 1px solid #232853;">
+    <div style="width: 44px; height: 44px; display: grid; place-items: center; color: #eef0ff;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px; direction: ltr;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="#8b7cff"><rect x="2" y="6" width="6" height="12" rx="1.5"></rect><rect x="9" y="3" width="6" height="18" rx="1.5"></rect><rect x="16" y="6" width="6" height="12" rx="1.5"></rect></svg>
+      <span class="disp" style="font-size: 19px; font-weight: 600;">Kolme</span>
+    </div>
+    <div style="width: 44px; height: 44px;"></div>
+  </header>
+
+  <main style="display: flex; flex-direction: column; gap: 16px; padding: 18px 16px 0 16px;">
+
+    <div>
+      <div style="font-size: 12px; color: #8b7cff; font-weight: 500;">اتجاه ج · المقارنة</div>
+      <h2 class="disp" style="margin: 4px 0 0 0; font-size: 26px; font-weight: 600;">أيّهما أعجبك أكثر؟</h2>
+      <p style="margin: 6px 0 0 0; font-size: 13px; color: #9aa0c8;">سؤالان قصيران يكفيان لترتيب الثلاثة. لمسة واحدة لكل سؤال، ولا سحب.</p>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span class="num" style="font-size: 12px; color: #9aa0c8;">السؤال 1 من 2</span>
+      <span style="flex: 1; height: 4px; border-radius: 2px; background: #232853; overflow: hidden;"><i style="display: block; width: 50%; height: 100%; background: #8b7cff;"></i></span>
+    </div>
+
+    <div class="pick" style="border-color: #8b7cff;">
+      <div class="poster" style="background: linear-gradient(160deg,#b0532e,#171b38);"><span class="ini">R</span></div>
+      <div style="flex: 1; min-width: 0;">
+        <div class="ttl">آر آر آر</div>
+        <div class="yr num">RRR · 2022</div>
+      </div>
+      <span style="width: 44px; height: 44px; display: grid; place-items: center; border-radius: 22px; background: #8b7cff; color: #12093d;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg>
+      </span>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <span style="flex: 1; height: 1px; background: #232853;"></span>
+      <span style="font-size: 12px; color: #9aa0c8;">أم</span>
+      <span style="flex: 1; height: 1px; background: #232853;"></span>
+    </div>
+
+    <div class="pick">
+      <div class="poster" style="background: linear-gradient(160deg,#d08a3a,#171b38);"><span class="ini">C</span></div>
+      <div style="flex: 1; min-width: 0;">
+        <div class="ttl">كوكو</div>
+        <div class="yr num">Coco · 2017</div>
+      </div>
+      <span style="width: 44px; height: 44px; display: grid; place-items: center; border-radius: 22px; border: 1px solid #232853; color: #9aa0c8;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg>
+      </span>
+    </div>
+
+    <div style="display: flex; gap: 10px; padding-top: 2px;">
+      <div style="flex: 1; display: flex; align-items: center; justify-content: center; height: 44px; border-radius: 8px; border: 1px solid #232853; font-size: 13px; color: #eef0ff;">متساويان</div>
+      <div style="flex: 1; display: flex; align-items: center; justify-content: center; height: 44px; border-radius: 8px; border: 1px solid #232853; font-size: 13px; color: #eef0ff;">لم أشاهد أحدهما</div>
+    </div>
+
+    <div style="margin-top: 4px; padding: 12px 14px; background: #10132a; border: 1px solid #232853; border-radius: 8px;">
+      <div style="font-size: 12px; color: #9aa0c8;">بعد السؤالين نعرض الترتيب الناتج لتؤكّده:</div>
+      <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">
+        <span class="num" style="font-size: 13px;">1 آر آر آر</span>
+        <span style="color: #9aa0c8;">›</span>
+        <span class="num" style="font-size: 13px;">2 كوكو</span>
+        <span style="color: #9aa0c8;">›</span>
+        <span class="num" style="font-size: 13px;">3 باربي</span>
+      </div>
+    </div>
+  </main>
+
+  <div style="position: absolute; inset-inline: 0; bottom: 61px; padding: 10px 16px 14px 16px; background: linear-gradient(180deg, rgba(6,7,15,0) 0%, #06070f 40%);">
+    <div style="display: flex; align-items: center; justify-content: space-between; height: 44px; padding: 0 14px; border-radius: 8px; border: 1px solid #232853; color: #9aa0c8; font-size: 13px;">
+      <span>تراجع عن آخر إجابة</span>
+      <span style="color: #8b7cff;">تراجع</span>
+    </div>
+  </div>
+
+  <nav style="position: absolute; bottom: 0; inset-inline: 0; height: 61px; display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid #232853; background: #06070f;">
+    <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"><path d="M4 11l8-7 8 7v9H4z"/></svg><span>الرئيسية</span></div>
+    <div class="tab on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M4 7h16M7 12h10M10 17h4"/></svg><span>رتّب</span></div>
+    <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M15 9l-2 5-4 1 2-5z"/></svg><span>اكتشف</span></div>
+    <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"><path d="M7 4h10v16l-5-3.5L7 20z"/></svg><span>قائمتي</span></div>
+    <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20a7 7 0 0114 0"/></svg><span>ملفي</span></div>
+  </nav>
+</div>
+</x-dc>
+</body>
+</html>
