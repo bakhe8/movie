@@ -23,5 +23,18 @@ export function Poster({ title, size = 'sm', className }: { title?: Pick<Title, 
     // eslint-disable-next-line @next/next/no-img-element
     return <img className={classes} src={url} alt="" loading="lazy" decoding="async" />;
   }
-  return <span className={`${classes} ${styles.hollow}`} aria-hidden="true" />;
+  // The empty slot is drawn, not left blank (remediation brief P1-05 /
+  // L10N-01): a dashed 2:3 frame with a neutral film mark, so a title with no
+  // licensed image reads as "no poster" rather than as a broken layout. The
+  // mark is a glyph in `currentColor` -- not an image, not a stock still, not
+  // a generated one (DATA_LICENSING §4 rule 5, decision Q16).
+  return (
+    <span className={`${classes} ${styles.hollow}`} aria-hidden="true">
+      <svg className={styles.mark} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" focusable="false">
+        <rect x="3.5" y="3.5" width="17" height="17" rx="2.5" />
+        <path d="M8.5 3.5v17M15.5 3.5v17" />
+        <path d="M3.5 9h5M3.5 15h5M15.5 9h5M15.5 15h5" />
+      </svg>
+    </span>
+  );
 }

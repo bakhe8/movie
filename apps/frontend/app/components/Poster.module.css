@@ -24,9 +24,19 @@
 }
 
 .hollow {
+  display: grid;
+  place-items: center;
   border-style: dashed;
   border-color: var(--line);
   background: transparent;
+  color: var(--muted);
+}
+
+/* Quiet enough that a row of real posters stays the subject of the screen. */
+.mark {
+  width: 38%;
+  height: auto;
+  opacity: 0.55;
 }
 
 @media (min-width: 900px) {

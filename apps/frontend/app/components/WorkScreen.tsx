@@ -3,6 +3,7 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { api, type FingerprintDimension, type LibraryRankingItem, type Recommendation, type Title, type TitleState } from '../lib/api';
 import { FEATURE_REASON_COPY } from '../lib/copy';
+import { genreLabel } from '../lib/genres';
 import { todayLocal } from '../lib/format';
 import { PublicQualityCell } from '../public-quality/PublicQualityCell';
 import { collectSources, SourcesFooter } from '../public-quality/SourcesFooter';
@@ -309,7 +310,7 @@ export function WorkScreen({
         {title.genres && title.genres.length > 0 && (
           <ul className={styles.genres}>
             {title.genres.map((genre) => (
-              <li key={genre}>{genre}</li>
+              <li key={genre}>{genreLabel(genre, lang)}</li>
             ))}
           </ul>
         )}

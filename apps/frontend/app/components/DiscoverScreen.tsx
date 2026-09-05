@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, type Title, type TitleState } from '../lib/api';
 import { formatNumber, todayLocal } from '../lib/format';
+import { genreLabel } from '../lib/genres';
 import { Poster } from './Poster';
 import styles from './DiscoverScreen.module.css';
 
@@ -300,7 +301,7 @@ export function DiscoverScreen({
             // The other language's title helps recognise a film the user knows
             // under a different name (alternate-title search is a backend gap).
             const alt = lang === 'ar' ? title.titleEn : title.titleAr;
-            const meta = [title.releaseYear, title.genres?.join(' · ')].filter(Boolean).join(' · ');
+            const meta = [title.releaseYear, title.genres?.map((genre) => genreLabel(genre, lang)).join(' · ')].filter(Boolean).join(' · ');
             const state = states.get(title.id);
             const busy = busyId === title.id;
 

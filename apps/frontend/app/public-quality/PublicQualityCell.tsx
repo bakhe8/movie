@@ -1,5 +1,5 @@
 import type { Lang } from '../legal/content';
-import { formatNumber } from '../lib/format';
+import { formatDate, formatNumber } from '../lib/format';
 import styles from './PublicQualityCell.module.css';
 import { SOURCE_LABEL, type PublicQuality } from './types';
 
@@ -23,6 +23,7 @@ const copy = {
     unknown: 'لا مصدر بعد',
     outOf: (scale: string) => `من ${scale.split('-')[1] ?? scale}`,
     votes: (n: string) => `${n} تصويت`,
+    capturedAt: (d: string) => `بتاريخ ${d}`,
     sources: 'مصادر منفصلة، لا تُدمج',
   },
   en: {
@@ -30,6 +31,7 @@ const copy = {
     unknown: 'No source yet',
     outOf: (scale: string) => `out of ${scale.split('-')[1] ?? scale}`,
     votes: (n: string) => `${n} votes`,
+    capturedAt: (d: string) => `as of ${d}`,
     sources: 'Separate sources, never merged',
   },
 };
@@ -53,7 +55,17 @@ export function PublicQualityCell({ quality, lang, headless = false }: { quality
                   <span className={styles.num}>{formatNumber(s.value as number, lang)}</span>
                   {s.scale && <span className={styles.sub}>{t.outOf(s.scale)}</span>}
                   <span className={styles.sub}>
-                    {[SOURCE_LABEL[s.source] ?? s.source, s.votes !== null ? t.votes(formatNumber(s.votes, lang)) : null].filter(Boolean).join(' · ')}
+                    {[
+                      SOURCE_LABEL[s.source] ?? s.source,
+                      s.votes !== null ? t.votes(formatNumber(s.votes, lang)) : null,
+                      // A public score is a reading taken on a day, not a
+                      // standing fact: the day it was captured is shown with
+                      // it (remediation brief P1-05 / L10N-01). Absent only
+                      // for a source that predates the column.
+                      s.capturedAt ? t.capturedAt(formatDate(s.capturedAt, lang)) : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
                   </span>
                 </div>
               </div>
