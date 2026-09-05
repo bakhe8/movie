@@ -8,7 +8,7 @@ import '../../jest-dom-vitest';
  * 3. Reset taste dialog: cancel keeps profile; confirm calls resetProfile
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render as renderView, screen, waitFor } from '@testing-library/react';
+import { act, render as renderView, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ProfileScreen } from '../components/ProfileScreen';
 import { useSession } from '../lib/session';
@@ -87,6 +87,65 @@ beforeEach(() => {
   mockApi.getConsents.mockResolvedValue([]);
   mockApi.listPrivacyRequests.mockResolvedValue([]);
   mockApi.updateProfile.mockResolvedValue({});
+  BASE_SESSION.refreshProfile.mockResolvedValue(undefined);
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail; });
+  return { promise, resolve, reject };
+}
+
+describe('ProfileScreen — pending preferences', () => {
+  it('locks edits and Back through both the save and the confirming profile refresh', async () => {
+    const user = userEvent.setup();
+    const write = deferred<object>();
+    const refresh = deferred<void>();
+    mockApi.updateProfile.mockReturnValue(write.promise);
+    BASE_SESSION.refreshProfile.mockReturnValue(refresh.promise);
+    render(<ProfileScreen lang="ar" />);
+    await user.click(screen.getByRole('button', { name: /التفضيلات/ }));
+    const name = screen.getByLabelText('اسم ملف الذوق');
+    await user.clear(name);
+    await user.type(name, 'Saved name');
+    await user.click(screen.getByRole('button', { name: 'حفظ' }));
+    await waitFor(() => expect(mockApi.updateProfile).toHaveBeenCalledTimes(1));
+    expect(name).toBeDisabled();
+    expect(screen.getByLabelText('لغة الواجهة')).toBeDisabled();
+    expect(screen.getByLabelText('السوق')).toBeDisabled();
+    expect(screen.getByRole('button', { name: /نتفليكس/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'إلى ملفي' })).toBeDisabled();
+    await user.type(name, ' lost edit');
+    expect((name as HTMLInputElement).value).toBe('Saved name');
+
+    await act(async () => { write.resolve({}); });
+    expect(BASE_SESSION.refreshProfile).toHaveBeenCalledTimes(1);
+    expect(name).toBeDisabled();
+    expect(screen.queryByText('تم الحفظ.')).toBeNull();
+    await act(async () => { refresh.resolve(); });
+    expect(name).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'إلى ملفي' })).toBeEnabled();
+    expect(screen.getByRole('status')).toHaveTextContent('تم الحفظ.');
+  });
+
+  it('unlocks the submitted draft after a failed save', async () => {
+    const user = userEvent.setup();
+    const write = deferred<object>();
+    mockApi.updateProfile.mockReturnValue(write.promise);
+    render(<ProfileScreen lang="ar" />);
+    await user.click(screen.getByRole('button', { name: /التفضيلات/ }));
+    const name = screen.getByLabelText('اسم ملف الذوق');
+    await user.clear(name);
+    await user.type(name, 'Keep this draft');
+    await user.click(screen.getByRole('button', { name: 'حفظ' }));
+    expect(name).toBeDisabled();
+    await act(async () => { write.reject(new Error('offline')); });
+    expect(name).toBeEnabled();
+    expect((name as HTMLInputElement).value).toBe('Keep this draft');
+    expect(screen.getByRole('button', { name: 'إلى ملفي' })).toBeEnabled();
+    expect(screen.getByRole('alert')).toHaveTextContent('تعذّر الحفظ');
+  });
 });
 
 // UX_AUDIT_MOBILE_2026-09-05 P1 #10: the profile is a hub of four cards now,

@@ -555,7 +555,7 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
         <p className={styles.eyebrow}>{t.eyebrow}</p>
         <h2>{current ? current.name : t.title}</h2>
         {current && (
-          <button type="button" className={styles.back} onClick={() => setOpen(null)}>
+          <button type="button" className={styles.back} onClick={() => setOpen(null)} disabled={saving}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M9 6l6 6-6 6" />
             </svg>
@@ -697,12 +697,13 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
         <AppearancePicker lang={lang} />
         <div className={styles.field}>
           <label htmlFor="profile-name">{t.nameLabel}</label>
-          <input id="profile-name" value={name} maxLength={255} onChange={(event) => setName(event.target.value)} />
+          <input id="profile-name" value={name} maxLength={255} onChange={(event) => setName(event.target.value)} disabled={saving} />
         </div>
         <div className={styles.field}>
           <label htmlFor="profile-language">{t.languageLabel}</label>
           <select
             id="profile-language"
+            disabled={saving}
             value={language}
             onChange={(event) => setLanguage(event.target.value as PreferredLanguage)}
           >
@@ -712,7 +713,7 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
         </div>
         <div className={styles.field}>
           <label htmlFor="profile-market">{t.marketLabel}</label>
-          <select id="profile-market" value={market} onChange={(event) => setMarket(event.target.value)}>
+          <select id="profile-market" value={market} onChange={(event) => setMarket(event.target.value)} disabled={saving}>
             <option value="" disabled={market !== ''}>
               {t.marketPlaceholder}
             </option>
@@ -723,7 +724,7 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
             ))}
           </select>
         </div>
-        <fieldset className={`${styles.field} ${styles.fieldset}`}>
+        <fieldset className={`${styles.field} ${styles.fieldset}`} disabled={saving}>
           <legend>{t.platformsLabel}</legend>
           <div className={styles.chips}>
             {PLATFORMS.map((option) => {

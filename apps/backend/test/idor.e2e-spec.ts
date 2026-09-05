@@ -99,6 +99,105 @@ describe('Cross-user access (IDOR) and auth guards', () => {
   });
 
   describe('profiles', () => {
+    // Appearance must survive real HTTP/database boundaries, including the
+    // profile list a newly authenticated browser uses to restore its choice.
+    it('persists every appearance and restores the last choice after a fresh login', async () => {
+      const appearanceProfileId = await createProfile(userA.token, 'Appearance readback');
+      for (const preferredAppearance of ['cinema', 'premiere', 'montage']) {
+        const patched = await request(app.getHttpServer())
+          .patch(`/profiles/${appearanceProfileId}`)
+          .set('Authorization', `Bearer ${userA.token}`)
+          .send({ preferredAppearance })
+          .expect(200);
+        expect(patched.body).toMatchObject({ id: appearanceProfileId, preferredAppearance });
+
+        const loaded = await request(app.getHttpServer())
+          .get(`/profiles/${appearanceProfileId}`)
+          .set('Authorization', `Bearer ${userA.token}`)
+          .expect(200);
+        expect(loaded.body.preferredAppearance).toBe(preferredAppearance);
+      }
+
+      const login = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: userA.email, password: 'CorrectHorseBattery1' })
+        .expect(201);
+      const profiles = await request(app.getHttpServer())
+        .get('/profiles')
+        .set('Authorization', `Bearer ${login.body.access_token}`)
+        .expect(200);
+      expect(profiles.body.find((entry: { id: string }) => entry.id === appearanceProfileId))
+        .toMatchObject({ preferredAppearance: 'montage', preferredLanguage: 'ar' });
+    });
+
+    it('keeps the saved appearance through later name and language patches', async () => {
+      const appearanceProfileId = await createProfile(userA.token, 'Appearance with settings');
+      await request(app.getHttpServer())
+        .patch(`/profiles/${appearanceProfileId}`)
+        .set('Authorization', `Bearer ${userA.token}`)
+        .send({ preferredAppearance: 'premiere' })
+        .expect(200);
+      await request(app.getHttpServer())
+        .patch(`/profiles/${appearanceProfileId}`)
+        .set('Authorization', `Bearer ${userA.token}`)
+        .send({ name: 'Renamed appearance profile' })
+        .expect(200);
+      await request(app.getHttpServer())
+        .patch(`/profiles/${appearanceProfileId}`)
+        .set('Authorization', `Bearer ${userA.token}`)
+        .send({ preferredLanguage: 'en' })
+        .expect(200);
+
+      const reloaded = await request(app.getHttpServer())
+        .get(`/profiles/${appearanceProfileId}`)
+        .set('Authorization', `Bearer ${userA.token}`)
+        .expect(200);
+      expect(reloaded.body).toMatchObject({
+        name: 'Renamed appearance profile', preferredLanguage: 'en', preferredAppearance: 'premiere',
+      });
+    });
+
+    it('rejects an invalid appearance without erasing the persisted choice', async () => {
+      const appearanceProfileId = await createProfile(userA.token, 'Appearance validation');
+      await request(app.getHttpServer())
+        .patch(`/profiles/${appearanceProfileId}`)
+        .set('Authorization', `Bearer ${userA.token}`)
+        .send({ preferredAppearance: 'cinema' })
+        .expect(200);
+      for (const preferredAppearance of ['dark', 'unsupported-style']) {
+        const rejected = await request(app.getHttpServer())
+          .patch(`/profiles/${appearanceProfileId}`)
+          .set('Authorization', `Bearer ${userA.token}`)
+          .send({ preferredAppearance })
+          .expect(400);
+        expect(JSON.stringify(rejected.body.message)).toContain('preferredAppearance');
+      }
+      const reloaded = await request(app.getHttpServer())
+        .get(`/profiles/${appearanceProfileId}`)
+        .set('Authorization', `Bearer ${userA.token}`)
+        .expect(200);
+      expect(reloaded.body.preferredAppearance).toBe('cinema');
+    });
+
+    it('blocks another account from changing the saved appearance', async () => {
+      const appearanceProfileId = await createProfile(userA.token, 'Private appearance');
+      await request(app.getHttpServer())
+        .patch(`/profiles/${appearanceProfileId}`)
+        .set('Authorization', `Bearer ${userA.token}`)
+        .send({ preferredAppearance: 'montage' })
+        .expect(200);
+      await request(app.getHttpServer())
+        .patch(`/profiles/${appearanceProfileId}`)
+        .set('Authorization', `Bearer ${userB.token}`)
+        .send({ preferredAppearance: 'premiere' })
+        .expect(404);
+      const reloaded = await request(app.getHttpServer())
+        .get(`/profiles/${appearanceProfileId}`)
+        .set('Authorization', `Bearer ${userA.token}`)
+        .expect(200);
+      expect(reloaded.body.preferredAppearance).toBe('montage');
+    });
+
     it("blocks user B from reading user A's profile", async () => {
       await request(app.getHttpServer())
         .get(`/profiles/${profileAId}`)

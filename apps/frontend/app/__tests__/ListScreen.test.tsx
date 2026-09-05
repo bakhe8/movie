@@ -1,9 +1,10 @@
 import '../../jest-dom-vitest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { useState } from 'react';
 import userEvent from '@testing-library/user-event';
-import { ListScreen } from '../components/ListScreen';
-import { api } from '../lib/api';
+import { ListScreen, type LibraryViewState } from '../components/ListScreen';
+import { api, type UserTitleState } from '../lib/api';
 import { todayLocal } from '../lib/format';
 
 vi.mock('../lib/api', () => ({
@@ -22,6 +23,22 @@ const mocks = vi.mocked(api);
 const film = { id: 'arrival', internalId: 'arrival', titleEn: 'Arrival', titleAr: 'الوافد', releaseYear: 2016, description: null, genres: ['Drama'], posterUrl: null };
 const listed = { id: 'state-arrival', profileId: 'p1', titleId: film.id, state: 'watchlist' as const, watchedAt: null, watchedOn: null, triadEligible: true, importedRating: null, ratingSource: null, notes: null, updatedAt: '2026-09-05T12:00:00Z', title: film };
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail; });
+  return { promise, resolve, reject };
+}
+
+// Mirrors the page's film overlay: the library really unmounts until Back.
+function LibraryReturnHarness() {
+  const [viewState, setViewState] = useState<LibraryViewState>();
+  const [showFilm, setShowFilm] = useState(false);
+  return showFilm ? <button onClick={() => setShowFilm(false)}>Back to library</button> : (
+    <ListScreen lang="en" profileId="p1" initialViewState={viewState} onViewStateChange={setViewState} onOpenCatalogTitle={() => setShowFilm(true)} />
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getWatchedTitles.mockResolvedValue([]);
@@ -31,6 +48,71 @@ beforeEach(() => {
 });
 
 describe('visual library navigation', () => {
+  it('restores the selected tab and filter after the film screen unmounts the library', async () => {
+    const user = userEvent.setup();
+    const contact = { ...film, id: 'contact', titleEn: 'Contact' };
+    mocks.getWatchedTitles.mockResolvedValue([
+      { ...listed, state: 'watched' },
+      { ...listed, id: 'state-contact', titleId: contact.id, title: contact, state: 'watched' },
+    ]);
+    render(<LibraryReturnHarness />);
+    await user.click(await screen.findByRole('tab', { name: /Watch history/ }));
+    await user.type(screen.getByRole('searchbox'), 'Contact');
+    await user.click(screen.getByRole('button', { name: 'Open film: Contact' }));
+    expect(screen.queryByRole('searchbox')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Back to library' }));
+
+    expect((await screen.findByRole('searchbox') as HTMLInputElement).value).toBe('Contact');
+    expect(screen.getByRole('tab', { name: /Watch history/ })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('button', { name: 'Open film: Contact' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Open film: Arrival' })).toBeNull();
+    expect(mocks.getWatchedTitles).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps A and B pending independently and prevents a second A write before either settles', async () => {
+    const user = userEvent.setup();
+    const contact = { ...film, id: 'contact', titleEn: 'Contact' };
+    const listedB = { ...listed, id: 'state-contact', titleId: contact.id, title: contact };
+    const requestA = deferred<UserTitleState>();
+    const requestB = deferred<UserTitleState>();
+    mocks.getWatchlist.mockResolvedValue([listed, listedB]);
+    mocks.setTitleState.mockImplementation((_profileId, titleId) => titleId === film.id ? requestA.promise : requestB.promise);
+    render(<ListScreen lang="en" profileId="p1" />);
+    const buttons = await screen.findAllByRole('button', { name: 'Watched it' });
+    act(() => { buttons[0].click(); buttons[0].click(); });
+    expect(mocks.setTitleState).toHaveBeenCalledTimes(1);
+    await user.click(buttons[1]);
+    expect(buttons[0]).toBeDisabled();
+    expect(buttons[1]).toBeDisabled();
+    await user.click(buttons[0]);
+    expect(mocks.setTitleState).toHaveBeenCalledTimes(2);
+
+    await act(async () => { requestB.resolve({ ...listedB, state: 'watched', watchedOn: todayLocal() }); });
+    expect(screen.getByRole('button', { name: 'Watched it' })).toBeDisabled();
+    await user.click(screen.getByRole('tab', { name: /Watch history/ }));
+    expect(screen.getByRole('heading', { name: 'Contact' })).toBeVisible();
+    expect(screen.queryByRole('heading', { name: 'Arrival' })).toBeNull();
+
+    await act(async () => { requestA.resolve({ ...listed, state: 'watched', watchedOn: todayLocal() }); });
+    expect(screen.getAllByRole('heading', { name: 'Arrival' })).toHaveLength(1);
+    expect(screen.getAllByRole('heading', { name: 'Contact' })).toHaveLength(1);
+    expect(mocks.setTitleState).toHaveBeenCalledTimes(2);
+  });
+
+  it('releases only the failed title lock so its action can be retried', async () => {
+    const user = userEvent.setup();
+    const request = deferred<UserTitleState>();
+    mocks.setTitleState.mockReturnValueOnce(request.promise);
+    render(<ListScreen lang="en" profileId="p1" />);
+    await user.click(await screen.findByRole('button', { name: 'Watched it' }));
+    expect(screen.getByRole('button', { name: 'Watched it' })).toBeDisabled();
+    await act(async () => { request.reject(new Error('offline')); });
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not save');
+    expect(screen.getByRole('button', { name: 'Watched it' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Watched it' }));
+    await waitFor(() => expect(mocks.setTitleState).toHaveBeenCalledTimes(2));
+  });
+
   it('opens saved and watched titles with their actual state without changing the library', async () => {
     const user = userEvent.setup();
     const onOpenCatalogTitle = vi.fn();

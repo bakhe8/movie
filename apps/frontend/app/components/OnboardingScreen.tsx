@@ -251,7 +251,7 @@ export function OnboardingScreen({
           <p className={styles.lead}>{t.step1Lead}</p>
         </div>
         <div className={styles.card}>
-          <fieldset className={`${styles.field} ${styles.fieldset}`}>
+          <fieldset className={`${styles.field} ${styles.fieldset}`} disabled={saving}>
             <legend>{t.language}</legend>
             <div className={styles.languageChoices}>
               {(['ar', 'en'] as const).map((choice) => (
@@ -264,7 +264,7 @@ export function OnboardingScreen({
           </fieldset>
           <div className={styles.field}>
             <label htmlFor="onboarding-market">{t.market}</label>
-            <select id="onboarding-market" value={market} onChange={(event) => setMarket(event.target.value)}>
+            <select id="onboarding-market" value={market} onChange={(event) => setMarket(event.target.value)} disabled={saving}>
               <option value="">{t.marketPlaceholder}</option>
               {MARKETS.map((option) => (
                 <option key={option.code} value={option.code}>
@@ -273,7 +273,7 @@ export function OnboardingScreen({
               ))}
             </select>
           </div>
-          <fieldset className={`${styles.field} ${styles.fieldset}`}>
+          <fieldset className={`${styles.field} ${styles.fieldset}`} disabled={saving}>
             <legend>{t.platforms}</legend>
             <p className={styles.lead}>{t.platformsHint}</p>
             <div className={styles.chips}>
@@ -305,7 +305,7 @@ export function OnboardingScreen({
             <button type="button" className={styles.primary} onClick={saveStepOne} disabled={saving}>
               {saving ? t.saving : t.next}
             </button>
-            <button type="button" className={styles.link} onClick={() => onSkip(destination)}>
+            <button type="button" className={styles.link} onClick={() => onSkip(destination)} disabled={saving}>
               {t.skip}
             </button>
           </div>
@@ -339,6 +339,7 @@ export function OnboardingScreen({
                 <input
                   type="checkbox"
                   role="switch"
+                  disabled={consentSaving}
                   checked={optional[item.purpose]}
                   onChange={(event) => setOptional((current) => ({ ...current, [item.purpose]: event.target.checked }))}
                 />
@@ -362,7 +363,7 @@ export function OnboardingScreen({
           <button type="button" className={styles.primary} onClick={acknowledgeAndContinue} disabled={consentSaving}>
             {consentSaving ? t.saving : destination === 'rank' ? t.startRanking : t.start}
           </button>
-          <button type="button" className={styles.ghost} onClick={() => setStep(1)}>
+          <button type="button" className={styles.ghost} onClick={() => setStep(1)} disabled={consentSaving}>
             {t.back}
           </button>
         </div>

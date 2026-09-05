@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, type Title, type TitleState } from '../lib/api';
 import { formatNumber, todayLocal } from '../lib/format';
 import { Poster } from './Poster';
@@ -95,35 +95,42 @@ const labels = {
 
 type Phase = { kind: 'loading' } | { kind: 'ready' } | { kind: 'failed' };
 
+export type DiscoverViewState = { query: string; browseAll: boolean; genre: string | null; pagesLoaded?: number };
+
 export function DiscoverScreen({
   lang,
   profileId,
   onGoToRank,
   onOpenTitle,
+  initialViewState,
 }: {
   lang: Lang;
   profileId: string;
   onGoToRank?: () => void;
   // Opens the work page for a catalogue title (no fit context here).
-  onOpenTitle?: (title: Title, state: TitleState | null) => void;
+  onOpenTitle?: (title: Title, state: TitleState | null, viewState: DiscoverViewState) => void;
+  initialViewState?: DiscoverViewState;
 }) {
   const t = labels[lang];
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   // The profile's existing marks, so a returning user sees what they already
   // logged instead of a blank slate (previously marks reset per session).
   const [states, setStates] = useState<Map<string, TitleState>>(new Map());
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(initialViewState?.query ?? '');
   const [results, setResults] = useState<Title[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pagesToRestore, setPagesToRestore] = useState(initialViewState?.pagesLoaded ?? 1);
   const [searching, setSearching] = useState(false);
   // With an empty query: the diverse starter list (default) or the whole
   // paginated catalogue, at the user's choice.
-  const [browseAll, setBrowseAll] = useState(false);
+  const [browseAll, setBrowseAll] = useState(initialViewState?.browseAll ?? false);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [notice, setNotice] = useState<string | null>(null);
   const [noticeTone, setNoticeTone] = useState<'success' | 'error'>('success');
-  const [genre, setGenre] = useState<string | null>(null);
+  const [genre, setGenre] = useState<string | null>(initialViewState?.genre ?? null);
+  const searchRevision = useRef(0);
+  const pendingPage = useRef<number | null>(null);
 
   const loadStates = useCallback(async () => {
     setPhase({ kind: 'loading' });
@@ -148,23 +155,26 @@ export function DiscoverScreen({
   // Debounced search. An empty query shows the genre-diverse starter list
   // from the server (blueprint §4.2 "اختيار سريع من عناوين معروفة ومتنوعة"),
   // or the whole paginated catalogue when the user asks for it. Page 1 on
-  // every new query.
+  // every new query. Returning from a film re-reads every previously loaded
+  // page so a restored genre can still find films beyond the first page.
   useEffect(() => {
     let cancelled = false;
+    const revision = ++searchRevision.current;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSearching(true);
     const trimmed = query.trim();
     const timer = window.setTimeout(() => {
       const load =
         trimmed || browseAll
-          ? api.listTitles(trimmed, 1, PAGE_SIZE).then((result) => ({ items: result.items, total: result.total }))
-          : api.getStarterTitles(STARTER_SIZE).then((items) => ({ items, total: items.length }));
+          ? Promise.all(Array.from({ length: pagesToRestore }, (_, index) => api.listTitles(trimmed, index + 1, PAGE_SIZE)))
+            .then((pages) => ({ items: pages.flatMap((result) => result.items), total: pages[0].total, page: pages.length }))
+          : api.getStarterTitles(STARTER_SIZE).then((items) => ({ items, total: items.length, page: 1 }));
       load
         .then((result) => {
           if (cancelled) return;
           setResults(result.items);
           setTotal(result.total);
-          setPage(1);
+          setPage(result.page);
         })
         .catch(() => {
           if (!cancelled) { setNoticeTone('error'); setNotice(t.loadFailed); }
@@ -175,9 +185,10 @@ export function DiscoverScreen({
     }, 250);
     return () => {
       cancelled = true;
+      searchRevision.current = revision + 1;
       window.clearTimeout(timer);
     };
-  }, [query, browseAll, t.loadFailed]);
+  }, [query, browseAll, pagesToRestore, t.loadFailed]);
 
   useEffect(() => {
     if (!notice) return;
@@ -186,18 +197,25 @@ export function DiscoverScreen({
   }, [notice]);
 
   async function loadMore() {
+    const revision = searchRevision.current;
+    if (pendingPage.current === revision) return;
+    pendingPage.current = revision;
     const nextPage = page + 1;
     setSearching(true);
     try {
       const result = await api.listTitles(query.trim(), nextPage, PAGE_SIZE);
+      // Changing the search invalidates pagination as well as its first read.
+      if (revision !== searchRevision.current) return;
       setResults((current) => [...current, ...result.items]);
       setTotal(result.total);
       setPage(nextPage);
     } catch {
+      if (revision !== searchRevision.current) return;
       setNoticeTone('error');
       setNotice(t.loadFailed);
     } finally {
-      setSearching(false);
+      if (pendingPage.current === revision) pendingPage.current = null;
+      if (revision === searchRevision.current) setSearching(false);
     }
   }
 
@@ -302,7 +320,7 @@ export function DiscoverScreen({
           type="search"
           placeholder={t.searchPlaceholder}
           value={query}
-          onChange={(event) => { setQuery(event.target.value); setGenre(null); }}
+          onChange={(event) => { setQuery(event.target.value); setGenre(null); setPagesToRestore(1); }}
           autoComplete="off"
         />
       </div>
@@ -374,7 +392,7 @@ export function DiscoverScreen({
 
                 <h4 className={styles.title}>
                   {onOpenTitle ? (
-                    <button type="button" className={styles.titleButton} onClick={() => onOpenTitle(title, state ?? null)}>
+                    <button type="button" className={styles.titleButton} onClick={() => onOpenTitle(title, state ?? null, { query, browseAll, genre, pagesLoaded: page })}>
                       {name}
                     </button>
                   ) : (
@@ -400,7 +418,7 @@ export function DiscoverScreen({
         <button
           type="button"
           className={`${styles.ghost} ${styles.more}`}
-          onClick={() => { setBrowseAll((current) => !current); setGenre(null); }}
+          onClick={() => { setBrowseAll((current) => !current); setGenre(null); setPagesToRestore(1); }}
           disabled={searching}
         >
           {browseAll ? t.backToStarter : t.browseAll}

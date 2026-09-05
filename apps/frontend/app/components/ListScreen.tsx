@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError, type LibraryRankingItem, type Title, type TitleState, type UserTitleState } from '../lib/api';
 import { formatNumber, formatWatchedOn, todayLocal } from '../lib/format';
 import { Toast } from '../lib/toast';
@@ -95,38 +95,71 @@ const labels = {
 
 type Phase = { kind: 'loading' } | { kind: 'ready' } | { kind: 'failed' };
 type Ranking = { kind: 'loading' } | { kind: 'ready'; items: LibraryRankingItem[] } | { kind: 'pending' } | { kind: 'failed' };
+export type LibraryViewState = { activeSection: 'watchlist' | 'ranking' | 'timeline'; filter: string };
 
 export function ListScreen({
   lang,
   profileId,
   onOpenTitle,
   onOpenCatalogTitle,
+  initialViewState,
+  onViewStateChange,
 }: {
   lang: Lang;
   profileId: string;
   // Opens the work page with this ranking row as its context (blueprint §5.3).
   onOpenTitle?: (item: LibraryRankingItem, count: number) => void;
   onOpenCatalogTitle?: (title: Title, state: TitleState) => void;
+  initialViewState?: LibraryViewState;
+  onViewStateChange?: (state: LibraryViewState) => void;
 }) {
   const t = labels[lang];
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   const [watched, setWatched] = useState<UserTitleState[]>([]);
   const [watchlist, setWatchlist] = useState<UserTitleState[]>([]);
   const [ranking, setRanking] = useState<Ranking>({ kind: 'loading' });
-  const [filter, setFilter] = useState('');
-  const [activeSection, setActiveSection] = useState<'watchlist' | 'ranking' | 'timeline'>('watchlist');
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [filter, setFilter] = useState(initialViewState?.filter ?? '');
+  const [activeSection, setActiveSection] = useState<LibraryViewState['activeSection']>(initialViewState?.activeSection ?? 'watchlist');
+  const mutationLocks = useRef(new Set<string>());
+  const [pendingTitles, setPendingTitles] = useState<ReadonlySet<string>>(new Set());
+  const rankingRequest = useRef(0);
   const [notice, setNotice] = useState<string | null>(null);
   // The diary editor open on one timeline item: date as yyyy-mm-dd, notes as typed.
   const [diary, setDiary] = useState<{ titleId: string; date: string; notes: string } | null>(null);
 
+  function changeSection(next: LibraryViewState['activeSection']) {
+    setActiveSection(next);
+    onViewStateChange?.({ activeSection: next, filter });
+  }
+
+  function changeFilter(next: string) {
+    setFilter(next);
+    onViewStateChange?.({ activeSection, filter: next });
+  }
+
+  // A synchronous lock prevents a second write before React renders, and a
+  // separate set keeps every pending film disabled while others remain usable.
+  function beginMutation(titleId: string) {
+    if (mutationLocks.current.has(titleId)) return false;
+    mutationLocks.current.add(titleId);
+    setPendingTitles(new Set(mutationLocks.current));
+    return true;
+  }
+
+  function finishMutation(titleId: string) {
+    mutationLocks.current.delete(titleId);
+    setPendingTitles(new Set(mutationLocks.current));
+  }
+
   const loadRanking = useCallback(async () => {
+    const request = ++rankingRequest.current;
     setRanking({ kind: 'loading' });
     try {
-      setRanking({ kind: 'ready', items: await api.getLibraryRanking(profileId) });
+      const items = await api.getLibraryRanking(profileId);
+      if (request === rankingRequest.current) setRanking({ kind: 'ready', items });
     } catch (err) {
       // 409 = no trained snapshot yet, the same honest answer recommendations give.
-      setRanking(err instanceof ApiError && err.status === 409 ? { kind: 'pending' } : { kind: 'failed' });
+      if (request === rankingRequest.current) setRanking(err instanceof ApiError && err.status === 409 ? { kind: 'pending' } : { kind: 'failed' });
     }
   }, [profileId]);
 
@@ -193,27 +226,27 @@ export function ListScreen({
 
   // Only exposure/list states are ever written here -- never a rating (ADR-4).
   async function markWatched(state: UserTitleState) {
+    if (!beginMutation(state.titleId)) return;
     const name = nameOf(state.title, state.titleId);
-    setBusyId(state.titleId);
     try {
       // ADR-104: the device's own local day, never the server's UTC clock.
       const updated = await api.setTitleState(profileId, state.titleId, { state: 'watched', watchedOn: todayLocal() });
       setWatchlist((current) => current.filter((item) => item.titleId !== state.titleId));
-      setWatched((current) => [{ ...updated, title: state.title }, ...current]);
+      setWatched((current) => [{ ...updated, title: state.title }, ...current.filter((item) => item.titleId !== state.titleId)]);
       setNotice(t.watchedNotice(name));
       // The watched set changed, so the model's ordering of it may too.
       await loadRanking();
     } catch {
       setNotice(t.actionFailed);
     } finally {
-      setBusyId(null);
+      finishMutation(state.titleId);
     }
   }
 
   // Back to "exposure unknown" -- never a negative signal (blueprint §2.4 #3).
   async function clearState(state: UserTitleState, noticeFor: (name: string) => string) {
+    if (!beginMutation(state.titleId)) return;
     const name = nameOf(state.title, state.titleId);
-    setBusyId(state.titleId);
     try {
       await api.setTitleState(profileId, state.titleId, { state: 'not_watched' });
       setWatchlist((current) => current.filter((item) => item.titleId !== state.titleId));
@@ -224,11 +257,12 @@ export function ListScreen({
     } catch {
       setNotice(t.actionFailed);
     } finally {
-      setBusyId(null);
+      finishMutation(state.titleId);
     }
   }
 
   function openDiary(state: UserTitleState) {
+    if (mutationLocks.current.has(state.titleId)) return;
     setDiary({
       titleId: state.titleId,
       date: state.watchedOn ?? todayLocal(),
@@ -240,9 +274,8 @@ export function ListScreen({
   // an already-watched title. Free text and a date -- never a rating, and
   // never read by training (ADR-4).
   async function saveDiary(state: UserTitleState) {
-    if (!diary) return;
+    if (!diary || diary.titleId !== state.titleId || !beginMutation(state.titleId)) return;
     const name = nameOf(state.title, state.titleId);
-    setBusyId(state.titleId);
     try {
       const notes = diary.notes.trim();
       // ADR-104: the date field's own value, verbatim -- never reconstructed
@@ -254,12 +287,12 @@ export function ListScreen({
         notes: notes.length > 0 ? notes : null,
       });
       setWatched((current) => current.map((item) => (item.titleId === state.titleId ? { ...updated, title: state.title } : item)));
-      setDiary(null);
+      setDiary((current) => current?.titleId === state.titleId ? null : current);
       setNotice(t.diarySaved(name));
     } catch {
       setNotice(t.actionFailed);
     } finally {
-      setBusyId(null);
+      finishMutation(state.titleId);
     }
   }
 
@@ -327,7 +360,7 @@ export function ListScreen({
           { id: 'ranking', label: t.ranking, count: ranking.kind === 'ready' ? ranking.items.length : null, path: 'M4 20V10h4v10M10 20V4h4v16M16 20v-7h4v7' },
           { id: 'timeline', label: t.timeline, count: watched.length, path: 'M12 8v5l3 2M21 12a9 9 0 1 1-3-6.7M21 3v6h-6' },
         ] as const).map((tab) => (
-          <button key={tab.id} id={`library-tab-${tab.id}`} type="button" role="tab" aria-selected={activeSection === tab.id} aria-controls={`library-${tab.id}`} tabIndex={activeSection === tab.id ? 0 : -1} onClick={() => setActiveSection(tab.id)}
+          <button key={tab.id} id={`library-tab-${tab.id}`} type="button" role="tab" aria-selected={activeSection === tab.id} aria-controls={`library-${tab.id}`} tabIndex={activeSection === tab.id ? 0 : -1} onClick={() => changeSection(tab.id)}
             onKeyDown={(event) => {
               const ids = ['watchlist', 'ranking', 'timeline'] as const;
               const nextKey = lang === 'ar' ? 'ArrowLeft' : 'ArrowRight';
@@ -336,7 +369,7 @@ export function ListScreen({
               event.preventDefault();
               const index = ids.indexOf(tab.id);
               const next = event.key === 'Home' ? ids[0] : event.key === 'End' ? ids[2] : ids[(index + (event.key === nextKey ? 1 : 2)) % 3];
-              setActiveSection(next);
+              changeSection(next);
               document.getElementById(`library-tab-${next}`)?.focus();
             }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={tab.path} /></svg>
@@ -354,7 +387,7 @@ export function ListScreen({
           type="search"
           placeholder={t.filterPlaceholder}
           value={filter}
-          onChange={(event) => setFilter(event.target.value)}
+          onChange={(event) => changeFilter(event.target.value)}
           autoComplete="off"
         />
       </div>
@@ -374,7 +407,7 @@ export function ListScreen({
           <ul className={`${styles.list} ${styles.posterGrid}`}>
             {visibleWatchlist.map((state) => {
               const meta = state.title?.releaseYear ? String(state.title.releaseYear) : '';
-              const busy = busyId === state.titleId;
+              const busy = pendingTitles.has(state.titleId);
               return (
                 <li key={state.id} className={styles.card}>
                   <div className={styles.cardHead}>
@@ -456,7 +489,7 @@ export function ListScreen({
         ) : (
           <ul className={styles.list}>
             {visibleWatched.map((state) => {
-              const busy = busyId === state.titleId;
+              const busy = pendingTitles.has(state.titleId);
               const editing = diary?.titleId === state.titleId;
               return (
                 <li key={state.id} className={editing ? `${styles.card} ${styles.cardEditing}` : styles.card}>
@@ -482,6 +515,7 @@ export function ListScreen({
                         <input
                           id={`diary-date-${state.titleId}`}
                           type="date"
+                          disabled={busy}
                           value={diary.date}
                           max={todayLocal()}
                           onChange={(event) => setDiary({ ...diary, date: event.target.value })}
@@ -495,6 +529,7 @@ export function ListScreen({
                           value={diary.notes}
                           maxLength={1000}
                           rows={3}
+                          disabled={busy}
                           onChange={(event) => setDiary({ ...diary, notes: event.target.value })}
                         />
                         <p className={styles.note}>{t.diaryHint}</p>

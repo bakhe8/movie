@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { api, type Title, type TitleState } from './lib/api';
 import { AppShell, type View } from './components/AppShell';
 import { AuthScreen } from './components/AuthScreen';
-import { DiscoverScreen } from './components/DiscoverScreen';
-import { ListScreen } from './components/ListScreen';
+import { DiscoverScreen, type DiscoverViewState } from './components/DiscoverScreen';
+import { ListScreen, type LibraryViewState } from './components/ListScreen';
 import { OnboardingScreen } from './components/OnboardingScreen';
 import { ProfileScreen } from './components/ProfileScreen';
 import { RankScreen } from './components/RankScreen';
@@ -21,6 +21,8 @@ export default function Home() {
   // The work page (blueprint §5.3) opens over the current section from a
   // card, carrying that card's context; any tab or "back" closes it.
   const [work, setWork] = useState<{ title: Title; context: WorkContext; state: TitleState | null } | null>(null);
+  const [libraryView, setLibraryView] = useState<{ profileId: string; state: LibraryViewState } | null>(null);
+  const [discoverView, setDiscoverView] = useState<{ profileId: string; state: DiscoverViewState } | null>(null);
   // Onboarding (blueprint §4.1) starts when a profile arrives with no market
   // and stays open until its last step (or "later") -- step 1 saves the
   // market, so the flow cannot be keyed on the market alone. "Later" hides it
@@ -169,16 +171,24 @@ export default function Home() {
           )}
           {view === 'discover' && (
             <DiscoverScreen
+              key={profile.id}
               lang={lang}
               profileId={profile.id}
+              initialViewState={discoverView?.profileId === profile.id ? discoverView.state : undefined}
               onGoToRank={() => setView('rank')}
-              onOpenTitle={(title, state) => setWork({ title, context: { kind: 'none' }, state })}
+              onOpenTitle={(title, state, currentView) => {
+                setDiscoverView({ profileId: profile.id, state: currentView });
+                setWork({ title, context: { kind: 'none' }, state });
+              }}
             />
           )}
           {view === 'list' && (
             <ListScreen
+              key={profile.id}
               lang={lang}
               profileId={profile.id}
+              initialViewState={libraryView?.profileId === profile.id ? libraryView.state : undefined}
+              onViewStateChange={(state) => setLibraryView({ profileId: profile.id, state })}
               onOpenCatalogTitle={(title, state) => setWork({ title, context: { kind: 'none' }, state })}
               onOpenTitle={(item, count) =>
                 setWork({ title: item.title, context: { kind: 'ranking', item, position: item.position, count }, state: 'watched' })

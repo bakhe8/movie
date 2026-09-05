@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { api, type FingerprintDimension, type LibraryRankingItem, type Recommendation, type Title, type TitleState } from '../lib/api';
 import { FEATURE_REASON_COPY } from '../lib/copy';
 import { genreLabel } from '../lib/genres';
@@ -193,14 +193,7 @@ function ChevronIcon() {
   );
 }
 
-export function WorkScreen({
-  lang,
-  profileId,
-  title,
-  context,
-  initialState,
-  onBack,
-}: {
+type WorkScreenProps = {
   lang: Lang;
   profileId: string;
   title: Title;
@@ -208,12 +201,27 @@ export function WorkScreen({
   // The exposure/list state known where the card came from, if any.
   initialState?: TitleState | null;
   onBack: () => void;
-}) {
+};
+
+export function WorkScreen(props: WorkScreenProps) {
+  return <ProfileWork key={`${props.profileId}:${props.title.id}`} {...props} />;
+}
+
+function ProfileWork({ lang, profileId, title, context, initialState, onBack }: WorkScreenProps) {
   const t = labels[lang];
   const names = DIMENSION_NAMES[lang];
   const [state, setState] = useState<TitleState | null>(initialState ?? null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [noticeTone, setNoticeTone] = useState<'success' | 'error'>('success');
+  const pendingRef = useRef(false);
+  const stateRevisionRef = useRef(0);
+  const lifetimeRef = useRef(0);
+
+  useEffect(() => {
+    const lifetime = ++lifetimeRef.current;
+    return () => { lifetimeRef.current = lifetime + 1; };
+  }, []);
   // The card's copy of the title is what it was when listed; the page reads
   // the title itself for what only GET /titles/:id carries (Public Quality
   // today; the poster and the fingerprint summary as they land). Until it
@@ -240,9 +248,10 @@ export function WorkScreen({
   // server's lists are the record (watched wins over the watchlist).
   useEffect(() => {
     let cancelled = false;
+    const revision = stateRevisionRef.current;
     Promise.all([api.getWatchedTitles(profileId), api.getWatchlist(profileId)])
       .then(([watched, watchlist]) => {
-        if (cancelled) return;
+        if (cancelled || revision !== stateRevisionRef.current) return;
         const isWatched = watched.some((entry) => entry.titleId === title.id && entry.state === 'watched');
         const isListed = watchlist.some((entry) => entry.titleId === title.id);
         setState(isWatched ? 'watched' : isListed ? 'watchlist' : null);
@@ -274,17 +283,28 @@ export function WorkScreen({
   // Only exposure/list states are written here -- never a rating (ADR-4);
   // undo returns the title to "exposure unknown" (blueprint §2.4 #3).
   async function change(next: TitleState, message: string) {
+    if (pendingRef.current) return;
+    pendingRef.current = true;
+    const lifetime = lifetimeRef.current;
     setBusy(true);
     try {
       // ADR-104: the device's own local day, never the server's UTC clock,
       // and only when actually marking watched right now.
       await api.setTitleState(profileId, title.id, next === 'watched' ? { state: next, watchedOn: todayLocal() } : { state: next });
+      if (lifetime !== lifetimeRef.current) return;
+      stateRevisionRef.current++;
       setState(next);
+      setNoticeTone('success');
       setNotice(message);
     } catch {
+      if (lifetime !== lifetimeRef.current) return;
+      setNoticeTone('error');
       setNotice(t.actionFailed);
     } finally {
-      setBusy(false);
+      if (lifetime === lifetimeRef.current) {
+        pendingRef.current = false;
+        setBusy(false);
+      }
     }
   }
 
@@ -384,7 +404,7 @@ export function WorkScreen({
       </div>
 
       {notice && (
-        <Toast message={notice} onDismiss={() => setNotice(null)} tone={notice === t.actionFailed ? 'error' : 'success'} />
+        <Toast message={notice} onDismiss={() => setNotice(null)} tone={noticeTone} />
       )}
 
       {/* The fit, exactly as the originating surface showed it (ADR-33: the
