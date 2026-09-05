@@ -21,6 +21,9 @@ const labels = {
     save: 'حفظ الترتيب',
     saving: 'جارٍ الحفظ…',
     saved: 'تم الحفظ. هذه جولة جديدة.',
+    // The order as a sentence: heard by a screen reader, and read by anyone
+    // who asked their device for less motion.
+    orderNow: (names: string[]) => `الترتيب الآن: ${names.map((name, index) => `${index + 1} ${name}`).join('، ')}`,
     rounds: (n: string) => `جولاتك المكتملة: ${n}`,
     // SPECIFICATION §5.1 step 4: 3–5 seed rounds; the exact count is an open
     // App. C experiment, so this is a range, not a target.
@@ -73,6 +76,7 @@ const labels = {
     save: 'Save ranking',
     saving: 'Saving…',
     saved: 'Saved. Here is a new round.',
+    orderNow: (names: string[]) => `Order now: ${names.map((name, index) => `${index + 1} ${name}`).join(', ')}`,
     rounds: (n: string) => `Completed rounds: ${n}`,
     roundsHint: 'Three to five rounds are enough for a first result; every round after that improves it.',
     repeats: (n: number, formatted: string) =>
@@ -174,6 +178,10 @@ export function RankScreen({
   const [replacing, setReplacing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
+  // The order as a sentence, re-announced after every change.
+  const [orderStatus, setOrderStatus] = useState('');
+  // The round that has just been saved, so its dot pulses once and no other.
+  const [justSavedRound, setJustSavedRound] = useState<number | null>(null);
   // Where the profile stands, as the server counts it (ADR-108). The screen
   // keeps no tally of its own: the old local counter added repeat rounds to
   // learning rounds and then incremented optimistically on save, so it could
@@ -283,8 +291,23 @@ export function RankScreen({
       const next = [...current];
       const [item] = next.splice(from, 1);
       next.splice(to, 0, item);
+      // The new order in words: what a screen reader hears, and what a reader
+      // who turned motion off gets instead of the cards sliding (owner's
+      // interaction addendum -- no meaning reaches the reader by motion alone).
+      setOrderStatus(t.orderNow(next.map((title) => (lang === 'ar' ? title.titleAr : title.titleEn))));
       return next;
     });
+    buzz(8);
+  }
+
+  // A short buzz on pick-up, drop and save where the device offers one. It
+  // repeats what the screen already says, and nothing depends on feeling it.
+  function buzz(ms: number) {
+    try {
+      navigator.vibrate?.(ms);
+    } catch {
+      // No vibration API, or a browser that refuses it: nothing is lost.
+    }
   }
 
   // --- Pointer-driven reorder ---------------------------------------------
@@ -322,6 +345,7 @@ export function RankScreen({
     }
     startYRef.current = event.clientY;
     updateDrag({ from: index, to: index, dy: 0 });
+    buzz(6);
   }
 
   function onHandlePointerMove(event: ReactPointerEvent<HTMLElement>) {
@@ -367,6 +391,13 @@ export function RankScreen({
       // a repeat round moves `verificationRounds`, not the count that
       // reaches the first training run (ADR-108).
       const next = await loadRounds();
+      // The dot for the round that was just saved pulses once -- after the
+      // server has counted it, never on the press (owner's addendum: no
+      // progress that has not happened).
+      if (next) {
+        setJustSavedRound(next.learningRounds);
+      }
+      buzz(12);
       // The first-training threshold is where a first result becomes
       // possible (§5.1 step 5); training is still a manual step, hence
       // "once your model is trained".
@@ -425,9 +456,11 @@ export function RankScreen({
           the sentence (ADR-111). */}
       {rounds && (
         <p className={styles.progress} aria-hidden="true">
-          {[0, 1, 2, 3, 4].map((slot) => (
-            <i key={slot} className={slot < Math.min(rounds.learningRounds, 5) ? styles.dotOn : styles.dot} />
-          ))}
+          {[0, 1, 2, 3, 4].map((slot) => {
+            const filled = slot < Math.min(rounds.learningRounds, 5);
+            const pulses = filled && justSavedRound === slot + 1;
+            return <i key={slot} className={[filled ? styles.dotOn : styles.dot, pulses ? styles.dotJustFilled : null].filter(Boolean).join(' ')} />;
+          })}
         </p>
       )}
       {rounds && (
@@ -508,6 +541,9 @@ export function RankScreen({
           not behind a menu -- so the gesture is never the only way to reorder,
           and the save button sticks above the shell's tabs so the question and
           its answer stay in one screen (audit P0 #2). */}
+      <p className={styles.srOnly} role="status" aria-live="polite">
+        {orderStatus}
+      </p>
       <ol className={drag ? `${styles.list} ${styles.dragging}` : styles.list}>
         {order.map((title, index) => {
           const name = lang === 'ar' ? title.titleAr : title.titleEn;

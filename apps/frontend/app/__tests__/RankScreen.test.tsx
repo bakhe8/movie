@@ -88,6 +88,21 @@ describe('RankScreen — ready state', () => {
   // The owner's interaction addendum (2026-09-05) makes the tap path visible:
   // the two arrows sit on every card, and only replacing a film -- which is
   // neither a rank nor an opinion -- lives behind a menu.
+  // The owner's addendum: motion carries meaning, and no meaning reaches the
+  // reader by motion alone. The order is said in words after every change, so
+  // a screen reader and a reader with motion turned off get the same fact.
+  it('says the new order in words after a move', async () => {
+    const user = userEvent.setup();
+    render(<RankScreen lang="ar" profileId="p1" />);
+    await screen.findByText('رأس ممحاة');
+
+    await user.click(screen.getAllByLabelText('أنزل درجة')[0]);
+
+    const status = document.querySelector('[role="status"][aria-live="polite"]');
+    expect(status?.textContent).toMatch(/^الترتيب الآن: 1 /);
+    expect(status?.textContent).toContain('رأس ممحاة');
+  });
+
   it('shows the tap alternative on every card, not behind a menu', async () => {
     render(<RankScreen lang="ar" profileId="p1" />);
     await screen.findByText('رأس ممحاة');
