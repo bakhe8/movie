@@ -68,8 +68,9 @@ UserTitleState { id, profileId, titleId, state, watchedAt|null, triadEligible /*
                  importedRating|null, ratingSource:'import'|null, notes|null, updatedAt, title? }
 Triad { id, profileId, titleIds: string[3], displayOrder: string[3]|null, items: Title[3] /* in displayOrder; public columns only */,
         ranking: string[3]|null /* titleIds, best first */,
-        shownAt|null, answeredAt|null, modelVersion|null /* null under random-v1, which uses no model */, idempotencyKey|null,
-        policyVersion|null, selectionPropensity|null, experimentId|null, sessionId|null, metadata|null, status, createdAt }
+        shownAt|null, answeredAt|null, modelVersion|null /* null under the random policy, which uses no model */, idempotencyKey|null,
+        policyVersion|null, selectionPropensity|null, experimentId|null, sessionId|null, metadata|null, status,
+        setHash, purpose: 'learn'|'verify', countsTowardActivation /* ADR-99: verify re-asks a set already completed, counts toward nothing */, createdAt }
 Recommendation { title, personalFitScore, publicQualityScore|null, watchabilityScore|null,
                  confidenceBand: 'initial'|'likely'|'strong'|'inconclusive',
                  fingerprintCoverage: number /* 0–1 share of known dimensions; < 1 costs one band (ADR-19) */,

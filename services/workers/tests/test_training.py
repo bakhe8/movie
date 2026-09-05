@@ -448,6 +448,8 @@ class TestLoadTrainableTriads:
 
         [(sql, params)] = cursor.executed
         assert "NOT holdout" in sql
+        # ADR-99: verify rounds (a repeated set) are consistency probes, never evidence.
+        assert "purpose = 'learn'" in sql
         assert "status = 'completed'" in sql and "ranking IS NOT NULL" in sql
         assert 'ORDER BY COALESCE("answeredAt", "createdAt") ASC' in sql
         assert params == ("profile-1",)

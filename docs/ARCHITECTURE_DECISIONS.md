@@ -739,6 +739,15 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 
 ---
 
+## ADR-99 — A completed *set* of three is never re-asked as new evidence (remediation brief P0-04, revises ADR-34)
+
+**Context.** The live round of 2026-09-05 got round 2's exact three films back in round 4, ranked identically, and it counted as a fresh piece of evidence toward the training threshold. ADR-34's one-triad lookback (excluding only the immediately-previous triad's titles) fixed a worse bug -- a title could enter at most one triad ever -- but with a small watched pool it lets an older set reappear with no signal that it is a repeat, inflating both `completedTriads` and the trainer's evidence count. `BP §8.1` still names re-testing a past comparison ("verification/refutation in an independent context") as one of six legitimate triad functions, so the fix is to label the repeat, not forbid it.
+**Decision.** `triads` gains `setHash` (md5 of the three title ids sorted and joined, identical for every display permutation; `modules/triads/triad-set.ts`, backfilled by `AddTriadSetHashAndPurpose`), `purpose` (`'learn' | 'verify'`) and `countsTowardActivation`. `getCurrent()` draws a `learn` set from the watched pool minus the previous triad's titles (ADR-34's exclusion, unchanged) that is not one of the profile's already-completed sets; only when every set that pool can make is already completed does it draw one anyway, labelled `verify`, `countsTowardActivation: false` -- still from that same fatigue-excluded pool, so a verify round is never the triad that was *just* completed. `replace()` applies the same rule when it swaps an item. `TrainingService.countCompleted` and the trainer's `TRAINABLE_TRIAD_PREDICATE` both filter on `learn`/`countsTowardActivation`, so a verify round advances neither the automatic-training threshold nor the model fit. The adaptive policy (`TriadPolicyService`) takes the same completed-set exclusion and never proposes a verify round itself, falling back to the random policy (now `random-v2`) when its own pool is exhausted.
+**Consequences.** A profile with a small watched pool sees more `verify` rounds sooner -- expected, not a regression: it is exactly the signal that the catalog needs more titles the user has watched. `training.e2e-spec.ts` and `full-journey.e2e-spec.ts` moved from 6 to 9 watched titles: with exactly 6, round 3 deterministically lands on round 1's set (the two halves of 6 alternate), which is now correctly `verify` and no longer trips the third-round trigger by itself. `triad-rank.e2e-spec.ts`'s repeat test is unaffected -- it only asserted the *titles* repeat, which they still do.
+**Revisit when.** A `bridge`/`boundary`/`explore` purpose is added (`BP §8.1`) and needs its own activation rule, or `countsTowardActivation` needs to vary independently of `purpose`.
+
+---
+
 ## Summary
 
 | # | Decision | Serves | Revisit trigger |
@@ -840,6 +849,8 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 | 95 | Mail leaves through a generic SMTP adapter (nodemailer), the Resend SDK is gone; O-3 stands as an SMTP endpoint | owner review of external dependencies 2026-09-05; ADR-85, O-3 | a second mail kind (templates), or volume needing a queue |
 | 97 | Mail: `resend` over HTTPS (no SDK), `smtp` for a VPS, `log` refused in production; every message a `mail_outbox` row with sealed body, backoff retries and an admin view | owner mail decision 2026-09-05; ADR-85, ADR-95, O-3 | a second mail kind, a second replica, or provider webhooks |
 | 98 | Postgres image pinned to `pgvector/pgvector:0.8.6-pg15` (was `ankane/pgvector:latest` = PG 15.4 from 2023) | owner review of external dependencies 2026-09-05 | PG 16+ (dump/restore), or pgvector columns in use |
+| 96 | `pending`/training status name every reason there is no model yet, instead of "still learning" | remediation brief P0-01/P0-03 2026-09-05 | queue item 8 folds this into a full readiness contract |
+| 99 | A completed set of three is never re-asked as new evidence (`purpose`/`countsTowardActivation`), revises ADR-34 | remediation brief P0-04 2026-09-05; `BP §8.1` | a `bridge`/`boundary`/`explore` purpose needs its own activation rule |
 
 ## How to add a decision
 

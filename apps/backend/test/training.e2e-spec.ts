@@ -147,12 +147,17 @@ describe('Training trigger and status (ADR-25, real HTTP, real DB, fake model se
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
     await app.init();
 
-    // Six watched titles: a triad excludes only the previous triad's three
-    // (ADR-34), so 6 is the smallest pool that yields three rounds in a row.
+    // Nine watched titles. A triad excludes the previous triad's three
+    // (ADR-34) and, since ADR-99, never repeats a *set* it already answered
+    // while an unseen one exists -- with only 6 titles, round 3's "rested"
+    // pool is always exactly round 1's own three (the two halves of 6
+    // alternate), which used to silently count as a third piece of
+    // evidence. 9 leaves 6 candidates outside every previous round, so an
+    // unseen set of three always exists for three rounds running.
     const titlesRepository = app.get<Repository<Title>>(getRepositoryToken(Title));
     const suffix = Date.now();
     const titles = await titlesRepository.save(
-      Array.from({ length: 6 }, (_, index) => ({
+      Array.from({ length: 9 }, (_, index) => ({
         internalId: `E2E-TRAIN-${suffix}-${index}`,
         titleEn: `Training Check ${index}`,
         titleAr: `فحص التدريب ${index}`,

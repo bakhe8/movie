@@ -219,8 +219,11 @@ export class TrainingService {
     return { state: job ? job.status : 'idle', job, nextTrainingAt };
   }
 
+  // Rounds that are evidence: a verify round (a set the profile already
+  // answered, ADR-99) is completed but counts toward no threshold, so ten
+  // rounds over the same three films never read as ten pieces of evidence.
   private async countCompleted(profileId: string): Promise<number> {
-    return this.triadsRepository.count({ where: { profileId, status: 'completed' } });
+    return this.triadsRepository.count({ where: { profileId, status: 'completed', countsTowardActivation: true } });
   }
 
   private async safeLatestJob(profileId: string): Promise<ModelServiceJob | null> {

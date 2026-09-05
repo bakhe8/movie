@@ -154,7 +154,7 @@ describe('GET /admin/metrics', () => {
     expect(report.triads.completed).toBeGreaterThanOrEqual(1);
     expect(report.triads.answerSeconds.samples).toBeGreaterThanOrEqual(1);
     expect(report.triads.answerSeconds.median).toBeGreaterThanOrEqual(40);
-    expect(report.triads.byPolicy['random-v1']).toBeGreaterThanOrEqual(1);
+    expect(report.triads.byPolicy['random-v2']).toBeGreaterThanOrEqual(1);
 
     expect(report.recommendations.shown).toBeGreaterThanOrEqual(3);
     expect(report.recommendations.byTrack).toMatchObject({ safe: expect.any(Number), discovery: expect.any(Number) });

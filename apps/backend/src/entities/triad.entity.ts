@@ -1,4 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, JoinColumn, Index } from 'typeorm';
+import type { TriadPurpose } from '../modules/triads/triad-set';
 import { Profile } from './profile.entity';
 
 // At most one active triad per profile -- TriadsService.getCurrent() checks
@@ -8,6 +9,7 @@ import { Profile } from './profile.entity';
 @Index('IDX_triads_one_active_per_profile', ['profileId'], { unique: true, where: "status = 'active'" })
 @Index('IDX_triads_profileId_createdAt', ['profileId', 'createdAt'])
 @Index('IDX_triads_profileId_status', ['profileId', 'status'])
+@Index('IDX_triads_profileId_setHash', ['profileId', 'setHash'])
 @Entity('triads')
 export class Triad {
   @PrimaryGeneratedColumn('uuid')
@@ -29,6 +31,25 @@ export class Triad {
   @Column('uuid', { array: true, nullable: true })
   displayOrder: string[] | null;
 
+  // The set of three as one key (ADR-99, modules/triads/triad-set.ts): equal
+  // for every permutation of the same films, so the selection policy can
+  // tell a repeat from a new question. NULL only on rows older than the
+  // column; the AddTriadSetHashAndPurpose migration backfills every row.
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  setHash: string | null;
+
+  // 'learn' = new evidence; 'verify' = a set this profile already completed,
+  // re-asked because no unseen set was left (ADR-99). Verify rounds measure
+  // consistency: they count toward neither the training threshold nor the
+  // rounds shown to the user, and the trainer leaves them out.
+  @Column({ type: 'varchar', default: 'learn' })
+  purpose: TriadPurpose;
+
+  // Derived from purpose today (verify = false); its own column because a
+  // future purpose (bridge/boundary/explore, BP §8.1) may count again.
+  @Column({ type: 'boolean', default: true })
+  countsTowardActivation: boolean;
+
   // Title ids in ranked order, best-liked first -- not indices into
   // titleIds (ADR-15). TriadsService validates this is exactly the
   // triad's own three title ids before it is ever written.
@@ -46,8 +67,8 @@ export class Triad {
   answeredAt: Date | null;
 
   // Which trained model snapshot (if any) selected this triad. NULL for the
-  // random-v1 policy, which uses no model -- honest "no model", never a
-  // fabricated version string (blueprint §11.3).
+  // random policy (random-v2, ADR-99), which uses no model -- honest "no
+  // model", never a fabricated version string (blueprint §11.3).
   @Column({ type: 'varchar', nullable: true })
   modelVersion: string | null;
 
@@ -58,7 +79,7 @@ export class Triad {
   @Column({ type: 'uuid', nullable: true, unique: true })
   idempotencyKey: string | null;
 
-  // Which triad-selection policy produced this triad (e.g. 'random-v1').
+  // Which triad-selection policy produced this triad (e.g. 'random-v2').
   // Bumped whenever the selection policy changes so past triads stay
   // attributable to the policy that actually generated them.
   @Column({ type: 'varchar', nullable: true })
@@ -102,7 +123,7 @@ export class Triad {
 
   // Reserved for a held-out validation split decided by the selection
   // policy at creation time (blueprint §8.3, §16.1) -- never trained on.
-  // Always false today: random-v1 has no holdout concept of its own: it's
+  // Always false today: the random policy has no holdout concept of its own: it's
   // training.py's temporal split (ADR-31) that reserves data for
   // evaluation, not this per-triad flag.
   @Column({ type: 'boolean', default: false })

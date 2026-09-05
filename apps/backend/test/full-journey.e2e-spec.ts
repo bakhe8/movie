@@ -109,13 +109,16 @@ describe.skipIf(!PYTHON_RUNNABLE)('First-run journey with the real model service
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
     await app.init();
 
-    // Six watched titles make three rounds possible (a triad excludes only
-    // the previous one, ADR-34); a seventh, unwatched, is what the model can
-    // actually recommend at the end.
+    // Nine watched titles for three genuine rounds: a triad excludes the
+    // previous one (ADR-34), and since ADR-99 never repeats a *set* it
+    // already answered while an unseen one exists -- 6 titles would force
+    // round 3 back onto round 1's exact set, now labelled `verify` and
+    // worth nothing toward training (training.e2e-spec.ts hit this first).
+    // A tenth, unwatched, is what the model can actually recommend at the end.
     const titlesRepository = app.get<Repository<Title>>(getRepositoryToken(Title));
     const suffix = Date.now();
     const titles = await titlesRepository.save(
-      Array.from({ length: 7 }, (_, index) => ({
+      Array.from({ length: 10 }, (_, index) => ({
         internalId: `E2E-JOURNEY-${suffix}-${index}`,
         titleEn: `Journey ${index}`,
         titleAr: `رحلة ${index}`,
@@ -136,7 +139,7 @@ describe.skipIf(!PYTHON_RUNNABLE)('First-run journey with the real model service
       .expect(201);
     profileId = profile.body.id as string;
 
-    for (const title of titles.slice(0, 6)) {
+    for (const title of titles.slice(0, 9)) {
       await request(app.getHttpServer())
         .patch(`/profiles/${profileId}/titles/${title.id}/state`)
         .set('Authorization', `Bearer ${token}`)

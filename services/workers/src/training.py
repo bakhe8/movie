@@ -295,7 +295,10 @@ def train_and_evaluate(
 # so that the day a policy starts reserving rows, nothing trains on them
 # (AUDIT_2026-09-05 H4). evaluation.py counts and loads through the same
 # predicate, so the gate sees exactly what training would.
-TRAINABLE_TRIAD_PREDICATE = "status = 'completed' AND ranking IS NOT NULL AND NOT holdout"
+# purpose = 'learn' (ADR-99): a verify round re-asks a set the profile already
+# answered, to measure consistency; it is not new evidence, so it never
+# enters the fit or the evidence count the confidence band is read from.
+TRAINABLE_TRIAD_PREDICATE = "status = 'completed' AND ranking IS NOT NULL AND NOT holdout AND purpose = 'learn'"
 
 
 def load_trainable_triads(cursor: Any, profile_id: str) -> List[Tuple[Tuple[str, ...], List[int]]]:

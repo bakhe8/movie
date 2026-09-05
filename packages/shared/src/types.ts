@@ -173,13 +173,19 @@ export interface Triad {
   shownAt: string | null;
   answeredAt: string | null;
   // Which trained model snapshot (if any) selected this triad; null under
-  // the random-v1 policy, which uses no model.
+  // the random policy (random-v2, ADR-99), which uses no model.
   modelVersion: string | null;
   policyVersion: string | null;
   selectionPropensity: number | null;
   experimentId: string | null;
   sessionId: string | null;
   status: TriadStatus;
+  // ADR-99: the set of three as one key, equal for every permutation, and
+  // whether this round is new evidence ('learn') or a re-ask of a set
+  // already answered ('verify') -- verify counts toward no threshold.
+  setHash: string | null;
+  purpose: 'learn' | 'verify';
+  countsTowardActivation: boolean;
   createdAt: string;
 }
 

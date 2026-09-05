@@ -16,10 +16,20 @@ import { ReplacementReason, TriadReplacement } from '../../entities/triad-replac
 import { UserTitleState } from '../../entities/user-title-state.entity';
 import { RankTriadDto } from './dto/rank-triad.dto';
 import { ReplaceTriadItemDto } from './dto/replace-triad-item.dto';
+import { triadSetHash, type TriadPurpose } from './triad-set';
 
 // Bumped whenever the triad-selection policy changes; see
 // docs/movie_taste_platform_blueprint_ar.md section 13.2 (triad_events).
-const TRIAD_POLICY_VERSION = 'random-v1';
+// random-v2 (ADR-99): random-v1 plus "never a completed set while an unseen
+// one exists", and a `verify` label when none is.
+const TRIAD_POLICY_VERSION = 'random-v2';
+
+// findLearnSet(): how many random draws to try before enumerating the pool's
+// sets, and the largest pool (by number of sets, C(n,3) -- 5000 is n ≤ 32)
+// that is enumerated at all. Past that, twelve misses in a row means the
+// history is, for any real profile, exhausted.
+const RANDOM_DRAWS_BEFORE_ENUMERATION = 12;
+const MAX_SETS_TO_ENUMERATE = 5000;
 
 // Policy parameter (ADR-17): a triad that would need more than this many
 // replacements is abandoned (`skipped`) rather than patched indefinitely.
@@ -28,9 +38,12 @@ const TRIAD_POLICY_VERSION = 'random-v1';
 // metric (BP §17.1).
 const MAX_REPLACEMENTS_PER_TRIAD = 3;
 
-interface CandidateSelection {
-  titles: Title[];
-  poolSize: number;
+// What getCurrent() decided to ask, before the row exists.
+interface TriadSelection {
+  titleIds: string[];
+  selectionPropensity: number;
+  purpose: TriadPurpose;
+  reasonForSelection: string;
 }
 
 // What the triad screen needs about each title -- never the fingerprint or
@@ -86,13 +99,17 @@ export class TriadsService {
       return { ...(await this.withItems(activeTriad)), state: 'ready' };
     }
 
-    // Only the most recently completed triad's titles are excluded, not
-    // every title this profile has ever ranked (H1, ADR-34): repetition is
-    // a soft penalty in the blueprint's selection score (BP §8.2 "-λr·Repeat"),
-    // never a permanent ban (BP §8.1 even names "verification/refutation in
-    // an independent context" as a deliberate re-test of a past comparison).
-    // random-v1 has no scoring function to apply a soft penalty through, so
-    // "not the immediately previous triad" is its policy-appropriate stand-in.
+    // Two exclusions, in order of precedence (ADR-99, revising ADR-34). A
+    // *set* this profile has already completed is never asked again while an
+    // unseen set exists: the live round of 2026-09-05 got round 2's exact
+    // films back in round 4 and saw it counted as progress. Among the unseen
+    // sets, the immediately previous triad's titles are avoided first, as a
+    // fatigue stand-in for BP §8.2's -λr·Repeat that random-v1 has no score
+    // to express. Repetition is still not a permanent ban -- BP §8.1 names
+    // re-testing a past comparison ("verification/refutation in an
+    // independent context") as one of the six triad functions -- so once
+    // every set is used the round is drawn anyway, labelled `verify`, and
+    // counts toward nothing (brief P0-04).
     const previousTriad = await this.triadsRepository.findOne({
       where: { profileId, status: 'completed' },
       order: { createdAt: 'DESC' },
@@ -100,49 +117,74 @@ export class TriadsService {
     });
     const recentlyUsedTitleIds = previousTriad?.titleIds ?? [];
     const watchedTitleIds = await this.eligibleWatchedTitleIds(profileId);
-    const { titles, poolSize } = await this.selectRandomTitles(watchedTitleIds, recentlyUsedTitleIds);
-
-    if (titles.length < 3) {
-      // Two genuinely different situations (H1): fewer than 3 watched titles
-      // exist at all, vs. there are 3+ but all remaining ones were just used
-      // in the previous triad -- the fix is "mark one more film", not "mark
-      // three", and telling a user who already has three to do that again is
-      // the exact false message this replaces.
-      const needed = watchedTitleIds.length < 3 ? 3 - watchedTitleIds.length : 1;
-      const message =
-        watchedTitleIds.length < 3
-          ? 'Mark at least three films as watched before starting a ranking round'
-          : 'Mark another film as watched to start a new ranking round';
+    if (watchedTitleIds.length < 3) {
       // A designed product state, not an error: 200 with a discriminator so
       // the screen can say exactly how many more films to mark, and the
       // browser console stays clean (board B→A; API.md §2.2). 4xx here is
       // reserved for real errors -- 401, or 404 for someone else's profile.
-      return { state: 'need_more_watched', needed, message };
+      return {
+        state: 'need_more_watched',
+        needed: 3 - watchedTitleIds.length,
+        message: 'Mark at least three films as watched before starting a ranking round',
+      };
     }
+    const restedTitleIds = watchedTitleIds.filter((id) => !recentlyUsedTitleIds.includes(id));
+    if (restedTitleIds.length < 3) {
+      // H1 (ADR-34), unchanged: 3+ watched, but excluding the triad that was
+      // just completed leaves fewer than 3 -- "mark one more film", never
+      // "mark three" to a user who already has three.
+      return { state: 'need_more_watched', needed: 1, message: 'Mark another film as watched to start a new ranking round' };
+    }
+    const usedSetHashes = await this.completedSetHashes(profileId);
 
     // ALPHA_PLAN 6.2/6.5: the adaptive policy runs only for profiles the
-    // `triad-policy` experiment put in that arm; everyone else keeps
-    // random-v1 as the control, and both record which policy chose them.
-    const adaptive = await this.adaptiveSelection(profileId, watchedTitleIds, recentlyUsedTitleIds);
-    const titleIds = adaptive ? adaptive.titleIds : titles.map((title) => title.id);
+    // `triad-policy` experiment put in that arm; everyone else keeps the
+    // random policy as the control, and both record which policy chose them.
+    const adaptive = await this.adaptiveSelection(profileId, restedTitleIds, recentlyUsedTitleIds, usedSetHashes);
+    let selection: TriadSelection;
+    if (adaptive) {
+      selection = { ...adaptive, purpose: 'learn', reasonForSelection: 'adaptive-uncertainty' };
+    } else {
+      const learn = this.findLearnSet(restedTitleIds, usedSetHashes);
+      selection = learn
+        ? {
+            titleIds: learn.titleIds,
+            // The probability this policy chose this triple: uniform over
+            // the pool it was drawn from (RANKING_ALGORITHM §9).
+            selectionPropensity: 1 / this.combinations(learn.poolSize, 3),
+            purpose: 'learn',
+            reasonForSelection: 'random-watched-unranked',
+          }
+        : {
+            // Every set the fatigue-excluded pool can make is already
+            // answered: still not a permanent ban (BP §8.1's re-testing
+            // function) -- drawn from the same pool, so it never repeats the
+            // triad that was just completed even as a verify round.
+            titleIds: this.shuffle([...restedTitleIds]).slice(0, 3),
+            selectionPropensity: 1 / this.combinations(restedTitleIds.length, 3),
+            purpose: 'verify',
+            reasonForSelection: 'random-verify-repeat',
+          };
+    }
     const policyVersion = adaptive ? ADAPTIVE_POLICY_VERSION : TRIAD_POLICY_VERSION;
 
     try {
       const created = await this.triadsRepository.save(
         this.triadsRepository.create({
           profileId,
-          titleIds,
+          titleIds: selection.titleIds,
+          setHash: triadSetHash(selection.titleIds),
+          purpose: selection.purpose,
+          countsTowardActivation: selection.purpose === 'learn',
           // Shuffled independently of titleIds so position bias in the UI can
-          // be measured and corrected for (blueprint section 4.3).
-          displayOrder: this.shuffle([...titleIds]),
+          // be measured and corrected for (blueprint section 4.3) -- and so a
+          // verify round never shows the order the user gave last time.
+          displayOrder: this.shuffle([...selection.titleIds]),
           policyVersion,
-          // The probability this policy chose this triple: uniform over the
-          // eligible pool under random-v1, uniform over the scored top-K
-          // under adaptive-v1 (RANKING_ALGORITHM §9).
-          selectionPropensity: adaptive ? adaptive.selectionPropensity : 1 / this.combinations(poolSize, 3),
+          selectionPropensity: selection.selectionPropensity,
           status: 'active',
           shownAt: new Date(),
-          metadata: { reasonForSelection: adaptive ? 'adaptive-uncertainty' : 'random-watched-unranked' },
+          metadata: { reasonForSelection: selection.reasonForSelection },
         }),
       );
       return { ...(await this.withItems(created)), state: 'ready' };
@@ -368,9 +410,10 @@ export class TriadsService {
       }
 
       const priorReplacements = await manager.count(TriadReplacement, { where: { triadId } });
+      const usedSetHashes = await this.completedSetHashes(locked.profileId, manager);
       const replacementTitleId =
         priorReplacements < MAX_REPLACEMENTS_PER_TRIAD
-          ? await this.pickReplacementTitle(locked.profileId, locked.titleIds)
+          ? await this.pickReplacementTitle(locked.profileId, locked.titleIds, replaceTriadItemDto.titleId, usedSetHashes)
           : null;
 
       await this.applyReplacementReason(
@@ -396,6 +439,12 @@ export class TriadsService {
         // card's position is as unbiased as the original draw (ADR-17).
         locked.titleIds = locked.titleIds.map((id) => (id === replaceTriadItemDto.titleId ? replacementTitleId : id));
         locked.displayOrder = this.shuffle([...locked.titleIds]);
+        // The swapped-in set is a new question -- or, when nothing unseen
+        // could be swapped in, a repeat, labelled exactly as a fresh draw
+        // of it would be (ADR-99).
+        locked.setHash = triadSetHash(locked.titleIds);
+        locked.purpose = usedSetHashes.has(locked.setHash) ? 'verify' : 'learn';
+        locked.countsTowardActivation = locked.purpose === 'learn';
       } else {
         // Nothing eligible left, or the per-triad limit is exceeded: the
         // event above is still recorded, the triad is abandoned rather than
@@ -440,19 +489,69 @@ export class TriadsService {
 
   // A random watched, still-eligible title that is in neither the triad nor
   // the immediately previous completed triad -- the same one-triad lookback
-  // getCurrent() applies (ADR-34). null when the pool has nothing left.
-  private async pickReplacementTitle(profileId: string, currentTitleIds: string[]): Promise<string | null> {
+  // getCurrent() applies (ADR-34) -- preferring one that makes a set this
+  // profile has not answered yet (ADR-99: a replacement yields a new
+  // question when one exists). null when the pool has nothing left.
+  private async pickReplacementTitle(
+    profileId: string,
+    currentTitleIds: string[],
+    replacedTitleId: string,
+    usedSetHashes: Set<string>,
+  ): Promise<string | null> {
     const previousTriad = await this.triadsRepository.findOne({
       where: { profileId, status: 'completed' },
       order: { createdAt: 'DESC' },
       select: { titleIds: true },
     });
     const excluded = new Set([...currentTitleIds, ...(previousTriad?.titleIds ?? [])]);
-    const candidates = (await this.eligibleWatchedTitleIds(profileId)).filter((id) => !excluded.has(id));
+    const candidates = this.shuffle((await this.eligibleWatchedTitleIds(profileId)).filter((id) => !excluded.has(id)));
     if (candidates.length === 0) {
       return null;
     }
-    return candidates[Math.floor(Math.random() * candidates.length)];
+    const kept = currentTitleIds.filter((id) => id !== replacedTitleId);
+    return candidates.find((id) => !usedSetHashes.has(triadSetHash([...kept, id]))) ?? candidates[0];
+  }
+
+  // Every set this profile has completed, as hashes (triad-set.ts). Rows
+  // from before the column existed are hashed here from their titleIds, so
+  // a half-backfilled table still answers correctly.
+  private async completedSetHashes(profileId: string, manager?: EntityManager): Promise<Set<string>> {
+    const options = { where: { profileId, status: 'completed' as const }, select: { setHash: true, titleIds: true } };
+    const rows = manager ? await manager.find(Triad, options) : await this.triadsRepository.find(options);
+    return new Set(rows.map((row) => row.setHash ?? triadSetHash(row.titleIds)));
+  }
+
+  // An unseen set of three from `pool`, or null when every set in it has
+  // been completed. Random draws first; when they keep landing on used sets
+  // and the pool is small enough, every set in a random order -- so a free
+  // set is never missed while one exists (brief P0-04's acceptance line: no
+  // unlabelled repeat while an alternative is available).
+  private findLearnSet(pool: string[], usedSetHashes: Set<string>): { titleIds: string[]; poolSize: number } | null {
+    const poolSize = pool.length;
+    if (poolSize < 3) {
+      return null;
+    }
+    for (let attempt = 0; attempt < RANDOM_DRAWS_BEFORE_ENUMERATION; attempt += 1) {
+      const titleIds = this.shuffle([...pool]).slice(0, 3);
+      if (!usedSetHashes.has(triadSetHash(titleIds))) {
+        return { titleIds, poolSize };
+      }
+    }
+    if (this.combinations(poolSize, 3) > MAX_SETS_TO_ENUMERATE) {
+      return null;
+    }
+    const order = this.shuffle([...pool]);
+    for (let i = 0; i < order.length - 2; i += 1) {
+      for (let j = i + 1; j < order.length - 1; j += 1) {
+        for (let k = j + 1; k < order.length; k += 1) {
+          const titleIds = [order[i], order[j], order[k]];
+          if (!usedSetHashes.has(triadSetHash(titleIds))) {
+            return { titleIds, poolSize };
+          }
+        }
+      }
+    }
+    return null;
   }
 
   // Watched titles the user can still be asked about: "don't remember"
@@ -477,35 +576,20 @@ export class TriadsService {
   // than blocking a round.
   private async adaptiveSelection(
     profileId: string,
-    watchedTitleIds: string[],
+    restedTitleIds: string[],
     recentlyUsedTitleIds: string[],
+    usedSetHashes: Set<string>,
   ): Promise<AdaptiveSelection | null> {
     const arm = await this.experimentsService.armFor(TRIAD_POLICY_EXPERIMENT, profileId);
     if (arm !== ADAPTIVE_POLICY_VERSION) {
       return null;
     }
-    const eligible = watchedTitleIds.filter((id) => !recentlyUsedTitleIds.includes(id));
-    if (eligible.length < 3) {
+    if (restedTitleIds.length < 3) {
       return null;
     }
-    const pool = await this.titlesRepository.find({ where: { id: In(eligible) } });
+    const pool = await this.titlesRepository.find({ where: { id: In(restedTitleIds) } });
     const snapshot = await this.snapshotsRepository.findOne({ where: { profileId }, order: { createdAt: 'DESC' } });
-    return this.triadPolicyService.select(pool, snapshot, new Set(recentlyUsedTitleIds));
-  }
-
-  private async selectRandomTitles(watchedTitleIds: string[], recentlyUsedTitleIds: string[]): Promise<CandidateSelection> {
-    if (watchedTitleIds.length < 3) {
-      return { titles: [], poolSize: 0 };
-    }
-    const queryBuilder = this.titlesRepository.createQueryBuilder('title').orderBy('RANDOM()').take(3);
-    queryBuilder.where('title.id IN (:...watchedTitleIds)', { watchedTitleIds });
-    if (recentlyUsedTitleIds.length > 0) {
-      queryBuilder.andWhere('title.id NOT IN (:...recentlyUsedTitleIds)', { recentlyUsedTitleIds });
-    }
-    // getManyAndCount() runs the COUNT without the take(3)/LIMIT, so
-    // poolSize is the full eligible pool, not just the 3 selected.
-    const [titles, poolSize] = await queryBuilder.getManyAndCount();
-    return { titles, poolSize };
+    return this.triadPolicyService.select(pool, snapshot, new Set(recentlyUsedTitleIds), Math.random, usedSetHashes);
   }
 
   // Shape only: no DB access, so this runs before the triad is even fetched.

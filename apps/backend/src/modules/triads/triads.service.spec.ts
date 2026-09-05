@@ -12,6 +12,7 @@ import { Title } from '../../entities/title.entity';
 import { Triad } from '../../entities/triad.entity';
 import { TriadReplacement } from '../../entities/triad-replacement.entity';
 import { UserTitleState } from '../../entities/user-title-state.entity';
+import { triadSetHash } from './triad-set';
 import { TriadsService } from './triads.service';
 
 function repoMock() {
@@ -19,6 +20,10 @@ function repoMock() {
   // can assert every write that happened inside the transaction.
   const manager = {
     findOne: vi.fn(),
+    // completedSetHashes(profileId, manager) reads this inside replace()'s
+    // transaction; empty by default so tests that don't care about set
+    // history see no prior sets.
+    find: vi.fn(async () => []),
     count: vi.fn(),
     save: vi.fn(async (entity: unknown) => entity),
     create: vi.fn((_target: unknown, data: unknown) => data),
@@ -32,18 +37,7 @@ function repoMock() {
     count: vi.fn(),
     save: vi.fn(async (entity: unknown) => entity),
     create: vi.fn((data: unknown) => data),
-    createQueryBuilder: vi.fn(),
     manager,
-  };
-}
-
-function titlesQueryBuilderMock(titles: Title[], poolSize: number) {
-  return {
-    orderBy: vi.fn().mockReturnThis(),
-    take: vi.fn().mockReturnThis(),
-    where: vi.fn().mockReturnThis(),
-    andWhere: vi.fn().mockReturnThis(),
-    getManyAndCount: vi.fn().mockResolvedValue([titles, poolSize]),
   };
 }
 
@@ -408,7 +402,6 @@ describe('TriadsService', () => {
         needed: 1,
         message: 'Mark at least three films as watched before starting a ranking round',
       });
-      expect(titlesRepository.createQueryBuilder).not.toHaveBeenCalled();
     });
 
     // H1: TriadsService used to exclude every title that had ever appeared in
@@ -429,16 +422,14 @@ describe('TriadsService', () => {
         statesRepository.find.mockResolvedValue(
           ['t1', 't2', 't3', 't4', 't5', 't6'].map((titleId) => ({ titleId })),
         );
-        const builder = titlesQueryBuilderMock([{ id: 't1' }, { id: 't2' }, { id: 't3' }] as Title[], 3);
-        titlesRepository.createQueryBuilder.mockReturnValue(builder);
 
-        await service.getCurrent('user-1', 'profile-1');
+        const result = await service.getCurrent('user-1', 'profile-1');
 
         // t1-t3 (from an older, already-completed triad) must stay eligible --
-        // only t4-t6 (the immediately previous triad) are excluded.
-        expect(builder.andWhere).toHaveBeenCalledWith('title.id NOT IN (:...recentlyUsedTitleIds)', {
-          recentlyUsedTitleIds: ['t4', 't5', 't6'],
-        });
+        // only t4-t6 (the immediately previous triad) are excluded, leaving
+        // exactly one possible set.
+        expect(result).toMatchObject({ state: 'ready' });
+        expect([...(result as { titleIds: string[] }).titleIds].sort()).toEqual(['t1', 't2', 't3']);
       });
 
       it('applies no exclusion filter when there is no previous completed triad', async () => {
@@ -447,12 +438,11 @@ describe('TriadsService', () => {
           .mockResolvedValueOnce(null) // no active triad
           .mockResolvedValueOnce(null); // no previous completed triad
         statesRepository.find.mockResolvedValue([{ titleId: 't1' }, { titleId: 't2' }, { titleId: 't3' }]);
-        const builder = titlesQueryBuilderMock([{ id: 't1' }, { id: 't2' }, { id: 't3' }] as Title[], 3);
-        titlesRepository.createQueryBuilder.mockReturnValue(builder);
 
-        await service.getCurrent('user-1', 'profile-1');
+        const result = await service.getCurrent('user-1', 'profile-1');
 
-        expect(builder.andWhere).not.toHaveBeenCalled();
+        expect(result).toMatchObject({ state: 'ready' });
+        expect([...(result as { titleIds: string[] }).titleIds].sort()).toEqual(['t1', 't2', 't3']);
       });
 
       it('reports "mark another film", not "mark three", when 3+ watched titles exist but all were just used', async () => {
@@ -461,12 +451,58 @@ describe('TriadsService', () => {
           .mockResolvedValueOnce(null) // no active triad
           .mockResolvedValueOnce({ titleIds: ['t1', 't2', 't3'] }); // just-completed triad used all 3 watched titles
         statesRepository.find.mockResolvedValue([{ titleId: 't1' }, { titleId: 't2' }, { titleId: 't3' }]);
-        titlesRepository.createQueryBuilder.mockReturnValue(titlesQueryBuilderMock([], 0));
 
         expect(await service.getCurrent('user-1', 'profile-1')).toMatchObject({
           state: 'need_more_watched',
           message: 'Mark another film as watched to start a new ranking round',
         });
+      });
+    });
+
+    // ADR-99 (remediation brief P0-04): the live round of 2026-09-05 got
+    // round 2's exact films back in round 4, saved with the round-2 ranking
+    // still shown, and it counted as a fresh piece of evidence.
+    describe('ADR-99: set reuse and the verify label', () => {
+      it('labels a fresh set "learn" and counts it toward activation', async () => {
+        profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+        triadsRepository.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(null); // no active, no previous
+        triadsRepository.find.mockResolvedValue([]); // no completed sets yet
+        statesRepository.find.mockResolvedValue([{ titleId: 't1' }, { titleId: 't2' }, { titleId: 't3' }]);
+
+        await service.getCurrent('user-1', 'profile-1');
+
+        const [created] = triadsRepository.create.mock.calls[0];
+        expect(created).toMatchObject({ purpose: 'learn', countsTowardActivation: true });
+        expect(created.setHash).toEqual(expect.any(String));
+      });
+
+      it('draws the one remaining set instead of repeating an already-completed one', async () => {
+        profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+        triadsRepository.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+        // Four watched titles -> four possible sets; one of them (t1,t2,t3) is
+        // already completed, so the only set left is (t1,t2,t4)/(t1,t3,t4)/etc.
+        statesRepository.find.mockResolvedValue(['t1', 't2', 't3', 't4'].map((titleId) => ({ titleId })));
+        const completedHash = triadSetHash(['t1', 't2', 't3']);
+        triadsRepository.find.mockResolvedValue([{ setHash: completedHash, titleIds: ['t1', 't2', 't3'] }]);
+
+        const result = await service.getCurrent('user-1', 'profile-1');
+
+        expect(result).toMatchObject({ purpose: 'learn' });
+        expect([...(result as { titleIds: string[] }).titleIds].sort()).not.toEqual(['t1', 't2', 't3']);
+      });
+
+      it('falls back to a labeled "verify" round, worth nothing, when every set is already completed', async () => {
+        profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+        triadsRepository.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+        statesRepository.find.mockResolvedValue([{ titleId: 't1' }, { titleId: 't2' }, { titleId: 't3' }]);
+        // The only possible set out of exactly 3 watched titles is already done.
+        triadsRepository.find.mockResolvedValue([{ setHash: triadSetHash(['t1', 't2', 't3']), titleIds: [] }]);
+
+        const result = await service.getCurrent('user-1', 'profile-1');
+
+        expect(result).toMatchObject({ purpose: 'verify' });
+        const [created] = triadsRepository.create.mock.calls[0];
+        expect(created).toMatchObject({ purpose: 'verify', countsTowardActivation: false });
       });
     });
 
@@ -476,9 +512,6 @@ describe('TriadsService', () => {
         .mockResolvedValueOnce(null) // no active triad
         .mockResolvedValueOnce(null); // no previous completed triad
       statesRepository.find.mockResolvedValue([{ titleId: 't1' }, { titleId: 't2' }, { titleId: 't3' }]);
-      titlesRepository.createQueryBuilder.mockReturnValue(
-        titlesQueryBuilderMock([{ id: 't1' }, { id: 't2' }, { id: 't3' }] as Title[], 3),
-      );
 
       const result = await service.getCurrent('user-1', 'profile-1');
 
@@ -489,9 +522,6 @@ describe('TriadsService', () => {
       profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
       triadsRepository.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
       statesRepository.find.mockResolvedValue([{ titleId: 't1' }, { titleId: 't2' }, { titleId: 't3' }]);
-      titlesRepository.createQueryBuilder.mockReturnValue(
-        titlesQueryBuilderMock([{ id: 't1' }, { id: 't2' }, { id: 't3' }] as Title[], 3),
-      );
 
       await service.getCurrent('user-1', 'profile-1');
 
@@ -529,9 +559,6 @@ describe('TriadsService', () => {
         .mockResolvedValueOnce(null) // no previous completed triad
         .mockResolvedValueOnce(winner); // re-fetched after losing the insert race
       statesRepository.find.mockResolvedValue([{ titleId: 't1' }, { titleId: 't2' }, { titleId: 't3' }]);
-      titlesRepository.createQueryBuilder.mockReturnValue(
-        titlesQueryBuilderMock([{ id: 't1' }, { id: 't2' }, { id: 't3' }] as Title[], 3),
-      );
       triadsRepository.save.mockRejectedValue({ code: '23505' });
 
       const result = await service.getCurrent('user-1', 'profile-1');
@@ -545,9 +572,6 @@ describe('TriadsService', () => {
         .mockResolvedValueOnce(null) // no active triad
         .mockResolvedValueOnce(null); // no previous completed triad
       statesRepository.find.mockResolvedValue([{ titleId: 't1' }, { titleId: 't2' }, { titleId: 't3' }]);
-      titlesRepository.createQueryBuilder.mockReturnValue(
-        titlesQueryBuilderMock([{ id: 't1' }, { id: 't2' }, { id: 't3' }] as Title[], 3),
-      );
       triadsRepository.save.mockRejectedValue(new Error('connection lost'));
 
       await expect(service.getCurrent('user-1', 'profile-1')).rejects.toThrow('connection lost');

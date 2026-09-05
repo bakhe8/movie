@@ -65,16 +65,20 @@ triads (                                                         -- one listwise
   ranking uuid[],                                                -- titleIds, best first, not indices (ADR-15); NULL while active
   "shownAt" timestamp,                                           -- set once, at creation
   "answeredAt" timestamp,                                        -- set once, at POST .../rank; NULL for triads completed before this column existed (ADR-32)
-  "modelVersion" varchar,                                        -- which snapshot selected this triad; NULL under random-v1, which uses no model
+  "modelVersion" varchar,                                        -- which snapshot selected this triad; NULL under the random policy, which uses no model
   "idempotencyKey" uuid UNIQUE,                                  -- optional; a repeated key for the same triad replays the prior result (BP §14)
   "policyVersion" varchar, "selectionPropensity" real, "experimentId" varchar,
   "sessionId" varchar, metadata json,                            -- { replacements?, reasonForSelection? } — the replacements key is superseded by triad_replacements below and never written
   status varchar NOT NULL DEFAULT 'active',                      -- 'active' | 'completed' | 'skipped' (skipped: abandoned by a replacement with nothing left to swap in)
   "correctsTriadId" uuid FK triads(id),                          -- append-only correction (BP §13.2); NULL for every triad today -- no correction flow built yet
-  holdout boolean NOT NULL DEFAULT false,                        -- reserved validation split (BP §8.3, §16.1); always false -- random-v1 has no holdout concept, training.py's temporal split (ADR-31) covers evaluation instead
+  holdout boolean NOT NULL DEFAULT false,                        -- reserved validation split (BP §8.3, §16.1); always false -- the random policy has no holdout concept, training.py's temporal split (ADR-31) covers evaluation instead
+  "setHash" varchar(32),                                         -- ADR-99: md5 of the three titleIds sorted+joined, equal across permutations; backfilled for legacy rows
+  purpose varchar NOT NULL DEFAULT 'learn',                      -- ADR-99: 'learn' | 'verify' -- verify re-asks a set already completed, once no unseen set is left
+  "countsTowardActivation" boolean NOT NULL DEFAULT true,        -- ADR-99: false for verify rounds; the training threshold and trainer's predicate both exclude them
   "createdAt" timestamp,
   UNIQUE ("profileId") WHERE status = 'active',                  -- partial index; at most one active triad per profile (ADR-28)
-  INDEX ("profileId", "createdAt"), INDEX ("profileId", status)  -- M1
+  INDEX ("profileId", "createdAt"), INDEX ("profileId", status), -- M1
+  INDEX ("profileId", "setHash")                                 -- ADR-99
 )
 
 triad_replacements (                                             -- one append-only row per neutral replacement (BP §4.3, §13.1, ADR-17)

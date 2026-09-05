@@ -168,4 +168,5 @@ def test_load_profiles_counts_only_trainable_triads_excluding_holdout():
 
     assert profiles == [] and popularity == {}
     assert "NOT holdout" in cursor.executed[0]
+    assert "purpose = 'learn'" in cursor.executed[0]
     assert "status = 'completed'" in cursor.executed[0]

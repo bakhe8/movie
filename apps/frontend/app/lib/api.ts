@@ -156,6 +156,10 @@ export interface Triad {
   answeredAt: string | null;
   modelVersion: string | null;
   status: TriadStatus;
+  // ADR-99: 'verify' re-asks a set already answered (no unseen set was
+  // left); it is still a real round to rank, just not new evidence. The
+  // product does not need to announce this at the moment it happens.
+  purpose: 'learn' | 'verify';
   createdAt: string;
 }
 

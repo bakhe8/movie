@@ -5,6 +5,7 @@ import { Credit } from '../../entities/credit.entity';
 import { Title } from '../../entities/title.entity';
 import { UserModelSnapshot } from '../../entities/user-model-snapshot.entity';
 import { FINGERPRINT_V2_DIMENSIONS, FINGERPRINT_V3_DIMENSIONS } from '../../entities/title-fingerprint.type';
+import { triadSetHash } from './triad-set';
 
 export const ADAPTIVE_POLICY_VERSION = 'adaptive-v1';
 
@@ -66,11 +67,16 @@ export class TriadPolicyService {
   // stand-in for §8.2's mutual-information term until a full posterior
   // exists. Minus the repetition costs §8.2 names (-λr·Repeat), and subject
   // to §8.3's constraint that one director may not supply two of the three.
+  // `usedSetHashes` (ADR-99): sets this profile has already completed are
+  // not candidates at all -- a repeat is a verify round, which the random
+  // policy draws and labels when nothing unseen is left; this policy never
+  // proposes one (null lets the caller fall back).
   async select(
     titles: Title[],
     snapshot: UserModelSnapshot | null,
     recentTitleIds: Set<string>,
     random: () => number = Math.random,
+    usedSetHashes: Set<string> = new Set(),
   ): Promise<AdaptiveSelection | null> {
     if (titles.length < 3) {
       return null;
@@ -83,8 +89,8 @@ export class TriadPolicyService {
     const seen = new Set<string>();
     for (let attempt = 0; attempt < CANDIDATES_TO_SCORE; attempt += 1) {
       const triple = this.sampleTriple(titles, random);
-      const key = [...triple.map((title) => title.id)].sort().join('|');
-      if (seen.has(key)) {
+      const key = triadSetHash(triple.map((title) => title.id));
+      if (seen.has(key) || usedSetHashes.has(key)) {
         continue;
       }
       seen.add(key);
