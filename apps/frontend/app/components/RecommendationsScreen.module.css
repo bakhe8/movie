@@ -238,12 +238,6 @@
   font-weight: var(--w-medium);
 }
 
-.model {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--fs-12);
-}
-
 /* --- Buttons -------------------------------------------------------------- */
 
 .cta {

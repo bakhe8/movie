@@ -121,6 +121,17 @@ describe('RecommendationsScreen — ready', () => {
     expect(container.querySelectorAll('[class*="confidenceOnce"]')).toHaveLength(1);
   });
 
+  // Owner decision 2026-09-05 (audit P2 #18): the model version leaves the
+  // list and lives on the profile, where the readiness contract already
+  // carries it; PRIVACY.md §12 now points there.
+  it('does not print the model version under the list', async () => {
+    render(<RecommendationsScreen lang="ar" profileId="p1" />);
+    await screen.findByLabelText('ذوقك حتى الآن');
+
+    expect(screen.queryByText(/إصدار النموذج/)).toBeNull();
+    expect(screen.queryByText(/test-v1/)).toBeNull();
+  });
+
   it('leans on the traits the items agree on', async () => {
     render(<RecommendationsScreen lang="ar" profileId="p1" />);
 

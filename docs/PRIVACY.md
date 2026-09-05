@@ -145,7 +145,7 @@ request → identity re-verification → privacy_requests(scheduled, executeAfte
 
 ## 12. Automated decision-making transparency
 
-Users see: which model version produced a recommendation, the top features that drove it (with `evidenceSource`), a verbal confidence band (never an uncalibrated percentage), and a "not relevant" control. No decision affecting access or eligibility is automated.
+Users see: the top features that drove a recommendation (with `evidenceSource`), a verbal confidence band (never an uncalibrated percentage), and a "not relevant" control. The model version that produced them is shown on the profile screen, in the readiness panel beside each capability and in the taste-profile block -- one place rather than a line under every list (owner decision 2026-09-05, UX_AUDIT_MOBILE_2026-09-05 P2 #18). No decision affecting access or eligibility is automated.
 
 ## 13. Pre-launch privacy checklist (`BP App. B`, Gate 4) — team-internal
 

@@ -89,7 +89,6 @@ const labels = {
     notRelevantNotice: (title: string) => `أُخفي «${title}». سجّلنا أن هذا الاقتراح لم يناسبك.`,
     listNotice: (title: string) => `أُضيف «${title}» إلى قائمتك.`,
     actionFailed: 'تعذّر الحفظ. حاول مجددًا.',
-    model: (version: string) => `إصدار النموذج: ${version}`,
   },
   en: {
     eyebrow: "Tonight's pick",
@@ -155,7 +154,6 @@ const labels = {
     notRelevantNotice: (title: string) => `“${title}” is hidden. We recorded that this suggestion missed.`,
     listNotice: (title: string) => `“${title}” was added to your list.`,
     actionFailed: 'Could not save. Please try again.',
-    model: (version: string) => `Model version: ${version}`,
   },
 };
 
@@ -618,8 +616,6 @@ export function RecommendationsScreen({
     );
   }
 
-  const modelVersions = [...new Set(items.map((item) => item.modelVersion))];
-
   return (
     <div className={styles.screen}>
       {header}
@@ -701,12 +697,6 @@ export function RecommendationsScreen({
         );
       })}
 
-      {/* Which model produced this list (PRIVACY.md §12 transparency). */}
-      {modelVersions.map((version) => (
-        <p key={version} className={styles.model}>
-          {t.model(version)}
-        </p>
-      ))}
     </div>
   );
 }
