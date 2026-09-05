@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { api, type FingerprintDimension, type LibraryRankingItem, type Recommendation, type Title, type TitleState } from '../lib/api';
 import { FEATURE_REASON_COPY } from '../lib/copy';
 import { genreLabel } from '../lib/genres';
@@ -9,6 +9,7 @@ import { PublicQualityCell } from '../public-quality/PublicQualityCell';
 import { collectSources, SourcesFooter } from '../public-quality/SourcesFooter';
 import { Poster } from './Poster';
 import { WorkCard } from './WorkCard';
+import { Toast } from '../lib/toast';
 import styles from './WorkScreen.module.css';
 
 type Lang = 'ar' | 'en';
@@ -142,6 +143,8 @@ const labels = {
     noContext: 'افتح هذا العمل من توصية أو من ترتيبك لترى ملاءمته لك هنا.',
     yourState: 'حالته عندك',
     summaryForeign: 'الملخص (بالإنجليزية)',
+    summary: 'عن الفيلم',
+    film: 'داخل الحكاية',
     watched: 'شاهدته',
     later: 'لاحقًا',
     onList: 'في قائمتك',
@@ -165,6 +168,8 @@ const labels = {
     noContext: 'Open this work from a recommendation or your ranking to see how it fits you here.',
     yourState: 'Your status',
     summaryForeign: 'Summary (in Arabic)',
+    summary: 'About the film',
+    film: 'Inside the story',
     watched: 'Watched it',
     later: 'Later',
     onList: 'On your list',
@@ -188,14 +193,7 @@ function ChevronIcon() {
   );
 }
 
-export function WorkScreen({
-  lang,
-  profileId,
-  title,
-  context,
-  initialState,
-  onBack,
-}: {
+type WorkScreenProps = {
   lang: Lang;
   profileId: string;
   title: Title;
@@ -203,12 +201,27 @@ export function WorkScreen({
   // The exposure/list state known where the card came from, if any.
   initialState?: TitleState | null;
   onBack: () => void;
-}) {
+};
+
+export function WorkScreen(props: WorkScreenProps) {
+  return <ProfileWork key={`${props.profileId}:${props.title.id}`} {...props} />;
+}
+
+function ProfileWork({ lang, profileId, title, context, initialState, onBack }: WorkScreenProps) {
   const t = labels[lang];
   const names = DIMENSION_NAMES[lang];
   const [state, setState] = useState<TitleState | null>(initialState ?? null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [noticeTone, setNoticeTone] = useState<'success' | 'error'>('success');
+  const pendingRef = useRef(false);
+  const stateRevisionRef = useRef(0);
+  const lifetimeRef = useRef(0);
+
+  useEffect(() => {
+    const lifetime = ++lifetimeRef.current;
+    return () => { lifetimeRef.current = lifetime + 1; };
+  }, []);
   // The card's copy of the title is what it was when listed; the page reads
   // the title itself for what only GET /titles/:id carries (Public Quality
   // today; the poster and the fingerprint summary as they land). Until it
@@ -235,9 +248,10 @@ export function WorkScreen({
   // server's lists are the record (watched wins over the watchlist).
   useEffect(() => {
     let cancelled = false;
+    const revision = stateRevisionRef.current;
     Promise.all([api.getWatchedTitles(profileId), api.getWatchlist(profileId)])
       .then(([watched, watchlist]) => {
-        if (cancelled) return;
+        if (cancelled || revision !== stateRevisionRef.current) return;
         const isWatched = watched.some((entry) => entry.titleId === title.id && entry.state === 'watched');
         const isListed = watchlist.some((entry) => entry.titleId === title.id);
         setState(isWatched ? 'watched' : isListed ? 'watchlist' : null);
@@ -256,30 +270,41 @@ export function WorkScreen({
     return () => window.clearTimeout(timer);
   }, [notice]);
 
-  const name = lang === 'ar' ? title.titleAr : title.titleEn;
-  const alt = lang === 'ar' ? title.titleEn : title.titleAr;
+  const name = lang === 'ar' ? detail.titleAr : detail.titleEn;
+  const alt = lang === 'ar' ? detail.titleEn : detail.titleAr;
   const showAlt = Boolean(alt && alt !== name);
   // Catalogue text comes in the source's own language (Wikipedia today), so
   // "is this the reader's language?" is answered by the script it is written
   // in, not by a field the API does not send.
-  const foreignSynopsis = Boolean(title.description) && /[؀-ۿ]/.test(title.description ?? '') !== (lang === 'ar');
+  const foreignSynopsis = Boolean(detail.description) && /[؀-ۿ]/.test(detail.description ?? '') !== (lang === 'ar');
   const summary = (detail as PublicTitle).fingerprintSummary ?? null;
   const known = new Map((summary ?? []).map((entry) => [entry.key, entry.level]));
 
   // Only exposure/list states are written here -- never a rating (ADR-4);
   // undo returns the title to "exposure unknown" (blueprint §2.4 #3).
   async function change(next: TitleState, message: string) {
+    if (pendingRef.current) return;
+    pendingRef.current = true;
+    const lifetime = lifetimeRef.current;
     setBusy(true);
     try {
       // ADR-104: the device's own local day, never the server's UTC clock,
       // and only when actually marking watched right now.
       await api.setTitleState(profileId, title.id, next === 'watched' ? { state: next, watchedOn: todayLocal() } : { state: next });
+      if (lifetime !== lifetimeRef.current) return;
+      stateRevisionRef.current++;
       setState(next);
+      setNoticeTone('success');
       setNotice(message);
     } catch {
+      if (lifetime !== lifetimeRef.current) return;
+      setNoticeTone('error');
       setNotice(t.actionFailed);
     } finally {
-      setBusy(false);
+      if (lifetime === lifetimeRef.current) {
+        pendingRef.current = false;
+        setBusy(false);
+      }
     }
   }
 
@@ -290,14 +315,15 @@ export function WorkScreen({
         {t.back}
       </button>
 
-      {/* Q21: the backdrop is the poster itself, blurred, under a gradient to
-          the ground; the frontend composes no image URL of its own. */}
+      {/* The current contract carries a poster, not a separate backdrop.
+          Its artwork becomes the cover without composing another image URL. */}
       <div
-        className={detail.posterUrl ? `${styles.header} ${styles.withImage}` : styles.header}
+        className={styles.header}
         style={detail.posterUrl ? ({ '--hero-image': `url("${detail.posterUrl}")` } as CSSProperties) : undefined}
       >
-        <Poster title={detail} size="lg" className={styles.headerPoster} />
+        <Poster title={detail} size="lg" className={styles.headerPoster} name={name} />
         <div className={styles.headerText}>
+        <p className={styles.eyebrow}>{t.film}</p>
         <h2>{name}</h2>
         {(showAlt || title.releaseYear) && (
           <p className={styles.alt}>
@@ -318,69 +344,8 @@ export function WorkScreen({
           </ul>
         )}
         </div>
-        {/* Full width under the poster on the phone: a synopsis in the narrow
-            column beside a 120px poster wrapped every few words. */}
-        <div className={styles.headerBelow}>
-          {/* Catalogue descriptions arrive in their own language: direction from the text. */}
-          {title.description &&
-            (foreignSynopsis ? (
-              /* An Arabic screen led with an English Wikipedia paragraph, left
-                 aligned inside a right-aligned card, before anything about the
-                 reader (UX_AUDIT_MOBILE_2026-09-05 P0 #6). Catalogue text
-                 arrives in whatever language the source wrote it, so when it
-                 is not the reader's it folds away under a named summary. */
-              <details className={styles.synopsis}>
-                <summary>{t.summaryForeign}</summary>
-                <p className={styles.desc} dir="auto">
-                  {title.description}
-                </p>
-              </details>
-            ) : (
-              <p className={styles.desc} dir="auto">
-                {title.description}
-              </p>
-            ))}
-          {/* No attribution sentence here: every third-party credit on the page
-              lives in the SourcesFooter at the end (owner, 2026-09-04). */}
-        </div>
-      </div>
-
-      {notice && (
-        <p className={styles.status} role="status">
-          {notice}
-        </p>
-      )}
-
-      {/* The fit, exactly as the originating surface showed it (ADR-33: the
-          same four cells, never merged, never recomputed here). */}
-      <section className={styles.section} aria-label={t.fit}>
-        <h3>{t.fit}</h3>
-        {context.kind === 'recommendation' && (
-          <>
-            <p className={styles.sectionNote}>{t.fitNote}</p>
-            <WorkCard
-              lang={lang}
-              position={context.position}
-              count={context.count}
-              recommendation={context.recommendation}
-              listed={state === 'watchlist'}
-              busy={busy}
-              headless
-              withoutQuality
-            />
-          </>
-        )}
-        {context.kind === 'ranking' && (
-          <>
-            <p className={styles.sectionNote}>{t.fitNote}</p>
-            <WorkCard lang={lang} kind="ranking" item={context.item} position={context.position} count={context.count} headless />
-          </>
-        )}
-        {context.kind === 'none' && <span className={styles.hollow}>{t.noContext}</span>}
-      </section>
-
-      <section className={styles.section} aria-label={t.yourState}>
-        <h3>{t.yourState}</h3>
+      <section className={styles.stateSection} aria-label={t.yourState}>
+        <h3 className={styles.srOnly}>{t.yourState}</h3>
         <div className={styles.actions}>
           {state === 'watched' ? (
             <>
@@ -416,12 +381,64 @@ export function WorkScreen({
         </div>
       </section>
 
+        {/* Full width under the poster on the phone: a synopsis in the narrow
+            column beside a 120px poster wrapped every few words. */}
+        <div className={styles.headerBelow}>
+          {/* Catalogue descriptions arrive in their own language: direction from the text. */}
+          {detail.description && (
+              /* An Arabic screen led with an English Wikipedia paragraph, left
+                 aligned inside a right-aligned card, before anything about the
+                 reader (UX_AUDIT_MOBILE_2026-09-05 P0 #6). Catalogue text
+                 arrives in whatever language the source wrote it, so when it
+                 is not the reader's it folds away under a named summary. */
+              <details className={styles.synopsis}>
+                <summary>{foreignSynopsis ? t.summaryForeign : t.summary}</summary>
+                <p className={styles.desc} dir="auto">
+                  {detail.description}
+                </p>
+              </details>
+          )}
+          {/* No attribution sentence here: every third-party credit on the page
+              lives in the SourcesFooter at the end (owner, 2026-09-04). */}
+        </div>
+      </div>
+
+      {notice && (
+        <Toast message={notice} onDismiss={() => setNotice(null)} tone={noticeTone} />
+      )}
+
+      {/* The fit, exactly as the originating surface showed it (ADR-33: the
+          same four cells, never merged, never recomputed here). */}
+      <section className={styles.section} aria-label={t.fit}>
+        <h3>{t.fit}</h3>
+        {context.kind === 'recommendation' && (
+          <>
+            <WorkCard
+              lang={lang}
+              position={context.position}
+              count={context.count}
+              recommendation={context.recommendation}
+              listed={state === 'watchlist'}
+              busy={busy}
+              headless
+              withoutQuality
+            />
+          </>
+        )}
+        {context.kind === 'ranking' && (
+          <>
+            <WorkCard lang={lang} kind="ranking" item={context.item} position={context.position} count={context.count} headless />
+          </>
+        )}
+        {context.kind === 'none' && <span className={styles.hollow}>{t.noContext}</span>}
+      </section>
+
       {/* Public Quality: a fact about the title, separate from the fit
           (blueprint §5.3, §10.3; ALPHA_PLAN 5.3): one row per source with its
           attribution verbatim and the rights badge; null stays hollow. */}
       <section className={styles.section} aria-label={t.quality}>
         <h3>{t.quality}</h3>
-        <p className={styles.sectionNote}>{t.qualityNote}</p>
+        <p className={styles.srOnly}>{t.qualityNote}</p>
         <dl className={styles.qualityList}>
           <PublicQualityCell quality={detail.publicQuality} lang={lang} headless />
         </dl>
@@ -431,7 +448,7 @@ export function WorkScreen({
           (the accent is reserved for personal fit). */}
       <section className={styles.section} aria-label={t.fingerprint}>
         <h3>{t.fingerprint}</h3>
-        <p className={styles.sectionNote}>{t.fingerprintNote}</p>
+        <p className={styles.srOnly}>{t.fingerprintNote}</p>
         {summary && summary.length > 0 ? (
           <ul className={styles.dims}>
             {DIMENSIONS.filter((key) => known.has(key)).map((key) => {

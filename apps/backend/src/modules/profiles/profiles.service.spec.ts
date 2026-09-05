@@ -9,6 +9,7 @@ function repoMock() {
     findOne: vi.fn(),
     find: vi.fn(),
     save: vi.fn(async (entity: unknown) => entity),
+    update: vi.fn(async () => ({ affected: 1 })),
     create: vi.fn((data: unknown) => data),
     remove: vi.fn(async (entity: unknown) => entity),
   };
@@ -77,6 +78,51 @@ describe('ProfilesService', () => {
   });
 
   describe('update', () => {
+    it('persists an appearance without changing language, platforms, or profile identity', async () => {
+      const profile = { id: 'profile-1', userId: 'user-1', name: 'Main', preferredLanguage: 'ar', preferredAppearance: null, platforms: ['shahid'] };
+      profilesRepository.findOne.mockResolvedValueOnce(profile).mockResolvedValueOnce({ ...profile, preferredAppearance: 'premiere' });
+
+      const updated = await service.update('user-1', 'profile-1', { preferredAppearance: 'premiere' });
+
+      expect(profilesRepository.findOne).toHaveBeenCalledWith({ where: { id: 'profile-1', userId: 'user-1' } });
+      expect(profilesRepository.update).toHaveBeenCalledWith({ id: 'profile-1', userId: 'user-1' }, { preferredAppearance: 'premiere' });
+      expect(profilesRepository.save).not.toHaveBeenCalled();
+      expect(updated).toMatchObject({ preferredAppearance: 'premiere', preferredLanguage: 'ar', platforms: ['shahid'] });
+    });
+
+    it('does not write a stale appearance when another request changes the profile name', async () => {
+      profilesRepository.findOne
+        .mockResolvedValueOnce({ id: 'profile-1', userId: 'user-1', name: 'Main', preferredAppearance: 'cinema' })
+        .mockResolvedValueOnce({ id: 'profile-1', userId: 'user-1', name: 'New name', preferredAppearance: 'montage' });
+
+      const updated = await service.update('user-1', 'profile-1', { name: 'New name' });
+
+      expect(profilesRepository.update).toHaveBeenCalledWith({ id: 'profile-1', userId: 'user-1' }, { name: 'New name' });
+      expect(updated.preferredAppearance).toBe('montage');
+    });
+
+    it('preserves duplicate-name conflict handling for a partial update', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      profilesRepository.update.mockRejectedValueOnce({ code: '23505' });
+
+      await expect(service.update('user-1', 'profile-1', { name: 'Already exists' })).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('accepts an empty patch without asking TypeORM to execute an empty update', async () => {
+      const profile = { id: 'profile-1', userId: 'user-1', name: 'Main' };
+      profilesRepository.findOne.mockResolvedValue(profile);
+      await expect(service.update('user-1', 'profile-1', {})).resolves.toBe(profile);
+      expect(profilesRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('does not save an appearance for another account', async () => {
+      profilesRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.update('other-user', 'profile-1', { preferredAppearance: 'montage' })).rejects.toBeInstanceOf(NotFoundException);
+      expect(profilesRepository.save).not.toHaveBeenCalled();
+      expect(profilesRepository.update).not.toHaveBeenCalled();
+    });
+
     it('rejects updating a profile owned by another user', async () => {
       profilesRepository.findOne.mockResolvedValue(null);
 
@@ -84,6 +130,7 @@ describe('ProfilesService', () => {
         service.update('attacker-user', 'someone-elses-profile', { name: 'Hijacked' }),
       ).rejects.toBeInstanceOf(NotFoundException);
       expect(profilesRepository.save).not.toHaveBeenCalled();
+      expect(profilesRepository.update).not.toHaveBeenCalled();
     });
   });
 

@@ -1,23 +1,24 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { api, type ReadinessRounds, type ReplacementReason, type Title, type Triad } from '../lib/api';
 import { TRIAD_INSTRUCTION } from '../lib/copy';
 import { formatNumber } from '../lib/format';
+import { Toast } from '../lib/toast';
 import { Poster } from './Poster';
 import styles from './RankScreen.module.css';
 
 type Lang = 'ar' | 'en';
 
-// Every string on this screen. The instruction itself is fixed product copy
-// (lib/copy.ts, blueprint §4.3) and must not be paraphrased here.
+// Concise visible prompt; the full instruction remains the heading's accessible
+// description so the meaning of the ranking stays explicit (blueprint §4.3).
 const labels = {
   ar: {
     eyebrow: 'ثلاثية',
-    title: TRIAD_INSTRUCTION.ar,
+    title: 'الأقرب لذوقك أولًا',
     // Blocked: there are no films to rank yet, so the instruction would lie.
     blockedTitle: 'قبل أول ثلاثية',
-    hint: 'اسحب بالمقبض إلى أعلى أو أسفل، أو استخدم السهمين. البطاقة الأولى هي الأكثر إعجابًا.',
+    hint: 'رتّبها حسب إعجابك. اسحب أو استخدم السهمين.',
     save: 'حفظ الترتيب',
     saving: 'جارٍ الحفظ…',
     saved: 'تم الحفظ. هذه جولة جديدة.',
@@ -70,9 +71,9 @@ const labels = {
   },
   en: {
     eyebrow: 'Triad',
-    title: TRIAD_INSTRUCTION.en,
+    title: 'Your favourite comes first',
     blockedTitle: 'Before your first triad',
-    hint: 'Drag by the handle, up or down, or use the arrows. The first card is the one you liked most.',
+    hint: 'Your favourite goes first. Drag the handle or use the arrows.',
     save: 'Save ranking',
     saving: 'Saving…',
     saved: 'Saved. Here is a new round.',
@@ -193,6 +194,25 @@ export function RankScreen({
   const dragRef = useRef<DragState | null>(null);
   const startYRef = useRef(0);
   const cardRefs = useRef<(HTMLLIElement | null)[]>([]);
+  const previousPositions = useRef(new Map<string, number>());
+  // Animate the actual move for both arrow and drag input. Order, focus and
+  // the screen-reader announcement remain the same when motion is disabled.
+  useLayoutEffect(() => {
+    const previous = previousPositions.current;
+    previousPositions.current = new Map();
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    order.forEach((title, index) => {
+      const element = cardRefs.current[index];
+      const before = previous.get(title.id);
+      if (!element || before === undefined || typeof element.animate !== 'function') return;
+      const distance = before - element.getBoundingClientRect().top;
+      if (Math.abs(distance) < 1) return;
+      element.animate([{ transform: `translateY(${distance}px)` }, { transform: 'translateY(0)' }], {
+        duration: 320,
+        easing: 'cubic-bezier(.2,.8,.2,1)',
+      });
+    });
+  }, [order]);
   // The three guards below are refs, not state, because each is read and
   // written synchronously inside the handler that needs it -- a state flag
   // only takes effect on the next render (AUDIT_2026-09-05 M6, M8).
@@ -287,6 +307,7 @@ export function RankScreen({
 
   function move(from: number, to: number) {
     if (from === to || to < 0 || to >= order.length) return;
+    previousPositions.current = new Map(order.map((title, index) => [title.id, cardRefs.current[index]?.getBoundingClientRect().top ?? 0]));
     setOrder((current) => {
       const next = [...current];
       const [item] = next.splice(from, 1);
@@ -449,7 +470,8 @@ export function RankScreen({
   const header = (
     <div className={styles.header}>
       <p className={styles.eyebrow}>{t.eyebrow}</p>
-      <h2>{phase.kind === 'blocked' ? t.blockedTitle : t.title}</h2>
+      <h2 aria-describedby={phase.kind === 'blocked' ? undefined : 'rank-instruction'}>{phase.kind === 'blocked' ? t.blockedTitle : t.title}</h2>
+      {phase.kind !== 'blocked' && <p id="rank-instruction" className={styles.srOnly}>{TRIAD_INSTRUCTION[lang]}</p>}
       {phase.kind === 'ready' && <p className={styles.hint}>{t.hint}</p>}
       {/* Five dots for the five rounds that make a first result (SPEC §5.1
           step 4): the reader can see how far along they are without reading
@@ -466,8 +488,8 @@ export function RankScreen({
       {rounds && (
         <p className={styles.rounds}>
           <span className={styles.roundsCount}>{t.rounds(formatNumber(rounds.learningRounds, lang))}</span>
-          {' · '}
-          {t.roundsHint}
+          {rounds.learningRounds < 5 ? ' · ' : null}
+          {rounds.learningRounds < 5 ? t.roundsHint : null}
           {rounds.verificationRounds > 0 && ` ${t.repeats(rounds.verificationRounds, formatNumber(rounds.verificationRounds, lang))}`}
           {stillToMark > 0 && ` ${t.addMore(stillToMark)}`}
         </p>
@@ -495,9 +517,7 @@ export function RankScreen({
         {/* e.g. "no replacement was left, so a new round has started" -- the
             reason the user is now looking at this message. */}
         {notice && (
-          <p className={styles.status} role="status">
-            {notice}
-          </p>
+          <Toast message={notice} onDismiss={() => setNotice(null)} />
         )}
         <p className={`${styles.status} ${styles.error}`} role="alert">
           {t.needMore(phase.needed)}
@@ -531,9 +551,7 @@ export function RankScreen({
     <div className={styles.screen}>
       {header}
       {notice && (
-        <p className={styles.status} role="status">
-          {notice}
-        </p>
+        <Toast message={notice} tone={notice === t.replaceFailed ? 'error' : 'success'} onDismiss={() => setNotice(null)} />
       )}
       {/* One column, dragged vertically (owner's interaction addendum,
           2026-09-05): a horizontal swipe on a film card reads as like/dislike
@@ -585,6 +603,7 @@ export function RankScreen({
               <Poster title={title} size="md" className={styles.poster} name={name} />
 
               <div className={styles.body}>
+                {index === 0 && <span className={styles.favourite}>{lang === 'ar' ? 'الأقرب لك' : 'Your favourite'}</span>}
                 <h3 className={styles.title}>{name}</h3>
                 {(showAlt || title.releaseYear) && (
                   <p className={styles.alt}>
@@ -677,6 +696,7 @@ export function RankScreen({
         })()}
 
       <button type="button" className={`${styles.cta} ${styles.stickyCta}`} onClick={submitRanking} disabled={busy}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12l4 4L19 6" /></svg>
         {saving ? t.saving : t.save}
       </button>
     </div>

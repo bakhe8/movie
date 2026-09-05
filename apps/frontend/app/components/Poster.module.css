@@ -7,7 +7,7 @@
   aspect-ratio: 2 / 3;
   object-fit: cover;
   border: 1px solid var(--poster-edge);
-  border-radius: var(--r-chip);
+  border-radius: var(--poster-radius, var(--r-chip));
   background: var(--well);
 }
 

@@ -29,6 +29,7 @@ export interface RefreshResponse {
 }
 
 export type PreferredLanguage = 'ar' | 'en';
+export type PreferredAppearance = 'cinema' | 'premiere' | 'montage';
 
 // The closed purpose list (PRIVACY.md §3). email_recommendations and
 // taste_card_sharing are reserved for later -- no feature asks for them yet,
@@ -61,6 +62,7 @@ export interface Profile {
   userId: string;
   name: string;
   preferredLanguage: PreferredLanguage;
+  preferredAppearance?: PreferredAppearance | null;
   // Onboarding (blueprint §4.1): display and availability only, never a
   // taste prior. `market` is ISO 3166-1 alpha-2; null until chosen -- the
   // onboarding screen shows while it is null.
@@ -453,7 +455,7 @@ export const api = {
 
   updateProfile: (
     profileId: string,
-    data: { name?: string; preferredLanguage?: PreferredLanguage; market?: string; platforms?: string[] },
+    data: { name?: string; preferredLanguage?: PreferredLanguage; preferredAppearance?: PreferredAppearance | null; market?: string; platforms?: string[] },
   ) =>
     request<Profile>(`/profiles/${profileId}`, { method: 'PATCH', body: JSON.stringify(data) }),
 

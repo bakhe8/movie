@@ -1,6 +1,7 @@
 import '../../jest-dom-vitest';
 import { describe, expect, it, vi } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { AppShell } from '../components/AppShell';
 
 vi.mock('../lib/theme', () => ({
@@ -57,6 +58,16 @@ describe('AppShell header', () => {
 // but not on the very first render, where the browser's own starting point
 // is the right one.
 describe('AppShell focus management', () => {
+  it('returns focus to the drawer trigger when Escape hides its contents', async () => {
+    const user = userEvent.setup();
+    render(<AppShell lang="ar" onToggleLanguage={() => {}} view="home" onNavigate={() => {}}><p>content</p></AppShell>);
+    await user.click(screen.getByRole('button', { name: 'القائمة' }));
+    const appearance = screen.getByRole('button', { name: /اختر مظهر تجربتك/ });
+    appearance.focus();
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('button', { name: 'القائمة' })).toHaveFocus();
+  });
+
   function shell(view: 'home' | 'rank') {
     return (
       <AppShell lang="ar" onToggleLanguage={() => {}} view={view} onNavigate={() => {}}>

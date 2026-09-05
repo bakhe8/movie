@@ -29,7 +29,7 @@ Verified against `apps/backend/src/modules/**` on 2026-09-03. Every profile-scop
 | POST | `/api/profiles` | JWT | `{ name, preferredLanguage?, market?, platforms? }` | Profile | unique `(userId, name)` → 409; `market` is ISO 3166-1 alpha-2, `platforms` ≤ 20 identifiers ≤ 40 chars — display and Watchability only, never a taste input (`BP §4.1`) |
 | GET | `/api/profiles` | JWT | — | Profile[] | caller's profiles only |
 | GET | `/api/profiles/:profileId` | JWT | — | Profile | |
-| PATCH | `/api/profiles/:profileId` | JWT | `{ name?, preferredLanguage?, market?, platforms? }` | Profile | the onboarding screen writes `market`/`platforms` here; `market` stays `null` until chosen |
+| PATCH | `/api/profiles/:profileId` | JWT | `{ name?, preferredLanguage?, preferredAppearance?, market?, platforms? }` | Profile | `preferredAppearance`: `cinema`, `premiere`, or `montage` (ADR-113); only submitted fields are updated; the onboarding screen writes `market`/`platforms` here |
 | DELETE | `/api/profiles/:profileId` | JWT | — | 204 | cascades events/models of that profile only |
 | GET | `/api/titles` | — | `?query&page&limit(≤100)` | `{ items, page, limit, total, totalPages }` | ILIKE on `titleEn`/`titleAr`; Arabic folding on both sides (hamza forms of alef → ا, ة → ه, ى → ي, tashkeel/shadda/dagger alef/tatweel stripped from query **and** column) so «احلام» finds «أحلام» and «الرسالة» finds «الرِّسالة»; `unaccent` on `titleEn` so «Amelie» finds «Amélie»; alternate titles matched through `localized_titles` with the same folding (ADR-106; nothing populates that table yet) |
 | GET | `/api/titles/search` | — | same as above | same | alias of `GET /api/titles` |
@@ -64,7 +64,7 @@ Verified against `apps/backend/src/modules/**` on 2026-09-03. Every profile-scop
 Response shapes in use (from `apps/frontend/app/lib/api.ts`, which mirrors the entities):
 
 ```ts
-Profile { id, userId, name, preferredLanguage: 'ar'|'en', market: string|null /* ISO 3166-1 alpha-2 */, platforms: string[], createdAt, updatedAt }
+Profile { id, userId, name, preferredLanguage: 'ar'|'en', preferredAppearance: 'cinema'|'premiere'|'montage'|null, market: string|null /* ISO 3166-1 alpha-2 */, platforms: string[], createdAt, updatedAt }
 Title { id, internalId, titleEn, titleAr, description|null, releaseYear|null, genres|null, externalIds?, fingerprint? }
 UserTitleState { id, profileId, titleId, state, watchedAt|null, triadEligible /* false after 'not_remembered' (ADR-17) */,
                  importedRating|null, ratingSource:'import'|null, notes|null, updatedAt, title? }

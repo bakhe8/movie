@@ -445,6 +445,11 @@ Still open: the Cron service and its two variables are the owner's one-time setu
 
 ## Audited on 2026-09-05 (UX-A — mobile audit at `cd31d86`, design direction ADR-111)
 
+| Current owner request | Implementation | Verification boundary |
+|---|---|---|
+| Cinematic redesign from `b87577f` (ADR-113) | Shared image-led home, film, discovery, ranking, library, profile and onboarding; visual platform marks, toast feedback and three profile-backed appearances | Owner approved through `0f39371` on 2026-09-05; all CI jobs passed (174 frontend tests, 199 HTTP/Postgres tests). Migration verified in disposable CI Postgres; production verification remains separate. Evidence: `CINEMATIC_REDESIGN_2026-09-05.md` |
+| Mobile journey follow-up from `6d38f44` | Preserve library tab/filter and discovery query/genre/pages on return; independent film save locks, stale-response guards and protected pending preference/consent edits | Deferred regression tests, 16 edge-layout cases and 8 production-preview journey assertions; new authenticated appearance persistence tests run in disposable CI Postgres |
+
 | Gap | What changed | Proof |
 |---|---|---|
 | The mobile UI told its logic in paragraphs: 6065px/741-word home with 56px posters and "unknown" ×26, triad save button off-screen (1125px), 113px two-row header, English paragraphs leading Arabic cards, 3714px profile page | Audit with DOM measurements and a prioritised list (8 P0, 8 P1, 4 P2), one visual grammar (ADR-111), brand fixed to **Kolme** (O-13أ), seven canvas mockups for owner approval, implementation order for UX-B | `docs/UX_AUDIT_MOBILE_2026-09-05.md` §1–4 · `docs/design/mobile-2026-09-05/` · canvas «نماذج Kolme للجوال» |

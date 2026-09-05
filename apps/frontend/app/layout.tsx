@@ -3,8 +3,11 @@ import Script from "next/script";
 import localFont from "next/font/local";
 import "./globals.css";
 import "./styles/tokens.css";
+import "./styles/cinematic.css";
 import { SessionProvider } from "./lib/session";
 import { ThemeProvider } from "./lib/theme";
+import { ToastProvider } from "./lib/toast";
+import { SessionAppearanceProvider } from "./lib/appearance";
 import { ServiceWorkerRegistration } from "./lib/ServiceWorkerRegistration";
 
 export const metadata: Metadata = {
@@ -50,10 +53,11 @@ export default function RootLayout({ children }: { children: import('react').Rea
             external file, not inline: React warns about inline <script>
             elements in the component tree. Source: public/theme-boot.js. */}
         <Script src="/theme-boot.js" strategy="beforeInteractive" />
+        <Script src="/appearance-boot.js" strategy="beforeInteractive" />
       </head>
       <body>
         <ThemeProvider>
-          <SessionProvider>{children}</SessionProvider>
+          <SessionProvider><ToastProvider><SessionAppearanceProvider>{children}</SessionAppearanceProvider></ToastProvider></SessionProvider>
         </ThemeProvider>
         <ServiceWorkerRegistration />
       </body>

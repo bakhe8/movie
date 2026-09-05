@@ -53,11 +53,15 @@ export class ProfilesService {
     profileId: string,
     updateProfileDto: UpdateProfileDto,
   ): Promise<Profile> {
-    const profile = await this.findOne(userId, profileId);
-    Object.assign(profile, updateProfileDto);
+    await this.findOne(userId, profileId);
 
     try {
-      return await this.profilesRepository.save(profile);
+      // Patch only submitted fields. Saving a previously loaded whole entity
+      // could let a concurrent name/language save erase a newer appearance.
+      if (Object.keys(updateProfileDto).length > 0) {
+        await this.profilesRepository.update({ id: profileId, userId }, updateProfileDto);
+      }
+      return await this.findOne(userId, profileId);
     } catch (error) {
       if (this.isUniqueConstraintError(error)) {
         throw new ConflictException('A profile with this name already exists');
