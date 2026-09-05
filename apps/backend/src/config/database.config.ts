@@ -29,6 +29,7 @@ import { SourceRecord } from '../entities/source-record.entity';
 import { Title } from '../entities/title.entity';
 import { TitleEdition } from '../entities/title-edition.entity';
 import { Triad } from '../entities/triad.entity';
+import { TrainingJob } from '../entities/training-job.entity';
 import { TriadReplacement } from '../entities/triad-replacement.entity';
 import { User } from '../entities/user.entity';
 import { UserModelSnapshot } from '../entities/user-model-snapshot.entity';
@@ -51,6 +52,7 @@ const ENTITIES: DataSourceOptions['entities'] = [
   Profile,
   Title,
   Triad,
+  TrainingJob,
   TriadReplacement,
   Embedding,
   UserModelSnapshot,

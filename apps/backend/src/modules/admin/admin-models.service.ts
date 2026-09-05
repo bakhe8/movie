@@ -1,12 +1,16 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Not, Repository } from 'typeorm';
+import { DataSource, IsNull, Not, Repository } from 'typeorm';
 import { Experiment } from '../../entities/experiment.entity';
 import { ExperimentAssignment } from '../../entities/experiment-assignment.entity';
 import { ModelVersion } from '../../entities/model-version.entity';
+import { Title } from '../../entities/title.entity';
 import { Triad } from '../../entities/triad.entity';
 import { UserModelSnapshot } from '../../entities/user-model-snapshot.entity';
 import { AuditService } from '../audit/audit.service';
+import { ModelServiceClient } from '../training/model-service.client';
+import { TrainingJobsService, TrainingJobsSummary } from '../training/training-jobs.service';
 import type { Actor } from './admin-catalog.service';
 import { CreateModelVersionDto, UpdateModelVersionDto } from './dto/admin.dto';
 
@@ -19,6 +23,28 @@ export interface SnapshotStats {
   meanHeldOutNll: number | null;
 }
 
+// Remediation brief P0-02's "readiness": whether training can plausibly
+// succeed right now, not any one profile's own eligibility. Nothing here
+// is a live poll on a hot path -- it is the admin board asking "is anything
+// structurally broken", the same question the AUDIT_2026-09-05 C1-class
+// findings were about.
+export interface ReadinessReport {
+  database: { ok: boolean };
+  // CATALOG_MIN_TITLES (default 200): the floor the product's own catalog
+  // plan sets for Phase 0 (DEMO_DATA_PLAN_2026-09-03.md), not an arbitrary
+  // number -- below it, discovery and triad variety both suffer regardless
+  // of whether training itself can run.
+  catalog: { titles: number; threshold: number; ok: boolean };
+  fingerprintCoverage: { published: number; total: number; percent: number; ok: boolean };
+  modelService: { configured: boolean; reachable: boolean; ok: boolean };
+}
+
+const DEFAULT_CATALOG_MIN_TITLES = 200;
+// Below this share of the catalog carrying a published fingerprint, a
+// profile's watched titles are unlikely to form even one trainable learn
+// triad (training.py refuses one unless all three have a fingerprint).
+const MIN_FINGERPRINT_COVERAGE = 0.5;
+
 // Internal board, model half (BP §5.1 "model versions", §16.5 acceptance
 // gate, §18.1 rollback; SPECIFICATION §5.5). model_versions rows are
 // registered by hand until the trainer stamps them (ALPHA_PLAN 6.4);
@@ -28,6 +54,8 @@ export interface SnapshotStats {
 // (board request), the pin itself lives here.
 @Injectable()
 export class AdminModelsService {
+  private readonly catalogMinTitles: number;
+
   constructor(
     @InjectRepository(ModelVersion)
     private readonly modelVersions: Repository<ModelVersion>,
@@ -39,9 +67,50 @@ export class AdminModelsService {
     private readonly assignments: Repository<ExperimentAssignment>,
     @InjectRepository(Triad)
     private readonly triads: Repository<Triad>,
+    @InjectRepository(Title)
+    private readonly titles: Repository<Title>,
     private readonly dataSource: DataSource,
     private readonly audit: AuditService,
-  ) {}
+    private readonly trainingJobs: TrainingJobsService,
+    private readonly modelService: ModelServiceClient,
+    config: ConfigService,
+  ) {
+    this.catalogMinTitles = Number(config.get<string>('CATALOG_MIN_TITLES')) || DEFAULT_CATALOG_MIN_TITLES;
+  }
+
+  // GET /admin/training-jobs (remediation brief P0-02): where every recent
+  // training attempt stands, mirroring GET /admin/mail-outbox's shape --
+  // counts by status and the recent rows, pseudonymous profile ids only.
+  async trainingJobsSummary(recent = 20): Promise<TrainingJobsSummary> {
+    return this.trainingJobs.summary(recent);
+  }
+
+  // GET /admin/readiness (remediation brief P0-02): can training plausibly
+  // succeed right now. `database.ok` is implied by this call returning at
+  // all -- every count below already required a live connection.
+  async readiness(): Promise<ReadinessReport> {
+    const [titleCount, publishedCount, modelServiceReachable] = await Promise.all([
+      this.titles.count(),
+      this.titles.count({ where: { fingerprint: Not(IsNull()) } }),
+      this.modelService.reachable(),
+    ]);
+    const percent = titleCount > 0 ? publishedCount / titleCount : 0;
+    return {
+      database: { ok: true },
+      catalog: { titles: titleCount, threshold: this.catalogMinTitles, ok: titleCount >= this.catalogMinTitles },
+      fingerprintCoverage: {
+        published: publishedCount,
+        total: titleCount,
+        percent: Math.round(percent * 1000) / 10,
+        ok: percent >= MIN_FINGERPRINT_COVERAGE,
+      },
+      modelService: {
+        configured: this.modelService.enabled,
+        reachable: modelServiceReachable,
+        ok: this.modelService.enabled && modelServiceReachable,
+      },
+    };
+  }
 
   // Registered versions side by side with what the snapshots table actually
   // holds, so a version that was trained but never registered still shows.

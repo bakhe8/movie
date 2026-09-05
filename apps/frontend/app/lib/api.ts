@@ -534,6 +534,27 @@ export const api = {
       unregistered: { modelVersion: string; snapshotCount: number; profileCount: number }[];
     }>('/admin/models'),
 
+  // ADR-100: the durable training queue, mirroring the mail outbox's admin shape.
+  adminGetTrainingJobs: (limit = 20) =>
+    request<{
+      counts: { queued: number; running: number; succeeded: number; failed: number };
+      recent: {
+        id: string; profileId: string; status: 'queued' | 'running' | 'succeeded' | 'failed';
+        attempts: number; errorKind: 'invalid' | 'error' | null; lastError: string | null;
+        nextAttemptAt: string; startedAt: string | null; finishedAt: string | null; createdAt: string; updatedAt: string;
+      }[];
+    }>(`/admin/training-jobs?limit=${limit}`),
+
+  // ADR-100: can training plausibly succeed right now -- database, catalog
+  // size, fingerprint coverage, model-service reachability.
+  adminGetReadiness: () =>
+    request<{
+      database: { ok: boolean };
+      catalog: { titles: number; threshold: number; ok: boolean };
+      fingerprintCoverage: { published: number; total: number; percent: number; ok: boolean };
+      modelService: { configured: boolean; reachable: boolean; ok: boolean };
+    }>('/admin/readiness'),
+
   adminGetPrivacyRequests: (params: { type?: string; status?: string; page?: number; limit?: number } = {}) => {
     const qs = new URLSearchParams();
     if (params.type) qs.set('type', params.type);

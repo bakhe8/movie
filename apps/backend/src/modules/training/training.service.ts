@@ -1,19 +1,13 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  Logger,
-  NotFoundException,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Profile } from '../../entities/profile.entity';
 import { Triad } from '../../entities/triad.entity';
+import { TrainingJob } from '../../entities/training-job.entity';
 import { UserModelSnapshot } from '../../entities/user-model-snapshot.entity';
-import { ModelServiceClient, ModelServiceError, ModelServiceJob } from './model-service.client';
-import { captureException } from '../../observability/observability';
+import { ModelServiceClient, ModelServiceJob } from './model-service.client';
+import { TrainingJobsService } from './training-jobs.service';
 
 export type TrainingState =
   | 'disabled' // MODEL_SERVICE_URL unset: training is the manual CLI only
@@ -23,7 +17,7 @@ export type TrainingState =
   | 'running'
   | 'succeeded'
   | 'failed'
-  | 'unknown'; // the model service did not answer
+  | 'unknown'; // kept for API compatibility; unreachable since ADR-100 -- see below
 
 export interface TrainingStatus {
   state: TrainingState;
@@ -61,6 +55,15 @@ export interface TrainingRequestResult {
 // profile after its third completed triad and every N after that, so the
 // first result appears on its own after the "three to five rounds" of §5.1.
 // Both thresholds are configuration (App. C leaves the exact count open).
+//
+// Since ADR-100 (remediation brief P0-02), every job-lifecycle question
+// (queued/running/succeeded/failed, retries, idempotency) is answered by
+// TrainingJobsService's durable `training_jobs` row, never by a live call
+// to the model service on this class's own account: a status poll is a DB
+// read, so a model-service blip costs the queue's next sweep tick, never
+// this request. `state: 'unknown'` -- "the model service did not answer
+// just now" -- is therefore unreachable in practice: that is exactly what
+// the durable queue's backoff now absorbs instead.
 @Injectable()
 export class TrainingService {
   private readonly logger = new Logger(TrainingService.name);
@@ -75,6 +78,7 @@ export class TrainingService {
     @InjectRepository(UserModelSnapshot)
     private readonly snapshotsRepository: Repository<UserModelSnapshot>,
     private readonly client: ModelServiceClient,
+    private readonly jobs: TrainingJobsService,
     config: ConfigService,
   ) {
     this.firstTriadCount = TrainingService.positiveInt(config.get<string>('TRAINING_FIRST_TRIAD_COUNT'), 3);
@@ -103,8 +107,9 @@ export class TrainingService {
   }
 
   // Called by TriadCompletedSubscriber after a triad turns 'completed'. Must
-  // never throw or delay the ranking response: a model service that is down
-  // costs a log line and the next threshold, not a failed rank.
+  // never throw or delay the ranking response: enqueue() itself never
+  // throws for a model-service blip (ADR-100 absorbs that into the queue's
+  // backoff), so this try/catch is only for a genuine DB failure.
   async onTriadCompleted(profileId: string): Promise<void> {
     if (!this.client.enabled) {
       return;
@@ -118,17 +123,20 @@ export class TrainingService {
       if (!profile || profile.pausedAt) {
         return;
       }
-      const job = await this.client.requestTraining(profileId);
-      this.logger.log(`training requested for profile ${profileId} at ${completed} completed triads (job ${job.id})`);
+      const { job, created } = await this.jobs.enqueue(profileId);
+      if (created) {
+        this.logger.log(`training requested for profile ${profileId} at ${completed} completed triads (job ${job.id})`);
+      }
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       this.logger.warn(`automatic training skipped for profile ${profileId}: ${reason}`);
-      captureException(error, { profileId, job: 'automatic-training' });
     }
   }
 
   // POST /profiles/:profileId/train -- the owner asks explicitly (the
-  // profile screen's "update my model", and the e2e path).
+  // profile screen's "update my model", and the e2e path). Once past the
+  // eligibility checks this always succeeds: a model-service blip is no
+  // longer this request's problem to report, it is the queue's to retry.
   async requestTraining(userId: string, profileId: string): Promise<TrainingRequestResult> {
     const profile = await this.assertProfileOwnership(userId, profileId);
     if (!this.client.enabled) {
@@ -157,19 +165,8 @@ export class TrainingService {
         needed: 1,
       });
     }
-    const before = await this.safeLatestJob(profileId);
-    try {
-      const job = await this.client.requestTraining(profileId);
-      return { jobId: job.id, status: job.status, created: before?.id !== job.id };
-    } catch (error) {
-      throw new ServiceUnavailableException({
-        statusCode: 503,
-        message: 'The model service did not accept the request',
-        error: 'Service Unavailable',
-        reason: 'model_service_unreachable',
-        detail: error instanceof ModelServiceError ? error.message : undefined,
-      });
-    }
+    const { job, created } = await this.jobs.enqueue(profileId);
+    return { jobId: job.id, status: job.status, created };
   }
 
   // GET /profiles/:profileId/training -- what the UI polls while it shows
@@ -191,8 +188,7 @@ export class TrainingService {
   }
 
   // The state alone, for a caller that owns the profile already. Never
-  // throws: a model service that does not answer is a state ('unknown'),
-  // not a failed recommendations request.
+  // throws: nothing here is a live network call any more.
   async summarize(profile: Pick<Profile, 'id' | 'pausedAt'>): Promise<TrainingSummary> {
     const completed = await this.countCompleted(profile.id);
     const { state, job, nextTrainingAt } = await this.resolveState(profile, completed);
@@ -210,16 +206,29 @@ export class TrainingService {
       return { state: 'paused', job: null, nextTrainingAt: null };
     }
     const nextTrainingAt = this.nextTrainingAt(completed);
-    let job: ModelServiceJob | null;
-    try {
-      job = await this.client.getLatestJob(profile.id);
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      this.logger.warn(`training status unavailable for profile ${profile.id}: ${reason}`);
-      captureException(error, { profileId: profile.id, job: 'training-status' });
-      return { state: 'unknown', job: null, nextTrainingAt };
+    const row = await this.jobs.latestForProfile(profile.id);
+    if (!row) {
+      return { state: 'idle', job: null, nextTrainingAt };
     }
-    return { state: job ? job.status : 'idle', job, nextTrainingAt };
+    return { state: row.status, job: this.toModelServiceJob(row), nextTrainingAt };
+  }
+
+  // The durable row, shaped exactly like the model service's own Job
+  // (model-service.client.ts) -- every existing reader (both API consumers
+  // and the frontend) keeps working against `job.id`/`status`/`errorKind`/
+  // `error`, now sourced from training_jobs instead of a live HTTP call.
+  private toModelServiceJob(row: TrainingJob): ModelServiceJob {
+    return {
+      id: row.id,
+      profileId: row.profileId,
+      status: row.status,
+      requestedAt: row.createdAt.toISOString(),
+      startedAt: row.startedAt ? row.startedAt.toISOString() : null,
+      finishedAt: row.finishedAt ? row.finishedAt.toISOString() : null,
+      errorKind: row.errorKind,
+      error: row.lastError,
+      result: (row.result as ModelServiceJob['result']) ?? null,
+    };
   }
 
   // Rounds that are evidence: a verify round (a set the profile already
@@ -227,14 +236,6 @@ export class TrainingService {
   // rounds over the same three films never read as ten pieces of evidence.
   private async countCompleted(profileId: string): Promise<number> {
     return this.triadsRepository.count({ where: { profileId, status: 'completed', countsTowardActivation: true } });
-  }
-
-  private async safeLatestJob(profileId: string): Promise<ModelServiceJob | null> {
-    try {
-      return await this.client.getLatestJob(profileId);
-    } catch {
-      return null;
-    }
   }
 
   // 404 for a profile that is not the caller's, never 403 -- the same

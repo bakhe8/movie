@@ -1,37 +1,50 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { BadRequestException, ConflictException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
-import { ModelServiceClient, ModelServiceError, ModelServiceJob } from './model-service.client';
+import type { ModelServiceClient } from './model-service.client';
+import type { TrainingJob } from '../../entities/training-job.entity';
+import type { TrainingJobsService } from './training-jobs.service';
 import { TrainingService } from './training.service';
 
-function job(overrides: Partial<ModelServiceJob> = {}): ModelServiceJob {
+// Since ADR-100, TrainingService never calls the model service directly for
+// job lifecycle -- only `client.enabled` (a genuine "not configured at all"
+// state) and TrainingJobsService's durable row. A model-service blip is
+// TrainingJobsService's problem to retry, not something this class's tests
+// exercise any more.
+function trainingJob(overrides: Partial<TrainingJob> = {}): TrainingJob {
   return {
     id: 'job-1',
     profileId: 'profile-1',
     status: 'queued',
-    requestedAt: '2026-09-04T00:00:00Z',
+    attempts: 1,
+    modelServiceJobId: 'python-job-1',
+    nextAttemptAt: new Date('2026-09-04T00:00:00Z'),
+    errorKind: null,
+    lastError: null,
+    result: null,
     startedAt: null,
     finishedAt: null,
-    errorKind: null,
-    error: null,
-    result: null,
+    createdAt: new Date('2026-09-04T00:00:00Z'),
+    updatedAt: new Date('2026-09-04T00:00:00Z'),
     ...overrides,
-  };
+  } as TrainingJob;
 }
 
 function configMock(values: Record<string, string> = {}): ConfigService {
   return { get: vi.fn((key: string) => values[key]) } as unknown as ConfigService;
 }
 
-function clientMock(enabled = true) {
+function clientMock(enabled = true): ModelServiceClient {
+  return { enabled } as unknown as ModelServiceClient;
+}
+
+function jobsMock() {
   return {
-    enabled,
-    requestTraining: vi.fn(async () => job()),
-    getLatestJob: vi.fn(async () => null as ModelServiceJob | null),
-    getJob: vi.fn(),
-  } as unknown as ModelServiceClient & {
-    requestTraining: ReturnType<typeof vi.fn>;
-    getLatestJob: ReturnType<typeof vi.fn>;
+    enqueue: vi.fn(async (profileId: string) => ({ job: trainingJob({ profileId }), created: true })),
+    latestForProfile: vi.fn(async () => null as TrainingJob | null),
+  } as unknown as TrainingJobsService & {
+    enqueue: ReturnType<typeof vi.fn>;
+    latestForProfile: ReturnType<typeof vi.fn>;
   };
 }
 
@@ -39,16 +52,11 @@ describe('TrainingService', () => {
   let profiles: { findOne: ReturnType<typeof vi.fn> };
   let triads: { count: ReturnType<typeof vi.fn> };
   let snapshots: { findOne: ReturnType<typeof vi.fn> };
-  let client: ReturnType<typeof clientMock>;
+  let client: ModelServiceClient;
+  let jobs: ReturnType<typeof jobsMock>;
 
   function build(config: ConfigService = configMock(), theClient = client) {
-    return new TrainingService(
-      profiles as never,
-      triads as never,
-      snapshots as never,
-      theClient,
-      config,
-    );
+    return new TrainingService(profiles as never, triads as never, snapshots as never, theClient, jobs, config);
   }
 
   beforeEach(() => {
@@ -56,6 +64,7 @@ describe('TrainingService', () => {
     triads = { count: vi.fn(async () => 3) };
     snapshots = { findOne: vi.fn(async () => null) };
     client = clientMock();
+    jobs = jobsMock();
   });
 
   describe('thresholds', () => {
@@ -83,31 +92,35 @@ describe('TrainingService', () => {
       const service = build(configMock(), clientMock(false));
       await service.onTriadCompleted('profile-1');
       expect(triads.count).not.toHaveBeenCalled();
+      expect(jobs.enqueue).not.toHaveBeenCalled();
     });
 
     it('requests training exactly at a threshold count', async () => {
       const service = build();
       triads.count.mockResolvedValueOnce(2);
       await service.onTriadCompleted('profile-1');
-      expect(client.requestTraining).not.toHaveBeenCalled();
+      expect(jobs.enqueue).not.toHaveBeenCalled();
 
       triads.count.mockResolvedValueOnce(3);
       await service.onTriadCompleted('profile-1');
-      expect(client.requestTraining).toHaveBeenCalledWith('profile-1');
+      expect(jobs.enqueue).toHaveBeenCalledWith('profile-1');
 
       triads.count.mockResolvedValueOnce(8);
       await service.onTriadCompleted('profile-1');
-      expect(client.requestTraining).toHaveBeenCalledTimes(2);
+      expect(jobs.enqueue).toHaveBeenCalledTimes(2);
     });
 
     it('never trains a paused profile (PRIVACY.md §4 pause_all)', async () => {
       profiles.findOne.mockResolvedValueOnce({ id: 'profile-1', userId: 'user-1', pausedAt: new Date() });
       await build().onTriadCompleted('profile-1');
-      expect(client.requestTraining).not.toHaveBeenCalled();
+      expect(jobs.enqueue).not.toHaveBeenCalled();
     });
 
-    it('swallows a model-service failure instead of surfacing it to the rank request', async () => {
-      client.requestTraining.mockRejectedValueOnce(new ModelServiceError('down', null));
+    // TrainingJobsService.enqueue() absorbs a model-service blip into its own
+    // backoff (ADR-100) and should never throw for one, but a genuine DB
+    // failure surfacing from it must still cost a log line, not a failed rank.
+    it('swallows a failure from enqueue() instead of surfacing it to the rank request', async () => {
+      jobs.enqueue.mockRejectedValueOnce(new Error('database unreachable'));
       await expect(build().onTriadCompleted('profile-1')).resolves.toBeUndefined();
     });
   });
@@ -124,6 +137,7 @@ describe('TrainingService', () => {
       await expect(service.requestTraining('user-1', 'profile-1')).rejects.toMatchObject({
         response: { reason: 'model_service_disabled' },
       });
+      expect(jobs.enqueue).not.toHaveBeenCalled();
     });
 
     it('409s for a paused profile and 400s with needed when nothing is ranked yet', async () => {
@@ -137,22 +151,18 @@ describe('TrainingService', () => {
       await expect(build().requestTraining('user-1', 'profile-1')).rejects.toBeInstanceOf(BadRequestException);
     });
 
-    it('returns the job and whether it was newly created', async () => {
-      client.getLatestJob.mockResolvedValueOnce(job({ id: 'job-1' }));
+    // Once past the eligibility checks this always succeeds now (ADR-100):
+    // a model-service blip is the queue's problem, never a 503 here.
+    it('returns the enqueued job and whether it was newly created', async () => {
+      jobs.enqueue.mockResolvedValueOnce({ job: trainingJob({ id: 'job-1', status: 'running' }), created: false });
       await expect(build().requestTraining('user-1', 'profile-1')).resolves.toEqual({
         jobId: 'job-1',
-        status: 'queued',
+        status: 'running',
         created: false,
       });
-      client.getLatestJob.mockResolvedValueOnce(null);
-      await expect(build().requestTraining('user-1', 'profile-1')).resolves.toMatchObject({ created: true });
-    });
 
-    it('maps an unreachable service to 503 with a reason', async () => {
-      client.requestTraining.mockRejectedValueOnce(new ModelServiceError('unreachable', null));
-      const promise = build().requestTraining('user-1', 'profile-1');
-      await expect(promise).rejects.toBeInstanceOf(ServiceUnavailableException);
-      await expect(promise).rejects.toMatchObject({ response: { reason: 'model_service_unreachable' } });
+      jobs.enqueue.mockResolvedValueOnce({ job: trainingJob({ id: 'job-2' }), created: true });
+      await expect(build().requestTraining('user-1', 'profile-1')).resolves.toMatchObject({ jobId: 'job-2', created: true });
     });
   });
 
@@ -173,16 +183,19 @@ describe('TrainingService', () => {
 
       const created = new Date('2026-09-04T00:00:00Z');
       snapshots.findOne.mockResolvedValueOnce({ modelVersion: 'plackett-luce-v2', trainingTriadCount: 3, createdAt: created });
-      client.getLatestJob.mockResolvedValueOnce(job({ status: 'succeeded' }));
+      jobs.latestForProfile.mockResolvedValueOnce(trainingJob({ status: 'succeeded' }));
       await expect(build().status('user-1', 'profile-1')).resolves.toMatchObject({
         state: 'succeeded',
         latestSnapshot: { modelVersion: 'plackett-luce-v2', trainingTriadCount: 3, createdAt: created },
       });
     });
 
-    it('answers unknown, not an error, when the service is unreachable', async () => {
-      client.getLatestJob.mockRejectedValueOnce(new ModelServiceError('down', null));
-      await expect(build().status('user-1', 'profile-1')).resolves.toMatchObject({ state: 'unknown', job: null });
+    it('shapes the durable row exactly like the model service job the frontend already reads', async () => {
+      jobs.latestForProfile.mockResolvedValueOnce(
+        trainingJob({ id: 'job-9', status: 'failed', errorKind: 'invalid', lastError: 'no fingerprints' }),
+      );
+      const result = await build().status('user-1', 'profile-1');
+      expect(result.job).toMatchObject({ id: 'job-9', status: 'failed', errorKind: 'invalid', error: 'no fingerprints' });
     });
 
     it('404s for a profile the caller does not own', async () => {
@@ -198,7 +211,7 @@ describe('TrainingService', () => {
 
     it('reports the latest job with its id and failure kind', async () => {
       triads.count.mockResolvedValueOnce(10);
-      client.getLatestJob.mockResolvedValueOnce(job({ id: 'job-9', status: 'failed', errorKind: 'invalid', error: 'no fingerprints' }));
+      jobs.latestForProfile.mockResolvedValueOnce(trainingJob({ id: 'job-9', status: 'failed', errorKind: 'invalid', lastError: 'no fingerprints' }));
       await expect(build().summarize(profile)).resolves.toEqual({
         state: 'failed',
         jobId: 'job-9',
@@ -209,12 +222,10 @@ describe('TrainingService', () => {
       expect(profiles.findOne).not.toHaveBeenCalled();
     });
 
-    it('reports disabled, paused, idle and unknown without throwing', async () => {
+    it('reports disabled, paused and idle without throwing', async () => {
       await expect(build(configMock(), clientMock(false)).summarize(profile)).resolves.toMatchObject({ state: 'disabled', nextTrainingAt: null });
       await expect(build().summarize({ id: 'profile-1', pausedAt: new Date() })).resolves.toMatchObject({ state: 'paused' });
       await expect(build().summarize(profile)).resolves.toMatchObject({ state: 'idle', jobId: null, nextTrainingAt: 8 });
-      client.getLatestJob.mockRejectedValueOnce(new ModelServiceError('down', null));
-      await expect(build().summarize(profile)).resolves.toMatchObject({ state: 'unknown', jobId: null, errorKind: null });
     });
   });
 });

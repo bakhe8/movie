@@ -14,6 +14,7 @@ import { Triad } from '../../entities/triad.entity';
 import { User } from '../../entities/user.entity';
 import { UserModelSnapshot } from '../../entities/user-model-snapshot.entity';
 import { AuditModule } from '../audit/audit.module';
+import { TrainingModule } from '../training/training.module';
 import { AdminCatalogService } from './admin-catalog.service';
 import { AdminMetricsService } from './admin-metrics.service';
 import { AdminModelsService } from './admin-models.service';
@@ -22,7 +23,9 @@ import { AdminController } from './admin.controller';
 
 // Internal board (BP §5.1): catalog and rights, fingerprint review,
 // models and experiments, accounts, privacy queue, audit log, and the
-// metrics board (4.3). Backend half only; the screens are 4.2.
+// metrics board (4.3). Backend half only; the screens are 4.2. TrainingModule
+// (ADR-100) supplies TrainingJobsService and ModelServiceClient for the
+// training-jobs summary and the readiness check.
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -41,6 +44,7 @@ import { AdminController } from './admin.controller';
       AuditLog,
     ]),
     AuditModule,
+    TrainingModule,
   ],
   controllers: [AdminController],
   providers: [AdminCatalogService, AdminModelsService, AdminOpsService, AdminMetricsService],

@@ -139,6 +139,22 @@ export class AdminController {
     return this.models.latestTriads(query.limit);
   }
 
+  // Where every recent training attempt stands (remediation brief P0-02,
+  // ADR-100): counts by status and the recent rows, pseudonymous profile
+  // ids only -- same shape as GET admin/mail-outbox.
+  @Get('training-jobs')
+  trainingJobs(@Query() query: LatestTriadsQueryDto) {
+    return this.models.trainingJobsSummary(query.limit);
+  }
+
+  // Can training plausibly succeed right now: database, catalog size,
+  // fingerprint coverage, model-service reachability (remediation brief
+  // P0-02). Never on the hot path -- polled by the admin board only.
+  @Get('readiness')
+  readiness() {
+    return this.models.readiness();
+  }
+
   // ---- accounts, privacy queue, audit log --------------------------------
 
   @Get('users')

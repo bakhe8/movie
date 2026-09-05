@@ -88,6 +88,21 @@ export class ModelServiceClient {
     return body.job;
   }
 
+  // Readiness (ADR-100, remediation brief P0-02): a live reachability check,
+  // not a status poll -- true only on an actual 200 from /health, false for
+  // "not configured" and for any network failure, never thrown.
+  async reachable(): Promise<boolean> {
+    if (!this.baseUrl) {
+      return false;
+    }
+    try {
+      await this.call<{ status: string }>('GET', '/health');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private async call<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
     if (!this.baseUrl) {
       throw new ModelServiceError('Model service is not configured (MODEL_SERVICE_URL)', null);

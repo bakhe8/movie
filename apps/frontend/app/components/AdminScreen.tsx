@@ -243,6 +243,102 @@ type ModelVersion = {
   stats: { snapshotCount: number; profileCount: number } | null;
 };
 
+type Readiness = {
+  database: { ok: boolean };
+  catalog: { titles: number; threshold: number; ok: boolean };
+  fingerprintCoverage: { published: number; total: number; percent: number; ok: boolean };
+  modelService: { configured: boolean; reachable: boolean; ok: boolean };
+};
+
+type TrainingJobRow = {
+  id: string; profileId: string; status: 'queued' | 'running' | 'succeeded' | 'failed';
+  attempts: number; errorKind: 'invalid' | 'error' | null; lastError: string | null;
+  nextAttemptAt: string; finishedAt: string | null; createdAt: string;
+};
+
+const JOB_STATUS_LABEL: Record<TrainingJobRow['status'], string> = {
+  queued: 'قيد الانتظار', running: 'قيد التنفيذ', succeeded: 'نجح', failed: 'فشل',
+};
+
+// GET admin/readiness (ADR-100): can training plausibly succeed right now --
+// answered once per load, never on a hot path.
+function ReadinessStrip() {
+  const [readiness, setReadiness] = useState<Readiness | null>(null);
+  useEffect(() => {
+    api.adminGetReadiness().then(setReadiness).catch(() => setReadiness(null));
+  }, []);
+  if (!readiness) return null;
+  const items: { label: string; ok: boolean; detail: string }[] = [
+    { label: 'القاعدة', ok: readiness.database.ok, detail: readiness.database.ok ? 'متصلة' : 'غير متصلة' },
+    { label: 'الكتالوج', ok: readiness.catalog.ok, detail: `${readiness.catalog.titles} / ${readiness.catalog.threshold}` },
+    { label: 'تغطية البصمات', ok: readiness.fingerprintCoverage.ok, detail: `${readiness.fingerprintCoverage.percent}%` },
+    {
+      label: 'خدمة النموذج',
+      ok: readiness.modelService.ok,
+      detail: !readiness.modelService.configured ? 'غير مُهيَّأة' : readiness.modelService.reachable ? 'تجيب' : 'لا تجيب',
+    },
+  ];
+  return (
+    <div className={s.tableWrap}>
+      <table className={s.table}>
+        <thead><tr>{items.map(i => <th key={i.label}>{i.label}</th>)}</tr></thead>
+        <tbody>
+          <tr>
+            {items.map(i => (
+              <td key={i.label}>
+                <span className={`${s.badge} ${i.ok ? s.green : s.red}`}>{i.detail}</span>
+              </td>
+            ))}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// GET admin/training-jobs (ADR-100): the same shape as the mail outbox's
+// admin view -- counts by status and the recent rows, never an address, a
+// body, or (here) the unsanitized error.
+function TrainingJobsTable() {
+  const [data, setData] = useState<{ counts: Record<TrainingJobRow['status'], number>; recent: TrainingJobRow[] } | null>(null);
+  useEffect(() => {
+    api.adminGetTrainingJobs().then(setData).catch(() => setData(null));
+  }, []);
+  if (!data) return null;
+  return (
+    <>
+      <h3 className={s.subhead}>
+        طابور التدريب — قيد الانتظار {data.counts.queued} · قيد التنفيذ {data.counts.running} · نجح {data.counts.succeeded} · فشل {data.counts.failed}
+      </h3>
+      <div className={s.tableWrap}>
+        <table className={s.table}>
+          <thead>
+            <tr><th>الملف</th><th>الحالة</th><th>محاولات</th><th>الخطأ</th><th>آخر تحديث</th></tr>
+          </thead>
+          <tbody>
+            {data.recent.map(row => (
+              <tr key={row.id}>
+                <td className={s.mono}>{row.profileId.slice(0, 8)}</td>
+                <td>
+                  <span className={`${s.badge} ${row.status === 'failed' ? s.red : row.status === 'succeeded' ? s.green : s.yellow}`}>
+                    {JOB_STATUS_LABEL[row.status]}
+                  </span>
+                </td>
+                <td>{row.attempts}</td>
+                <td>{row.lastError ?? '—'}</td>
+                <td>{fmt(row.finishedAt ?? row.createdAt)}</td>
+              </tr>
+            ))}
+            {data.recent.length === 0 && (
+              <tr><td colSpan={5} className={s.loading}>لا جولات تدريب بعد</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
 function ModelsTab() {
   const [data, setData] = useState<{ versions: ModelVersion[]; unregistered: { modelVersion: string; snapshotCount: number; profileCount: number }[] } | null>(null);
   const [busy, setBusy] = useState(true);
@@ -256,6 +352,8 @@ function ModelsTab() {
 
   return (
     <div className={s.tabBody}>
+      <ReadinessStrip />
+      <TrainingJobsTable />
       <div className={s.tableWrap}>
         <table className={s.table}>
           <thead>

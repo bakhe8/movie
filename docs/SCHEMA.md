@@ -147,6 +147,19 @@ mail_outbox (                                                    -- ADR-97: ever
   INDEX ("userId"), INDEX (status, "nextAttemptAt")            -- the sweep's scan; delivered/dead rows purge after 7 days
 )
 
+training_jobs (                                                  -- ADR-100: durable outer layer around the model service's own async job (ADR-25)
+  id uuid PK, "profileId" uuid NOT NULL FK profiles ON DELETE CASCADE,
+  status varchar(16) NOT NULL DEFAULT 'queued',                  -- queued | running | succeeded | failed
+  attempts int NOT NULL DEFAULT 0, "modelServiceJobId" varchar,  -- the model service's own job id for the attempt in flight; NULL while queued
+  "nextAttemptAt" timestamp NOT NULL,                            -- ignored while running -- a running row is polled every sweep tick regardless
+  "errorKind" varchar, "lastError" varchar(500),                 -- sanitized (connection strings/tokens/paths stripped) before storage
+  result json,                                                   -- model_service.py's summarize() shape; never weights
+  "startedAt" timestamp, "finishedAt" timestamp,
+  "createdAt" timestamp NOT NULL DEFAULT now(), "updatedAt" timestamp NOT NULL DEFAULT now(),
+  UNIQUE ("profileId") WHERE status IN ('queued', 'running'),    -- idempotency: at most one attempt series per profile
+  INDEX ("profileId"), INDEX (status, "nextAttemptAt")           -- 30-day retention purge on succeeded/failed rows
+)
+
 refresh_tokens (                                                 -- ADR-26: rotated refresh tokens with family-level reuse detection
   id uuid PK, "userId" uuid NOT NULL FK users ON DELETE CASCADE, -- a privacy purge takes every session with the account
   "tokenHash" varchar(64) UNIQUE NOT NULL,                       -- sha256 of the raw token; the raw value is never stored

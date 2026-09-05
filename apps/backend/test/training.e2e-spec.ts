@@ -220,16 +220,20 @@ describe('Training trigger and status (ADR-25, real HTTP, real DB, fake model se
       .get(`/profiles/${ownerProfileId}/training`)
       .set('Authorization', `Bearer ${ownerToken}`)
       .expect(200);
-    expect(status.body).toMatchObject({ state: 'queued', completedTriads: 3, nextTrainingAt: 8 });
-    expect(status.body.job).toMatchObject({ profileId: ownerProfileId, status: 'queued' });
+    // ADR-100: `running` means "handed off to the model service and being
+    // tracked", not "the model service's own worker has started it" -- the
+    // durable row's own retry-due state also uses 'queued', so a status
+    // that is really Python's own sub-state would collide with it.
+    expect(status.body).toMatchObject({ state: 'running', completedTriads: 3, nextTrainingAt: 8 });
+    expect(status.body.job).toMatchObject({ profileId: ownerProfileId, status: 'running' });
   });
 
-  it('accepts an explicit request from the owner and is idempotent while a job is queued', async () => {
+  it('accepts an explicit request from the owner and is idempotent while a job is running', async () => {
     const response = await request(app.getHttpServer())
       .post(`/profiles/${ownerProfileId}/train`)
       .set('Authorization', `Bearer ${ownerToken}`)
       .expect(202);
-    expect(response.body).toMatchObject({ status: 'queued', created: false });
+    expect(response.body).toMatchObject({ status: 'running', created: false });
     expect(response.body.jobId).toEqual(expect.any(String));
   });
 
