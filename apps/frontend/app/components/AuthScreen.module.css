@@ -173,6 +173,13 @@
 /* The terms agreement: a native checkbox in the accent; the whole label is
    the tap target. Plain text until the pages it names exist. */
 .terms {
+  display: grid;
+  gap: var(--sp-1);
+}
+
+/* The agreement is one sentence with one target; the documents sit under it
+   on their own line so the whole paragraph does not read as a link. */
+.termsAgree {
   display: flex;
   align-items: flex-start;
   gap: var(--sp-2);
@@ -183,7 +190,15 @@
   cursor: pointer;
 }
 
-.terms input {
+.termsLinks {
+  margin: 0;
+  padding-inline-start: calc(20px + var(--sp-2));
+  color: var(--muted);
+  font-size: var(--fs-13);
+  line-height: var(--lh-ui);
+}
+
+.termsAgree input {
   flex: none;
   width: 20px;
   height: 20px;
@@ -191,7 +206,7 @@
   accent-color: var(--accent);
 }
 
-.terms input:focus-visible {
+.termsAgree input:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }

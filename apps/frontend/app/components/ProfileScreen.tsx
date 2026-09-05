@@ -700,10 +700,14 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
         <h3>{t.account}</h3>
         {user && (
           <p>
-            <span className={styles.strong}>
-              {user.firstName} {user.lastName}
-            </span>
-            <br />
+            {/* An account created since the door stopped asking has no name
+                (2026-09-05); the address is what identifies it. */}
+            {(user.firstName || user.lastName) && (
+              <>
+                <span className={styles.strong}>{[user.firstName, user.lastName].filter(Boolean).join(' ')}</span>
+                <br />
+              </>
+            )}
             {user.email}
           </p>
         )}

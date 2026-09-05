@@ -65,8 +65,8 @@ export class AuthService {
     const user = this.usersRepository.create({
       email,
       password: hashedPassword,
-      firstName,
-      lastName,
+      firstName: firstName ?? null,
+      lastName: lastName ?? null,
       active: true,
       // ADR-107: derived from the address, never from the request body --
       // the canary registers through this same route, and no caller may

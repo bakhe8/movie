@@ -27,8 +27,6 @@ const labels = {
     email: 'البريد الإلكتروني',
     password: 'كلمة المرور',
     passwordHint: 'من 8 إلى 64 حرفًا.',
-    firstName: 'الاسم الأول',
-    lastName: 'اسم العائلة',
     switchToRegister: 'ليس لديك حساب؟ أنشئ واحدًا',
     switchToLogin: 'لديك حساب بالفعل؟ سجّل الدخول',
     submitLogin: 'دخول',
@@ -58,8 +56,6 @@ const labels = {
     email: 'Email',
     password: 'Password',
     passwordHint: '8 to 64 characters.',
-    firstName: 'First name',
-    lastName: 'Last name',
     switchToRegister: "Don't have an account? Create one",
     switchToLogin: 'Already have an account? Log in',
     submitLogin: 'Log in',
@@ -88,8 +84,6 @@ export function AuthScreen({
   const [submitting, setSubmitting] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
   // Unchecked by default; registration cannot be submitted without it.
   const [agreed, setAgreed] = useState(false);
   // Reset mode keeps its own outcome: the session's error belongs to
@@ -122,7 +116,10 @@ export function AuthScreen({
       if (mode === 'login') {
         await login(email, password);
       } else {
-        await register({ email, password, firstName, lastName });
+        // No name is asked for at the door (owner's interaction addendum,
+        // 2026-09-05): it appears on no screen but the profile's account card
+        // and enters no model, so the door asks for what it needs and stops.
+        await register({ email, password });
         // The account exists and the token is set: record the agreement the
         // checkbox expressed. A failed write must not trap the user on the
         // door (the same non-blocking pattern as onboarding's consent write);
@@ -169,30 +166,6 @@ export function AuthScreen({
           </p>
         ) : (
           <form className={styles.form} onSubmit={handleSubmit} noValidate={false}>
-            {mode === 'register' && (
-              <div className={styles.two}>
-                <div className={styles.field}>
-                  <label htmlFor="auth-first-name">{t.firstName}</label>
-                  <input
-                    id="auth-first-name"
-                    autoComplete="given-name"
-                    value={firstName}
-                    onChange={(event) => setFirstName(event.target.value)}
-                    required
-                  />
-                </div>
-                <div className={styles.field}>
-                  <label htmlFor="auth-last-name">{t.lastName}</label>
-                  <input
-                    id="auth-last-name"
-                    autoComplete="family-name"
-                    value={lastName}
-                    onChange={(event) => setLastName(event.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-            )}
             <div className={styles.field}>
               <label htmlFor="auth-email">{t.email}</label>
               <input
@@ -222,10 +195,22 @@ export function AuthScreen({
               </div>
             )}
             {mode === 'register' && (
-              <label className={styles.terms}>
-                <input type="checkbox" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} required />
-                <span>
-                  {t.terms}{' '}
+              <div className={styles.terms}>
+                {/* The links leave the sentence: three of them inside the
+                    agreement made the whole line read as one link, and the box
+                    itself had no name for a screen reader
+                    (UX_AUDIT_MOBILE_2026-09-05 P1 #12). */}
+                <label className={styles.termsAgree} htmlFor="auth-terms">
+                  <input
+                    id="auth-terms"
+                    type="checkbox"
+                    checked={agreed}
+                    onChange={(event) => setAgreed(event.target.checked)}
+                    required
+                  />
+                  <span>{t.terms}</span>
+                </label>
+                <p className={styles.termsLinks}>
                   <Link href={`/terms?lang=${lang}`} target="_blank" rel="noopener" className={styles.docLink}>
                     {t.termsLink}
                   </Link>
@@ -237,8 +222,8 @@ export function AuthScreen({
                   <Link href={`/data-notice?lang=${lang}`} target="_blank" rel="noopener" className={styles.docLink}>
                     {t.dataLink}
                   </Link>
-                </span>
-              </label>
+                </p>
+              </div>
             )}
             {mode !== 'reset' && error && (
               <p className={styles.error} role="alert">

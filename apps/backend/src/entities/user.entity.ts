@@ -12,10 +12,10 @@ export class User {
   password: string;
 
   @Column({ type: 'varchar', nullable: true })
-  firstName: string;
+  firstName: string | null;
 
   @Column({ type: 'varchar', nullable: true })
-  lastName: string;
+  lastName: string | null;
 
   @Column({ type: 'boolean', default: true })
   active: boolean;

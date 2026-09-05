@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, MinLength, MaxLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, MinLength, MaxLength } from 'class-validator';
 import { NormalizeEmail } from '../email';
 
 export class RegisterDto {
@@ -14,11 +14,16 @@ export class RegisterDto {
   @MaxLength(64)
   password: string;
 
-  @IsNotEmpty()
+  // Optional since 2026-09-05 (owner's interaction addendum: ask for nothing
+  // the experience does not use). A name appears on no screen but the
+  // profile's own account card and enters no model, so the door stops asking
+  // for one. A client that still sends one is still accepted, and the columns
+  // were always nullable.
+  @IsOptional()
   @MaxLength(100)
-  firstName: string;
+  firstName?: string;
 
-  @IsNotEmpty()
+  @IsOptional()
   @MaxLength(100)
-  lastName: string;
+  lastName?: string;
 }

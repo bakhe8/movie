@@ -67,6 +67,18 @@ describe('AuthService', () => {
     vi.mocked(bcrypt.compare).mockReset();
   });
 
+  // The owner's interaction addendum (2026-09-05) takes the name off the door:
+  // it shows on no screen but the profile's account card and enters no model.
+  // A client that still sends one is still accepted -- the columns were always
+  // nullable, and only the DTO required them.
+  it('registers an account with no name at all', async () => {
+    usersRepository.findOne.mockResolvedValue(null);
+
+    await service.register({ email: 'no-name@example.com', password: 'password123' } as never);
+
+    expect(usersRepository.create).toHaveBeenCalledWith(expect.objectContaining({ firstName: null, lastName: null }));
+  });
+
   describe('register', () => {
     it('hashes the password, persists the user and returns a token without the password', async () => {
       usersRepository.findOne.mockResolvedValue(null);

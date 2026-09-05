@@ -5,8 +5,9 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3101/api';
 export interface User {
   id: string;
   email: string;
-  firstName: string;
-  lastName: string;
+  // Null for an account created since the door stopped asking (2026-09-05).
+  firstName: string | null;
+  lastName: string | null;
   createdAt: string;
 }
 
@@ -421,7 +422,9 @@ async function request<T>(path: string, options: RequestInit = {}, flags: Reques
 }
 
 export const api = {
-  register: (data: { email: string; password: string; firstName: string; lastName: string }) =>
+  // A name is optional at the door since 2026-09-05: it appears on no screen
+  // but the profile's account card and enters no model.
+  register: (data: { email: string; password: string; firstName?: string; lastName?: string }) =>
     request<AuthResponse>('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
 
   // Revokes the refresh token (or, with `all`, every live one); the access

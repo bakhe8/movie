@@ -31,7 +31,7 @@ interface SessionState {
   profile: Profile | null;
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
-  register: (data: { email: string; password: string; firstName: string; lastName: string }) => Promise<void>;
+  register: (data: { email: string; password: string; firstName?: string; lastName?: string }) => Promise<void>;
   logout: () => void;
   clearError: () => void;
   // Re-resolve the taste profile from the server: after a rename, a language
@@ -158,7 +158,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   );
 
   const register = useCallback(
-    async (data: { email: string; password: string; firstName: string; lastName: string }) => {
+    async (data: { email: string; password: string; firstName?: string; lastName?: string }) => {
       setError(null);
       try {
         const result = await api.register(data);

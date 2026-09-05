@@ -46,6 +46,36 @@ beforeEach(() => {
   session.error = null;
 });
 
+// The owner's interaction addendum (2026-09-05): ask for nothing the
+// experience does not use. A name shows on no screen but the profile's own
+// account card and enters no model, so the door asks for two fields.
+describe('AuthScreen — the door asks for two things', () => {
+  it('has no name fields when creating an account', async () => {
+    const user = userEvent.setup();
+    render(<AuthScreen lang="ar" />);
+
+    await user.click(screen.getByRole('button', { name: /أنشئ واحدًا/ }));
+
+    expect(screen.queryByLabelText('الاسم الأول')).toBeNull();
+    expect(screen.queryByLabelText('اسم العائلة')).toBeNull();
+    expect(screen.getByLabelText('البريد الإلكتروني')).toBeInTheDocument();
+    expect(screen.getByLabelText('كلمة المرور')).toBeInTheDocument();
+  });
+
+  it('registers with the address and the password alone', async () => {
+    const user = userEvent.setup();
+    render(<AuthScreen lang="ar" />);
+    await user.click(screen.getByRole('button', { name: /أنشئ واحدًا/ }));
+
+    await user.type(screen.getByLabelText('البريد الإلكتروني'), 'someone@example.com');
+    await user.type(screen.getByLabelText('كلمة المرور'), 'password123');
+    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('button', { name: 'إنشاء الحساب' }));
+
+    await waitFor(() => expect(session.register).toHaveBeenCalledWith({ email: 'someone@example.com', password: 'password123' }));
+  });
+});
+
 describe('AuthScreen password reset', () => {
   it('switches to an email-only reset form from the login screen', async () => {
     const user = userEvent.setup();
