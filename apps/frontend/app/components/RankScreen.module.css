@@ -441,9 +441,14 @@
 
 /* The lifted card follows the finger with no transition of its own -- a
    transition would lag the gesture -- and says so with the accent and a lift. */
+/* The lift uses the theme's own float shadow, which is a blue-tinted one in
+   light and `none` in dark -- where the accent border is the lift cue and
+   shadows are ruled out (decision Q8). The hardcoded black shadow this
+   replaces was written for dark and would have sat wrongly on the montage
+   light ground. */
 .lifted {
   transition: border-color 120ms ease, box-shadow 120ms ease;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow-float);
 }
 
 /* The gap the card would land in. */
