@@ -284,3 +284,16 @@
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* The document behind the summary: a link, drawn as one. */
+.docLink {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.docLink:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-chip);
+}

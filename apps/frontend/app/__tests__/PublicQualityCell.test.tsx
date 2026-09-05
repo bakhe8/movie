@@ -42,7 +42,7 @@ describe('PublicQualityCell', () => {
   });
 
   it('keeps a neutral star for a source with no mark of its own', () => {
-    const other = { value: 74, votes: 12, sources: [{ source: 'other', value: 74, scale: '0-100', votes: 12, capturedAt: null, attribution: null }] };
+    const other = { value: 74, votes: 12, sources: [{ source: 'other', value: 74, scale: '0-100', votes: 12, capturedAt: '2026-09-01T00:00:00.000Z', attribution: null }] };
     const { container } = render(<PublicQualityCell quality={other} lang="ar" />);
 
     expect(container.querySelector('img')).toBeNull();

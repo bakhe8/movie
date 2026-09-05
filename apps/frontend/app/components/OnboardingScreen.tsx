@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { api, ApiError, CONSENT_VERSION, type PreferredLanguage } from '../lib/api';
 import { MARKETS, PLATFORMS } from '../lib/onboarding-options';
@@ -38,29 +39,35 @@ const labels = {
     // Step 2: what we collect and why (PRIVACY.md §1, §3)
     step2Title: 'ما نجمعه ولماذا',
     step2Lead: 'قبل أن تبدأ، هذا ما يحدث ببياناتك.',
+    // One clause each (owner's instruction, 2026-09-05). Every fact that was
+    // here is still here; what left is the second sentence explaining it, and
+    // the privacy notice under the list carries the full text.
     collect: [
-      { head: 'حسابك منفصل عن ذوقك', body: 'ملف ذوقك يحمل معرّفًا مستعارًا، ولا يربطه النموذج بهويتك.' },
-      { head: 'ما تسجّله كمُشاهَد', body: 'علامات المشاهدة وقائمتك تُخزَّن لبناء الثلاثيات والتوصيات، ولا يُحتسب ما لم تشاهده ضدّه.' },
-      { head: 'ترتيباتك تدرّب نموذجًا عنك أنت', body: 'السؤال الوحيد هو ترتيب ثلاثة أفلام شاهدتها. لا نجوم ولا إعجاب، ولا يُستخدم النموذج إلا لملفك.' },
-      { head: 'خاص افتراضيًا', body: 'لا صفحة عامة، ولا مشاركة إلا بقرارك، ولا يُباع ملف ذوقك، ولا نستنتج سمات حساسة من مشاهداتك.' },
-      { head: 'حقوقك', body: 'مسح ملف الذوق متاح الآن من الملف الشخصي. التصدير وحذف الحساب قيد البناء.' },
+      { head: 'حسابك منفصل عن ذوقك', body: 'ملف ذوقك يحمل معرّفًا مستعارًا.' },
+      { head: 'ما تسجّله كمُشاهَد', body: 'يُخزَّن لبناء الثلاثيات والتوصيات، وما لم تشاهده لا يُحتسب ضدّه.' },
+      { head: 'ترتيباتك تدرّب نموذجك', body: 'لا نجوم ولا إعجاب، والنموذج لملفك وحده.' },
+      { head: 'خاص افتراضيًا', body: 'لا صفحة عامة، ولا بيع، ولا استنتاج سمات حساسة.' },
+      { head: 'حقوقك', body: 'مسح الملف متاح الآن؛ التصدير والحذف قيد البناء.' },
     ],
     // Declinable purposes (PRIVACY.md §3; docs/CONSENT_COPY_2026-09-04.md):
     // shown as items with a switch, recorded with the mandatory two.
     optional: [
       {
         purpose: 'personalization_pooled' as const,
-        head: 'ترتيباتك تُسهم أيضاً في نموذج جماعي (اختياري)',
-        body: 'إلى جانب نموذج ذوقك الخاص، تساعد ترتيباتك المستعارة — دون أن تُنسب إليك — في تدريب نموذج جماعي يُحسّن اختيار الثلاثيات والترشيحات للجميع. لا تُعرض لأحد أبداً. يمكنك إيقاف هذا في أي وقت دون أن يتأثر نموذجك الشخصي.',
+        head: 'المساهمة في النموذج الجماعي (اختياري)',
+        body: 'ترتيباتك المستعارة تُحسّن الاقتراحات للجميع، ولا تُنسب إليك. إيقافها لا يمسّ نموذجك.',
         toggle: 'المساهمة في النموذج الجماعي',
       },
       {
         purpose: 'analytics_first_party' as const,
-        head: 'تحليلات المنتج الأولى (اختياري)',
-        body: 'نستخدم أحداثاً تشغيلية على أنظمتنا فقط — لا طرف ثالث، لا إعلانات — لقياس أداء التوصيات وتحسينها. يمكنك المشاركة أو الاعتذار الآن، وتغيير قرارك لاحقاً من الملف الشخصي.',
+        head: 'تحليلات المنتج (اختياري)',
+        body: 'أحداث تشغيلية على أنظمتنا فقط: لا طرف ثالث ولا إعلانات.',
         toggle: 'تحليلات المنتج',
       },
     ],
+    // Revocability belongs beside the switches, once, not in each body.
+    optionalNote: 'يمكنك تغيير الاختيارين لاحقًا من الملف الشخصي.',
+    fullText: 'النص الكامل في إشعار الخصوصية',
     // Step 3: the loop ahead
     start: 'ابدأ بتسجيل ما شاهدت',
     // With three watched titles already logged, the loop's first step is done.
@@ -87,26 +94,28 @@ const labels = {
     step2Title: 'What we collect and why',
     step2Lead: 'Before you start, this is what happens with your data.',
     collect: [
-      { head: 'Your account is separate from your taste', body: 'Your taste profile carries a pseudonymous id; the model never ties it to your identity.' },
-      { head: 'What you mark as watched', body: 'Watch marks and your list are stored to build ranking rounds and recommendations; what you have not watched never counts against it.' },
-      { head: 'Your rankings train a model about you', body: 'The only question is ranking three films you have watched. No stars, no likes, and the model serves your profile only.' },
-      { head: 'Private by default', body: 'No public page, no sharing unless you choose it, your taste profile is never sold, and no sensitive traits are inferred from what you watch.' },
-      { head: 'Your rights', body: 'Wiping the taste profile is available now from the profile screen. Export and account deletion are being built.' },
+      { head: 'Your account is separate from your taste', body: 'Your taste profile carries a pseudonymous id.' },
+      { head: 'What you mark as watched', body: 'Stored to build triads and recommendations; what you have not watched never counts against it.' },
+      { head: 'Your rankings train your model', body: 'No stars, no likes, and the model is used for your profile alone.' },
+      { head: 'Private by default', body: 'No public page, nothing sold, no sensitive traits inferred.' },
+      { head: 'Your rights', body: 'Clearing the profile works today; export and deletion are being built.' },
     ],
     optional: [
       {
         purpose: 'personalization_pooled' as const,
-        head: 'Your rankings also help a shared model (optional)',
-        body: 'Beyond your own taste model, your pseudonymous rankings — never attributed to you — help train a shared model that improves triad and recommendation selection for everyone. Never shown to anyone. Turn this off any time without affecting your personal model.',
+        head: 'Contribute to the shared model (optional)',
+        body: 'Your rankings, pseudonymous and never attributed to you, improve suggestions for everyone. Turning this off leaves your own model untouched.',
         toggle: 'Contribute to the shared model',
       },
       {
         purpose: 'analytics_first_party' as const,
-        head: 'First-party product analytics (optional)',
-        body: 'We use operational events on our own systems only — no third party, no advertising — to measure and improve recommendation quality. Opt in or skip now, and change your choice later from your profile.',
+        head: 'Product analytics (optional)',
+        body: 'Operational events on our own systems only: no third party, no advertising.',
         toggle: 'Product analytics',
       },
     ],
+    optionalNote: 'You can change both later from your profile.',
+    fullText: 'The full text is in the privacy notice',
     start: 'Start marking what you watched',
     startRanking: 'Start ranking',
     back: 'Back',
@@ -333,6 +342,12 @@ export function OnboardingScreen({
             </li>
           ))}
         </ul>
+        <p className={styles.note}>{t.optionalNote}</p>
+        <p className={styles.lead}>
+          <Link href={`/privacy?lang=${lang}`} target="_blank" rel="noopener" className={styles.docLink}>
+            {t.fullText}
+          </Link>
+        </p>
         {consentError && (
           <p className={styles.status} role="alert">
             {consentError}
