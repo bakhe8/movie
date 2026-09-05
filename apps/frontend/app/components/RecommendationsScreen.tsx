@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { api, ApiError, type Recommendation, type RecommendationTrack, type TrainingSummary } from '../lib/api';
+import { api, ApiError, type ProfileReadiness, type Recommendation, type RecommendationTrack, type TrainingSummary } from '../lib/api';
 import { TRACK_COPY } from '../lib/copy';
 import { formatNumber, todayLocal, type PersonalFitLevel } from '../lib/format';
 import { WorkCard } from './WorkCard';
@@ -35,6 +35,12 @@ const labels = {
       notPublished: { title: 'اكتمل التدريب ولم يُنشر النموذج', body: 'اختياراتك محفوظة. أعد المحاولة، وإن تكرّر أرفق رمز الدعم.' },
       disabled: { title: 'التدريب غير مفعَّل على هذا الخادم', body: 'جولاتك محفوظة. هذا إعداد تشغيلي يعالجه مشغّل الخدمة، لا أنت.' },
       unreachable: { title: 'تعذّر الوصول إلى خدمة النموذج', body: 'جولاتك محفوظة. حاول بعد قليل.' },
+      // Only the readiness contract can tell this apart from "no model"
+      // (ADR-103): النموذج جاهز، والحوض فارغ.
+      noCandidates: {
+        title: 'نموذجك جاهز، ولا أفلام جديدة نقترحها',
+        body: 'كل ما في الكتالوج اليوم إمّا شاهدته أو استبعدته. يتّسع الكتالوج باستمرار، وتظهر اقتراحات جديدة كلما أُضيفت أفلام.',
+      },
     },
     trainNow: 'درّب نموذجي الآن',
     trainRetry: 'أعد المحاولة',
@@ -90,6 +96,10 @@ const labels = {
       notPublished: { title: 'Training finished but no model was published', body: 'Your choices are saved. Try again; if it repeats, quote the support code.' },
       disabled: { title: 'Training is not enabled on this server', body: 'Your rounds are saved. This is an operational setting for the service operator, not for you.' },
       unreachable: { title: 'The model service could not be reached', body: 'Your rounds are saved. Try again in a moment.' },
+      noCandidates: {
+        title: 'Your model is ready; there is nothing new to suggest',
+        body: 'Everything in the catalogue today is either watched or set aside. The catalogue keeps growing, and suggestions appear as films are added.',
+      },
     },
     trainNow: 'Train my model now',
     trainRetry: 'Try again',
@@ -137,12 +147,44 @@ const labels = {
 type Phase =
   | { kind: 'loading' }
   | { kind: 'ready' }
-  | { kind: 'pending'; watched: number | null; needed: number; training: TrainingSummary }
+  | { kind: 'pending'; watched: number | null; needed: number; training: TrainingSummary; readiness: ProfileReadiness | null }
   | { kind: 'paused' }
   | { kind: 'outdated' }
   | { kind: 'failed' };
 
-type PendingSituation = 'rounds' | 'building' | 'notStarted' | 'noFingerprints' | 'failed' | 'notPublished' | 'disabled' | 'unreachable';
+type PendingSituation =
+  | 'rounds'
+  | 'building'
+  | 'notStarted'
+  | 'noFingerprints'
+  | 'failed'
+  | 'notPublished'
+  | 'disabled'
+  | 'unreachable'
+  // A ready model with an empty candidate pool. Nothing in the training
+  // state can express this -- it is the distinction ADR-103 exists for.
+  | 'noCandidates';
+
+// The readiness contract answers the capability question directly (ADR-103):
+// it is the only source that can say "the model is ready, the pool is empty",
+// and it names a disabled service and a coverage failure without inferring
+// them from a job's state. What it cannot do is tell a job that succeeded
+// without publishing from a service that could not be reached -- both arrive
+// as `model_service_error` -- so the training state still refines those two.
+// Readiness first, the local inference only for what it leaves open; if the
+// readiness read itself failed, the screen falls back to what it always did
+// rather than losing an explanation.
+function situationFor(needed: number, training: TrainingSummary, readiness: ProfileReadiness | null): PendingSituation {
+  const capability = readiness?.recommendation;
+  if (capability) {
+    if (capability.reason === 'insufficient_eligible_candidates') return 'noCandidates';
+    if (capability.reason === 'model_service_disabled') return 'disabled';
+    if (capability.status === 'queued' || capability.status === 'processing') return 'building';
+    if (capability.reason === 'insufficient_fingerprint_coverage') return 'noFingerprints';
+    if (capability.reason === 'insufficient_triads') return 'rounds';
+  }
+  return pendingSituation(needed, training);
+}
 
 function pendingSituation(needed: number, training: TrainingSummary): PendingSituation {
   if (needed > 0) {
@@ -166,6 +208,16 @@ function pendingSituation(needed: number, training: TrainingSummary): PendingSit
     // the top level and never reaches here.
     default:
       return 'notStarted';
+  }
+}
+
+// Readiness is an explanation, not a dependency: if it cannot be read the
+// screen still renders from the recommendations response alone.
+async function readinessOrNull(profileId: string): Promise<ProfileReadiness | null> {
+  try {
+    return await api.getReadiness(profileId);
+  } catch {
+    return null;
   }
 }
 
@@ -203,9 +255,21 @@ export function RecommendationsScreen({
       // ADR-80: 200 with a discriminator instead of 409/400.
       // 15 items covers 3–5 per each of the three tracks (blueprint §5.3).
       const result = await api.getRecommendations(profileId, 15);
-      if (result.state === 'ready') {
+      if (result.state === 'ready' && result.items.length > 0) {
         setItems(result.items);
         setPhase({ kind: 'ready' });
+      } else if (result.state === 'ready') {
+        // A ready model that returned nothing: an empty list is not an
+        // answer, so ask readiness why (ADR-103 -- almost always an empty
+        // candidate pool) and say it.
+        setItems([]);
+        setPhase({
+          kind: 'pending',
+          watched: null,
+          needed: 0,
+          training: { state: 'succeeded', jobId: null, errorKind: null, completedTriads: 0, nextTrainingAt: null },
+          readiness: await readinessOrNull(profileId),
+        });
       } else if (result.state === 'pending') {
         let watched: number | null = null;
         if (result.needed > 0) {
@@ -215,7 +279,7 @@ export function RecommendationsScreen({
             watched = null;
           }
         }
-        setPhase({ kind: 'pending', watched, needed: result.needed, training: result.training });
+        setPhase({ kind: 'pending', watched, needed: result.needed, training: result.training, readiness: await readinessOrNull(profileId) });
       } else if (result.state === 'paused') {
         setPhase({ kind: 'paused' });
       } else {
@@ -326,7 +390,7 @@ export function RecommendationsScreen({
   }
 
   if (phase.kind === 'pending') {
-    const situation = pendingSituation(phase.needed, phase.training);
+    const situation = situationFor(phase.needed, phase.training, phase.readiness);
     if (situation === 'rounds') {
       return (
         <div className={styles.screen}>
@@ -363,11 +427,13 @@ export function RecommendationsScreen({
           : situation === 'failed' || situation === 'noFingerprints' || situation === 'notPublished'
             ? { label: t.trainRetry, run: trainNow }
             : null;
-    const showSupport = phase.training.jobId !== null && situation !== 'building' && situation !== 'notStarted';
+    const showSupport = phase.training.jobId !== null && situation !== 'building' && situation !== 'notStarted' && situation !== 'noCandidates';
     return (
       <div className={styles.screen}>
         {header}
-        <div className={styles.pending} role={situation === 'building' ? 'status' : 'alert'}>
+        {/* An empty catalogue pool is a calm state, not an alarm: 'status'
+            like a build in progress, not 'alert' like a failure. */}
+        <div className={styles.pending} role={situation === 'building' || situation === 'noCandidates' ? 'status' : 'alert'}>
           <h3>{copy.title}</h3>
           <p>{copy.body}</p>
           {showSupport && <p className={styles.support}>{t.support(phase.training.jobId as string)}</p>}

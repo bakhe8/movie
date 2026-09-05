@@ -13,6 +13,7 @@ vi.mock('../lib/api', () => ({
   api: {
     getRecommendations: vi.fn(),
     getWatchedTitles: vi.fn().mockResolvedValue([]),
+    getReadiness: vi.fn(),
     requestTraining: vi.fn(),
     setTitleState: vi.fn(),
   },
@@ -38,9 +39,21 @@ function pending(needed: number, training: Partial<{ state: string; jobId: strin
   };
 }
 
+// Readiness explains a pending screen (ADR-103); rejecting by default keeps
+// every existing case on the training-state fallback it was written for, so
+// the tests below still cover that path.
+const capability = (over: Record<string, unknown> = {}) => ({ status: 'not_ready', reason: null, action: null, publishedAt: null, modelVersion: null, ...over });
+const readiness = (recommendation: Record<string, unknown>) => ({
+  ordinalModel: capability(),
+  semanticProfile: capability(),
+  recommendation: capability(recommendation),
+  availability: capability({ reason: 'no_availability_data_source' }),
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
   mockApi.getWatchedTitles.mockResolvedValue([]);
+  mockApi.getReadiness.mockRejectedValue(new Error('not mocked in this case'));
 });
 
 describe('RecommendationsScreen — pending', () => {
@@ -75,6 +88,39 @@ describe('RecommendationsScreen — pending', () => {
     render(<RecommendationsScreen lang="en" profileId="p1" />);
     await screen.findByText(/Training is not enabled on this server/);
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  // The two things the readiness contract can say and a training state
+  // cannot (ADR-103): a ready model with an empty pool, and a coverage
+  // failure named as such rather than inferred from errorKind.
+  it('says the model is ready and the pool is empty, instead of an empty list', async () => {
+    mockApi.getRecommendations.mockResolvedValue({ state: 'ready', items: [] });
+    mockApi.getReadiness.mockResolvedValue(readiness({ status: 'not_ready', reason: 'insufficient_eligible_candidates' }));
+    render(<RecommendationsScreen lang="ar" profileId="p1" />);
+
+    const panel = await screen.findByRole('status');
+    expect(panel).toHaveTextContent(/لا أفلام جديدة نقترحها/);
+    // A calm state, not a failure: nothing to press, no support code.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('prefers readiness over the training state when the two could disagree', async () => {
+    // The job merely looks idle; readiness knows the coverage is the problem.
+    mockApi.getRecommendations.mockResolvedValue(pending(0, { state: 'idle', jobId: 'job-4' }));
+    mockApi.getReadiness.mockResolvedValue(readiness({ status: 'failed', reason: 'insufficient_fingerprint_coverage' }));
+    render(<RecommendationsScreen lang="ar" profileId="p1" />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/ينتظر تحليل الأفلام/);
+    expect(screen.queryByText(/جولاتك تكفي للبدء/)).not.toBeInTheDocument();
+  });
+
+  it('falls back to the training state when readiness cannot be read', async () => {
+    mockApi.getRecommendations.mockResolvedValue(pending(0, { state: 'unknown' }));
+    mockApi.getReadiness.mockRejectedValue(new Error('offline'));
+    render(<RecommendationsScreen lang="ar" profileId="p1" />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/تعذّر الوصول إلى خدمة النموذج/);
   });
 
   it('shows the refusal reason when the train request is turned away', async () => {
