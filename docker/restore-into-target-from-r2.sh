@@ -111,8 +111,30 @@ TABLE_COUNT=$(psql "$TARGET_DATABASE_URL" -t -A -c "SELECT count(*) FROM informa
 [ "$TABLE_COUNT" -ge 1 ] || { echo "restore FAILED: the restored database has no tables" >&2; exit 1; }
 
 echo "restore OK: $SOURCE_LABEL -> target ($TABLE_COUNT table(s))"
-echo "row counts on the restored target (compare these with the source before the cutover):"
-psql "$TARGET_DATABASE_URL" -c "SELECT relname AS table, n_live_tup AS approx_rows FROM pg_stat_user_tables ORDER BY n_live_tup DESC, relname LIMIT 15;"
-psql "$TARGET_DATABASE_URL" -t -A -c "SELECT 'users=' || count(*) FROM users;" 2>/dev/null || true
-psql "$TARGET_DATABASE_URL" -t -A -c "SELECT 'titles=' || count(*) FROM titles;" 2>/dev/null || true
-psql "$TARGET_DATABASE_URL" -t -A -c "SELECT 'migrations=' || count(*) FROM migrations;" 2>/dev/null || true
+
+# Exact per-table counts, not pg_stat's estimates: query_to_xml runs a real
+# count(*) per table in one statement, so the comparison below is evidence,
+# not an approximation.
+COUNT_SQL="SELECT relname || '=' || (xpath('/row/c/text()', x))[1]::text AS row_count
+  FROM (SELECT relname, query_to_xml(format('SELECT count(*) AS c FROM %I.%I', 'public', relname), false, true, '') AS x
+        FROM pg_stat_user_tables WHERE schemaname = 'public') t ORDER BY relname;"
+
+psql "$TARGET_DATABASE_URL" -t -A -c "$COUNT_SQL" > "$WORKDIR/target.counts"
+
+# SOURCE_DATABASE_URL is optional and read-only: when it is set (the old
+# database, still serving until the cutover), the two sets of counts are
+# compared here instead of by eye, and a mismatch fails this script.
+if [ -n "${SOURCE_DATABASE_URL:-}" ]; then
+  psql "$SOURCE_DATABASE_URL" -t -A -c "$COUNT_SQL" > "$WORKDIR/source.counts"
+  if diff -u "$WORKDIR/source.counts" "$WORKDIR/target.counts" > "$WORKDIR/counts.diff"; then
+    echo "row counts match the source exactly ($(wc -l < "$WORKDIR/target.counts") table(s)):"
+    cat "$WORKDIR/target.counts"
+  else
+    echo "restore FAILED: row counts differ between source and target (- source, + target):" >&2
+    cat "$WORKDIR/counts.diff" >&2
+    exit 1
+  fi
+else
+  echo "row counts on the restored target (no SOURCE_DATABASE_URL given, so compare these with the source by hand before the cutover):"
+  cat "$WORKDIR/target.counts"
+fi
