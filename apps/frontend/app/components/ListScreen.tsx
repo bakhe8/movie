@@ -499,10 +499,20 @@ export function ListScreen({
                       {catalogHeading(state)}
                       {altOf(state.title) && <p className={styles.alt}>{altOf(state.title)}</p>}
                       <p className={styles.meta}>{state.watchedOn ? formatWatchedOn(state.watchedOn, lang) : t.noDate}</p>
+                      {!editing && (
+                        <div className={styles.actions}>
+                          <button type="button" className={styles.ghost} onClick={() => openDiary(state)} disabled={busy}>
+                            {state.notes ? t.diaryEdit : t.diary}
+                          </button>
+                          <button type="button" className={styles.ghost} onClick={() => clearState(state, t.undoNotice)} disabled={busy}>
+                            {t.undo}
+                          </button>
+                        </div>
+                      )}
                       {!editing && state.notes && <p className={styles.noteText}>{state.notes}</p>}
                     </div>
                   </div>
-                  {editing && diary ? (
+                  {editing && diary && (
                     <form
                       className={styles.diary}
                       onSubmit={(event) => {
@@ -543,15 +553,6 @@ export function ListScreen({
                         </button>
                       </div>
                     </form>
-                  ) : (
-                    <div className={styles.actions}>
-                      <button type="button" className={styles.ghost} onClick={() => openDiary(state)} disabled={busy}>
-                        {state.notes ? t.diaryEdit : t.diary}
-                      </button>
-                      <button type="button" className={styles.ghost} onClick={() => clearState(state, t.undoNotice)} disabled={busy}>
-                        {t.undo}
-                      </button>
-                    </div>
                   )}
                 </li>
               );
