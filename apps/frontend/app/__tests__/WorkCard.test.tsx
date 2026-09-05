@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { WorkCard } from '../components/WorkCard';
 import type { Recommendation, Title } from '../lib/api';
+import type { PublicQuality } from '../public-quality/types';
 
 // UX_AUDIT_MOBILE_2026-09-05: the card was measured at 357-411px with a 56px
 // poster, four labelled cells, and a confidence sentence that repeated on
@@ -33,6 +34,16 @@ const recommendation: Recommendation = {
   track: 'safe',
   modelVersion: 'test',
   reason: { features: [], evidenceSource: 'individual' },
+};
+
+const productionRecommendation = {
+  ...recommendation,
+  publicQuality: {
+    value: 8.1,
+    votes: 250000,
+    sources: [{ source: 'imdb', value: 8.1, scale: '1-10', votes: 250000, capturedAt: '2026-08-14T09:00:00.000Z', attribution: null }],
+  } satisfies PublicQuality,
+  watchability: { available: true, providers: [{ name: 'MUBI', market: 'SA' }] },
 };
 
 function card(onOpen?: () => void) {
@@ -99,5 +110,59 @@ describe('WorkCard', () => {
 
     expect(hollow).toContain('غير معروف بعد');
     expect(container.querySelectorAll('[class*="strip"]')).toHaveLength(1);
+  });
+
+  it('keeps a compact shelf tile to poster, title and personal fit', () => {
+    const { container } = render(
+      <WorkCard
+        lang="ar"
+        position={1}
+        count={7}
+        compact
+        recommendation={productionRecommendation}
+        listed={false}
+        busy={false}
+        onOpen={() => {}}
+        onAddToList={vi.fn()}
+        onMarkWatched={vi.fn()}
+        onNotRelevant={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelector('[class*="poster"]')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'يد إلهية' })).toBeInTheDocument();
+    expect(container.querySelector('[class*="fitRow"]')).not.toBeNull();
+    expect(container.querySelector('[class*="metaRow"]')).toBeNull();
+    expect(container.querySelector('img[alt="IMDb"]')).toBeNull();
+    expect(container).not.toHaveTextContent('250,000');
+    expect(container).not.toHaveTextContent('MUBI');
+    expect(container).not.toHaveTextContent('غير محسوم');
+    expect(screen.queryByRole('button', { name: 'أضف إلى قائمتي' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'شاهدته' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'ليس اقتراحًا مناسبًا' })).toBeNull();
+  });
+
+  it('restores production quality and availability on the full card', () => {
+    const { container } = render(
+      <WorkCard
+        lang="ar"
+        position={1}
+        count={7}
+        recommendation={productionRecommendation}
+        listed={false}
+        busy={false}
+        onAddToList={vi.fn()}
+        onMarkWatched={vi.fn()}
+        onNotRelevant={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelector('img[alt="IMDb"]')).not.toBeNull();
+    expect(container).toHaveTextContent('250,000');
+    expect(container).toHaveTextContent('MUBI · SA');
+    expect(container).toHaveTextContent('غير محسوم');
+    expect(screen.getByRole('button', { name: 'أضف إلى قائمتي' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'شاهدته' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'ليس اقتراحًا مناسبًا' })).toBeInTheDocument();
   });
 });

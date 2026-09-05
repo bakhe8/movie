@@ -386,6 +386,14 @@
 }
 
 @media (min-width: 900px) {
+  .compact .compactPoster {
+    width: 128px;
+  }
+
+  .compact .title {
+    font-size: var(--fs-16);
+  }
+
   .poster {
     width: 64px;
   }

@@ -194,10 +194,10 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
               same destination, already in the tab order and already named. */}
           {onOpen ? (
             <button type="button" className={styles.posterButton} tabIndex={-1} aria-hidden="true" onClick={onOpen}>
-              <Poster title={title} size="md" name={name} />
+              <Poster title={title} size="md" name={name} className={compact ? styles.compactPoster : undefined} />
             </button>
           ) : (
-            <Poster title={title} size="md" name={name} />
+            <Poster title={title} size="md" name={name} className={compact ? styles.compactPoster : undefined} />
           )}
           <div className={styles.titles}>
             <h4 className={styles.title}>
@@ -256,71 +256,73 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
           </dd>
         </div>
 
-        <div className={styles.metaRow}>
-          {!isRanking && !withoutQuality && fullQuality && <PublicQualityCell quality={fullQuality} lang={lang} />}
+        {!compact && (
+          <div className={styles.metaRow}>
+            {!isRanking && !withoutQuality && fullQuality && <PublicQualityCell quality={fullQuality} lang={lang} />}
 
-          {!isRanking && !withoutQuality && !fullQuality && (
-            <div className={styles.meta}>
-              <dt className={styles.srOnly}>{t.quality}</dt>
-              <dd className={styles.metaValue}>
-                {quality && quality.value !== null ? (
-                  <>
-                    {/* Star + number: the scale needs no words (addendum 3). */}
-                    <span className={styles.rating}>
-                      <RatingStar size={14} />
-                      <span className={styles.num}>{formatNumber(quality.value, lang)}</span>
-                    </span>
-                    <span className={styles.numSub}>
-                      {[quality.votes !== null ? t.votes(formatNumber(quality.votes, lang)) : null, ...quality.sources]
-                        .filter(Boolean)
-                        .join(' · ') || t.sourceUnknown}
-                    </span>
-                  </>
-                ) : (
-                  <span className={`${styles.chip} ${styles.hollow}`}>{t.qualityUnknown}</span>
-                )}
-              </dd>
-            </div>
-          )}
-
-          {!isRanking && (
-            <div className={styles.meta}>
-              <dt className={styles.srOnly}>{t.availability}</dt>
-              <dd className={styles.metaValue}>
-                {watch && watch.providers.length > 0 ? (
-                  <div className={styles.chips}>
-                    {watch.providers.map((provider) => (
-                      <span key={`${provider.name}-${provider.market}`} className={styles.chip}>
-                        {provider.name} · {provider.market}
+            {!isRanking && !withoutQuality && !fullQuality && (
+              <div className={styles.meta}>
+                <dt className={styles.srOnly}>{t.quality}</dt>
+                <dd className={styles.metaValue}>
+                  {quality && quality.value !== null ? (
+                    <>
+                      {/* Star + number: the scale needs no words (addendum 3). */}
+                      <span className={styles.rating}>
+                        <RatingStar size={14} />
+                        <span className={styles.num}>{formatNumber(quality.value, lang)}</span>
                       </span>
-                    ))}
-                  </div>
-                ) : watch && watch.available === true ? (
-                  <span className={styles.chip}>{t.available}</span>
-                ) : watch && watch.available === false ? (
-                  <span className={`${styles.chip} ${styles.hollow}`}>{t.unavailable}</span>
-                ) : (
-                  <span className={`${styles.chip} ${styles.hollow}`}>{t.availabilityUnknown}</span>
-                )}
+                      <span className={styles.numSub}>
+                        {[quality.votes !== null ? t.votes(formatNumber(quality.votes, lang)) : null, ...quality.sources]
+                          .filter(Boolean)
+                          .join(' · ') || t.sourceUnknown}
+                      </span>
+                    </>
+                  ) : (
+                    <span className={`${styles.chip} ${styles.hollow}`}>{t.qualityUnknown}</span>
+                  )}
+                </dd>
+              </div>
+            )}
+
+            {!isRanking && (
+              <div className={styles.meta}>
+                <dt className={styles.srOnly}>{t.availability}</dt>
+                <dd className={styles.metaValue}>
+                  {watch && watch.providers.length > 0 ? (
+                    <div className={styles.chips}>
+                      {watch.providers.map((provider) => (
+                        <span key={`${provider.name}-${provider.market}`} className={styles.chip}>
+                          {provider.name} · {provider.market}
+                        </span>
+                      ))}
+                    </div>
+                  ) : watch && watch.available === true ? (
+                    <span className={styles.chip}>{t.available}</span>
+                  ) : watch && watch.available === false ? (
+                    <span className={`${styles.chip} ${styles.hollow}`}>{t.unavailable}</span>
+                  ) : (
+                    <span className={`${styles.chip} ${styles.hollow}`}>{t.availabilityUnknown}</span>
+                  )}
+                </dd>
+              </div>
+            )}
+
+            <div className={styles.meta}>
+              <dt className={styles.srOnly}>{t.confidence}</dt>
+              <dd className={styles.metaValue}>
+                {/* The word alone. Its sentence used to repeat on every card --
+                    thirteen times on one screen -- and now belongs to the
+                    screen's own "your taste so far" line (audit P0 #4); the
+                    caveat stays available to assistive tech. */}
+                <span className={styles.band}>{confidence.label}</span>
+                <span className={styles.srOnly}>
+                  {confidence.copy}
+                  {fingerprintCoverage < 1 ? ` ${t.partialFingerprint}` : ''}
+                </span>
               </dd>
             </div>
-          )}
-
-          <div className={compact ? `${styles.meta} ${styles.srOnly}` : styles.meta}>
-            <dt className={styles.srOnly}>{t.confidence}</dt>
-            <dd className={styles.metaValue}>
-              {/* The word alone. Its sentence used to repeat on every card --
-                  thirteen times on one screen -- and now belongs to the
-                  screen's own "your taste so far" line (audit P0 #4); the
-                  caveat stays available to assistive tech. */}
-              <span className={styles.band}>{confidence.label}</span>
-              <span className={styles.srOnly}>
-                {confidence.copy}
-                {fingerprintCoverage < 1 ? ` ${t.partialFingerprint}` : ''}
-              </span>
-            </dd>
           </div>
-        </div>
+        )}
       </dl>
 
       {!isRanking && !headless && !compact && (

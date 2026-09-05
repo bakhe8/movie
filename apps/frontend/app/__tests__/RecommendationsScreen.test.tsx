@@ -82,7 +82,15 @@ const item = (id: string, ar: string, track: string) => ({
   title: title(id, ar),
   personalFitScore: 0.9,
   publicQualityScore: 6.6,
+  // Use the production contract here, not only the transitional score: the
+  // shelf must not accidentally grow a full IMDb cell again.
+  publicQuality: {
+    value: 6.6,
+    votes: 4239,
+    sources: [{ source: 'imdb', value: 6.6, scale: '1-10', votes: 4239, capturedAt: '2026-09-05T00:00:00.000Z', attribution: null }],
+  },
   watchabilityScore: null,
+  watchability: { available: null, providers: [] },
   availability: 'unknown',
   confidenceBand: 'inconclusive',
   fingerprintCoverage: 1,
@@ -143,8 +151,13 @@ describe('RecommendationsScreen — ready', () => {
     const { container } = render(<RecommendationsScreen lang="ar" profileId="p1" />);
     await screen.findByLabelText('ذوقك حتى الآن');
 
-    // A shelf carries tiles: no action buttons and no reason line on them.
+    // A shelf carries tiles: poster, title and fit only. Production quality
+    // and availability are restored with the rest of the full card.
     expect(container.querySelectorAll('[class*="rail"]').length).toBeGreaterThan(0);
+    expect(container.querySelectorAll('[class*="metaRow"]')).toHaveLength(0);
+    expect(container.querySelector('img[alt="IMDb"]')).toBeNull();
+    expect(screen.queryByText(/بتاريخ/)).toBeNull();
+    expect(screen.queryByText('غير معروف بعد')).toBeNull();
     expect(screen.queryByRole('button', { name: 'أضف إلى قائمتي' })).toBeNull();
 
     // Every track opens, not only the ones with items left over: the tiles
@@ -152,6 +165,9 @@ describe('RecommendationsScreen — ready', () => {
     await user.click(screen.getAllByRole('button', { name: 'افتح المسار' })[0]);
 
     expect(container.querySelectorAll('[class*="rail"]').length).toBeLessThan(3);
+    expect(container.querySelectorAll('[class*="metaRow"]').length).toBeGreaterThan(0);
+    expect(container.querySelector('img[alt="IMDb"]')).not.toBeNull();
+    expect(screen.getAllByText(/بتاريخ/).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button', { name: 'أضف إلى قائمتي' }).length).toBeGreaterThan(0);
   });
 });

@@ -3,6 +3,8 @@
 .page {
   display: grid;
   gap: var(--sp-4);
+  width: min(100%, 1080px);
+  margin-inline: auto;
   padding: var(--sp-4);
   background: var(--bg);
 }

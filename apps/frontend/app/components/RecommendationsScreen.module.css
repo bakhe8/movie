@@ -210,6 +210,9 @@
   background: var(--well);
   border-radius: var(--r-card);
   overflow-x: auto;
+  /* Chromium otherwise lets a long RTL shelf enlarge the root scroll area;
+     contain it without removing the shelf's own horizontal scrolling. */
+  contain: layout paint;
   overscroll-behavior-x: contain;
   scroll-snap-type: x proximity;
   /* Logical: in RTL the shelf starts at the right and scrolls left. */
@@ -222,7 +225,14 @@
 
 @media (min-width: 900px) {
   .rail {
-    grid-auto-columns: 148px;
+    /* Keep this five-slot grid in step with TRACK_PREVIEW. Fewer results keep
+       their tile proportions instead of stretching one card across the row. */
+    grid-auto-flow: row;
+    grid-template-columns: repeat(5, minmax(148px, 1fr));
+  }
+
+  .rail > li {
+    min-width: 0;
   }
 }
 
@@ -285,8 +295,35 @@
     gap: var(--sp-8);
   }
 
+  .ready {
+    width: 100%;
+  }
+
   .header h2 {
     font-size: var(--fs-34);
+  }
+
+  .taste {
+    grid-template-columns: max-content minmax(0, 1fr);
+    align-items: center;
+    padding: var(--sp-4);
+  }
+
+  .taste > :only-child {
+    grid-column: 1 / -1;
+  }
+
+  .trackHeader {
+    grid-template-columns: max-content minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: var(--sp-3);
+  }
+
+  .more {
+    justify-self: end;
+    width: auto;
+    min-width: 160px;
+    padding-inline: var(--sp-6);
   }
 }
 

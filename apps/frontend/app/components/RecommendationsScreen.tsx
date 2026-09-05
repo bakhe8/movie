@@ -617,7 +617,7 @@ export function RecommendationsScreen({
   }
 
   return (
-    <div className={styles.screen}>
+    <div className={`${styles.screen} ${styles.ready}`}>
       {header}
       {notice && (
         <p className={styles.status} role="status">
