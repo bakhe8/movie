@@ -967,6 +967,8 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 | 109 | The training queue leases each row with one conditional UPDATE, expires the lease after ten minutes back into the queue, and reconciles eligible profiles that have no job and no model | P0-9 2026-09-05; ADR-100 | a second sweeping replica needs `SKIP LOCKED`, or the model service pushes completions |
 | 108 | The onboarding round tells the truth: real `needed`, fatigue as a preference not a ban, `learningRounds`/`verificationRounds` reported apart, and the screen's own tally deleted in favour of `readiness.rounds` | P0-8 2026-09-05; ADR-34, ADR-99, ADR-103 | a third triad purpose needs its own count, or a verify round starts to count as evidence |
 | 106 | Catalogue search: both sides folded (Arabic marks stripped from the column too), `unaccent` for Latin, and alternate titles read from `localized_titles`; a 53-case golden set pins it | remediation brief P1-01/SEARCH-01 2026-09-05; ADR-2 | ~10k titles (indexes/FTS), or alternate-title ingestion lands |
+| 111 | One visual grammar shows the product's working logic instead of explaining it | UX-A mobile audit 2026-09-05; `BP §4` | the value model or navigation structure changes |
+| 112 | Dark and light are sibling themes: preserve black/indigo dark; rebuild only light from the white/blue/lime GPT reference through one component tree | owner correction 2026-09-05; ADR-111; `BP §4.3`, `§2.4 #7`, `§5.1` | the owner replaces either visual identity or the product needs theme-specific behaviour |
 
 ## How to add a decision
 
@@ -986,6 +988,22 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 
 **Amendment (owner, 2026-09-05, after comparing three palettes on the canvas).** The accent moves from the 3 September teal to a deep indigo: dark `--bg #06070f` · `--surface #10132a` · `--well #171b38` · `--line #232853` · `--muted #9aa0c8` · `--text #eef0ff` · `--accent #8b7cff` · `--accent-ink #12093d` · roles safe `#5fd0e6` / discovery `#e07cc8` / outside `#f0a050`; light `--bg #f4f4fa` · `--surface #ffffff` · `--well #e9e9f5` · `--line #d4d5e8` · `--muted #5e6285` · `--text #171a33` · `--accent #5b4bd6` · `--accent-ink #ffffff` · roles `#1e7fa0` / `#b0338f` / `#b85a10`. Measured contrast: every text/ground pair ≥ 4.57:1 (lowest: light safe-role on white 4.57, light outside-role on white 4.66; dark accent on surface 5.59; button ink on accent 5.67). Q6/Q7 in `IDENTITY_DECISIONS` are superseded by this amendment; UX-B applies it in `tokens.css` first. Reason: the owner judged the cool ground to set warm posters off better than any other option; the known cost is adjacency to Trakt's violet.
 
+**Supersession note.** ADR-112 supersedes only the light-palette half of this amendment. The light role values above were later darkened in `tokens.css` for contrast and all of those light values are now transitional implementation state, not a target to restore. The amendment's dark values and all structural and interaction decisions above remain in force.
+
 **Revisit when.** Availability data exists for a market (the hollow chip gains real logos), or the model publishes more than two traits per profile (the trait chips need a cap).
+
+---
+
+## ADR-112 — Light and dark are sibling themes, not competing directions (owner correction, 2026-09-05)
+
+**Context.** ADR-111 shipped one indigo family in both modes, while the owner's later, explicit reference makes «طاولة المونتاج» — white, blue and limited lime — the light identity; the current light tokens therefore describe implementation state, not acceptance. The visual split is an owner choice within the shared triad interaction (`BP §4.3`), separate value meanings (`BP §2.4 #7`) and bilingual surface (`BP §5.1`).
+
+**Decision.** Preserve the existing near-black/deep-indigo dark mode. Replace only light with the selected GPT reference after the exact image is archived locally and semantic colours pass contrast review. Blue owns light-mode action/brand; lime is a bounded highlight whose role must be frozen before code. `system / light / dark` selection does not change.
+
+**Rationale.** The modes are two expressions of one product, not two product branches. The owner's correction must not erase preserved dark work or cause the shared journey and interaction to be rebuilt.
+
+**Consequences.** One route/component/state tree serves both modes through semantic tokens and narrowly conditional assets. Vertical triad drag, visible arrows, Undo where applicable, Reduced Motion, 44px targets, RTL/LTR and the separate fit/quality/availability/confidence meanings are shared. No light/dark component forks or parallel token edits. The single-owner sequence and acceptance matrix are binding in [THEME_MODES_2026-09-05.md](THEME_MODES_2026-09-05.md).
+
+**Revisit when.** The owner replaces either visual reference, or measured usability requires behaviour—not merely presentation—to differ by mode.
 
 ---
