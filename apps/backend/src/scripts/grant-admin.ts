@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import { DatabaseConfig } from '../config/database.config';
 import { AuditLog } from '../entities/audit-log.entity';
 import { User } from '../entities/user.entity';
+import { normalizeEmail } from '../modules/auth/email';
 
 // Grants (or, with --revoke, removes) the admin role for one account by
 // email. Deliberately a command on the server, not an HTTP route: the first
@@ -13,7 +14,8 @@ import { User } from '../entities/user.entity';
 //   npm run admin:grant -- someone@example.com
 //   npm run admin:grant -- someone@example.com --revoke
 async function main() {
-  const [email, flag] = process.argv.slice(2);
+  const [typed, flag] = process.argv.slice(2);
+  const email = normalizeEmail(typed) as string | undefined;
   if (!email) {
     console.error('usage: grant-admin <email> [--revoke]');
     process.exit(2);

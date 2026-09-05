@@ -1,6 +1,8 @@
 import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
+import { NormalizeEmail } from '../email';
 
 export class RequestPasswordResetDto {
+  @NormalizeEmail()
   @IsEmail()
   email: string;
 }

@@ -472,7 +472,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Item | Built | Blueprint | Evidence / gap |
 |---|---|---|---|
 | Register / login / JWT (`AuthService`, `AuthController`) | ✅ | 🟡 | `§13.1`: pseudonymous taste id exists (profile); no market/platforms; no `consents` at registration (`§2.4 #9`) |
-| Password hashing (bcrypt cost 10), email validation, 8–64 char passwords | ✅ | — | |
+| Password hashing (bcrypt cost 10), email validation, 8–64 char passwords | ✅ | — | Since 2026-09-05 the address is trimmed and lower-cased before validation on register, login and reset (`auth/email.ts`; migration `NormalizeUserEmails` folds existing rows) — the live round found an account typed with capitals could neither log in nor reset in lower case, silently |
 | Auth throttling (5 req/min) + global 60 req/min | ✅ | — | `§21.3` |
 | Deactivated accounts locked out of every guarded route, not just login | ✅ | ✅ | `§21.3`; H2 fix, ADR-35 — `validateUser()` (what every guarded request actually runs) now checks `active` too, not only `login()` |
 | Refresh tokens | ✅ | — | ADR-26, `7603900`: rotated on use, family-level reuse detection (an old token reused revokes the whole chain), `refresh_tokens` table; frontend adoption is F8, open |
