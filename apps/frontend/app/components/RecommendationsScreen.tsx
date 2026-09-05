@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError, type Recommendation, type RecommendationTrack, type TrainingSummary } from '../lib/api';
 import { TRACK_COPY } from '../lib/copy';
-import { formatNumber, type PersonalFitLevel } from '../lib/format';
+import { formatNumber, todayLocal, type PersonalFitLevel } from '../lib/format';
 import { WorkCard } from './WorkCard';
 import styles from './RecommendationsScreen.module.css';
 
@@ -296,7 +296,8 @@ export function RecommendationsScreen({
     try {
       // A watched title leaves the candidate pool and becomes eligible for
       // later triads (blueprint §4.5) -- no rating is asked, ever (ADR-4).
-      await api.setTitleState(profileId, rec.title.id, { state: 'watched' });
+      // ADR-104: the device's own local day, never the server's UTC clock.
+      await api.setTitleState(profileId, rec.title.id, { state: 'watched', watchedOn: todayLocal() });
       setItems((current) => current.filter((item) => item.title.id !== rec.title.id));
       setNotice(t.watchedNotice(name));
     } catch {

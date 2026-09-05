@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError, type LibraryRankingItem, type Title, type UserTitleState } from '../lib/api';
-import { formatDate, formatNumber } from '../lib/format';
+import { formatNumber, formatWatchedOn, todayLocal } from '../lib/format';
 import { Poster } from './Poster';
 import styles from './ListScreen.module.css';
 import { WorkCard } from './WorkCard';
@@ -170,7 +170,8 @@ export function ListScreen({
     const name = nameOf(state.title, state.titleId);
     setBusyId(state.titleId);
     try {
-      const updated = await api.setTitleState(profileId, state.titleId, { state: 'watched' });
+      // ADR-104: the device's own local day, never the server's UTC clock.
+      const updated = await api.setTitleState(profileId, state.titleId, { state: 'watched', watchedOn: todayLocal() });
       setWatchlist((current) => current.filter((item) => item.titleId !== state.titleId));
       setWatched((current) => [{ ...updated, title: state.title }, ...current]);
       setNotice(t.watchedNotice(name));
@@ -204,7 +205,7 @@ export function ListScreen({
   function openDiary(state: UserTitleState) {
     setDiary({
       titleId: state.titleId,
-      date: state.watchedAt ? state.watchedAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
+      date: state.watchedOn ?? todayLocal(),
       notes: state.notes ?? '',
     });
   }
@@ -218,9 +219,12 @@ export function ListScreen({
     setBusyId(state.titleId);
     try {
       const notes = diary.notes.trim();
+      // ADR-104: the date field's own value, verbatim -- never reconstructed
+      // through a Date object, which is exactly what let editing the note
+      // alone silently shift the stored day (DATE-01).
       const updated = await api.setTitleState(profileId, state.titleId, {
         state: 'watched',
-        watchedAt: new Date(`${diary.date}T12:00:00`).toISOString(),
+        watchedOn: diary.date,
         notes: notes.length > 0 ? notes : null,
       });
       setWatched((current) => current.map((item) => (item.titleId === state.titleId ? { ...updated, title: state.title } : item)));
@@ -267,11 +271,13 @@ export function ListScreen({
   }
 
   const visibleWatchlist = watchlist.filter((state) => matches(state.title));
-  // Timeline: most recent watch first; undated rows (legacy) last.
+  // Timeline: most recent watch first; undated rows (legacy) last. Plain
+  // 'YYYY-MM-DD' strings sort lexicographically in calendar order, so no
+  // Date.parse (and no timezone) is involved (ADR-104).
   const visibleWatched = watched
     .filter((state) => matches(state.title))
     .slice()
-    .sort((left, right) => (right.watchedAt ? Date.parse(right.watchedAt) : 0) - (left.watchedAt ? Date.parse(left.watchedAt) : 0));
+    .sort((left, right) => (right.watchedOn ?? '').localeCompare(left.watchedOn ?? ''));
   const visibleRanking = ranking.kind === 'ready' ? ranking.items.filter((item) => matches(item.title)) : [];
   const filtering = filter.trim().length > 0;
 
@@ -401,7 +407,7 @@ export function ListScreen({
                     <div className={styles.cardBody}>
                       <h4 className={styles.title}>{nameOf(state.title, state.titleId)}</h4>
                       {altOf(state.title) && <p className={styles.alt}>{altOf(state.title)}</p>}
-                      <p className={styles.meta}>{state.watchedAt ? formatDate(state.watchedAt, lang) : t.noDate}</p>
+                      <p className={styles.meta}>{state.watchedOn ? formatWatchedOn(state.watchedOn, lang) : t.noDate}</p>
                       {!editing && state.notes && <p className={styles.noteText}>{state.notes}</p>}
                     </div>
                   </div>
@@ -419,7 +425,7 @@ export function ListScreen({
                           id={`diary-date-${state.titleId}`}
                           type="date"
                           value={diary.date}
-                          max={new Date().toISOString().slice(0, 10)}
+                          max={todayLocal()}
                           onChange={(event) => setDiary({ ...diary, date: event.target.value })}
                           required
                         />

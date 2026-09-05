@@ -776,6 +776,15 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 
 ---
 
+## ADR-104 — The watched date is a plain string the client supplies, never a timestamp the server guesses (remediation brief P1-03/DATE-01)
+
+**Context.** The live round of 2026-09-05 found two related bugs in `user_title_states.watchedAt` (a `timestamp`): a title marked watched showed the previous day, and editing a diary note alone silently moved the displayed date. Both traced to the same design: `watchedAt` stored the server's UTC "now" (wrong for anyone east of UTC acting just after their own local midnight -- Riyadh is the primary market, UTC+3), and the frontend's diary always resent a value reconstructed via `new Date(`${date}T12:00:00`).toISOString()` regardless of whether the date field was touched, so a notes-only save could still shift the stored instant depending on the *viewer's own* browser timezone at save time.
+**Decision.** `user_title_states` gains `watchedOn`: plain `'YYYY-MM-DD'` text, deliberately never a native `date`/`timestamp` column -- the bug was exactly a timestamp/timezone being interpreted differently by different code, and a bare string sidesteps the entire class by construction. The backend only ever stores what it is given, verbatim (`UpdateTitleStateDto.watchedOn`, `@Matches(/^\d{4}-\d{2}-\d{2}$/)`); it never derives a day from its own clock. Every frontend call that marks a title watched *now* (`ListScreen`, `RecommendationsScreen`, `DiscoverScreen`, `WorkScreen`) sends `lib/format.ts`'s new `todayLocal()` -- the device's own wall-clock day, computed from `Date`'s local getters, never `toISOString()`. The diary sends its date input's value unchanged; PATCH semantics extend to it (omitting `watchedOn` leaves an already-set day alone, exactly like `notes`), which is what stops a notes-only save from moving the date. Display goes through a new `formatWatchedOn()`, pinned to `timeZone: 'UTC'` when rendering the bare string -- the day a fact happened does not change with who is later looking at it, unlike `formatDate` (kept, unchanged, for real instants: consent timestamps, document revision dates). `watchedAt` stays, demoted to legacy bookkeeping only; nothing reads it for display any more. Migration backfills `watchedOn` from `watchedAt`'s UTC date for existing rows -- an acknowledged approximation, since a user's actual local day cannot be recovered from a bare UTC timestamp after the fact.
+**Consequences.** `WatchEventsService.create()`'s own call into the same PATCH path derives `watchedOn` from its own `watchedAt` input's UTC date (the closest thing to a chosen day that path has; the frontend does not call it today). `docs/REMEDIATION_MAP_2026-09-05.md`'s queue item 4 (DATE-01) closes. Not done here: `seed-demo.ts`'s persona fixtures still only set the legacy `watchedAt` (out of this session's registered files; their library screens show no date until backfilled or re-seeded).
+**Revisit when.** A profile-level IANA timezone is added (`BP` leaves this open) and "today" should be computed from it server-side too, for a client that cannot be trusted to report its own clock correctly (a very old cached PWA build, a manipulated clock).
+
+---
+
 ## Summary
 
 | # | Decision | Serves | Revisit trigger |
@@ -882,6 +891,7 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 | 100 | Durable `training_jobs` queue (retries, backoff, idempotency) replaces live model-service calls on the status path; `GET /admin/training-jobs` and `GET /admin/readiness` | remediation brief P0-02 2026-09-05; ADR-25, ADR-97 | a second replica (needs `SKIP LOCKED`), or a model-service push/webhook |
 | 101 | IMDb dump download is atomic with validation and stale-fallback; the whole IMDb step can no longer fail `npm run release`, revises ADR-90 | P0-4 2026-09-05; ADR-90 | a persistent `IMDB_DATASETS_DIR` volume, or a second dataset needing the same treatment |
 | 102 | Automated encrypted `pg_dump` to R2 (own credentials, sha256, `pg_restore --list`), weekly restore drill into a disposable database, retention via the bucket's own S3 lifecycle | P0-5 2026-09-05; O-8 | a second database needing the same treatment, or Railway notifications proving insufficient |
+| 104 | `watchedOn`: a plain `'YYYY-MM-DD'` the client supplies (`todayLocal()`, or the diary's own date), never a timestamp the server derives from its own clock | remediation brief P1-03/DATE-01 2026-09-05 | a profile-level IANA timezone lets the server compute "today" too |
 
 ## How to add a decision
 

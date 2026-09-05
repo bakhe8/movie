@@ -61,17 +61,23 @@ export class UserTitleStateService {
   private applyUpdate(state: UserTitleState, updateTitleStateDto: UpdateTitleStateDto): UserTitleState {
     state.state = updateTitleStateDto.state;
 
-    // watchedAt only means anything for state 'watched' (M1): a caller-
-    // supplied value is ignored for any other state instead of being stored
-    // alongside it, and it's cleared on any transition away from 'watched' —
-    // consistent with TriadsService.replace()'s not_watched path, which
-    // already nulls it the same way for the same reason.
-    state.watchedAt =
-      updateTitleStateDto.state === 'watched'
-        ? updateTitleStateDto.watchedAt
-          ? new Date(updateTitleStateDto.watchedAt)
-          : (state.watchedAt ?? new Date())
-        : null;
+    // watchedAt/watchedOn only mean anything for state 'watched' (M1): a
+    // caller-supplied value is ignored for any other state instead of being
+    // stored alongside it, and both are cleared on any transition away from
+    // 'watched' — consistent with TriadsService.replace()'s not_watched
+    // path, which already nulls watchedAt the same way for the same reason.
+    if (updateTitleStateDto.state === 'watched') {
+      state.watchedAt = state.watchedAt ?? new Date();
+      // ADR-104: omitting watchedOn leaves an already-set day alone (PATCH
+      // semantics -- a notes-only diary save must never move the date);
+      // a first-ever watch with no date supplied stays unknown (NULL, never
+      // guessed from this server's own clock, DATE-01) rather than silently
+      // defaulting to a day the client never actually claimed.
+      state.watchedOn = updateTitleStateDto.watchedOn ?? state.watchedOn ?? null;
+    } else {
+      state.watchedAt = null;
+      state.watchedOn = null;
+    }
 
     // PATCH semantics (M1): notes is only touched when the caller actually
     // sends the field. Omitting it from the body must not silently wipe

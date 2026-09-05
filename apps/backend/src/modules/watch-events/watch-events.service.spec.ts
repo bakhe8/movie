@@ -178,9 +178,12 @@ describe('WatchEventsService', () => {
       watchedAt: '2026-01-15T10:00:00.000Z',
     });
 
+    // ADR-104: the state PATCH now takes a plain calendar day, derived here
+    // from this event's own watchedAt (its UTC date -- the best available
+    // day this path has, no separate day-only input exists).
     expect(userTitleStateService.upsert).toHaveBeenCalledWith('user-1', 'profile-1', 'title-1', {
       state: 'watched',
-      watchedAt: '2026-01-15T10:00:00.000Z',
+      watchedOn: '2026-01-15',
     });
   });
 });

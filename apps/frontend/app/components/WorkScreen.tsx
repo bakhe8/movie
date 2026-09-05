@@ -3,6 +3,7 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { api, type FingerprintDimension, type LibraryRankingItem, type Recommendation, type Title, type TitleState } from '../lib/api';
 import { FEATURE_REASON_COPY } from '../lib/copy';
+import { todayLocal } from '../lib/format';
 import { PublicQualityCell } from '../public-quality/PublicQualityCell';
 import { collectSources, SourcesFooter } from '../public-quality/SourcesFooter';
 import { Poster } from './Poster';
@@ -265,7 +266,9 @@ export function WorkScreen({
   async function change(next: TitleState, message: string) {
     setBusy(true);
     try {
-      await api.setTitleState(profileId, title.id, { state: next });
+      // ADR-104: the device's own local day, never the server's UTC clock,
+      // and only when actually marking watched right now.
+      await api.setTitleState(profileId, title.id, next === 'watched' ? { state: next, watchedOn: todayLocal() } : { state: next });
       setState(next);
       setNotice(message);
     } catch {

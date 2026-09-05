@@ -571,13 +571,14 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Item | Built | Blueprint | Evidence / gap |
 |---|---|---|---|
 | `PATCH …/titles/:titleId/state` (watched / not_watched / watchlist / interested) | ✅ | 🟡 | `§13.1 watch_events`/`§6.2`: no source, edition, audio, subtitles, provider; single state row; `watch_events` table exists since M5, unused |
+| `watchedOn`: the watched day is a client-supplied string, never a server-guessed timestamp | ✅ | ✅ | ADR-104 (remediation brief P1-03/DATE-01): a title watched just after local midnight in Riyadh showed the previous day; editing a diary note alone silently moved the date. `todayLocal()`/`formatWatchedOn()` (`lib/format.ts`) fix both; `watchedAt` stays only as a legacy timestamp |
 | `GET …/watched-titles`, `GET …/watchlist` | ✅ | — | |
 | No in-app rating; `importedRating` + `ratingSource='import'` reserved | ✅ | ✅ | `§2.4 #2`, `§4.2`, `§4.5` |
 | `POST /watch-events` with source | ✅ | ✅ | ADR-66, 2026-09-03 |
 | `POST /recommendations/:id/outcome` | ✅ | ✅ | ADR-67 (the four caller-reportable types) + ADR-68 (`ranked_later`, written by `TriadsService.rank()` itself, not this endpoint), both 2026-09-04 — every `Outcome` type now has a writer |
 | `POST /library/imports` | ❌ | ❌ | `§14`, `§4.2` — `library_imports` table exists since M5, empty |
 | `triadEligible` flag (ADR-17) | ✅ | ✅ | migration `AddTriadReplacements`; cleared only by a `not_remembered` replacement; read by the triad pool query; never by training |
-| Unit tests | ✅ | — | `user-title-state.service.spec.ts`, 5 tests |
+| Unit tests | ✅ | — | `user-title-state.service.spec.ts`, 15 tests |
 | Frontend: mark watched ✅; not watched ✅ (Discover undo, or a triad replacement); watchlist ✅ (Discover or a recommendation; managed in `ListScreen`: watched / remove); history ✅ (`ListScreen` timeline with dates, undo, and a diary: editable watch date + private note); state shown in search ✅ | ✅ | 🟡 | `§4.2`, `§5.1` |
 
 ## Privacy, consent, admin

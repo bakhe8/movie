@@ -52,7 +52,7 @@ describe('UserTitleStateService', () => {
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it('stamps watchedAt automatically the first time a title is marked watched', async () => {
+    it('stamps watchedAt automatically the first time a title is marked watched, but never guesses watchedOn', async () => {
       profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
       titlesRepository.findOne.mockResolvedValue({ id: 'title-1' });
       statesRepository.findOne.mockResolvedValue(null);
@@ -61,9 +61,62 @@ describe('UserTitleStateService', () => {
 
       expect(result.watchedAt).toBeInstanceOf(Date);
       expect(result.state).toBe('watched');
+      // ADR-104/DATE-01: an unsupplied day stays unknown (NULL), never
+      // defaulted from this server's own UTC clock -- the exact bug found
+      // live (a Riyadh user just after local midnight got the previous day).
+      expect(result.watchedOn).toBeNull();
     });
 
-    it('clears watchedAt when the state changes away from watched', async () => {
+    // ADR-104: the client always supplies its own local calendar day when
+    // marking watched (lib/format.ts's todayLocal(), or the diary's chosen
+    // date) -- this is what actually fixes DATE-01, not a server-side guess.
+    it('records the client-supplied watchedOn when marking watched', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      titlesRepository.findOne.mockResolvedValue({ id: 'title-1' });
+      statesRepository.findOne.mockResolvedValue(null);
+
+      const result = await service.upsert('user-1', 'profile-1', 'title-1', { state: 'watched', watchedOn: '2026-09-05' });
+
+      expect(result.watchedOn).toBe('2026-09-05');
+    });
+
+    // The diary saving only a note must never move the date it did not
+    // touch -- the second live bug DATE-01 found (editing the note changed
+    // the displayed date because the old code always resent watchedAt).
+    it('leaves an already-set watchedOn untouched when a notes-only PATCH omits it', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      titlesRepository.findOne.mockResolvedValue({ id: 'title-1' });
+      statesRepository.findOne.mockResolvedValue({
+        profileId: 'profile-1',
+        titleId: 'title-1',
+        state: 'watched',
+        watchedAt: new Date('2026-09-01T12:00:00Z'),
+        watchedOn: '2026-09-01',
+      });
+
+      const result = await service.upsert('user-1', 'profile-1', 'title-1', { state: 'watched', notes: 'loved it' });
+
+      expect(result.watchedOn).toBe('2026-09-01');
+    });
+
+    // The diary can also correct the date -- an explicit watchedOn always wins.
+    it('updates watchedOn when the diary corrects it', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      titlesRepository.findOne.mockResolvedValue({ id: 'title-1' });
+      statesRepository.findOne.mockResolvedValue({
+        profileId: 'profile-1',
+        titleId: 'title-1',
+        state: 'watched',
+        watchedAt: new Date('2026-09-01T12:00:00Z'),
+        watchedOn: '2026-09-01',
+      });
+
+      const result = await service.upsert('user-1', 'profile-1', 'title-1', { state: 'watched', watchedOn: '2026-08-30' });
+
+      expect(result.watchedOn).toBe('2026-08-30');
+    });
+
+    it('clears watchedAt and watchedOn when the state changes away from watched', async () => {
       profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
       titlesRepository.findOne.mockResolvedValue({ id: 'title-1' });
       statesRepository.findOne.mockResolvedValue({
@@ -71,27 +124,30 @@ describe('UserTitleStateService', () => {
         titleId: 'title-1',
         state: 'watched',
         watchedAt: new Date('2026-01-01'),
+        watchedOn: '2026-01-01',
       });
 
       const result = await service.upsert('user-1', 'profile-1', 'title-1', { state: 'watchlist' });
 
       expect(result.watchedAt).toBeNull();
+      expect(result.watchedOn).toBeNull();
       expect(result.state).toBe('watchlist');
     });
 
-    // M1: watchedAt only means anything for state 'watched' -- a caller
-    // supplying it alongside any other state must not have it stored.
-    it('ignores a supplied watchedAt when the state is not watched', async () => {
+    // M1/ADR-104: neither field means anything for a state other than
+    // 'watched' -- a caller supplying one anyway must not have it stored.
+    it('ignores a supplied watchedOn when the state is not watched', async () => {
       profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
       titlesRepository.findOne.mockResolvedValue({ id: 'title-1' });
       statesRepository.findOne.mockResolvedValue(null);
 
       const result = await service.upsert('user-1', 'profile-1', 'title-1', {
         state: 'watchlist',
-        watchedAt: '2020-01-01T00:00:00.000Z',
+        watchedOn: '2020-01-01',
       });
 
       expect(result.watchedAt).toBeNull();
+      expect(result.watchedOn).toBeNull();
     });
 
     // M1: PATCH semantics -- omitting `notes` must leave an existing value

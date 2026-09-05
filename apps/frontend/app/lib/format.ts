@@ -63,3 +63,31 @@ export function formatDate(iso: string, lang: Lang): string {
     new Date(iso),
   );
 }
+
+// The day the user watched a title, as the plain 'YYYY-MM-DD' the backend
+// stores (ADR-104, remediation brief P1-03/DATE-01) -- deliberately never a
+// timestamp. Pinned to UTC while formatting: a bare date string has no
+// timezone of its own, and letting Intl render it in the *viewer's* local
+// time would shift the displayed day for anyone west of UTC, exactly the
+// class of bug this column exists to end. Use this for a stored watchedOn;
+// use formatDate above for anything that is a real instant.
+export function formatWatchedOn(dateOnly: string, lang: Lang): string {
+  return new Intl.DateTimeFormat(lang === 'ar' ? 'ar-SA-u-ca-gregory-nu-latn' : 'en-US', {
+    dateStyle: 'medium',
+    timeZone: 'UTC',
+  }).format(new Date(`${dateOnly}T00:00:00Z`));
+}
+
+// "Today" in the device's own timezone, as plain 'YYYY-MM-DD' -- never the
+// server's UTC clock. DATE-01's root cause: a Riyadh user (UTC+3) marking a
+// title watched just after their own local midnight had the server's UTC
+// "now" recorded, which was still the previous day there. Every write of a
+// watchedOn for "right now" (as opposed to a diary's explicitly chosen date)
+// must go through this, not new Date().toISOString().
+export function todayLocal(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}

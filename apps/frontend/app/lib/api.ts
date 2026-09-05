@@ -111,7 +111,12 @@ export interface UserTitleState {
   profileId: string;
   titleId: string;
   state: TitleState;
+  // Legacy bookkeeping timestamp; nothing renders it any more (ADR-104).
   watchedAt: string | null;
+  // The calendar day the user watched it, plain 'YYYY-MM-DD' (ADR-104,
+  // remediation brief DATE-01) -- format with formatWatchedOn, never
+  // formatDate (that would let the viewer's own timezone shift the day).
+  watchedOn: string | null;
   // false after a "don't remember" replacement (ADR-17): still watched, never
   // asked about in a triad again. Only the replace endpoint writes it.
   triadEligible: boolean;
@@ -399,8 +404,10 @@ export const api = {
 
   // No `rating` here: the only explicit preference signal is a triad ranking (blueprint §2.4 #2).
   // `notes` omitted = left alone; `null` = cleared (PATCH semantics). Notes are
-  // the user's private diary and never enter the model.
-  setTitleState: (profileId: string, titleId: string, data: { state: TitleState; watchedAt?: string; notes?: string | null }) =>
+  // the user's private diary and never enter the model. `watchedOn` (ADR-104):
+  // a plain 'YYYY-MM-DD', omitted = an already-set day is left alone too --
+  // pass lib/format.ts's todayLocal() for "right now", or the diary's chosen date.
+  setTitleState: (profileId: string, titleId: string, data: { state: TitleState; watchedOn?: string; notes?: string | null }) =>
     request<UserTitleState>(`/profiles/${profileId}/titles/${titleId}/state`, {
       method: 'PATCH',
       body: JSON.stringify(data),

@@ -52,7 +52,8 @@ embeddings (
 user_title_states (                                              -- exposure + list state, one row per (profile, title); renamed from user_title_state (M1, ADR-16 plural naming)
   id uuid PK, "profileId" uuid NOT NULL FK profiles ON DELETE CASCADE, "titleId" uuid NOT NULL FK titles ON DELETE CASCADE,
   state varchar NOT NULL,                                        -- 'watched' | 'not_watched' | 'watchlist' | 'interested'
-  "watchedAt" timestamp,
+  "watchedAt" timestamp,                                         -- legacy bookkeeping; nothing renders it any more, watchedOn is the day of record (ADR-104)
+  "watchedOn" varchar(10),                                       -- plain 'YYYY-MM-DD', client-supplied, never derived from a server clock (ADR-104, DATE-01)
   "triadEligible" boolean NOT NULL DEFAULT true,                 -- false after a 'not_remembered' replacement (ADR-17): still watched, never asked about again
   "importedRating" real, "ratingSource" varchar,                 -- import-only auxiliary signal; never written by the API (BP §4.2)
   notes text, "updatedAt" timestamp,

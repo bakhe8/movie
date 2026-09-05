@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api, type Title, type TitleState } from '../lib/api';
-import { formatNumber } from '../lib/format';
+import { formatNumber, todayLocal } from '../lib/format';
 import { Poster } from './Poster';
 import styles from './DiscoverScreen.module.css';
 
@@ -193,7 +193,9 @@ export function DiscoverScreen({
     const name = lang === 'ar' ? title.titleAr : title.titleEn;
     setBusyId(title.id);
     try {
-      await api.setTitleState(profileId, title.id, { state });
+      // ADR-104: the device's own local day, never the server's UTC clock,
+      // and only when actually marking watched right now.
+      await api.setTitleState(profileId, title.id, state === 'watched' ? { state, watchedOn: todayLocal() } : { state });
       setStates((current) => {
         const next = new Map(current);
         if (state === 'not_watched') next.delete(title.id);

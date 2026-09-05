@@ -27,8 +27,24 @@ export class UserTitleState {
   @Column({ type: 'varchar' })
   state: TitleState;
 
+  // Legacy bookkeeping timestamp (UTC instant), superseded for display by
+  // watchedOn below (ADR-104, remediation brief P1-03/DATE-01) -- nothing
+  // reads it for "which day" any more, only ever written for continuity.
   @Column({ type: 'timestamp', nullable: true })
   watchedAt: Date | null;
+
+  // The calendar day the user says they watched it, as plain 'YYYY-MM-DD'
+  // text -- deliberately never a native date/timestamp column. The bug this
+  // fixes was exactly a driver/timezone silently shifting a day: a title
+  // marked watched just after local midnight in Riyadh (UTC+3) stored the
+  // server's UTC "now", which was still the previous day there. The client
+  // now always supplies its own local calendar day (lib/format.ts's
+  // todayLocal()) or, from the diary, the exact day the user chose; the
+  // backend only ever stores the string it is given, verbatim, never
+  // guessing one from a server clock. NULL for a state that has never been
+  // 'watched', and for rows written before this column existed.
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  watchedOn: string | null;
 
   // Whether this watched title may still be asked about in a triad. Cleared
   // by the "don't remember" replacement control (ADR-17): the watch stays

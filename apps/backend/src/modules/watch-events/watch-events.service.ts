@@ -93,9 +93,13 @@ export class WatchEventsService {
     // watch history. Reused rather than duplicated (PATCH semantics, M1);
     // this is strictly additive -- .../state keeps working exactly as
     // before for watchlist/interested and for watches with no in-app event.
+    // ADR-104: this event's own watchedAt is the closest thing to a chosen
+    // day this path has (no separate day-only input exists here); its UTC
+    // date is the same best-effort a legacy watchedOn-less row is
+    // backfilled with, not a new imprecision.
     await this.userTitleStateService.upsert(userId, profileId, dto.titleId, {
       state: 'watched',
-      watchedAt: watchedAt.toISOString(),
+      watchedOn: watchedAt.toISOString().slice(0, 10),
     });
 
     return watchEvent;

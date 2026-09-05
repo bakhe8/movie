@@ -28,9 +28,11 @@ async function registerAndCreateProfile(app: INestApplication) {
 // M1 (an independent audit's finding): PATCH .../titles/:titleId/state used
 // to overwrite `notes` unconditionally (`dto.notes ?? null`) even when the
 // caller's body omitted the field entirely, and stored a supplied
-// `watchedAt` regardless of the target state. Real HTTP round trips against
-// real Postgres, not just a unit-level mock, since the bug is specifically
-// about what a PATCH does and doesn't touch.
+// `watchedAt` regardless of the target state. ADR-104/DATE-01 added the same
+// PATCH-semantics guarantee for `watchedOn` (a notes-only PATCH must never
+// move a date it did not touch). Real HTTP round trips against real
+// Postgres, not just a unit-level mock, since the bug is specifically about
+// what a PATCH does and doesn't touch.
 describe('Watch state PATCH semantics (M1)', () => {
   let app: INestApplication;
   let titleId: string;
@@ -93,16 +95,47 @@ describe('Watch state PATCH semantics (M1)', () => {
     expect(cleared.body.notes).toBeNull();
   });
 
-  it('ignores a supplied watchedAt when the target state is not watched', async () => {
+  it('ignores a supplied watchedOn when the target state is not watched', async () => {
     const { token, profileId } = await registerAndCreateProfile(app);
 
     const response = await request(app.getHttpServer())
       .patch(`/profiles/${profileId}/titles/${titleId}/state`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ state: 'watchlist', watchedAt: '2020-01-01T00:00:00.000Z' })
+      .send({ state: 'watchlist', watchedOn: '2020-01-01' })
       .expect(200);
 
     expect(response.body.watchedAt).toBeNull();
+    expect(response.body.watchedOn).toBeNull();
+  });
+
+  // One shared registration for both assertions -- /auth/register is
+  // throttled to 5/min per IP, and this file already spends its budget on
+  // the other cases below.
+  it('validates watchedOn, and a notes-only PATCH never moves an already-recorded one (DATE-01)', async () => {
+    const { token, profileId } = await registerAndCreateProfile(app);
+
+    await request(app.getHttpServer())
+      .patch(`/profiles/${profileId}/titles/${titleId}/state`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ state: 'watched', watchedOn: '2020-01-01T00:00:00.000Z' })
+      .expect(400);
+
+    await request(app.getHttpServer())
+      .patch(`/profiles/${profileId}/titles/${titleId}/state`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ state: 'watched', watchedOn: '2026-09-01' })
+      .expect(200);
+
+    // DATE-01's second live bug: editing the diary's note alone moved the
+    // watched date, because the old PATCH always resent a reconstructed
+    // watchedAt regardless of whether the date field was touched.
+    const afterDiary = await request(app.getHttpServer())
+      .patch(`/profiles/${profileId}/titles/${titleId}/state`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ state: 'watched', notes: 'rewatch for the twist' })
+      .expect(200);
+
+    expect(afterDiary.body.watchedOn).toBe('2026-09-01');
   });
 
   // H2 (AUDIT_2026-09-05): concurrent first writes for the same (profile,
