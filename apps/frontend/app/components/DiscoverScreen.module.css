@@ -1,5 +1,5 @@
-.screen { display: grid; gap: 12px; width: 100%; margin-inline: auto; }
-.header { display: grid; grid-template-columns: minmax(0, 1fr) 100px; align-items: center; min-height: 116px; gap: 12px; padding: 12px 16px; background: radial-gradient(ellipse at 15% 70%, var(--role-discovery-soft), transparent 70%), radial-gradient(ellipse at 80% 0%, var(--accent-soft), transparent 70%); border-radius: var(--scene-radius); overflow: hidden; }
+.screen { display: grid; gap: 8px; width: 100%; margin-inline: auto; }
+.header { display: grid; grid-template-columns: minmax(0, 1fr) 100px; align-items: center; min-height: 104px; gap: 12px; padding: 9px 16px; background: radial-gradient(ellipse at 15% 70%, var(--role-discovery-soft), transparent 70%), radial-gradient(ellipse at 80% 0%, var(--accent-soft), transparent 70%); border-radius: var(--scene-radius); overflow: hidden; }
 .headerCopy { position: relative; z-index: 1; min-width: 0; }
 .eyebrow { display: none; align-items: center; gap: 8px; margin: 0 0 14px; color: var(--accent); font-size: 13px; font-weight: 600; }
 .eyebrow span { font-size: 20px; }
@@ -66,7 +66,7 @@
   .pickHintLabel { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 }
 @media (min-width: 600px) {
-  .screen { gap: 20px; }
+  .screen { gap: 18px; }
   .header { grid-template-columns: 1fr 1fr; min-height: 230px; padding: 24px; gap: 20px; }
   .header h2 { font-size: clamp(28px, 3.8vw, 48px); }
   .eyebrow { display: flex; }
@@ -85,9 +85,9 @@
 }
 @media (min-width: 1050px) {
   .filters { flex-wrap: wrap; overflow-x: visible; padding-bottom: 8px; }
-  .screen { gap: 22px; }
-  .header { min-height: 270px; padding: 28px 36px; }
-  .filmFan { height: 240px; }
+  .screen { gap: 18px; }
+  .header { min-height: 210px; padding: 24px 36px; }
+  .filmFan { height: 190px; }
   .grid { grid-template-columns: repeat(5,minmax(0,1fr)); gap: 28px 22px; }
 }
 @media (hover: hover) {
