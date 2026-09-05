@@ -340,6 +340,16 @@ export const api = {
   login: (data: { email: string; password: string }) =>
     request<AuthResponse>('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
 
+  // Password reset (ADR-85). The request answers 202 for any address (no
+  // membership oracle), so the door shows one neutral message; confirm
+  // spends the single-use token from the emailed link and revokes every
+  // live session of that account.
+  requestPasswordReset: (email: string) =>
+    request<{ accepted: boolean }>('/auth/password-reset/request', { method: 'POST', body: JSON.stringify({ email }) }),
+
+  confirmPasswordReset: (token: string, password: string) =>
+    request<{ reset: boolean }>('/auth/password-reset/confirm', { method: 'POST', body: JSON.stringify({ token, password }) }),
+
   getProfiles: () => request<Profile[]>('/profiles'),
 
   createProfile: (data: { name: string; preferredLanguage?: PreferredLanguage }) =>
