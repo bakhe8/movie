@@ -146,7 +146,7 @@ describe('RecommendationsService', () => {
   let titlesRepository: { findOne: ReturnType<typeof vi.fn>; find: ReturnType<typeof vi.fn>; createQueryBuilder: ReturnType<typeof vi.fn> };
   let snapshotsRepository: ReturnType<typeof repoMock>;
   let statesRepository: ReturnType<typeof repoMock>;
-  let recommendationsRepository: { insert: ReturnType<typeof vi.fn> };
+  let recommendationsRepository: { insert: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
   let modelVersionsRepository: ReturnType<typeof repoMock>;
   let publicQualityService: { forTitles: ReturnType<typeof vi.fn> };
   let triadsRepository: { count: ReturnType<typeof vi.fn> };
@@ -173,7 +173,10 @@ describe('RecommendationsService', () => {
     titlesRepository.find.mockResolvedValue([]);
     snapshotsRepository = repoMock();
     statesRepository = repoMock();
-    recommendationsRepository = { insert: vi.fn().mockResolvedValue({}) };
+    recommendationsRepository = {
+    insert: vi.fn(async (rows: unknown[]) => ({ identifiers: rows.map((_, index) => ({ id: `rec-${index + 1}` })) })),
+    update: vi.fn().mockResolvedValue({ affected: 1 }),
+  };
     modelVersionsRepository = repoMock();
     // No active pin by default -- every existing test keeps serving each
     // profile's own latest snapshot regardless of modelVersion, unchanged.
@@ -201,6 +204,56 @@ describe('RecommendationsService', () => {
       posterService as unknown as PosterService,
       experimentsService as unknown as ExperimentsService,
     );
+  });
+
+  // ADR-110: two facts, two writes. The row says what the model chose; the
+  // impression says it reached a screen. Conflating them made ProfileScreen's
+  // one-item request -- made only to read a confidence band -- indistinguishable
+  // from a list a person actually read.
+  describe('impressions (ADR-110)', () => {
+    it('stamps only this profile rows that were never stamped before', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+
+      const result = await service.recordImpressions('user-1', 'profile-1', ['rec-1', 'rec-2']);
+
+      expect(result).toEqual({ recorded: 1 });
+      const [where, patch] = recommendationsRepository.update.mock.calls[0];
+      expect(where).toMatchObject({ profileId: 'profile-1' });
+      // First write wins: a row already stamped keeps its first shownAt.
+      expect(where.shownAt).toBeDefined();
+      expect(patch.shownAt).toBeInstanceOf(Date);
+    });
+
+    it('writes nothing, and asks nothing, for an empty list', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+
+      expect(await service.recordImpressions('user-1', 'profile-1', [])).toEqual({ recorded: 0 });
+      expect(recommendationsRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('is 404 for a profile that is not the caller own', async () => {
+      profilesRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.recordImpressions('attacker', 'profile-1', ['rec-1'])).rejects.toBeInstanceOf(NotFoundException);
+      expect(recommendationsRepository.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('modelConfidence (ADR-110)', () => {
+    it('reports the snapshot own band without writing a recommendation', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(warmthOnlySnapshot());
+
+      expect(await service.modelConfidence('user-1', 'profile-1')).toEqual(expect.any(String));
+      expect(recommendationsRepository.insert).not.toHaveBeenCalled();
+    });
+
+    it('is null when there is no usable snapshot', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      snapshotsRepository.findOne.mockResolvedValue(null);
+
+      expect(await service.modelConfidence('user-1', 'profile-1')).toBeNull();
+    });
   });
 
   it('throws 404 (not 403) for a profile owned by another user', async () => {
@@ -492,6 +545,10 @@ describe('RecommendationsService', () => {
       // Deterministic top-K given the snapshot and pool: every shown item
       // was certain under this policy.
       expect(rows.every((row) => row.selectionPropensity === 1)).toBe(true);
+      // ADR-110: created, not yet seen. `shownAt` is stamped by
+      // recordImpressions() when the client says the list reached a screen.
+      expect(rows.every((row) => row.shownAt === null)).toBe(true);
+      expect(result.every((item) => item.recommendationId !== undefined)).toBe(true);
     });
 
     it('writes nothing when there are no candidates to show', async () => {

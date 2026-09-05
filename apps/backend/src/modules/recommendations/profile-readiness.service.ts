@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserTitleState } from '../../entities/user-title-state.entity';
 import { TrainingService, TrainingStatus } from '../training/training.service';
-import { RecommendationsService } from './recommendations.service';
+import { ConfidenceBand, RecommendationsService } from './recommendations.service';
 
 // BP §5.1 / remediation brief §5: four capabilities that a single
 // "trained or not" flag used to conflate. `not_ready` before anything has
@@ -35,6 +35,12 @@ export interface CapabilityReadiness {
   action: ReadinessAction;
   publishedAt: string | null;
   modelVersion: string | null;
+  // The model's own confidence band (ADR-110), from the snapshot alone --
+  // null for a capability with no usable model, and for `availability`,
+  // which has no model at all. A recommendation's own band can be lower
+  // than this one: it is demoted per title by that title's fingerprint
+  // coverage, which is a property of the title, not of the model.
+  confidenceBand: ConfidenceBand | null;
 }
 
 // How many watched films keep the rounds *learning* rather than repeating.
@@ -90,6 +96,7 @@ const NOT_BUILT_AVAILABILITY: CapabilityReadiness = {
   action: null,
   publishedAt: null,
   modelVersion: null,
+  confidenceBand: null,
 };
 
 @Injectable()
@@ -102,14 +109,15 @@ export class ProfileReadinessService {
   ) {}
 
   async forProfile(userId: string, profileId: string): Promise<ProfileReadiness> {
-    const [snapshotState, training, watchedTitles] = await Promise.all([
+    const [snapshotState, training, watchedTitles, confidenceBand] = await Promise.all([
       this.recommendationsService.snapshotState(userId, profileId),
       // Ownership is checked here (404 for someone else's profile) before
       // the watched count below is read.
       this.trainingService.status(userId, profileId),
       this.eligibleWatchedCount(profileId),
+      this.recommendationsService.modelConfidence(userId, profileId),
     ]);
-    const model = this.modelCapability(snapshotState, training);
+    const model = this.modelCapability(snapshotState, training, confidenceBand);
     const recommendation = await this.recommendationCapability(model, profileId);
     return {
       rounds: {
@@ -136,10 +144,15 @@ export class ProfileReadinessService {
   private modelCapability(
     snapshotState: 'ready' | 'pending' | 'paused' | 'model_outdated',
     training: TrainingStatus,
+    confidenceBand: ConfidenceBand | null,
   ): CapabilityReadiness {
     const published = training.latestSnapshot
-      ? { publishedAt: training.latestSnapshot.createdAt.toISOString(), modelVersion: training.latestSnapshot.modelVersion }
-      : { publishedAt: null, modelVersion: null };
+      ? {
+          publishedAt: training.latestSnapshot.createdAt.toISOString(),
+          modelVersion: training.latestSnapshot.modelVersion,
+          confidenceBand,
+        }
+      : { publishedAt: null, modelVersion: null, confidenceBand };
 
     if (snapshotState === 'ready') {
       return { status: 'ready', reason: null, action: null, ...published };
@@ -151,7 +164,7 @@ export class ProfileReadinessService {
       return { status: 'stale', reason: 'fingerprint_schema_changed', action: 'rank_more_triads', ...published };
     }
     if (snapshotState === 'paused') {
-      return { status: 'not_ready', reason: 'processing_paused', action: 'resume_processing', publishedAt: null, modelVersion: null };
+      return { status: 'not_ready', reason: 'processing_paused', action: 'resume_processing', publishedAt: null, modelVersion: null, confidenceBand: null };
     }
     // snapshotState === 'pending': no usable snapshot yet. training.state
     // carries the finer distinction of *why*.
@@ -182,13 +195,21 @@ export class ProfileReadinessService {
     }
     const candidates = await this.recommendationsService.candidatePoolSize(profileId);
     return candidates > 0
-      ? { status: 'ready', reason: null, action: null, publishedAt: model.publishedAt, modelVersion: model.modelVersion }
+      ? {
+          status: 'ready',
+          reason: null,
+          action: null,
+          publishedAt: model.publishedAt,
+          modelVersion: model.modelVersion,
+          confidenceBand: model.confidenceBand,
+        }
       : {
           status: 'not_ready',
           reason: 'insufficient_eligible_candidates',
           action: 'watch_more_titles',
           publishedAt: model.publishedAt,
           modelVersion: model.modelVersion,
+          confidenceBand: model.confidenceBand,
         };
   }
 }

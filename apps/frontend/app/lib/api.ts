@@ -171,6 +171,9 @@ export interface CapabilityReadiness {
   action: ReadinessAction;
   publishedAt: string | null;
   modelVersion: string | null;
+  // The model's own confidence (ADR-110) -- what the profile screen shows,
+  // instead of requesting a recommendation purely to read one band off it.
+  confidenceBand: ConfidenceBand | null;
 }
 // ADR-108: where the profile stands, counted by the server. A repeat round
 // (`verify`, ADR-99) is completed but is evidence of nothing, so the two
@@ -274,7 +277,16 @@ export interface RecommendationReason {
 // missing fact, never "not available" and never a zero.
 export type AvailabilityState = 'unknown' | 'available' | 'unavailable';
 
+// What a client reports back about a recommendation it showed (ADR-110).
+// `watched` is not here: a watch is a watch event, and the outcome row is
+// written from it server-side.
+export type OutcomeType = 'clicked' | 'saved' | 'dismissed_not_relevant' | 'opened_provider';
+
 export interface Recommendation {
+  // The `recommendations` row this item is (ADR-110). Every outcome names
+  // it, so the loop closes on the recommendation actually made rather than
+  // on the most recent one for the same title.
+  recommendationId: string;
   title: Title;
   personalFitScore: number;
   publicQualityScore: number | null;
@@ -513,6 +525,33 @@ export const api = {
       | { state: 'paused' }
       | { state: 'model_outdated' }
     >(`/profiles/${profileId}/recommendations?limit=${limit}`),
+
+  // ADR-110: the items that actually reached the screen. Never blocks a
+  // render -- a lost impression is a lost measurement, not a lost feature.
+  recordImpressions: (profileId: string, recommendationIds: string[]) =>
+    request<{ recorded: number }>(`/profiles/${profileId}/recommendations/impressions`, {
+      method: 'POST',
+      body: JSON.stringify({ recommendationIds }),
+    }),
+
+  // One reported outcome for one recommendation (ADR-67/110), append-only.
+  recordOutcome: (recommendationId: string, type: OutcomeType) =>
+    request<{ id: string }>(`/recommendations/${recommendationId}/outcome`, {
+      method: 'POST',
+      body: JSON.stringify({ type }),
+    }),
+
+  // The watch itself (BP §4.5): marks the title watched *and*, when the
+  // watch followed a recommendation, links the outcome row that closes the
+  // loop -- which PATCH .../state alone never did.
+  recordWatchEvent: (
+    profileId: string,
+    data: { titleId: string; watchedOn?: string; recommendationId?: string; source?: 'in_app' | 'import' | 'manual' },
+  ) =>
+    request<{ id: string; recommendationId: string | null }>(`/profiles/${profileId}/watch-events`, {
+      method: 'POST',
+      body: JSON.stringify({ source: 'in_app', ...data }),
+    }),
 
   getTrainingStatus: (profileId: string) =>
     request<{

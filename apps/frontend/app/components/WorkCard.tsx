@@ -60,6 +60,9 @@ const labels = {
     addToList: 'أضف إلى قائمتي',
     added: 'في قائمتك',
     markWatched: 'شاهدته',
+    // Not a rating and not a dislike: it says this suggestion missed, which
+    // is the one thing the loop cannot learn from a silence (ADR-110).
+    notRelevant: 'ليس اقتراحًا مناسبًا',
     position: (n: number) => `الموضع ${n}`,
     // Library ranking (SPEC §5.4, ADR-33): a position among the watched set,
     // never framed as a recommendation and never a score.
@@ -85,6 +88,7 @@ const labels = {
     addToList: 'Add to my list',
     added: 'On your list',
     markWatched: 'Watched it',
+    notRelevant: 'Not a good suggestion',
     position: (n: number) => `Position ${n}`,
     rankingCell: 'Your personal ranking',
     rankingPosition: (position: string, count: string) => `${position} of ${count} among what you watched`,
@@ -114,6 +118,7 @@ type RecommendationProps = Shared & {
   busy: boolean;
   onAddToList?: () => void;
   onMarkWatched?: () => void;
+  onNotRelevant?: () => void;
 };
 
 type RankingProps = Shared & {
@@ -302,6 +307,11 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
           <button type="button" className={styles.ghost} onClick={props.onMarkWatched} disabled={props.busy}>
             {t.markWatched}
           </button>
+          {props.onNotRelevant && (
+            <button type="button" className={styles.ghost} onClick={props.onNotRelevant} disabled={props.busy}>
+              {t.notRelevant}
+            </button>
+          )}
         </div>
       )}
     </article>

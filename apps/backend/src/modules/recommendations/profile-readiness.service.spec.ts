@@ -24,6 +24,7 @@ function servicesOf(overrides: {
   candidatePoolSize?: number;
   firstTriadCount?: number;
   watchedTitles?: number;
+  confidenceBand?: 'initial' | 'likely' | 'strong' | 'inconclusive';
 }) {
   const training = {
     firstTriadCount: overrides.firstTriadCount ?? 3,
@@ -32,11 +33,12 @@ function servicesOf(overrides: {
   const recommendations = {
     snapshotState: vi.fn(async () => overrides.snapshotState ?? 'pending'),
     candidatePoolSize: vi.fn(async () => overrides.candidatePoolSize ?? 0),
+    modelConfidence: vi.fn(async () => overrides.confidenceBand ?? null),
   };
   const states = { count: vi.fn(async () => overrides.watchedTitles ?? 0) };
   return {
     training: training as unknown as TrainingService,
-    recommendations: recommendations as unknown as RecommendationsService,
+    recommendations,
     states,
     service: new ProfileReadinessService(
       training as unknown as TrainingService,
@@ -178,6 +180,25 @@ describe('ProfileReadinessService', () => {
       action: null,
       publishedAt: null,
       modelVersion: null,
+      confidenceBand: null,
     });
+  });
+
+  // ADR-110: the profile screen used to request one recommendation purely to
+  // read a confidence band -- writing a row and stamping it shown for a list
+  // nobody ever saw. The band belongs to the model, so readiness carries it.
+  it('carries the model confidence band, so no screen requests a recommendation to read one', async () => {
+    const created = new Date('2026-09-04T00:00:00Z');
+    const { service, recommendations } = servicesOf({
+      snapshotState: 'ready',
+      status: { state: 'succeeded', latestSnapshot: { modelVersion: 'plackett-luce-v3', trainingTriadCount: 25, createdAt: created } },
+      candidatePoolSize: 12,
+      confidenceBand: 'likely',
+    });
+    const result = await service.forProfile('user-1', 'profile-1');
+    expect(result.ordinalModel.confidenceBand).toBe('likely');
+    expect(result.recommendation.confidenceBand).toBe('likely');
+    expect(result.availability.confidenceBand).toBeNull();
+    expect(recommendations.candidatePoolSize).toHaveBeenCalled();
   });
 });

@@ -186,4 +186,58 @@ describe('WatchEventsService', () => {
       watchedOn: '2026-01-15',
     });
   });
+
+  // ADR-110: the client knows which recommendation it acted on. Guessing the
+  // most recent one for the same title is right until a title is recommended
+  // twice, and then it silently credits the wrong row.
+  it('links the recommendation the client names, scoped to this profile and title', async () => {
+    profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+    titlesRepository.findOne.mockResolvedValue({ id: 'title-1' });
+    recommendationsRepository.findOne.mockResolvedValue({ id: 'rec-older', profileId: 'profile-1', titleId: 'title-1' });
+
+    const result = await service.create('user-1', 'profile-1', {
+      titleId: 'title-1',
+      source: 'in_app',
+      recommendationId: 'rec-older',
+    });
+
+    expect(recommendationsRepository.findOne).toHaveBeenCalledWith({
+      where: { id: 'rec-older', profileId: 'profile-1', titleId: 'title-1' },
+    });
+    expect(result.recommendationId).toBe('rec-older');
+  });
+
+  it('links nothing when the named recommendation is not this profile and title', async () => {
+    profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+    titlesRepository.findOne.mockResolvedValue({ id: 'title-1' });
+    recommendationsRepository.findOne.mockResolvedValue(null);
+
+    const result = await service.create('user-1', 'profile-1', {
+      titleId: 'title-1',
+      source: 'in_app',
+      recommendationId: '00000000-0000-4000-8000-000000000000',
+    });
+
+    expect(result.recommendationId).toBeNull();
+    expect(outcomesRepository.save).not.toHaveBeenCalled();
+  });
+
+  // ADR-104 again: the day is the client's local one when it sends it.
+  it('prefers the client local watchedOn over the UTC date of watchedAt', async () => {
+    profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+    titlesRepository.findOne.mockResolvedValue({ id: 'title-1' });
+    recommendationsRepository.findOne.mockResolvedValue(null);
+
+    await service.create('user-1', 'profile-1', {
+      titleId: 'title-1',
+      source: 'in_app',
+      watchedAt: '2026-01-15T22:00:00.000Z',
+      watchedOn: '2026-01-16',
+    });
+
+    expect(userTitleStateService.upsert).toHaveBeenCalledWith('user-1', 'profile-1', 'title-1', {
+      state: 'watched',
+      watchedOn: '2026-01-16',
+    });
+  });
 });

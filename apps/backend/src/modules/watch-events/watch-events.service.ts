@@ -49,10 +49,15 @@ export class WatchEventsService {
     // (API.md). Not scoped to "still shown"/unexpired: a watch can follow a
     // recommendation by any amount of time, and there is no concept of a
     // recommendation expiring today.
-    const recommendation = await this.recommendationsRepository.findOne({
-      where: { profileId, titleId: dto.titleId },
-      order: { createdAt: 'DESC' },
-    });
+    // ADR-110: when the client names the recommendation it acted on, that
+    // one is used -- scoped to this profile and title, so a borrowed id
+    // links nothing. Otherwise the old guess stands.
+    const recommendation = dto.recommendationId
+      ? await this.recommendationsRepository.findOne({ where: { id: dto.recommendationId, profileId, titleId: dto.titleId } })
+      : await this.recommendationsRepository.findOne({
+          where: { profileId, titleId: dto.titleId },
+          order: { createdAt: 'DESC' },
+        });
 
     const watchEvent = await this.watchEventsRepository.save(
       this.watchEventsRepository.create({
@@ -99,7 +104,9 @@ export class WatchEventsService {
     // backfilled with, not a new imprecision.
     await this.userTitleStateService.upsert(userId, profileId, dto.titleId, {
       state: 'watched',
-      watchedOn: watchedAt.toISOString().slice(0, 10),
+      // The client's own local day when it sent one (ADR-104); the UTC date
+      // of the event only as the fallback it always was.
+      watchedOn: dto.watchedOn ?? watchedAt.toISOString().slice(0, 10),
     });
 
     return watchEvent;

@@ -67,11 +67,16 @@ beforeEach(() => {
   mockApi.getTrainingStatus.mockResolvedValue({ state: 'idle', latestSnapshot: null, completedTriads: 0, nextTrainingAt: null, job: null });
   // The readiness panel lives in the model section (ADR-103); an unmocked
   // rejection here would only add noise to tests about other sections.
+  // ADR-108/110: this call also carries the round counts the screen shows and
+  // the model's own confidence band, so it is the screen's single source for
+  // both -- not a completed-triads list and a one-item recommendation request.
+  const notReady = { status: 'not_ready', reason: 'insufficient_triads', action: 'rank_more_triads', publishedAt: null, modelVersion: null, confidenceBand: null };
   mockApi.getReadiness.mockResolvedValue({
-    ordinalModel: { status: 'not_ready', reason: 'insufficient_triads', action: 'rank_more_triads', publishedAt: null, modelVersion: null },
-    semanticProfile: { status: 'not_ready', reason: 'insufficient_triads', action: 'rank_more_triads', publishedAt: null, modelVersion: null },
-    recommendation: { status: 'not_ready', reason: 'insufficient_triads', action: 'rank_more_triads', publishedAt: null, modelVersion: null },
-    availability: { status: 'not_ready', reason: 'no_availability_data_source', action: null, publishedAt: null, modelVersion: null },
+    rounds: { learningRounds: 0, verificationRounds: 0, firstTrainingAt: 3, nextTrainingAt: 3, watchedTitles: 0, suggestedWatchedTitles: 9 },
+    ordinalModel: notReady,
+    semanticProfile: notReady,
+    recommendation: notReady,
+    availability: { status: 'not_ready', reason: 'no_availability_data_source', action: null, publishedAt: null, modelVersion: null, confidenceBand: null },
   });
   mockApi.getRecommendations.mockResolvedValue({ state: 'pending', needed: 3 });
   mockApi.getConsents.mockResolvedValue([]);
@@ -111,14 +116,22 @@ describe('ProfileScreen — training state', () => {
       nextTrainingAt: null,
       job: null,
     });
-    mockApi.getRecommendations.mockResolvedValue({
-      state: 'ready',
-      items: [{ id: 'r1', titleId: 't1', modelVersion: 'plackett-luce-v3', confidenceBand: 'strong', track: 'safe', score: 0.9 }],
+    // The band comes from readiness now, never from a recommendation.
+    mockApi.getReadiness.mockResolvedValue({
+      rounds: { learningRounds: 25, verificationRounds: 4, firstTrainingAt: 3, nextTrainingAt: 28, watchedTitles: 12, suggestedWatchedTitles: 9 },
+      ordinalModel: { status: 'ready', reason: null, action: null, publishedAt: null, modelVersion: 'plackett-luce-v3', confidenceBand: 'strong' },
+      semanticProfile: { status: 'ready', reason: null, action: null, publishedAt: null, modelVersion: 'plackett-luce-v3', confidenceBand: 'strong' },
+      recommendation: { status: 'ready', reason: null, action: null, publishedAt: null, modelVersion: 'plackett-luce-v3', confidenceBand: 'strong' },
+      availability: { status: 'not_ready', reason: 'no_availability_data_source', action: null, publishedAt: null, modelVersion: null, confidenceBand: null },
     });
     renderProfile();
-    await waitFor(() => expect(screen.getByText(/plackett-luce-v3/)).toBeInTheDocument());
+    // Named twice on this screen: the model section and the readiness panel.
+    await waitFor(() => expect(screen.getAllByText(/plackett-luce-v3/).length).toBeGreaterThan(0));
     // Arabic label for 'strong' band
     await waitFor(() => expect(screen.getByText('قوي')).toBeInTheDocument());
+    // No recommendation is requested to read a band (ADR-110): asking for
+    // one wrote a recommendations row and stamped it shown.
+    expect(mockApi.getRecommendations).not.toHaveBeenCalled();
   });
 });
 

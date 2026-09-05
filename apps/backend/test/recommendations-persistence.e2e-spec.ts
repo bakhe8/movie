@@ -192,7 +192,32 @@ describe('Recommendation persistence (real HTTP, real DB, blueprint gap 4)', () 
     expect(rows.every((row) => row.confidenceBand === 'strong')).toBe(true);
     // Both rows from the one call share a single requestId.
     expect(new Set(rows.map((row) => row.requestId)).size).toBe(1);
-    expect(rows.every((row) => row.shownAt !== null)).toBe(true);
+    // ADR-110: created, not yet seen. The impression is a separate write,
+    // exercised below over real HTTP.
+    expect(rows.every((row) => row.shownAt === null)).toBe(true);
+    const recommendationIds = (response.body.items as Array<{ recommendationId: string }>).map((item) => item.recommendationId);
+    expect(new Set(recommendationIds)).toEqual(new Set(rows.map((row) => row.id)));
+
+    const impression = await request(app.getHttpServer())
+      .post(`/profiles/${profileId}/recommendations/impressions`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ recommendationIds })
+      .expect(200);
+    expect(impression.body).toEqual({ recorded: 2 });
+
+    const stamped = await recommendationsRepository.find({ where: { profileId } });
+    expect(stamped.every((row) => row.shownAt !== null)).toBe(true);
+    const firstStamps = stamped.map((row) => row.shownAt?.toISOString());
+
+    // First write wins: a second report leaves the original stamps alone.
+    const again = await request(app.getHttpServer())
+      .post(`/profiles/${profileId}/recommendations/impressions`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ recommendationIds })
+      .expect(200);
+    expect(again.body).toEqual({ recorded: 0 });
+    const reread = await recommendationsRepository.find({ where: { profileId } });
+    expect(reread.map((row) => row.shownAt?.toISOString())).toEqual(firstStamps);
     // Honest nulls, not fabricated values -- no continuous confidence score,
     // no experiment, and today's full-catalog scan matches none of the
     // specified candidateSource values.

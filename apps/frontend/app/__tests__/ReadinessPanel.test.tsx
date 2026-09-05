@@ -14,6 +14,7 @@ const capability = (over: Partial<CapabilityReadiness> = {}): CapabilityReadines
   action: null,
   publishedAt: null,
   modelVersion: null,
+  confidenceBand: null,
   ...over,
 });
 

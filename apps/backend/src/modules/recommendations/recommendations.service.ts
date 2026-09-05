@@ -1,7 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'node:crypto';
-import { In, QueryDeepPartialEntity, Repository } from 'typeorm';
+import { In, IsNull, QueryDeepPartialEntity, Repository } from 'typeorm';
 import { ModelVersion } from '../../entities/model-version.entity';
 import { Profile } from '../../entities/profile.entity';
 import { Recommendation } from '../../entities/recommendation.entity';
@@ -161,6 +161,11 @@ export interface RecommendationResult {
   track: RecommendationTrack;
   modelVersion: string;
   reason: RecommendationReason;
+  // The `recommendations` row this item was written as (ADR-110). Every
+  // outcome the client reports -- clicked, saved, not relevant, watched --
+  // names it, so a later comparison is against the recommendation that was
+  // actually made rather than the most recent one for the same title.
+  recommendationId: string;
 }
 
 // Every designed state of GET .../recommendations is a 200 with a
@@ -268,7 +273,7 @@ export class RecommendationsService {
     // candidate pool -- a title absent from the map has no displayable
     // source and gets null, never 0 (BP §11.3).
     const publicQualityByTitle = await this.publicQualityService.forTitles(scored.map((item) => item.title.id));
-    const results = scored.map((item) => {
+    const results: Omit<RecommendationResult, 'recommendationId'>[] = scored.map((item) => {
       const publicQuality = publicQualityByTitle.get(item.title.id) ?? null;
       return {
         title: item.title,
@@ -285,14 +290,18 @@ export class RecommendationsService {
       };
     });
 
-    await this.persistShown(profileId, snapshot.modelVersion, results);
+    const recommendationIds = await this.persistCreated(profileId, snapshot.modelVersion, results);
     // The poster travels with every title the client renders (ADR-82).
     const posters = await this.posterService.forTitles(results.map((result) => result.title));
     return {
       state: 'ready',
-      items: results.map((result) => {
+      items: results.map((result, index) => {
         const poster = posters.get(result.title.id);
-        return { ...result, title: { ...result.title, posterUrl: poster?.posterUrl ?? null, posterSource: poster?.posterSource ?? null } };
+        return {
+          ...result,
+          recommendationId: recommendationIds[index],
+          title: { ...result.title, posterUrl: poster?.posterUrl ?? null, posterSource: poster?.posterSource ?? null },
+        };
       }),
     };
   }
@@ -404,13 +413,24 @@ export class RecommendationsService {
   // snapshot and candidate pool, so every shown item was certain under this
   // policy (the same convention TriadsService uses for its own uniform-random
   // policy, just evaluated for a greedy one).
-  private async persistShown(profileId: string, modelVersion: string, results: RecommendationResult[]): Promise<void> {
+  //
+  // ADR-110: creating the row and recording that it was seen are two events,
+  // not one. This writes the row with `shownAt: null` -- "this is what the
+  // model chose" -- and `recordImpressions()` stamps the ones the client
+  // actually rendered. Before, every request stamped every row as shown, so
+  // a list the user never saw (a prefetch, a screen abandoned mid-load, or
+  // ProfileScreen asking for a single item purely to read a confidence band)
+  // was indistinguishable from one they read.
+  private async persistCreated(
+    profileId: string,
+    modelVersion: string,
+    results: Omit<RecommendationResult, 'recommendationId'>[],
+  ): Promise<string[]> {
     if (results.length === 0) {
-      return;
+      return [];
     }
     const requestId = randomUUID();
-    const shownAt = new Date();
-    await this.recommendationsRepository.insert(
+    const inserted = await this.recommendationsRepository.insert(
       results.map((result) => ({
         requestId,
         profileId,
@@ -428,9 +448,42 @@ export class RecommendationsService {
         policyVersion: RECOMMENDATION_POLICY_VERSION,
         experimentId: null,
         selectionPropensity: 1,
-        shownAt,
+        shownAt: null,
       })) as unknown as QueryDeepPartialEntity<Recommendation>[],
     );
+    return (inserted.identifiers ?? []).map((identifier) => (identifier as { id: string }).id);
+  }
+
+  // The impression. Idempotent and first-write-wins: a row already stamped
+  // keeps its first `shownAt`, because the question it answers is "when did
+  // this reach a screen", not "when was it last re-rendered". Silently
+  // ignores ids that are not this profile's -- the caller learns how many
+  // were recorded, never which of the ids it sent exist.
+  async recordImpressions(userId: string, profileId: string, recommendationIds: string[]): Promise<{ recorded: number }> {
+    // 404 for a profile that is not the caller's, never 403 -- the same
+    // object-level rule every profile-scoped route follows.
+    if (!(await this.profilesRepository.findOne({ where: { id: profileId, userId } }))) {
+      throw new NotFoundException('Profile not found');
+    }
+    if (recommendationIds.length === 0) {
+      return { recorded: 0 };
+    }
+    const result = await this.recommendationsRepository.update(
+      { id: In(recommendationIds), profileId, shownAt: IsNull() },
+      { shownAt: new Date() },
+    );
+    return { recorded: result.affected ?? 0 };
+  }
+
+  // The model's own confidence, from the snapshot alone (ADR-110): what the
+  // profile screen shows about the model, rather than the band of one
+  // arbitrary recommendation -- which is per-item, demoted by that title's
+  // fingerprint coverage, and used to cost a whole recommendation request
+  // (rows written and all) to read a single field. Null when there is no
+  // usable snapshot; the readiness status says why.
+  async modelConfidence(userId: string, profileId: string): Promise<ConfidenceBand | null> {
+    const outcome = await this.resolveSnapshot(userId, profileId);
+    return outcome.state === 'ready' ? this.confidenceBand(outcome.snapshot) : null;
   }
 
   // The profile's own library ordered by the same model that ranks

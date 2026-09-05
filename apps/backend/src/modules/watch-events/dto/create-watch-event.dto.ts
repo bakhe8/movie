@@ -1,4 +1,4 @@
-import { IsDateString, IsIn, IsOptional, IsUUID, MaxLength } from 'class-validator';
+import { IsDateString, IsIn, IsOptional, IsUUID, Matches, MaxLength } from 'class-validator';
 import { WatchEventSource } from '../../../entities/watch-event.entity';
 
 // No `rating`/liking field here either, same rule as UpdateTitleStateDto
@@ -12,6 +12,21 @@ export class CreateWatchEventDto {
   @IsOptional()
   @IsDateString()
   watchedAt?: string;
+
+  // ADR-104: the day the watch belongs to, as the client's own local day.
+  // Without it the server derives one from `watchedAt` in UTC, which is the
+  // previous or next day for a good part of the world.
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'watchedOn must be YYYY-MM-DD' })
+  watchedOn?: string;
+
+  // ADR-110: the recommendation this watch followed, as the client knows it.
+  // Without it the server links the most recent recommendation for the same
+  // (profile, title), which is a guess -- right in the common case, wrong
+  // whenever the same title was recommended more than once.
+  @IsOptional()
+  @IsUUID()
+  recommendationId?: string;
 
   @IsIn(['in_app', 'import', 'manual'])
   source: WatchEventSource;

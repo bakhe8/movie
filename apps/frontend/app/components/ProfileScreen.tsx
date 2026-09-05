@@ -241,29 +241,30 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
   const loadStats = useCallback(async () => {
     if (!profileId) return;
     setModel({ kind: 'loading' });
-    const [triads, watchedTitles] = await Promise.all([
-      api.getCompletedTriads(profileId).catch(() => null),
+    // ADR-108/110: the rounds count and the model's confidence both come
+    // from readiness. Counting completed triads here included the `verify`
+    // repeats that count toward nothing, and the band used to be read off a
+    // one-item recommendation request -- which wrote a recommendations row
+    // and stamped it shown for a list nobody ever saw.
+    const [readiness, watchedTitles] = await Promise.all([
+      api.getReadiness(profileId).catch(() => null),
       api.getWatchedTitles(profileId).catch(() => null),
     ]);
-    setRounds(triads ? triads.length : null);
+    setRounds(readiness ? readiness.rounds.learningRounds : null);
     setWatched(watchedTitles ? watchedTitles.length : null);
     try {
       const status = await api.getTrainingStatus(profileId);
       if (status.state === 'queued' || status.state === 'running') {
         setModel({ kind: 'building' });
       } else if (status.latestSnapshot) {
-        // We have a trained snapshot; fetch the confidence band from recs.
-        try {
-          const recs = await api.getRecommendations(profileId, 1);
-          const first = recs.state === 'ready' ? recs.items[0] : undefined;
-          setModel(
-            first
-              ? { kind: 'trained', version: first.modelVersion, band: first.confidenceBand }
-              : { kind: 'trained', version: status.latestSnapshot.modelVersion, band: 'initial' },
-          );
-        } catch {
-          setModel({ kind: 'trained', version: status.latestSnapshot.modelVersion, band: 'initial' });
-        }
+        // The model's own band, not one title's: a recommendation's band is
+        // demoted by that title's fingerprint coverage (ADR-19), which says
+        // something about the title, not about the model this screen names.
+        setModel({
+          kind: 'trained',
+          version: status.latestSnapshot.modelVersion,
+          band: readiness?.ordinalModel.confidenceBand ?? 'initial',
+        });
       } else if (status.state === 'failed') {
         setModel({ kind: 'failed', errorKind: status.job?.errorKind ?? null, jobId: status.job?.id ?? null });
       } else if (status.state === 'succeeded') {

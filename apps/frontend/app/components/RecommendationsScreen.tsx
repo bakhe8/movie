@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError, type ProfileReadiness, type Recommendation, type RecommendationTrack, type TrainingSummary } from '../lib/api';
 import { TRACK_COPY } from '../lib/copy';
 import { formatNumber, todayLocal, type PersonalFitLevel } from '../lib/format';
@@ -75,6 +75,7 @@ const labels = {
     added: 'في قائمتك',
     markWatched: 'شاهدته',
     watchedNotice: (title: string) => `سُجّل «${title}» كمُشاهَد وسيدخل جولات الترتيب.`,
+    notRelevantNotice: (title: string) => `أُخفي «${title}». سجّلنا أن هذا الاقتراح لم يناسبك.`,
     listNotice: (title: string) => `أُضيف «${title}» إلى قائمتك.`,
     actionFailed: 'تعذّر الحفظ. حاول مجددًا.',
     model: (version: string) => `إصدار النموذج: ${version}`,
@@ -134,6 +135,7 @@ const labels = {
     added: 'On your list',
     markWatched: 'Watched it',
     watchedNotice: (title: string) => `“${title}” is marked watched and will enter ranking rounds.`,
+    notRelevantNotice: (title: string) => `“${title}” is hidden. We recorded that this suggestion missed.`,
     listNotice: (title: string) => `“${title}” was added to your list.`,
     actionFailed: 'Could not save. Please try again.',
     model: (version: string) => `Model version: ${version}`,
@@ -244,6 +246,39 @@ export function RecommendationsScreen({
   const [requesting, setRequesting] = useState(false);
   const [listed, setListed] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<RecommendationTrack>>(new Set());
+  // ADR-110: which recommendations this screen has already reported as seen.
+  // A ref, not state: reporting an impression must never cause a render, and
+  // the set is read and written inside the same effect that computes it.
+  const reportedRef = useRef<Set<string>>(new Set());
+
+  // Exactly the items on screen right now: the preview slice of each track,
+  // plus everything in the tracks the reader expanded. An item further down
+  // an unexpanded track was created but not shown, and saying otherwise is
+  // what made "shown" meaningless before ADR-110.
+  const visibleIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const track of TRACK_ORDER) {
+      const trackItems = items.filter((item) => item.track === track);
+      const shown = expanded.has(track) ? trackItems : trackItems.slice(0, TRACK_PREVIEW);
+      for (const item of shown) {
+        ids.push(item.recommendationId);
+      }
+    }
+    return ids;
+  }, [items, expanded]);
+
+  useEffect(() => {
+    const fresh = visibleIds.filter((id) => id && !reportedRef.current.has(id));
+    if (fresh.length === 0) {
+      return;
+    }
+    for (const id of fresh) {
+      reportedRef.current.add(id);
+    }
+    // A lost impression is a lost measurement, never a lost feature: this
+    // never blocks the render and never surfaces an error to the reader.
+    void api.recordImpressions(profileId, fresh).catch(() => {});
+  }, [visibleIds, profileId]);
 
   // `silent` refreshes in place (the poll while a model is being built) --
   // no skeleton flash every few seconds.
@@ -345,6 +380,8 @@ export function RecommendationsScreen({
     setBusyTitleId(rec.title.id);
     try {
       await api.setTitleState(profileId, rec.title.id, { state: 'watchlist' });
+      // The outcome names the recommendation, not just the title (ADR-110).
+      void api.recordOutcome(rec.recommendationId, 'saved').catch(() => {});
       setListed((current) => new Set(current).add(rec.title.id));
       setNotice(t.listNotice(name));
     } catch {
@@ -361,9 +398,33 @@ export function RecommendationsScreen({
       // A watched title leaves the candidate pool and becomes eligible for
       // later triads (blueprint §4.5) -- no rating is asked, ever (ADR-4).
       // ADR-104: the device's own local day, never the server's UTC clock.
-      await api.setTitleState(profileId, rec.title.id, { state: 'watched', watchedOn: todayLocal() });
+      // The watch event, not the bare state PATCH (ADR-110): it marks the
+      // title watched *and* writes the outcome row that closes §4.5's loop
+      // back to the recommendation this watch actually followed.
+      await api.recordWatchEvent(profileId, {
+        titleId: rec.title.id,
+        watchedOn: todayLocal(),
+        recommendationId: rec.recommendationId,
+      });
       setItems((current) => current.filter((item) => item.title.id !== rec.title.id));
       setNotice(t.watchedNotice(name));
+    } catch {
+      setNotice(t.actionFailed);
+    } finally {
+      setBusyTitleId(null);
+    }
+  }
+
+  // The only negative signal this product collects about a *suggestion* --
+  // never about the film (BP §2.4 principle #2). It hides the card and
+  // records the outcome; nothing about the title's own state changes.
+  async function markNotRelevant(rec: Recommendation) {
+    const name = lang === 'ar' ? rec.title.titleAr : rec.title.titleEn;
+    setBusyTitleId(rec.title.id);
+    try {
+      await api.recordOutcome(rec.recommendationId, 'dismissed_not_relevant');
+      setItems((current) => current.filter((item) => item.title.id !== rec.title.id));
+      setNotice(t.notRelevantNotice(name));
     } catch {
       setNotice(t.actionFailed);
     } finally {
@@ -537,7 +598,18 @@ export function RecommendationsScreen({
                       busy={busyTitleId === rec.title.id}
                       onAddToList={() => addToList(rec)}
                       onMarkWatched={() => markWatched(rec)}
-                      onOpen={onOpenTitle ? () => onOpenTitle(rec, index + 1, trackItems.length, listed.has(rec.title.id)) : undefined}
+                      onNotRelevant={() => markNotRelevant(rec)}
+                      onOpen={
+                        onOpenTitle
+                          ? () => {
+                              // The click is an outcome of this exact
+                              // recommendation (ADR-110), reported beside
+                              // the navigation, never in place of it.
+                              void api.recordOutcome(rec.recommendationId, 'clicked').catch(() => {});
+                              onOpenTitle(rec, index + 1, trackItems.length, listed.has(rec.title.id));
+                            }
+                          : undefined
+                      }
                     />
                   </li>
                 ))}
