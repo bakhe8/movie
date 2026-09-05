@@ -28,10 +28,6 @@ secrets:
     file: ./secrets/postgres_password.txt
   jwt_secret:
     file: ./secrets/jwt_secret.txt
-  anthropic_api_key:
-    file: ./secrets/anthropic_api_key.txt
-  tmdb_api_key:
-    file: ./secrets/tmdb_api_key.txt
   model_service_token:
     file: ./secrets/model_service_token.txt
   audit_ip_salt:
@@ -120,8 +116,6 @@ services:
       MAIL_OUTBOX_SWEEP_INTERVAL_MS: ${MAIL_OUTBOX_SWEEP_INTERVAL_MS:-30000}
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
       JWT_SECRET_FILE: /run/secrets/jwt_secret
-      ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
-      TMDB_API_KEY_FILE: /run/secrets/tmdb_api_key
       MODEL_SERVICE_TOKEN_FILE: /run/secrets/model_service_token
       AUDIT_IP_SALT_FILE: /run/secrets/audit_ip_salt
       SMTP_PASSWORD_FILE: /run/secrets/smtp_password
@@ -129,8 +123,6 @@ services:
     secrets:
       - postgres_password
       - jwt_secret
-      - anthropic_api_key
-      - tmdb_api_key
       - model_service_token
       - audit_ip_salt
       - smtp_password
