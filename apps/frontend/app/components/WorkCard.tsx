@@ -193,10 +193,10 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
               same destination, already in the tab order and already named. */}
           {onOpen ? (
             <button type="button" className={styles.posterButton} tabIndex={-1} aria-hidden="true" onClick={onOpen}>
-              <Poster title={title} size="md" />
+              <Poster title={title} size="md" name={name} />
             </button>
           ) : (
-            <Poster title={title} size="md" />
+            <Poster title={title} size="md" name={name} />
           )}
           <div className={styles.titles}>
             <h4 className={styles.title}>

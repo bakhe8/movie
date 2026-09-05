@@ -16,7 +16,20 @@ import styles from './Poster.module.css';
  */
 type Size = 'sm' | 'md' | 'lg';
 
-export function Poster({ title, size = 'sm', className }: { title?: Pick<Title, 'posterUrl'> | null; size?: Size; className?: string }) {
+export function Poster({
+  title,
+  size = 'sm',
+  className,
+  name,
+}: {
+  title?: Pick<Title, 'posterUrl'> | null;
+  size?: Size;
+  className?: string;
+  // Shown as its first letter when there is no licensed image, so two films
+  // without posters do not read as the same empty frame
+  // (UX_AUDIT_MOBILE_2026-09-05 P1 #13).
+  name?: string | null;
+}) {
   const classes = [styles.poster, styles[size], className].filter(Boolean).join(' ');
   const url = title?.posterUrl ?? null;
   if (url) {
@@ -35,13 +48,18 @@ export function Poster({ title, size = 'sm', className }: { title?: Pick<Title, 
   // licensed image reads as "no poster" rather than as a broken layout. The
   // mark is a glyph in `currentColor` -- not an image, not a stock still, not
   // a generated one (DATA_LICENSING §4 rule 5, decision Q16).
+  const initial = name?.trim()?.[0] ?? null;
   return (
     <span className={`${classes} ${styles.hollow}`} aria-hidden="true">
-      <svg className={styles.mark} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" focusable="false">
-        <rect x="3.5" y="3.5" width="17" height="17" rx="2.5" />
-        <path d="M8.5 3.5v17M15.5 3.5v17" />
-        <path d="M3.5 9h5M3.5 15h5M15.5 9h5M15.5 15h5" />
-      </svg>
+      {initial ? (
+        <span className={styles.initial}>{initial}</span>
+      ) : (
+        <svg className={styles.mark} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" focusable="false">
+          <rect x="3.5" y="3.5" width="17" height="17" rx="2.5" />
+          <path d="M8.5 3.5v17M15.5 3.5v17" />
+          <path d="M3.5 9h5M3.5 15h5M15.5 9h5M15.5 15h5" />
+        </svg>
+      )}
     </span>
   );
 }

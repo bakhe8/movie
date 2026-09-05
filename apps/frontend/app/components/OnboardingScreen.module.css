@@ -9,7 +9,7 @@
   margin-inline: auto;
 }
 
-/* --- Progress: "step n of 3" + three dots --------------------------------- */
+/* --- Progress: "step n of 2" + two dots ----------------------------------- */
 
 .progress {
   display: flex;
@@ -161,7 +161,7 @@
   font-size: var(--fs-14);
 }
 
-/* --- Step 2 list, step 3 loop --------------------------------------------- */
+/* --- Step 2 list ---------------------------------------------------------- */
 
 .list {
   display: grid;

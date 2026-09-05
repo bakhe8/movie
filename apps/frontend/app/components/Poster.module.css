@@ -34,6 +34,17 @@
   color: var(--muted);
 }
 
+/* The title's first letter: enough to tell two empty frames apart, quiet
+   enough not to imitate a poster. */
+.initial {
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: var(--w-bold);
+  line-height: 1;
+  color: var(--muted);
+  opacity: 0.5;
+}
+
 /* Quiet enough that a row of real posters stays the subject of the screen. */
 .mark {
   width: 38%;

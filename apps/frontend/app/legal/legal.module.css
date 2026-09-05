@@ -46,6 +46,9 @@
   gap: var(--sp-2);
 }
 
+/* Both of these navigate, so they are links; they are drawn as controls
+   rather than as underlined text in a box, which read as neither
+   (UX_AUDIT_MOBILE_2026-09-05 P2 #19). */
 .link {
   display: inline-flex;
   align-items: center;
@@ -53,6 +56,7 @@
   padding: 0 var(--sp-3);
   border: 1px solid var(--line);
   border-radius: var(--r-button);
+  background: var(--surface);
   color: var(--text);
   font-size: var(--fs-13);
   font-weight: var(--w-medium);

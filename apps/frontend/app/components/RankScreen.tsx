@@ -546,7 +546,7 @@ export function RankScreen({
               </span>
 
               {/* The poster slot is always present (owner decision 2026-09-04); hollow until licensed. */}
-              <Poster title={title} size="md" className={styles.poster} />
+              <Poster title={title} size="md" className={styles.poster} name={name} />
 
               <div className={styles.body}>
                 <h3 className={styles.title}>{name}</h3>

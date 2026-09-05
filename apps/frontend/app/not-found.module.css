@@ -1,0 +1,58 @@
+/* The missing page, in the product's own clothes. Tokens only; both themes
+   come from app/styles/tokens.css. */
+
+.page {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: var(--sp-3);
+  min-height: 70vh;
+  padding: var(--sp-8) var(--sp-4);
+  text-align: center;
+}
+
+.mark {
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--fs-26);
+}
+
+.body {
+  margin: 0;
+  max-width: 32ch;
+  color: var(--muted);
+  font-size: var(--fs-14);
+  line-height: var(--lh-body);
+}
+
+.bodyEn {
+  margin: 0;
+  max-width: 40ch;
+  color: var(--muted);
+  font-size: var(--fs-13);
+  line-height: var(--lh-body);
+}
+
+.home {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  margin-top: var(--sp-2);
+  padding: 0 var(--sp-6);
+  border-radius: var(--r-button);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: var(--fs-16);
+  font-weight: var(--w-semibold);
+  text-decoration: none;
+}
+
+.home:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
