@@ -148,12 +148,21 @@ export async function seedContentFeatures(
   return { rows: rows.length, superseded: supersededCount };
 }
 
+// The source tree wins whenever it is there, and the copy beside the code is
+// the fallback. The order used to be the other way round, which was a trap on
+// any machine that had ever run `npm run build`: `dist/scripts/fixtures` is a
+// *snapshot* taken at build time (Dockerfile), so running the compiled
+// scripts locally seeded yesterday's catalogue while the tree held today's,
+// silently (movie-94, 2026-09-05). In the image there is no `src/`, so the
+// fallback is what runs there -- the packaged behaviour is unchanged.
+// `__dirname` is <backend>/src/scripts under tsx and <backend>/dist/scripts
+// when compiled, so '../../src/scripts/fixtures' resolves the same either way.
 export function resolveFixturesDir(): string {
-  const beside = path.resolve(__dirname, 'fixtures');
-  if (existsSync(beside)) {
-    return beside; // running from src via tsx
+  const fromSource = path.resolve(__dirname, '..', '..', 'src', 'scripts', 'fixtures');
+  if (existsSync(fromSource)) {
+    return fromSource;
   }
-  return path.resolve(__dirname, '..', '..', 'src', 'scripts', 'fixtures'); // running from dist
+  return path.resolve(__dirname, 'fixtures'); // packaged: copied beside the code
 }
 
 export function loadFixtures(fixturesDir: string): { catalog: CatalogEntry[]; personas: PersonasFixture } {

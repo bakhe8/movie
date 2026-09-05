@@ -238,12 +238,16 @@ export async function loadCatalogRights(
   return summary;
 }
 
+// Same order as seed-demo's resolveFixturesDir(), and for the same reason: a
+// stale `dist/scripts/fixtures` snapshot must never win over the tree. Not
+// `process.cwd()` either -- that made the answer depend on where the script
+// was invoked from.
 function resolveFixturePath(): string {
-  const packaged = path.resolve(__dirname, 'fixtures', 'catalog.demo.json');
-  if (existsSync(packaged)) {
-    return packaged;
+  const fromSource = path.resolve(__dirname, '..', '..', 'src', 'scripts', 'fixtures', 'catalog.demo.json');
+  if (existsSync(fromSource)) {
+    return fromSource;
   }
-  return path.resolve(process.cwd(), 'src', 'scripts', 'fixtures', 'catalog.demo.json');
+  return path.resolve(__dirname, 'fixtures', 'catalog.demo.json'); // packaged
 }
 
 async function main(): Promise<void> {
