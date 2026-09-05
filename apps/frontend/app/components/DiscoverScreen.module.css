@@ -13,6 +13,9 @@
 .progress { display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 8px; row-gap: 5px; padding: 8px 0; border-block: 1px solid var(--line-soft); }
 .progressRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; grid-column: 1; }
 .progressText { margin: 0; font-size: 12px; font-weight: 600; }
+.historyLink { display: inline-flex; align-items: center; gap: 7px; min-height: 44px; margin-block: -6px; padding: 4px 0; border: 0; background: transparent; color: var(--text); font: inherit; font-size: 12px; font-weight: 600; text-align: start; }
+.historyLink svg { flex: none; color: var(--accent); }
+.historyLink:hover { color: var(--accent); }
 .progressNote { margin: 0; color: var(--muted); font-size: 12px; }
 .dots { display: flex; gap: 5px; }
 .dot { width: 12px; height: 17px; border: 1px solid var(--line); border-radius: 4px; transform: rotate(-8deg); transition: background 220ms, transform 220ms; }
@@ -34,24 +37,24 @@
 .filters button:nth-child(4n) .genreDot { background: var(--role-outside); }
 .sectionTitle { margin: 0; font-size: 20px; }
 .sectionTitle + .progressNote { margin-top: -8px; }
-.grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px 10px; margin: 0; padding: 4px 0; list-style: none; }
-.cell { display: flex; flex-direction: column; gap: 7px; min-width: 0; animation: reveal 330ms ease both; }
+.grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px 8px; margin: 0; padding: 4px 0; list-style: none; }
+.cell { min-width: 0; animation: reveal 330ms ease both; }
 .cell:nth-child(3n+2) { animation-delay: 45ms; }
 .cell:nth-child(3n+3) { animation-delay: 90ms; }
-.tile { position: relative; border-radius: var(--poster-radius); box-shadow: var(--shadow-small); transition: transform 240ms, box-shadow 240ms; }
+.tile { position: relative; overflow: hidden; border-radius: var(--poster-radius); background: var(--well); box-shadow: var(--shadow-small); transition: transform 240ms, box-shadow 240ms; }
 .pick { display: block; position: relative; width: 100%; padding: 0; border: 0; border-radius: var(--poster-radius); background: var(--well); overflow: hidden; }
 .pick .poster, .poster { width: 100%; }
-.pickHint { position: absolute; inset-inline: 0; bottom: 0; display: flex; justify-content: center; align-items: center; gap: 6px; min-height: 40px; padding: 14px 4px 6px; color: var(--cinema-ink); font-size: 12px; background: linear-gradient(transparent, var(--cinema-scrim)); }
-.picked { outline: 3px solid var(--accent); outline-offset: 3px; }
-.picked .poster { filter: saturate(.65); }
-.check { position: absolute; inset-block-start: 10px; inset-inline-start: 10px; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); animation: pop 260ms ease-out; box-shadow: var(--shadow-small); }
-.saveLater { position: absolute; inset-block-start: 5px; inset-inline-end: 5px; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: var(--cinema-scrim); color: var(--cinema-ink); backdrop-filter: blur(8px); }
+.posterMeta { position: absolute; z-index: 2; inset-inline: 0; inset-block-end: 0; display: grid; align-content: end; gap: 3px; min-height: 94px; padding: 36px 8px 8px; pointer-events: none; color: var(--cinema-ink); background: linear-gradient(to top, var(--cinema-scrim) 0%, var(--cinema-scrim) 55%, color-mix(in srgb, var(--cinema-scrim) 65%, transparent) 78%, transparent 100%); }
+.pickHint { position: absolute; z-index: 3; inset-block-start: 9px; inset-inline-start: 9px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; width: 36px; min-height: 36px; padding: 0 9px; border: 1px solid color-mix(in srgb, var(--cinema-ink) 20%, transparent); border-radius: 100px; color: var(--cinema-ink); background: var(--cinema-scrim); font-size: 11px; font-weight: 700; line-height: 1; white-space: nowrap; pointer-events: none; backdrop-filter: blur(8px); box-shadow: var(--shadow-small); }
+.pickHint svg { flex: none; }
+.pickHintLabel { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.saveLater { position: absolute; z-index: 3; inset-block-start: 5px; inset-inline-end: 5px; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: var(--cinema-scrim); color: var(--cinema-ink); backdrop-filter: blur(8px); }
 .saved { color: var(--position-highlight-ink); background: var(--position-highlight); }
 .saveLater:disabled { visibility: hidden; }
-.title { margin: 0; font-family: var(--font-ui); font-size: 13px; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
-.titleButton { display: block; width: 100%; min-height: 44px; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: start; }
-.titleButton:hover { color: var(--accent); }
-.year { margin: -6px 0 0; color: var(--muted); font-size: 12px; }
+.title { display: -webkit-box; min-width: 0; margin: 0; overflow: hidden; color: var(--cinema-ink); font-family: var(--font-ui); font-size: 12px; font-weight: 700; line-height: 1.4; overflow-wrap: anywhere; text-shadow: 0 1px 4px rgba(0,0,0,.65); -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.titleButton { display: -webkit-box; width: 100%; min-height: 34px; padding: 0; overflow: hidden; border: 0; background: transparent; color: inherit; font: inherit; text-align: start; text-shadow: inherit; pointer-events: auto; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.titleButton:hover { text-decoration: underline; text-underline-offset: 3px; }
+.year { color: color-mix(in srgb, var(--cinema-ink) 76%, transparent); font-size: 11px; font-variant-numeric: tabular-nums; }
 .ghost, .cta, .retry { min-height: 46px; padding: 10px 16px; border: 1px solid var(--line-soft); border-radius: var(--r-button); color: var(--text); background: var(--surface); font-size: 13px; font-weight: 600; }
 .cta { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); box-shadow: 0 5px 16px var(--accent-soft); }
 .more { justify-self: center; min-width: 220px; }
@@ -59,7 +62,17 @@
 .skeleton { height: 150px; border-radius: var(--r-card); background: linear-gradient(110deg,var(--well) 25%,var(--surface) 40%,var(--well) 55%); background-size: 200% 100%; animation: shimmer 1.6s infinite; }
 @keyframes shimmer { to { background-position: -200% 0; } }
 @keyframes reveal { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
-@keyframes pop { 0% { transform: scale(.4); } 65% { transform: scale(1.15); } 100% { transform: scale(1); } }
+@media (min-height: 800px) and (max-width: 599px) {
+  .grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px 12px; }
+  .cell:nth-child(n) { animation-delay: 0ms; }
+  .cell:nth-child(2n) { animation-delay: 55ms; }
+  .posterMeta { min-height: 104px; padding: 40px 11px 10px; gap: 5px; }
+  .title { font-size: 14px; }
+  .titleButton { min-height: 40px; }
+  .pickHint { width: auto; min-width: 36px; font-size: 12px; }
+  .pickHintLabel { position: static; width: auto; height: auto; overflow: visible; clip-path: none; }
+  .year { font-size: 12px; }
+}
 @media (min-width: 600px) {
   .screen { gap: 20px; }
   .header { grid-template-columns: 1fr 1fr; min-height: 230px; padding: 24px; gap: 20px; }

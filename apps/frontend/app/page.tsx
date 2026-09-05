@@ -176,6 +176,10 @@ export default function Home() {
               profileId={profile.id}
               initialViewState={discoverView?.profileId === profile.id ? discoverView.state : undefined}
               onGoToRank={() => setView('rank')}
+              onOpenHistory={() => {
+                setLibraryView({ profileId: profile.id, state: { activeSection: 'timeline', filter: '' } });
+                setView('list');
+              }}
               onOpenTitle={(title, state, currentView) => {
                 setDiscoverView({ profileId: profile.id, state: currentView });
                 setWork({ title, context: { kind: 'none' }, state });
