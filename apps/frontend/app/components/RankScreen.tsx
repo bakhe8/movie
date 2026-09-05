@@ -17,7 +17,7 @@ const labels = {
     title: TRIAD_INSTRUCTION.ar,
     // Blocked: there are no films to rank yet, so the instruction would lie.
     blockedTitle: 'قبل أول ثلاثية',
-    hint: 'اسحب البطاقة أو افتح قائمتها. البطاقة الأولى هي الأكثر إعجابًا.',
+    hint: 'اسحب بالمقبض إلى أعلى أو أسفل، أو استخدم السهمين. البطاقة الأولى هي الأكثر إعجابًا.',
     save: 'حفظ الترتيب',
     saving: 'جارٍ الحفظ…',
     saved: 'تم الحفظ. هذه جولة جديدة.',
@@ -39,7 +39,7 @@ const labels = {
       n === 1 ? 'سجّل فيلمًا آخر في «اكتشف» لتبقى الجولات جديدة.' : 'سجّل فيلمين آخرين في «اكتشف» لتبقى الجولات جديدة.',
     firstResult: 'اكتملت ثلاث جولات. توصياتك الأولى وترتيب مكتبتك يظهران بعد تدريب نموذجك.',
     dragHandle: 'اسحب لتغيير الترتيب',
-    cardMenu: 'خيارات هذه البطاقة',
+    cardMenu: 'استبدال هذا الفيلم',
     moveUp: 'ارفع درجة',
     moveDown: 'أنزل درجة',
     position: (n: number) => `الترتيب ${n}`,
@@ -69,7 +69,7 @@ const labels = {
     eyebrow: 'Triad',
     title: TRIAD_INSTRUCTION.en,
     blockedTitle: 'Before your first triad',
-    hint: 'Drag a card or open its menu. The first card is the one you liked most.',
+    hint: 'Drag by the handle, up or down, or use the arrows. The first card is the one you liked most.',
     save: 'Save ranking',
     saving: 'Saving…',
     saved: 'Saved. Here is a new round.',
@@ -80,7 +80,7 @@ const labels = {
     addMore: (n: number) => (n === 1 ? 'Mark one more film in Discover to keep the rounds new.' : `Mark ${n} more films in Discover to keep the rounds new.`),
     firstResult: 'Three rounds done. Your first recommendations and library ranking appear once your model is trained.',
     dragHandle: 'Drag to reorder',
-    cardMenu: 'Options for this card',
+    cardMenu: 'Replace this film',
     moveUp: 'Move up',
     moveDown: 'Move down',
     position: (n: number) => `Position ${n}`,
@@ -120,8 +120,9 @@ interface DragState {
   // Slot the lifted card lands in on release.
   to: number;
   // Pointer travel since pointerdown, in px; the lifted card follows it.
-  // Horizontal since ADR-111: the three slots sit side by side.
-  dx: number;
+  // Vertical only (owner's interaction addendum, 2026-09-05): a horizontal
+  // swipe on a film card reads as like/dislike, and this product ranks.
+  dy: number;
 }
 
 interface PendingReplacement {
@@ -129,7 +130,21 @@ interface PendingReplacement {
   reason: ReplacementReason;
 }
 
-// Three dots: a menu, not a grip -- the card itself is what you drag now.
+// Six dots: the drag handle. The gesture it starts is vertical only.
+function GripIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <circle cx="9" cy="5" r="1.8" />
+      <circle cx="9" cy="12" r="1.8" />
+      <circle cx="9" cy="19" r="1.8" />
+      <circle cx="15" cy="5" r="1.8" />
+      <circle cx="15" cy="12" r="1.8" />
+      <circle cx="15" cy="19" r="1.8" />
+    </svg>
+  );
+}
+
+// Three dots: the replace menu, which is not a rank and not an opinion.
 function MoreIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -168,7 +183,7 @@ export function RankScreen({
   // Pointer handlers read the live drag state through this ref so they never
   // see a stale closure mid-gesture; `drag` (state) only drives rendering.
   const dragRef = useRef<DragState | null>(null);
-  const startXRef = useRef(0);
+  const startYRef = useRef(0);
   const cardRefs = useRef<(HTMLLIElement | null)[]>([]);
   // The three guards below are refs, not state, because each is read and
   // written synchronously inside the handler that needs it -- a state flag
@@ -283,15 +298,14 @@ export function RankScreen({
   }
 
   // The slot the lifted card lands in: how many *other* cards' midpoints the
-  // pointer has passed. The row reads start-to-end, so in Arabic slot 1 is the
-  // rightmost card and passing a midpoint means moving left.
-  function dropIndexFor(clientX: number, from: number): number {
-    const rtl = lang === 'ar';
+  // pointer has passed. Top to bottom means first to last in both directions,
+  // so this needs no direction awareness.
+  function dropIndexFor(clientY: number, from: number): number {
     let index = 0;
     cardRefs.current.forEach((card, i) => {
       if (!card || i === from) return;
-      const middle = card.getBoundingClientRect().left + card.getBoundingClientRect().width / 2;
-      if (rtl ? clientX < middle : clientX > middle) index += 1;
+      const rect = card.getBoundingClientRect();
+      if (clientY > rect.top + rect.height / 2) index += 1;
     });
     return index;
   }
@@ -306,8 +320,8 @@ export function RankScreen({
     } catch {
       // no capture available for this pointer
     }
-    startXRef.current = event.clientX;
-    updateDrag({ from: index, to: index, dx: 0 });
+    startYRef.current = event.clientY;
+    updateDrag({ from: index, to: index, dy: 0 });
   }
 
   function onHandlePointerMove(event: ReactPointerEvent<HTMLElement>) {
@@ -316,8 +330,8 @@ export function RankScreen({
     event.preventDefault();
     updateDrag({
       from: current.from,
-      to: dropIndexFor(event.clientX, current.from),
-      dx: event.clientX - startXRef.current,
+      to: dropIndexFor(event.clientY, current.from),
+      dy: event.clientY - startYRef.current,
     });
   }
 
@@ -488,14 +502,17 @@ export function RankScreen({
           {notice}
         </p>
       )}
-      {/* The three slots side by side, in one screen with the save button
-          (ADR-111; UX_AUDIT_MOBILE_2026-09-05 P0 #2, where the first card
-          started at 399px and the button sat at 1125px in an 812px viewport).
-          The card itself is the drag surface, and everything else it can do
-          lives in its own menu so three columns fit 375px. */}
-      <ol className={drag ? `${styles.row} ${styles.dragging}` : styles.row}>
+      {/* One column, dragged vertically (owner's interaction addendum,
+          2026-09-05): a horizontal swipe on a film card reads as like/dislike
+          and this product ranks. The two arrows sit on every card, visible --
+          not behind a menu -- so the gesture is never the only way to reorder,
+          and the save button sticks above the shell's tabs so the question and
+          its answer stay in one screen (audit P0 #2). */}
+      <ol className={drag ? `${styles.list} ${styles.dragging}` : styles.list}>
         {order.map((title, index) => {
           const name = lang === 'ar' ? title.titleAr : title.titleEn;
+          const alt = lang === 'ar' ? title.titleEn : title.titleAr;
+          const showAlt = Boolean(alt && alt !== name);
           const lifted = drag?.from === index;
           const isTarget = drag !== null && drag.to !== drag.from && drag.to === index;
           const className = [styles.card, lifted && styles.lifted, isTarget && styles.target].filter(Boolean).join(' ');
@@ -507,13 +524,13 @@ export function RankScreen({
                 cardRefs.current[index] = element;
               }}
               className={className}
-              style={lifted && drag ? { transform: `translateX(${drag.dx}px)` } : undefined}
+              style={lifted && drag ? { transform: `translateY(${drag.dy}px)` } : undefined}
               aria-label={t.position(index + 1)}
             >
-              {/* Not focusable on purpose: the menu is the keyboard path. */}
+              {/* Not focusable on purpose: the arrows are the keyboard path. */}
               <button
                 type="button"
-                className={styles.dragSurface}
+                className={styles.handle}
                 tabIndex={-1}
                 aria-label={t.dragHandle}
                 onPointerDown={(event) => onHandlePointerDown(event, index)}
@@ -521,66 +538,87 @@ export function RankScreen({
                 onPointerUp={onHandlePointerUp}
                 onPointerCancel={onHandlePointerCancel}
               >
-                <span className={styles.badge} aria-hidden="true">
-                  {formatNumber(index + 1, lang)}
-                </span>
-                {/* The poster slot is always present (owner decision 2026-09-04); hollow until licensed. */}
-                <Poster title={title} size="md" className={styles.poster} />
+                <GripIcon />
               </button>
 
-              <h3 className={styles.title}>{name}</h3>
-              {title.releaseYear && <p className={styles.alt}>{String(title.releaseYear)}</p>}
+              <span className={styles.badge} aria-hidden="true">
+                {formatNumber(index + 1, lang)}
+              </span>
 
-              {/* One control per card instead of four: at 375px each column is
-                  about 105px wide. Native disclosure, so it needs no state and
-                  closes itself. */}
-              <details className={styles.menu}>
-                <summary className={styles.menuButton} aria-label={t.cardMenu}>
-                  <MoreIcon />
-                </summary>
-                <div className={styles.menuPanel}>
-                  <button
-                    type="button"
-                    className={styles.menuItem}
-                    onClick={() => move(index, index - 1)}
-                    disabled={busy || index === 0}
-                  >
-                    {t.moveUp}
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.menuItem}
-                    onClick={() => move(index, index + 1)}
-                    disabled={busy || index === order.length - 1}
-                  >
-                    {t.moveDown}
-                  </button>
-                  {/* Two separate, neutral controls (blueprint §4.3, ADR-17):
-                      neither is an opinion about the film. */}
-                  <button
-                    type="button"
-                    className={styles.menuItem}
-                    onClick={() => setPending({ titleId: title.id, reason: 'not_watched' })}
-                    disabled={busy}
-                  >
-                    {t.notWatched}
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.menuItem}
-                    onClick={() => setPending({ titleId: title.id, reason: 'not_remembered' })}
-                    disabled={busy}
-                  >
-                    {t.notRemembered}
-                  </button>
-                </div>
-              </details>
+              {/* The poster slot is always present (owner decision 2026-09-04); hollow until licensed. */}
+              <Poster title={title} size="md" className={styles.poster} />
+
+              <div className={styles.body}>
+                <h3 className={styles.title}>{name}</h3>
+                {(showAlt || title.releaseYear) && (
+                  <p className={styles.alt}>
+                    {showAlt && <bdi>{alt}</bdi>}
+                    {title.releaseYear && (
+                      <span className={styles.yearTail}>
+                        {showAlt ? ' · ' : ''}
+                        {String(title.releaseYear)}
+                      </span>
+                    )}
+                  </p>
+                )}
+              </div>
+
+              <div className={styles.controls}>
+                <button
+                  type="button"
+                  className={styles.arrow}
+                  aria-label={t.moveUp}
+                  onClick={() => move(index, index - 1)}
+                  disabled={busy || index === 0}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M12 19V5M5 12l7-7 7 7" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  className={styles.arrow}
+                  aria-label={t.moveDown}
+                  onClick={() => move(index, index + 1)}
+                  disabled={busy || index === order.length - 1}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M12 5v14M19 12l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {/* Replacing a film is neither a rank nor an opinion, so it
+                    keeps its own menu (blueprint §4.3, ADR-17). */}
+                <details className={styles.menu}>
+                  <summary className={styles.menuButton} aria-label={t.cardMenu}>
+                    <MoreIcon />
+                  </summary>
+                  <div className={styles.menuPanel}>
+                    <button
+                      type="button"
+                      className={styles.menuItem}
+                      onClick={() => setPending({ titleId: title.id, reason: 'not_watched' })}
+                      disabled={busy}
+                    >
+                      {t.notWatched}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.menuItem}
+                      onClick={() => setPending({ titleId: title.id, reason: 'not_remembered' })}
+                      disabled={busy}
+                    >
+                      {t.notRemembered}
+                    </button>
+                  </div>
+                </details>
+              </div>
             </li>
           );
         })}
       </ol>
 
-      {/* The confirmation is about one card but reads across the row, so it
+      {/* The confirmation is about one card but reads across the column, so it
           sits under it: a one-step replacement for a modal that says what will
           happen. */}
       {pending &&

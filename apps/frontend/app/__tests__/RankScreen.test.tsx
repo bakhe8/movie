@@ -85,16 +85,26 @@ describe('RankScreen — ready state', () => {
     expect(screen.getByText('البريق')).toBeInTheDocument();
   });
 
-  // ADR-111: the three slots sit side by side, so each card's controls live
-  // behind one menu -- at 375px a column is about 105px wide.
-  it("keeps every card control behind that card's own menu", async () => {
+  // The owner's interaction addendum (2026-09-05) makes the tap path visible:
+  // the two arrows sit on every card, and only replacing a film -- which is
+  // neither a rank nor an opinion -- lives behind a menu.
+  it('shows the tap alternative on every card, not behind a menu', async () => {
+    render(<RankScreen lang="ar" profileId="p1" />);
+    await screen.findByText('رأس ممحاة');
+
+    expect(screen.getAllByLabelText('ارفع درجة')).toHaveLength(3);
+    expect(screen.getAllByLabelText('أنزل درجة')).toHaveLength(3);
+    // The handle exists for pointers but is not the keyboard path.
+    expect(screen.getAllByLabelText('اسحب لتغيير الترتيب')[0]).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('keeps only the replacement controls behind the card menu', async () => {
     const user = userEvent.setup();
     render(<RankScreen lang="ar" profileId="p1" />);
     await screen.findByText('رأس ممحاة');
 
-    const menus = screen.getAllByLabelText('خيارات هذه البطاقة');
+    const menus = screen.getAllByLabelText('استبدال هذا الفيلم');
     expect(menus).toHaveLength(3);
-    // Closed until asked: the summary is the only control the row shows.
     expect(menus[0].closest('details')).not.toHaveAttribute('open');
 
     await user.click(menus[0]);

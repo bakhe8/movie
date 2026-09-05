@@ -289,13 +289,13 @@
   white-space: nowrap;
 }
 
-/* --- The triad as one row (ADR-111) ---------------------------------------
-   Three slots side by side so the whole question, and the button that
-   answers it, fit one phone screen (UX_AUDIT_MOBILE_2026-09-05 P0 #2). */
+/* --- The triad as one column (owner's interaction addendum, 2026-09-05) ---
+   Back to a vertical list: a horizontal swipe on a film card reads as
+   like/dislike, and this product ranks. Every card carries the handle, the
+   two arrows and the replace menu, so the gesture is never the only way. */
 
-.row {
+.list {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--sp-2);
   margin: 0;
   padding: var(--sp-3) var(--sp-2);
@@ -304,76 +304,114 @@
   border-radius: var(--r-card);
 }
 
-.row .card {
+.card {
   display: grid;
-  gap: var(--sp-1);
-  justify-items: center;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  text-align: center;
+  grid-template-columns: 44px auto auto 1fr auto;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  /* The handle owns the vertical gesture; the page keeps its own scrolling. */
   touch-action: pan-y;
 }
 
-/* The card follows the finger, and the slot it would land in lifts to meet it. */
-.row .lifted {
+.lifted {
   position: relative;
   z-index: 2;
-  opacity: 0.92;
+  border-color: var(--accent);
+  opacity: 0.96;
 }
 
-.row .target {
+.target {
   outline: 2px dashed var(--accent);
-  outline-offset: 4px;
-  border-radius: var(--r-card);
+  outline-offset: 2px;
 }
 
-.dragSurface {
-  position: relative;
-  display: block;
+.handle {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
   padding: 0;
   border: 0;
+  border-radius: var(--r-button);
   background: transparent;
+  color: var(--muted);
   cursor: grab;
   touch-action: none;
 }
 
-.row .badge {
-  position: absolute;
-  inset-block-start: 4px;
-  inset-inline-start: 4px;
-  z-index: 1;
+.lifted .handle {
+  color: var(--accent);
+  cursor: grabbing;
+}
+
+.badge {
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  border-radius: 14px;
   background: var(--accent);
   color: var(--accent-ink);
   font-size: var(--fs-13);
   font-weight: var(--w-semibold);
+  font-variant-numeric: tabular-nums;
 }
 
-.row .poster {
-  width: 96px;
+.poster {
+  width: 72px;
 }
 
-.row .title {
+.body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.title {
   margin: 0;
-  font-size: var(--fs-13);
+  font-family: var(--font-ui);
+  font-size: var(--fs-14);
   font-weight: var(--w-semibold);
   line-height: var(--lh-ui);
   overflow-wrap: anywhere;
 }
 
-.row .alt {
+.alt {
   margin: 0;
   color: var(--muted);
   font-size: var(--fs-12);
-  font-variant-numeric: tabular-nums;
+  line-height: var(--lh-ui);
 }
 
-/* --- One menu per card ---------------------------------------------------- */
+/* The tap path, always visible beside the handle. */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.arrow {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  min-height: var(--tap);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-button);
+  background: transparent;
+  color: var(--text);
+}
+
+.arrow:disabled {
+  color: var(--muted);
+  opacity: 0.4;
+}
+
+/* --- Replace menu --------------------------------------------------------- */
 
 .menu {
   position: relative;
@@ -390,7 +428,6 @@
   list-style: none;
 }
 
-/* Safari draws its own marker on summary. */
 .menuButton::-webkit-details-marker {
   display: none;
 }
@@ -400,28 +437,31 @@
   outline-offset: 2px;
 }
 
-/* In flow, not a popover: a floating panel anchored to a 105px column would
-   hang off the screen at the row's edges. The open card grows the row for as
-   long as the menu is open, and the save button stays reachable because it
-   sticks. */
+/* Anchored to the card's end edge and floating over the column: unlike the
+   three-column row, a full-width card leaves room for a real popover. */
 .menuPanel {
+  position: absolute;
+  z-index: 3;
+  inset-block-start: calc(var(--tap) + 4px);
+  inset-inline-end: 0;
   display: grid;
-  width: 100%;
+  min-width: 180px;
   padding: var(--sp-1);
   border: 1px solid var(--line);
   border-radius: var(--r-card);
   background: var(--surface);
+  box-shadow: var(--shadow-float);
 }
 
 .menuItem {
   min-height: var(--tap);
-  padding: 0 var(--sp-2);
+  padding: 0 var(--sp-3);
   border: 0;
   border-radius: var(--r-button);
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: var(--fs-13);
+  font-size: var(--fs-14);
   line-height: var(--lh-ui);
   text-align: start;
 }
@@ -462,13 +502,13 @@
 }
 
 @media (min-width: 900px) {
-  .row {
-    gap: var(--sp-4);
+  .list {
     padding: var(--sp-4);
+    gap: var(--sp-3);
   }
 
-  .row .poster {
-    width: 120px;
+  .poster {
+    width: 84px;
   }
 
   .stickyCta {
