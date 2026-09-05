@@ -32,6 +32,20 @@ describe('observabilityConfig', () => {
     });
   });
 
+  it('prefers the explicit or Railway deployment environment over NODE_ENV', () => {
+    expect(
+      observabilityConfig({ RAILWAY_ENVIRONMENT_NAME: 'production', NODE_ENV: 'development' } as NodeJS.ProcessEnv)
+        .environment,
+    ).toBe('production');
+    expect(
+      observabilityConfig({
+        SENTRY_ENVIRONMENT: 'staging',
+        RAILWAY_ENVIRONMENT_NAME: 'production',
+        NODE_ENV: 'development',
+      } as NodeJS.ProcessEnv).environment,
+    ).toBe('staging');
+  });
+
   it.each([['2'], ['-1'], ['nonsense'], [undefined]])('falls back to a full sample rate for %j', (rate) => {
     expect(observabilityConfig({ OTEL_TRACES_SAMPLE_RATE: rate } as NodeJS.ProcessEnv).tracesSampleRate).toBe(1);
   });

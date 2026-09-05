@@ -28,7 +28,14 @@ export function observabilityConfig(env: NodeJS.ProcessEnv = process.env): Obser
   return {
     sentryDsn: env.SENTRY_DSN?.trim() || null,
     otelEndpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim() || null,
-    environment: env.NODE_ENV?.trim() || 'development',
+    // Railway's environment name is the deployment classification. NODE_ENV
+    // can be overridden independently by the runtime/build setup and must not
+    // make production incidents appear under development in Sentry.
+    environment:
+      env.SENTRY_ENVIRONMENT?.trim() ||
+      env.RAILWAY_ENVIRONMENT_NAME?.trim() ||
+      env.NODE_ENV?.trim() ||
+      'development',
     serviceName: env.OTEL_SERVICE_NAME?.trim() || 'reel-backend',
     // Sampling everything is right for a small alpha and wrong later; the
     // default is explicit here rather than left to an SDK's own.

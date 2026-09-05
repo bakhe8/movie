@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs/config";
 
 // Dev proxy: with NEXT_PUBLIC_API_URL=/api (apps/frontend/.env.local) the
 // browser calls this server's own origin and Next forwards to the backend,
@@ -19,4 +20,28 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+const sentryAuthEnabled = Boolean(process.env.SENTRY_AUTH_TOKEN?.trim());
+const sentryRelease = process.env.SENTRY_RELEASE?.trim() || process.env.RAILWAY_GIT_COMMIT_SHA?.trim() || undefined;
+
+export default withSentryConfig(nextConfig, {
+  org: "kolme",
+  project: "kolme-frontend",
+  telemetry: false,
+  silent: true,
+  sourcemaps: {
+    // Runtime error collection does not need a build token. Source-map upload
+    // turns on automatically if a scoped SENTRY_AUTH_TOKEN is added later.
+    disable: !sentryAuthEnabled,
+  },
+  release: {
+    name: sentryRelease,
+    create: sentryAuthEnabled,
+    finalize: sentryAuthEnabled,
+  },
+  bundleSizeOptimizations: {
+    excludeDebugStatements: true,
+    excludeTracing: true,
+    excludeReplayIframe: true,
+    excludeReplayShadowDom: true,
+  },
+});
