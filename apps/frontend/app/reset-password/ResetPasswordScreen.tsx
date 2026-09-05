@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { api, ApiError } from '../lib/api';
+import { BrandMark } from '../components/BrandMark';
 import { DocumentLanguage } from '../legal/DocumentLanguage';
 import styles from '../components/AuthScreen.module.css';
 
@@ -18,7 +19,7 @@ type Lang = 'ar' | 'en';
 
 const labels = {
   ar: {
-    brand: 'Reel',
+    brand: 'Kolme',
     title: 'كلمة مرور جديدة',
     hint: 'اختر كلمة مرور جديدة لحسابك. بعد التعيين تُغلق جلساتك القديمة كلها.',
     password: 'كلمة المرور الجديدة',
@@ -34,7 +35,7 @@ const labels = {
     otherLang: 'English',
   },
   en: {
-    brand: 'Reel',
+    brand: 'Kolme',
     title: 'New password',
     hint: 'Choose a new password for your account. Setting it signs out every other session.',
     password: 'New password',
@@ -90,7 +91,10 @@ export function ResetPasswordScreen({ token, lang }: { token: string | null; lan
         <Link href={otherHref} className={`${styles.language} ${styles.docLink}`} lang={otherLang}>
           {t.otherLang}
         </Link>
-        <p className={styles.brand}>{t.brand}</p>
+        <p className={styles.brand}>
+          <BrandMark size={18} />
+          {t.brand}
+        </p>
         <h1>{t.title}</h1>
         {done ? (
           <>

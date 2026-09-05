@@ -8,7 +8,7 @@ import { ThemeProvider } from "./lib/theme";
 import { ServiceWorkerRegistration } from "./lib/ServiceWorkerRegistration";
 
 export const metadata: Metadata = {
-  title: "Reel",
+  title: "Kolme",
   description: "Personalized film recommendations from triadic rankings.",
 };
 

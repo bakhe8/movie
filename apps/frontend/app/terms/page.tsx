@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { LegalPage, resolveLang } from '../legal/LegalPage';
 
 export const metadata: Metadata = {
-  title: 'Reel — شروط الاستخدام / Terms of Use',
+  title: 'Kolme — شروط الاستخدام / Terms of Use',
 };
 
 // The language comes from `?lang=` (Arabic by default): the app keeps its UI

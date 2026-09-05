@@ -26,22 +26,17 @@
   align-items: center;
   gap: var(--sp-2);
   color: var(--text);
+  font-family: var(--font-display);
   font-size: var(--fs-16);
   font-weight: var(--w-bold);
   text-decoration: none;
 }
 
+/* The mark is the accent-coloured triad glyph itself (ADR-111). */
 .mark {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--r-button);
-  background: var(--accent);
-  color: var(--accent-ink);
-  font-family: var(--font-display);
-  font-size: var(--fs-14);
-  font-weight: var(--w-bold);
+  color: var(--accent);
 }
 
 .topLinks {

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { BrandMark } from '../components/BrandMark';
 import { formatDate } from '../lib/format';
 import type { Lang } from '../legal/content';
 import { DocumentLanguage } from '../legal/DocumentLanguage';
@@ -14,8 +15,8 @@ import styles from './DataNoticePage.module.css';
  * default. Linked from every attribution line through <DataNoticeBadge />.
  */
 const chrome = {
-  ar: { brand: 'Reel', toApp: 'إلى التطبيق', other: 'اللغة: English', updated: 'آخر تحديث', terms: 'شروط الاستخدام', privacy: 'إشعار الخصوصية' },
-  en: { brand: 'Reel', toApp: 'To the app', other: 'اللغة: العربية', updated: 'Last updated', terms: 'Terms of Use', privacy: 'Privacy Notice' },
+  ar: { brand: 'Kolme', toApp: 'إلى التطبيق', other: 'اللغة: English', updated: 'آخر تحديث', terms: 'شروط الاستخدام', privacy: 'إشعار الخصوصية' },
+  en: { brand: 'Kolme', toApp: 'To the app', other: 'اللغة: العربية', updated: 'Last updated', terms: 'Terms of Use', privacy: 'Privacy Notice' },
 };
 
 export function DataNoticePage({ lang }: { lang: Lang }) {
@@ -28,8 +29,8 @@ export function DataNoticePage({ lang }: { lang: Lang }) {
       <DocumentLanguage lang={lang} />
       <header className={legal.top}>
         <Link href="/" className={legal.brand}>
-          <span className={legal.mark} aria-hidden="true">
-            R
+          <span className={legal.mark}>
+            <BrandMark />
           </span>
           {c.brand}
         </Link>

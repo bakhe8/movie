@@ -4,8 +4,52 @@ import { render } from '@testing-library/react';
 import { AppShell } from '../components/AppShell';
 
 vi.mock('../lib/theme', () => ({
-  ThemeToggle: () => null,
+  ThemeToggle: () => <span data-testid="theme-toggle" />,
 }));
+
+// UX_AUDIT_MOBILE_2026-09-05 P0 #3 and #5: the phone header measured 113px --
+// two rows -- because the preferences wrapper in the bar carried BOTH the
+// shell's `prefsInline` (display: none until 900px) and the shared `prefs`
+// class (display: flex), and the shared one won; and the brand read "Reel"
+// while the domain reads kolme.app.
+describe('AppShell header', () => {
+  function bar() {
+    const { container } = render(
+      <AppShell lang="ar" onToggleLanguage={() => {}} view="home" onNavigate={() => {}}>
+        <p>content</p>
+      </AppShell>,
+    );
+    const el = container.querySelector('header > div');
+    if (!el) throw new Error('no top bar');
+    return el as HTMLElement;
+  }
+
+  it('names the product Kolme and draws the triad mark, not an initial', () => {
+    const heading = bar().querySelector('h1');
+
+    expect(heading?.textContent).toBe('Kolme');
+    expect(heading?.querySelectorAll('svg rect')).toHaveLength(3);
+  });
+
+  it('gives the bar preferences one class only, so they stay hidden on the phone', () => {
+    const inline = bar().querySelector('[class*="prefsInline"]');
+
+    expect(inline).not.toBeNull();
+    expect(inline!.className.trim().split(/\s+/)).toHaveLength(1);
+  });
+
+  it('puts the preferences drawer under the bar, not in it', () => {
+    const { container } = render(
+      <AppShell lang="ar" onToggleLanguage={() => {}} view="home" onNavigate={() => {}}>
+        <p>content</p>
+      </AppShell>,
+    );
+    const drawer = container.querySelector('header > div[hidden]');
+
+    expect(drawer).not.toBeNull();
+    expect(drawer!.querySelector('[data-testid="theme-toggle"]')).not.toBeNull();
+  });
+});
 
 // AUDIT_2026-09-05 §4: switching sections replaced everything under the
 // header while focus stayed on the tab that was clicked, so assistive tech

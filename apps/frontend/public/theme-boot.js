@@ -14,7 +14,7 @@
       m.setAttribute('name', 'theme-color');
       document.head.appendChild(m);
     }
-    m.setAttribute('content', dark ? '#000000' : '#f3f5f5');
+    m.setAttribute('content', dark ? '#06070f' : '#f4f4fa');
   } catch (e) {
     // No storage or no matchMedia: the CSS falls back to the system scheme.
   }

@@ -24,9 +24,13 @@ import styles from './ThemeToggle.module.css';
 export type ThemePreference = 'system' | 'light' | 'dark';
 export type ResolvedTheme = 'light' | 'dark';
 
+// The storage key keeps its original name through the rename to Kolme
+// (O-13أ): it is not shown anywhere, and changing it would silently discard
+// every visitor's saved theme choice.
 export const STORAGE_KEY = 'reel.theme';
-const LIGHT_GROUND = '#f3f5f5';
-const DARK_GROUND = '#000000';
+// The two grounds are --bg in each theme (styles/tokens.css).
+const LIGHT_GROUND = '#f4f4fa';
+const DARK_GROUND = '#06070f';
 const QUERY = '(prefers-color-scheme: dark)';
 
 function readStored(): ThemePreference {

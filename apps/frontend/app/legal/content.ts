@@ -30,7 +30,7 @@ export const LEGAL: Record<LegalKind, Record<Lang, LegalDocument>> = {
       title: 'شروط الاستخدام',
       updated: UPDATED,
       draftNotice: 'نسخة أولية بانتظار المراجعة القانونية. تُعرض حتى لا يوافق أحد على نص لا يستطيع قراءته.',
-      intro: 'Reel خدمة توصيات أفلام تتعلم ذوقك من ترتيبك لأفلام شاهدتها، ثلاثة في كل مرة. باستخدامك الخدمة توافق على ما يلي.',
+      intro: 'Kolme خدمة توصيات أفلام تتعلم ذوقك من ترتيبك لأفلام شاهدتها، ثلاثة في كل مرة. باستخدامك الخدمة توافق على ما يلي.',
       sections: [
         {
           head: 'ما الخدمة',
@@ -90,7 +90,7 @@ export const LEGAL: Record<LegalKind, Record<Lang, LegalDocument>> = {
       title: 'Terms of Use',
       updated: UPDATED,
       draftNotice: 'A first draft pending legal review. Shown so that nobody agrees to a text they cannot read.',
-      intro: 'Reel is a film recommendation service that learns your taste from how you rank films you have watched, three at a time. By using the service you agree to the following.',
+      intro: 'Kolme is a film recommendation service that learns your taste from how you rank films you have watched, three at a time. By using the service you agree to the following.',
       sections: [
         {
           head: 'What the service is',

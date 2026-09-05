@@ -5,13 +5,14 @@ import { useState } from 'react';
 import { api, CONSENT_VERSION } from '../lib/api';
 import { useSession } from '../lib/session';
 import { LanguageToggle } from './AppShell';
+import { BrandMark } from './BrandMark';
 import styles from './AuthScreen.module.css';
 
 type Mode = 'login' | 'register' | 'reset';
 
 const labels = {
   ar: {
-    brand: 'Reel',
+    brand: 'Kolme',
     // The brand sits above as the mark; the heading states the product's one ask.
     welcome: 'ثلاثة أفلام تكفي للبدء',
     hint: 'ترتّب ما شاهدت حسب إعجابك، فنبدأ بفهم ذوقك. لا نجوم ولا إعجاب.',
@@ -45,7 +46,7 @@ const labels = {
     backToLogin: 'العودة إلى تسجيل الدخول',
   },
   en: {
-    brand: 'Reel',
+    brand: 'Kolme',
     welcome: 'Three films are enough to start',
     hint: 'Rank what you have watched by how much you liked it, and we start learning your taste. No stars, no likes.',
     login: 'Log in',
@@ -156,7 +157,10 @@ export function AuthScreen({
             className={styles.language}
           />
         )}
-        <p className={styles.brand}>{t.brand}</p>
+        <p className={styles.brand}>
+          <BrandMark size={18} />
+          {t.brand}
+        </p>
         <h1>{mode === 'reset' ? t.resetTitle : t.welcome}</h1>
         <p className={styles.lead}>{mode === 'reset' ? t.resetHint : t.hint}</p>
         {mode === 'reset' && resetSent ? (

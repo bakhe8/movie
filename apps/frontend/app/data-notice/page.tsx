@@ -3,7 +3,7 @@ import { resolveLang } from '../legal/LegalPage';
 import { DataNoticePage } from './DataNoticePage';
 
 export const metadata: Metadata = {
-  title: 'Reel — إشعار مرحلة التطوير واستخدام البيانات / Development Notice',
+  title: 'Kolme — إشعار مرحلة التطوير واستخدام البيانات / Development Notice',
 };
 
 // The language comes from `?lang=` (Arabic by default): the app keeps its UI

@@ -1,8 +1,7 @@
 import type { MetadataRoute } from 'next';
 
-// Installable PWA shell (BP §5.1–§5.2, ADR-5). Icons are placeholders for
-// the two-version logo decided but not yet designed
-// (docs/IDENTITY_DECISIONS_2026-09-03.md Q23) -- see app/lib/brand-icon.tsx.
+// Installable PWA shell (BP §5.1–§5.2, ADR-5). Icons draw the Kolme triad
+// mark (O-13أ, ADR-111) -- see app/lib/brand-icon.tsx.
 // background_color/theme_color use the light-theme tokens (styles/tokens.css)
 // since a manifest carries only one static pair; the HTML <head> separately
 // declares a dark-aware theme-color via the `viewport` export in layout.tsx.
@@ -13,13 +12,13 @@ import type { MetadataRoute } from 'next';
 // text it is given (AUDIT_2026-09-05 M7).
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Reel',
-    short_name: 'Reel',
+    name: 'Kolme',
+    short_name: 'Kolme',
     description: 'Personalized film recommendations from triadic rankings.',
     start_url: '/',
     display: 'standalone',
-    background_color: '#f3f5f5',
-    theme_color: '#0b7a70',
+    background_color: '#f4f4fa',
+    theme_color: '#5b4bd6',
     dir: 'auto',
     categories: ['entertainment'],
     icons: [

@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { LegalPage, resolveLang } from '../legal/LegalPage';
 
 export const metadata: Metadata = {
-  title: 'Reel — إشعار الخصوصية / Privacy Notice',
+  title: 'Kolme — إشعار الخصوصية / Privacy Notice',
 };
 
 // The language comes from `?lang=` (Arabic by default): the app keeps its UI

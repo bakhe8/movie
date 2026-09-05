@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import styles from './AppShell.module.css';
+import { BrandMark } from './BrandMark';
 import { ThemeToggle } from '../lib/theme';
 import prefStyles from '../lib/ThemeToggle.module.css';
 
@@ -138,8 +139,8 @@ export function LanguageToggle({
 /**
  * The frame around every signed-in screen (identity decisions Q19 revised and
  * Q20): two bars.
- * - Top: on the phone, menu at the start, brand in the centre, search at the
- *   end; the menu holds the preferences (theme, language). On wide screens the
+ * - Top: ONE row, 56px on the phone -- menu at the start, brand in the centre,
+ *   search at the end; the menu holds the preferences (theme, language). On wide screens the
  *   sections sit inline in the header and the preferences are visible.
  * - Bottom (phone only): the five sections as fixed tabs.
  * Navigation appears only when `view`/`onNavigate` are given -- onboarding
@@ -204,10 +205,10 @@ export function AppShell({
           </button>
 
           <h1 className={styles.brand}>
-            <span className={styles.mark} aria-hidden="true">
-              R
+            <span className={styles.mark}>
+              <BrandMark />
             </span>
-            Reel
+            Kolme
           </h1>
 
           {hasNav && (
@@ -227,7 +228,12 @@ export function AppShell({
             </nav>
           )}
 
-          <div className={`${prefStyles.prefs} ${styles.prefsInline}`}>
+          {/* Preferences live in the drawer on the phone and inline only on
+              wide screens (Q20). This wrapper carries the shell's own class
+              alone: pairing it with the shared `prefs` class let that class's
+              `display: flex` win over `display: none` and put a second row in
+              the phone header (UX_AUDIT_MOBILE_2026-09-05 P0 #3). */}
+          <div className={styles.prefsInline}>
             <ThemeToggle lang={lang} />
             <LanguageToggle lang={lang} onToggle={toggleLanguage} className={styles.language} />
           </div>

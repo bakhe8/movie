@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { BrandMark } from '../components/BrandMark';
 import { formatDate } from '../lib/format';
 import { LEGAL, type Lang, type LegalKind } from './content';
 import { DocumentLanguage } from './DocumentLanguage';
@@ -12,8 +13,8 @@ import styles from './legal.module.css';
  * like the document root.
  */
 const chrome = {
-  ar: { brand: 'Reel', toApp: 'إلى التطبيق', other: 'اللغة: English', updated: 'آخر تحديث', terms: 'شروط الاستخدام', privacy: 'إشعار الخصوصية', dataNotice: 'إشعار البيانات والمصادر' },
-  en: { brand: 'Reel', toApp: 'To the app', other: 'اللغة: العربية', updated: 'Last updated', terms: 'Terms of Use', privacy: 'Privacy Notice', dataNotice: 'Data notice' },
+  ar: { brand: 'Kolme', toApp: 'إلى التطبيق', other: 'اللغة: English', updated: 'آخر تحديث', terms: 'شروط الاستخدام', privacy: 'إشعار الخصوصية', dataNotice: 'إشعار البيانات والمصادر' },
+  en: { brand: 'Kolme', toApp: 'To the app', other: 'اللغة: العربية', updated: 'Last updated', terms: 'Terms of Use', privacy: 'Privacy Notice', dataNotice: 'Data notice' },
 };
 
 export function resolveLang(value: string | string[] | undefined): Lang {
@@ -31,8 +32,8 @@ export function LegalPage({ kind, lang }: { kind: LegalKind; lang: Lang }) {
       <DocumentLanguage lang={lang} />
       <header className={styles.top}>
         <Link href="/" className={styles.brand}>
-          <span className={styles.mark} aria-hidden="true">
-            R
+          <span className={styles.mark}>
+            <BrandMark />
           </span>
           {c.brand}
         </Link>

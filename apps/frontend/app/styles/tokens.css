@@ -10,37 +10,39 @@
    before first paint by the boot script in app/layout.tsx and kept in sync
    by app/lib/theme.tsx.
 
-   Accent values were adjusted at the contrast check the decisions asked for:
-   the decided #0F8F84 reads 3.6:1 against the light ground / with white text,
-   so the light value is #0B7A70 (4.7:1). The dark value #2CC4B6 passes on
-   black (9.7:1) and with its dark ink (7.1:1). */
+   Palette: deep indigo (ADR-111 amendment, owner decision 2026-09-05, which
+   supersedes the teal of decisions Q6/Q7). Three light role hues were
+   darkened from the decided values at the contrast check, the same way the
+   old accent was: #1E7FA0/#B0338F/#B85A10 read 3.79/4.69/3.87 against the
+   --well they sit on, so they ship as #14637F/#A52F86/#964709 (5.59/5.20/
+   5.45). Every text-on-ground pair in both themes is >= 4.5:1. */
 
 :root {
   color-scheme: light;
 
   /* Light palette — off-white with a hint of the accent hue (Q5), a darker
      "well" behind poster rows (Q5), no shadows on cards (Q8). */
-  --bg: #f3f5f5;
+  --bg: #f4f4fa;
   --surface: #ffffff;
-  --well: #e8ecec;
-  --line: #d3dada;
-  --muted: #5c6b6b;
-  --text: #161c1c;
+  --well: #e9e9f5;
+  --line: #d4d5e8;
+  --muted: #5e6285;
+  --text: #171a33;
 
-  /* Single action colour (Q6): the only saturated colour in the UI. */
-  --accent: #0a7268; /* 4.9:1 on --well, 5.8:1 on white (audit 2026-09-04) */
+  /* Single action colour (Q6, ADR-111): the only saturated colour in the UI. */
+  --accent: #5b4bd6; /* 5.1:1 on --well, 6.1:1 on white, 6.1:1 with white ink */
   --accent-ink: #ffffff;
-  --accent-soft: rgba(10, 114, 104, 0.12);
+  --accent-soft: rgba(91, 75, 214, 0.12);
   /* Role hues (decision 27, 2026-09-04): each carries one meaning -- the three
      recommendation tracks and the "later" list state -- never the action,
      the fit meter or the confidence. Values searched for >= 4.5:1 as text on
      bg, surface, well and their own soft wash in this theme. */
-  --role-safe: #2a5cb2;
-  --role-safe-soft: rgba(42, 92, 178, 0.12);
-  --role-discovery: #7f37be;
-  --role-discovery-soft: rgba(127, 55, 190, 0.12);
-  --role-outside: #ab2b56;
-  --role-outside-soft: rgba(171, 43, 86, 0.12);
+  --role-safe: #14637f;
+  --role-safe-soft: rgba(20, 99, 127, 0.12);
+  --role-discovery: #a52f86;
+  --role-discovery-soft: rgba(165, 47, 134, 0.12);
+  --role-outside: #964709;
+  --role-outside-soft: rgba(150, 71, 9, 0.12);
   --role-later: #885007;
   --role-later-soft: rgba(136, 80, 7, 0.12);
 
@@ -48,7 +50,7 @@
   --poster-edge: var(--line);
 
   /* Floating layers (menu, sheet) take one shadow in light only (Q8). */
-  --shadow-float: 0 12px 32px rgba(22, 28, 28, 0.16);
+  --shadow-float: 0 12px 32px rgba(12, 14, 40, 0.18);
 
   /* Type (Q9–Q11). Font families come from next/font in app/layout.tsx. */
   --font-ui: var(--font-plex-arabic), "Segoe UI", "Noto Sans Arabic", system-ui, sans-serif;
@@ -91,21 +93,21 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #000000;
-    --surface: #121616;
-    --well: #1b2121;
-    --line: #263030;
-    --muted: #9aa9a9;
-    --text: #ecf1f1;
-    --accent: #2cc4b6;
-    --accent-ink: #062a27;
-    --accent-soft: rgba(44, 196, 182, 0.16);
-    --role-safe: #779ddf;
-    --role-safe-soft: rgba(119, 157, 223, 0.16);
-    --role-discovery: #b88cde;
-    --role-discovery-soft: rgba(184, 140, 222, 0.16);
-    --role-outside: #de7c9d;
-    --role-outside-soft: rgba(222, 124, 157, 0.16);
+    --bg: #06070f;
+    --surface: #10132a;
+    --well: #171b38;
+    --line: #232853;
+    --muted: #9aa0c8;
+    --text: #eef0ff;
+    --accent: #8b7cff;
+    --accent-ink: #12093d;
+    --accent-soft: rgba(139, 124, 255, 0.18);
+    --role-safe: #5fd0e6;
+    --role-safe-soft: rgba(95, 208, 230, 0.18);
+    --role-discovery: #e07cc8;
+    --role-discovery-soft: rgba(224, 124, 200, 0.18);
+    --role-outside: #f0a050;
+    --role-outside-soft: rgba(240, 160, 80, 0.18);
     --role-later: #de8512;
     --role-later-soft: rgba(222, 133, 18, 0.16);
     --poster-edge: transparent;
@@ -116,21 +118,21 @@
 /* Dark by explicit choice — wins over the system preference. */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #000000;
-  --surface: #121616;
-  --well: #1b2121;
-  --line: #263030;
-  --muted: #9aa9a9;
-  --text: #ecf1f1;
-  --accent: #2cc4b6;
-  --accent-ink: #062a27;
-  --accent-soft: rgba(44, 196, 182, 0.16);
-  --role-safe: #779ddf;
-  --role-safe-soft: rgba(119, 157, 223, 0.16);
-  --role-discovery: #b88cde;
-  --role-discovery-soft: rgba(184, 140, 222, 0.16);
-  --role-outside: #de7c9d;
-  --role-outside-soft: rgba(222, 124, 157, 0.16);
+  --bg: #06070f;
+  --surface: #10132a;
+  --well: #171b38;
+  --line: #232853;
+  --muted: #9aa0c8;
+  --text: #eef0ff;
+  --accent: #8b7cff;
+  --accent-ink: #12093d;
+  --accent-soft: rgba(139, 124, 255, 0.18);
+  --role-safe: #5fd0e6;
+  --role-safe-soft: rgba(95, 208, 230, 0.18);
+  --role-discovery: #e07cc8;
+  --role-discovery-soft: rgba(224, 124, 200, 0.18);
+  --role-outside: #f0a050;
+  --role-outside-soft: rgba(240, 160, 80, 0.18);
   --role-later: #de8512;
   --role-later-soft: rgba(222, 133, 18, 0.16);
   --poster-edge: transparent;

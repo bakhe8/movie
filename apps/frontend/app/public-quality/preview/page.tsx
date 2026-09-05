@@ -6,7 +6,7 @@ import { SourcesFooter, collectSources } from '../SourcesFooter';
 import type { PublicQuality } from '../types';
 import styles from './preview.module.css';
 
-export const metadata: Metadata = { title: 'Reel — Public Quality cell preview' };
+export const metadata: Metadata = { title: 'Kolme — Public Quality cell preview' };
 
 // Development-only preview of the Public Quality cell's states, for review
 // before session B mounts it in WorkScreen / WorkCard (board G3). 404 in
