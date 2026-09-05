@@ -178,7 +178,7 @@ class TrainingResult:
     training_language_diversity: Optional[int]
     training_director_diversity: Optional[int]
     # The L2 strength actually used to fit the served weights -- REGULARIZATION_GRID's
-    # default (first entry) below the 5-triad floor, held-out-chosen above it.
+    # strongest entry below the 5-triad floor (H5, ADR-92), held-out-chosen above it.
     # Diagnostic only, not persisted (RANKING_ALGORITHM.md/ADR-22's determinism
     # only requires the same events reproduce the same choice, which a fixed
     # grid + argmin already guarantees).
@@ -225,11 +225,14 @@ def train_and_evaluate(
     training_genre_diversity: Optional[int] = None
     training_language_diversity: Optional[int] = None
     training_director_diversity: Optional[int] = None
-    # Below the 5-triad floor there's no held-out slice to choose from --
-    # default to the grid's first (smallest, most permissive) entry, same
-    # spirit as every other held-out-gated diagnostic here reporting nothing
-    # meaningful yet rather than an arbitrary guess.
-    chosen_regularization = REGULARIZATION_GRID[0]
+    # Below the 5-triad floor there's no held-out slice to choose from, so
+    # the grid's *strongest* entry serves (owner decision H5, 2026-09-05,
+    # ADR-92). It used to be the weakest: 1-4 triads fitting a 40-dimensional
+    # weight vector is the most underdetermined case in the pipeline, and it
+    # was getting the loosest shrinkage of any regime -- "no information to
+    # select a regularization" argues for more caution, not less. The moment
+    # a held-out slice exists, the grid search below takes over as before.
+    chosen_regularization = REGULARIZATION_GRID[-1]
 
     if n >= 5:
         held_out_triad_count = max(1, n // 5)  # floor(0.2n), exact since 0.2 == 1/5

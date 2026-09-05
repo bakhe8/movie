@@ -363,12 +363,15 @@ class TestChosenRegularization:
     # Blueprint §7.1's protection for theta^T*phi: a single L2 strength
     # picked per training run from REGULARIZATION_GRID by held-out NLL, not
     # a fixed constant.
-    def test_below_five_triads_defaults_to_the_grid_first_entry(self):
+    # H5 (owner decision 2026-09-05, ADR-92): with no held-out slice to
+    # select from, the most underdetermined fit gets the strongest shrinkage,
+    # not the weakest.
+    def test_below_five_triads_uses_the_strongest_grid_entry(self):
         triads, fingerprints = make_triads(4)
 
         result = train_and_evaluate(triads, fingerprints)
 
-        assert result.chosen_regularization == REGULARIZATION_GRID[0]
+        assert result.chosen_regularization == REGULARIZATION_GRID[-1] == max(REGULARIZATION_GRID)
 
     def test_at_or_above_the_floor_picks_a_grid_value_by_held_out_nll(self):
         triads, fingerprints = make_triads(10)

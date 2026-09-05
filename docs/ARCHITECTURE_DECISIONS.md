@@ -676,6 +676,15 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 
 ---
 
+## ADR-92 — Below the 5-triad floor, the strongest regularization serves (owner decision H5, 2026-09-05)
+
+**Context.** `training.py` picks the L2 strength per run from `REGULARIZATION_GRID` by held-out NLL (RANKING_ALGORITHM §2/§6), but below the 5-triad floor there is no held-out slice, and the fallback was the grid's *weakest* entry. A profile with 1-4 triads fitting a 40-dimensional weight vector is the most underdetermined case in the pipeline, and it was getting the loosest shrinkage of any regime -- served unconditionally, since the serving fit runs regardless (AUDIT_2026-09-05 H5). The two pairwise-accuracy numbers were already made comparable for exactly this near-zero-weight regime (ADR-84 addendum, M2).
+**Decision.** Below the floor the fallback is `REGULARIZATION_GRID[-1]`, the strongest value; at or above it the grid search is unchanged. "No information to select a regularization" argues for more caution, not less.
+**Consequences.** Early models shrink harder toward zero: relative order still drives recommendations, the confidence band was already capped at `initial` there, and a held-out slice takes over from the fifth triad on. No schema or API change; `chosen_regularization` is persisted as before.
+**Revisit when.** `§16` measures early-round recommendation quality, or the grid itself is retuned (a wider grid could make "strongest" too strong for 4 triads).
+
+---
+
 ## Summary
 
 | # | Decision | Serves | Revisit trigger |
@@ -771,6 +780,7 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 | 89 | Rate limit keyed by user identity, by address only when anonymous | ALPHA_PLAN 7.6; `BP §21.3` | per-plan or per-route-family limits, or a shared throttle store for multi-instance deploys |
 | 90 | Catalog ships with the schema: `npm run release` = migrate + seed + rights + IMDb | `BP §12.1`; owner rule 2026-09-05 | a production catalog editor, or Railway pre-deploy on `backend` |
 | 91 | Constraint names follow `FK_<table>_<column>`, derived by `ConventionNamingStrategy`; seven legacy hashes renamed | AUDIT_2026-09-05 follow-up; SCHEMA.md §1 | a second engine/schema, or TypeORM models index sort direction |
+| 92 | Below the 5-triad floor the strongest regularization serves, not the weakest | AUDIT_2026-09-05 H5; owner decision 2026-09-05; `BP §7.1` | `§16` early-round quality data, or a retuned grid |
 
 ## How to add a decision
 
