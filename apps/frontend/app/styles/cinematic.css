@@ -1,5 +1,6 @@
 /* Shared scene, depth and motion tokens. Appearance is independent of light/dark. */
 :root {
+  --shell-header-height: 62px;
   --cinema-ink: #ffffff;
   --cinema-scrim: rgba(5, 8, 20, .78);
   --cinema-logo-ground: #ffffff;
@@ -71,6 +72,7 @@
     --role-later: #b8dca1; --role-later-soft: #2c3e24; --position-highlight: #e9ff72; --position-highlight-ink: #172326;
   }
 }
+@media (min-width: 1050px) { :root { --shell-header-height: 86px; } }
 body { background-image: radial-gradient(ellipse at 80% 0%, var(--ambient-glow), transparent 55%); background-attachment: fixed; transition: background-color 240ms, color 240ms; }
 button, a { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 button { transition: transform 160ms ease, background-color 180ms ease, box-shadow 180ms ease, color 180ms ease; }

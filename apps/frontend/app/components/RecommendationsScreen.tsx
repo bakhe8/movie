@@ -663,7 +663,6 @@ export function RecommendationsScreen({
           <span className={styles.heroEdition} aria-hidden="true">KOLME / TONIGHT</span>
         </section>
       )}
-      {tasteStrip}
       {notice && (
         <Toast message={notice} onDismiss={() => setNotice(null)} tone={notice === t.actionFailed ? 'error' : 'success'} />
       )}
@@ -739,6 +738,8 @@ export function RecommendationsScreen({
           </section>
         );
       })}
+
+      {tasteStrip}
 
     </div>
   );

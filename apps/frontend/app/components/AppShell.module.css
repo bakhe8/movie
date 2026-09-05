@@ -4,8 +4,8 @@
 .skipNav:focus { top: 12px; }
 .withNav { padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)); }
 .header { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 88%, transparent); border-bottom: 1px solid var(--line-soft); backdrop-filter: blur(22px); }
-.bar { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 8px; min-height: 68px; padding: 6px max(16px, calc((100vw - var(--scene-width)) / 2)); }
-.brand { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0; font-size: 23px; font-family: var(--font-display); font-weight: 700; }
+.bar { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 8px; min-height: calc(var(--shell-header-height) + env(safe-area-inset-top, 0px)); padding: 6px max(16px, calc((100vw - var(--scene-width)) / 2)); padding-top: max(6px, env(safe-area-inset-top, 0px)); }
+.brand { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0; font-size: 22px; font-family: var(--font-display); font-weight: 700; }
 .mark { display: grid; place-items: center; color: var(--accent); filter: drop-shadow(0 3px 10px var(--ambient-glow)); }
 .iconButton { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid var(--line-soft); border-radius: 50%; background: var(--surface); color: var(--text); }
 .iconButton svg { width: 21px; height: 21px; }
@@ -18,10 +18,10 @@
 .menuTitle { margin: 0; color: var(--muted); font-size: 13px; }
 .appearanceLink { display: flex; align-items: center; gap: 10px; width: fit-content; min-height: 44px; padding: 8px 16px; border: 1px solid var(--line-soft); border-radius: var(--r-button); color: var(--text); background: var(--well); }
 .appearanceLink span { font-size: 22px; color: var(--accent); }
-.content { width: min(100%, var(--scene-width)); margin: 0 auto; padding: 24px 20px 40px; scroll-margin-top: 86px; }
+.content { width: min(100%, var(--scene-width)); margin: 0 auto; padding: 14px 16px 24px; scroll-margin-top: calc(var(--shell-header-height) + env(safe-area-inset-top, 0px)); }
 .content:focus { outline: none; }
 .scene { min-width: 0; animation: arrive var(--scene-motion) cubic-bezier(.2,.8,.2,1) both; }
-.tabs { position: fixed; z-index: 30; inset-inline: 12px; bottom: max(10px, env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 2px; padding: 7px 5px; background: color-mix(in srgb,var(--surface) 94%, transparent); backdrop-filter: blur(24px); border: 1px solid var(--line-soft); border-radius: 24px; box-shadow: var(--cinema-shadow); }
+.tabs { position: fixed; z-index: 30; inset-inline: 10px; bottom: max(6px, env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 2px; padding: 5px 4px; background: color-mix(in srgb,var(--surface) 94%, transparent); backdrop-filter: blur(24px); border: 1px solid var(--line-soft); border-radius: 22px; box-shadow: var(--cinema-shadow); }
 .tab, .inlineTab { display: grid; align-content: center; justify-items: center; gap: 5px; min-height: 52px; padding: 5px 2px; border: 0; border-radius: 17px; background: transparent; color: var(--muted); font-size: 11px; font-weight: 500; line-height: 1.2; }
 .tab span, .inlineTab span { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .tab svg, .inlineTab svg { width: 21px; height: 21px; }

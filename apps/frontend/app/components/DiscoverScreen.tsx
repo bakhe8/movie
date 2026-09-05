@@ -275,7 +275,7 @@ export function DiscoverScreen({
       {header}
 
       {/* Progress toward the three watched titles that unlock ranking. */}
-      <div className={styles.progress} role="status">
+      <div className={remaining === 0 ? `${styles.progress} ${styles.progressReady}` : styles.progress} role="status">
         <div className={styles.progressRow}>
           <p className={styles.progressText}>{t.progress(t.progressUnit(watchedCount))}</p>
           <div className={styles.dots} aria-hidden="true">

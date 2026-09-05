@@ -442,7 +442,7 @@ export function ListScreen({
           ))}
       </section>
 
-      <section id="library-timeline" role="tabpanel" aria-labelledby="library-tab-timeline" hidden={activeSection !== 'timeline'} className={styles.section}>
+      <section id="library-timeline" role="tabpanel" aria-labelledby="library-tab-timeline" hidden={activeSection !== 'timeline'} className={styles.section} data-role="history">
         <div className={styles.sectionHeader}>
           <h3>
             {t.timeline}

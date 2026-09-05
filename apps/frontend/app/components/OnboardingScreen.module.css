@@ -4,7 +4,7 @@
 
 .screen {
   display: grid;
-  gap: var(--sp-6);
+  gap: 16px;
   width: min(100%, 640px);
   margin-inline: auto;
 }
@@ -12,12 +12,12 @@
 /* Onboarding uses visual platform choices and one-tap language selection;
    disclosures retain their full, visible wording. */
 .screen { width: min(100%, 820px); }
-.screen .header { position: relative; padding-inline-start: 68px; min-height: 58px; }
-.introIcon { position: absolute; inset-inline-start: 0; inset-block-start: 0; width: 52px; height: 52px; padding: 10px; border-radius: 18px; color: var(--accent); background: var(--accent-soft); }
-.screen .header h2 { font-size: clamp(24px, 3.2vw, 36px); letter-spacing: -.025em; }
-.screen .card { padding: clamp(20px, 3.5vw, 34px); border-radius: 26px; border-color: var(--line-soft, var(--line)); box-shadow: var(--cinema-shadow, var(--shadow-float)); background: radial-gradient(ellipse at 100% 0, var(--ambient-glow, var(--accent-soft)), transparent 60%), var(--surface); gap: 24px; }
+.screen .header { position: relative; padding-inline-start: 56px; min-height: 48px; }
+.introIcon { position: absolute; inset-inline-start: 0; inset-block-start: 0; width: 44px; height: 44px; padding: 8px; border-radius: 14px; color: var(--accent); background: var(--accent-soft); }
+.screen .header h2 { font-size: 24px; letter-spacing: -.025em; }
+.screen .card { padding: 16px; border-radius: 20px; border-color: var(--line-soft, var(--line)); box-shadow: var(--cinema-shadow, var(--shadow-float)); background: radial-gradient(ellipse at 100% 0, var(--ambient-glow, var(--accent-soft)), transparent 60%), var(--surface); gap: 16px; }
 .languageChoices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.languageChoices button { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 52px; border: 1px solid var(--line); border-radius: 14px; color: var(--text); background: var(--surface); font: inherit; font-size: 14px; cursor: pointer; }
+.languageChoices button { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; border: 1px solid var(--line); border-radius: 14px; color: var(--text); background: var(--surface); font: inherit; font-size: 14px; cursor: pointer; }
 .languageChoices button span { font-size: 23px; font-weight: 700; }
 .languageChoices button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .languageChoices button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
@@ -103,7 +103,7 @@
 }
 
 .field select {
-  min-height: 52px;
+  min-height: 48px;
   padding: 0 var(--sp-3);
   border: 1px solid var(--line);
   border-radius: var(--r-button);
@@ -133,7 +133,7 @@
 .chips {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px;
   margin-top: var(--sp-2);
 }
 
@@ -144,11 +144,11 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  min-height: 96px;
-  padding: 14px 8px;
+  gap: 6px;
+  min-height: 80px;
+  padding: 8px 6px;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 15px;
   background: var(--surface);
   color: var(--text);
   font: inherit;
@@ -292,6 +292,17 @@
   .header h2 {
     font-size: var(--fs-34);
   }
+}
+
+@media (min-width: 600px) {
+  .screen { gap: 24px; }
+  .screen .header { padding-inline-start: 68px; min-height: 58px; }
+  .introIcon { width: 52px; height: 52px; padding: 10px; border-radius: 18px; }
+  .screen .header h2 { font-size: clamp(28px, 3.2vw, 36px); }
+  .screen .card { padding: clamp(24px, 3.5vw, 34px); border-radius: 26px; gap: 24px; }
+  .languageChoices button, .field select { min-height: 52px; }
+  .chips { gap: 12px; }
+  .chip { gap: 10px; min-height: 96px; padding: 14px 8px; border-radius: 18px; }
 }
 
 /* A declinable purpose's switch: a native checkbox in the accent, on its own
