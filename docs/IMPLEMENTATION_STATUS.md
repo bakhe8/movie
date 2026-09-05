@@ -447,7 +447,7 @@ Still open: the Cron service and its two variables are the owner's one-time setu
 
 | Current owner request | Implementation | Verification boundary |
 |---|---|---|
-| Cinematic redesign from `b87577f` (ADR-113) | Shared image-led home, film, discovery, ranking, library, profile and onboarding; visual platform marks, toast feedback and three profile-backed appearances | 151 initial frontend tests, 28 profile backend tests, production webpack build; isolated fixture browser QA in `CINEMATIC_REDESIGN_2026-09-05.md`. Migration verified on disposable CI Postgres at `6d38f44`; production migration, owner visual acceptance and deployment remain pending |
+| Cinematic redesign from `b87577f` (ADR-113) | Shared image-led home, film, discovery, ranking, library, profile and onboarding; visual platform marks, toast feedback and three profile-backed appearances | Owner approved through `0f39371` on 2026-09-05; all CI jobs passed (174 frontend tests, 199 HTTP/Postgres tests). Migration verified in disposable CI Postgres; production verification remains separate. Evidence: `CINEMATIC_REDESIGN_2026-09-05.md` |
 | Mobile journey follow-up from `6d38f44` | Preserve library tab/filter and discovery query/genre/pages on return; independent film save locks, stale-response guards and protected pending preference/consent edits | Deferred regression tests, 16 edge-layout cases and 8 production-preview journey assertions; new authenticated appearance persistence tests run in disposable CI Postgres |
 
 | Gap | What changed | Proof |
