@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kolme — نموذج الترتيب التفاعلي</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Readex+Pro:wght@500;600;700&display=swap">
+<style>
+  :root {
+    --bg: #06070f; --surface: #10132a; --well: #171b38; --line: #232853;
+    --muted: #9aa0c8; --text: #eef0ff; --accent: #8b7cff; --accent-ink: #12093d;
+    --accent-soft: rgba(139,124,255,0.18);
+    --safe-top: 44px; --safe-bottom: 34px; --tabs: 61px; --tap: 44px;
+    --font: 'IBM Plex Sans Arabic','Segoe UI',sans-serif;
+    --disp: 'Readex Pro', var(--font);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #04050c; color: var(--text);
+    font-family: var(--font); font-size: 16px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { padding: 20px; }
+  h1 { font-family: var(--disp); font-size: 20px; margin: 0 0 6px; }
+  .lead { margin: 0 0 16px; color: var(--muted); font-size: 13px; max-width: 70ch; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
+  .toggle {
+    display: inline-flex; align-items: center; gap: 8px; min-height: var(--tap);
+    padding: 0 14px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--surface); color: var(--text); font: inherit; font-size: 13px; cursor: pointer;
+  }
+  .toggle[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  .rack { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+  .unit { display: flex; flex-direction: column; gap: 8px; }
+  .size { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .say { color: var(--muted); font-size: 12px; min-height: 2.6em; max-width: 100%; }
+
+  /* --- the phone --------------------------------------------------------- */
+  .frame {
+    position: relative; height: 780px; overflow: hidden;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 18px;
+  }
+  .frame.w360 { width: 360px; }
+  .frame.w390 { width: 390px; }
+  .frame.w430 { width: 430px; }
+
+  .safeTop { height: var(--safe-top); }
+  .bar {
+    display: grid; grid-template-columns: var(--tap) 1fr var(--tap);
+    align-items: center; height: 56px; padding: 0 6px; border-bottom: 1px solid var(--line);
+  }
+  .icon {
+    display: grid; place-items: center; width: var(--tap); height: var(--tap);
+    border: 0; border-radius: 8px; background: transparent; color: var(--text); cursor: pointer;
+  }
+  .brand { display: flex; align-items: center; justify-content: center; gap: 8px; direction: ltr; }
+  .brand span { font-family: var(--disp); font-size: 19px; font-weight: 600; }
+
+  .body { padding: 14px 16px 0; display: flex; flex-direction: column; gap: 12px; }
+  .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; }
+  .head h2 { font-family: var(--disp); font-size: 22px; font-weight: 600; margin: 0; }
+  .dots { display: flex; gap: 5px; direction: ltr; }
+  .dot { width: 9px; height: 9px; border-radius: 5px; border: 1px solid var(--line); }
+  .dot.on { border-color: var(--accent); background: var(--accent); }
+  .dot.pulse { animation: fill 320ms ease-out; }
+  @keyframes fill { 0% { transform: scale(.6); opacity: .4 } 60% { transform: scale(1.25) } 100% { transform: scale(1) } }
+  .hint { margin: 0; color: var(--muted); font-size: 13px; }
+
+  .list { display: grid; gap: 8px; margin: 0; padding: 12px 8px; list-style: none; background: var(--well); border-radius: 12px; }
+  .card {
+    display: grid; grid-template-columns: var(--tap) 28px auto 1fr auto;
+    align-items: center; gap: 8px; padding: 8px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    transition: transform 240ms cubic-bezier(.2,.9,.3,1.2), border-color 120ms ease, box-shadow 120ms ease;
+    touch-action: pan-y;
+  }
+  .card.lifted { transition: border-color 120ms, box-shadow 120ms; border-color: var(--accent); box-shadow: 0 10px 24px rgba(0,0,0,.45); position: relative; z-index: 2; }
+  .card.target { outline: 2px dashed var(--accent); outline-offset: 2px; }
+  .grip { display: grid; place-items: center; width: var(--tap); height: var(--tap); border: 0; background: transparent; color: var(--muted); cursor: grab; touch-action: none; }
+  .card.lifted .grip { color: var(--accent); cursor: grabbing; }
+  .rank { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 14px; background: var(--accent); color: var(--accent-ink); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .poster { width: 72px; aspect-ratio: 2/3; border-radius: 6px; display: grid; place-items: center; font-family: var(--disp); font-size: 26px; color: rgba(255,255,255,.18); }
+  .titles { min-width: 0; }
+  .t1 { font-size: 14px; font-weight: 600; }
+  .t2 { font-size: 12px; color: var(--muted); direction: ltr; text-align: right; }
+  .ctrls { display: flex; align-items: center; gap: 2px; }
+  .arrow { display: grid; place-items: center; width: var(--tap); min-height: var(--tap); border: 0; border-radius: 8px; background: transparent; color: var(--text); cursor: pointer; }
+  .arrow:disabled { color: var(--muted); opacity: .4; cursor: default; }
+  details { position: relative; }
+  summary { display: grid; place-items: center; width: var(--tap); height: var(--tap); border-radius: 8px; color: var(--muted); cursor: pointer; list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  .menu { position: absolute; z-index: 3; inset-block-start: calc(var(--tap) + 4px); inset-inline-end: 0; display: grid; min-width: 180px; padding: 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 12px 32px rgba(0,0,0,.5); }
+  .menu button { min-height: var(--tap); padding: 0 12px; border: 0; border-radius: 8px; background: transparent; color: var(--text); font: inherit; font-size: 13px; text-align: start; cursor: pointer; }
+
+  .save {
+    position: absolute; inset-inline: 0; bottom: calc(var(--tabs) + var(--safe-bottom));
+    padding: 10px 16px 12px; background: linear-gradient(180deg, rgba(6,7,15,0), var(--bg) 40%);
+  }
+  .save button { width: 100%; min-height: 50px; border: 0; border-radius: 10px; background: var(--accent); color: var(--accent-ink); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
+  .toast {
+    position: absolute; inset-inline: 16px; bottom: calc(var(--tabs) + var(--safe-bottom) + 74px);
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
+    font-size: 13px;
+  }
+  .toast[hidden] { display: none; }
+  .toast button { min-height: 36px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--accent); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+
+  .tabs { position: absolute; inset-inline: 0; bottom: var(--safe-bottom); height: var(--tabs); display: grid; grid-template-columns: repeat(5,1fr); border-top: 1px solid var(--line); background: var(--bg); }
+  .tab { display: grid; place-items: center; gap: 2px; font-size: 11px; color: var(--muted); }
+  .tab.on { color: var(--accent); }
+  .safeBottom { position: absolute; inset-inline: 0; bottom: 0; height: var(--safe-bottom); background: var(--bg); display: grid; place-items: center; }
+  .handleBar { width: 120px; height: 4px; border-radius: 2px; background: var(--line); }
+
+  /* thumb reach, drawn over everything when asked for */
+  .zones { position: absolute; inset: 0; pointer-events: none; display: none; }
+  .frame.zones-on .zones { display: block; }
+  .zones i { position: absolute; inset-inline: 0; display: block; }
+  .z1 { top: 0; height: 38%; background: rgba(240,160,80,.14); }
+  .z2 { top: 38%; height: 24%; background: rgba(139,124,255,.12); }
+  .z3 { top: 62%; height: 38%; background: rgba(95,208,230,.16); }
+  .zoneKey { position: absolute; inset-inline-start: 8px; font-size: 10px; color: var(--text); opacity: .8; }
+
+  /* safe areas, drawn when asked for */
+  .frame.safe-on .safeTop { background: repeating-linear-gradient(45deg, rgba(240,160,80,.16) 0 8px, transparent 8px 16px); }
+  .frame.safe-on .safeBottom { background: repeating-linear-gradient(45deg, rgba(240,160,80,.16) 0 8px, transparent 8px 16px); }
+
+  .frame.reduced .card, .frame.reduced .dot { transition: none !important; animation: none !important; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>نموذج الترتيب التفاعلي — الاتجاه أ (عمود يُسحب رأسيًا)</h1>
+  <p class="lead">
+    ثلاث نسخ حيّة على 360 و390 و430 بكسل. اسحب بالمقبض إلى أعلى أو أسفل، أو استخدم السهمين، أو افتح قائمة البطاقة.
+    كل نسخة مستقلة. المفاتيح أدناه تُظهر مدى الإبهام ومناطق الأمان، وتحاكي «تقليل الحركة».
+  </p>
+  <div class="controls">
+    <button class="toggle" id="zones" aria-pressed="false" type="button">مدى الإبهام</button>
+    <button class="toggle" id="safe" aria-pressed="false" type="button">مناطق الأمان</button>
+    <button class="toggle" id="reduced" aria-pressed="false" type="button">حركة مخفّضة</button>
+  </div>
+  <div class="rack" id="rack"></div>
+</div>
+
+<script>
+const FILMS = [
+  { id: 'r', ar: 'آر آر آر', en: 'RRR · 2022', ini: 'R', c: '#b0532e' },
+  { id: 'c', ar: 'كوكو', en: 'Coco · 2017', ini: 'C', c: '#d08a3a' },
+  { id: 'b', ar: 'باربي', en: 'Barbie · 2023', ini: 'B', c: '#c94f8a' },
+];
+
+function svg(paths, w) {
+  return `<svg width="${w || 20}" height="${w || 20}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+}
+const ICON = {
+  back: svg('<path d="M9 6l6 6-6 6"/>'),
+  search: svg('<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/>'),
+  up: svg('<path d="M12 19V5M5 12l7-7 7 7"/>'),
+  down: svg('<path d="M12 5v14M19 12l-7 7-7-7"/>'),
+  grip: '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.8"/><circle cx="9" cy="12" r="1.8"/><circle cx="9" cy="19" r="1.8"/><circle cx="15" cy="5" r="1.8"/><circle cx="15" cy="12" r="1.8"/><circle cx="15" cy="19" r="1.8"/></svg>',
+  more: '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>',
+  mark: '<svg width="20" height="20" viewBox="0 0 24 24" fill="#8b7cff" aria-hidden="true"><rect x="2" y="6" width="6" height="12" rx="1.5"/><rect x="9" y="3" width="6" height="18" rx="1.5"/><rect x="16" y="6" width="6" height="12" rx="1.5"/></svg>',
+};
+
+function buzz(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} }
+
+function makeUnit(width) {
+  const unit = document.createElement('div');
+  unit.className = 'unit';
+  unit.innerHTML = `
+    <div class="size">${width} × 780</div>
+    <div class="frame w${width}">
+      <div class="zones">
+        <i class="z1"></i><i class="z2"></i><i class="z3"></i>
+        <span class="zoneKey" style="top:6px">بعيد</span>
+        <span class="zoneKey" style="top:40%">ممتد</span>
+        <span class="zoneKey" style="top:64%">مريح</span>
+      </div>
+      <div class="safeTop"></div>
+      <div class="bar">
+        <button class="icon back" type="button" aria-label="رجوع">${ICON.back}</button>
+        <span class="brand">${ICON.mark}<span>Kolme</span></span>
+        <button class="icon" type="button" aria-label="بحث">${ICON.search}</button>
+      </div>
+      <div class="body">
+        <div class="head">
+          <h2>رتّبها من الأعلى إلى الأسفل</h2>
+          <div class="dots"></div>
+        </div>
+        <p class="hint">اسحب بالمقبض، أو استخدم السهمين. البطاقة الأولى هي الأكثر إعجابًا.</p>
+        <ol class="list"></ol>
+      </div>
+      <div class="toast" hidden><span class="toastText"></span><button type="button" class="undo">تراجع</button></div>
+      <div class="save"><button type="button">حفظ الترتيب</button></div>
+      <nav class="tabs">
+        <span class="tab">الرئيسية</span><span class="tab on">رتّب</span><span class="tab">اكتشف</span><span class="tab">قائمتي</span><span class="tab">ملفي</span>
+      </nav>
+      <div class="safeBottom"><i class="handleBar"></i></div>
+    </div>
+    <p class="say" role="status" aria-live="polite"></p>
+  `;
+
+  const frame = unit.querySelector('.frame');
+  const list = unit.querySelector('.list');
+  const say = unit.querySelector('.say');
+  const dots = unit.querySelector('.dots');
+  const toast = unit.querySelector('.toast');
+  const toastText = unit.querySelector('.toastText');
+
+  let order = FILMS.slice();
+  let rounds = 3;
+  let lastOrder = null;
+  let drag = null;
+
+  function announce(text) { say.textContent = text; }
+  function orderSentence() {
+    return 'الترتيب الآن: ' + order.map((f, i) => (i + 1) + ' ' + f.ar).join('، ');
+  }
+
+  function paintDots(pulseIndex) {
+    dots.innerHTML = '';
+    for (let i = 0; i < 5; i++) {
+      const d = document.createElement('i');
+      d.className = 'dot' + (i < Math.min(rounds, 5) ? ' on' : '') + (pulseIndex === i ? ' pulse' : '');
+      dots.appendChild(d);
+    }
+  }
+
+  function move(from, to) {
+    if (from === to || to < 0 || to >= order.length) return;
+    const next = order.slice();
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item);
+    order = next;
+    paint();
+    announce(orderSentence());
+    buzz(8);
+  }
+
+  function paint() {
+    list.innerHTML = '';
+    order.forEach((film, index) => {
+      const li = document.createElement('li');
+      li.className = 'card';
+      li.setAttribute('aria-label', 'الترتيب ' + (index + 1));
+      li.innerHTML = `
+        <button class="grip" type="button" tabindex="-1" aria-label="اسحب لتغيير الترتيب">${ICON.grip}</button>
+        <span class="rank">${index + 1}</span>
+        <span class="poster" style="background:linear-gradient(160deg, ${film.c}, #171b38)">${film.ini}</span>
+        <span class="titles"><span class="t1">${film.ar}</span><br><span class="t2">${film.en}</span></span>
+        <span class="ctrls">
+          <button class="arrow up" type="button" aria-label="ارفع درجة" ${index === 0 ? 'disabled' : ''}>${ICON.up}</button>
+          <button class="arrow down" type="button" aria-label="أنزل درجة" ${index === order.length - 1 ? 'disabled' : ''}>${ICON.down}</button>
+          <details>
+            <summary aria-label="استبدال هذا الفيلم">${ICON.more}</summary>
+            <div class="menu">
+              <button type="button">لم أشاهده</button>
+              <button type="button">لا أتذكره</button>
+            </div>
+          </details>
+        </span>
+      `;
+      li.querySelector('.up').addEventListener('click', () => move(index, index - 1));
+      li.querySelector('.down').addEventListener('click', () => move(index, index + 1));
+
+      const grip = li.querySelector('.grip');
+      grip.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        try { grip.setPointerCapture(event.pointerId); } catch (e) {}
+        drag = { from: index, to: index, startY: event.clientY };
+        li.classList.add('lifted');
+        buzz(6);
+      });
+      grip.addEventListener('pointermove', (event) => {
+        if (!drag) return;
+        event.preventDefault();
+        const cards = [...list.children];
+        let to = 0;
+        cards.forEach((card, i) => {
+          if (i === drag.from) return;
+          const rect = card.getBoundingClientRect();
+          if (event.clientY > rect.top + rect.height / 2) to += 1;
+        });
+        drag.to = to;
+        li.style.transform = 'translateY(' + (event.clientY - drag.startY) + 'px)';
+        cards.forEach((card, i) => card.classList.toggle('target', i === to && to !== drag.from));
+      });
+      function end() {
+        if (!drag) return;
+        const { from, to } = drag;
+        drag = null;
+        li.style.transform = '';
+        move(from, to);
+      }
+      grip.addEventListener('pointerup', end);
+      grip.addEventListener('pointercancel', () => { drag = null; li.style.transform = ''; paint(); });
+
+      list.appendChild(li);
+    });
+  }
+
+  unit.querySelector('.save button').addEventListener('click', () => {
+    lastOrder = order.slice();
+    rounds = Math.min(rounds + 1, 5);
+    paintDots(Math.min(rounds, 5) - 1);
+    toastText.textContent = 'حُفظت الجولة ' + rounds + ' من 5';
+    toast.hidden = false;
+    announce('تم الحفظ. الجولة ' + rounds + ' من 5.');
+    buzz(12);
+    window.setTimeout(() => { toast.hidden = true; }, 5000);
+  });
+
+  unit.querySelector('.undo').addEventListener('click', () => {
+    if (!lastOrder) return;
+    rounds = Math.max(rounds - 1, 0);
+    order = lastOrder;
+    lastOrder = null;
+    toast.hidden = true;
+    paint();
+    paintDots(null);
+    announce('تراجعنا عن الحفظ. ' + orderSentence());
+  });
+
+  unit.querySelector('.back').addEventListener('click', () => {
+    order = FILMS.slice();
+    rounds = 3;
+    lastOrder = null;
+    toast.hidden = true;
+    paint();
+    paintDots(null);
+    announce('عدنا إلى البداية.');
+  });
+
+  paint();
+  paintDots(null);
+  announce(orderSentence());
+  return unit;
+}
+
+const rack = document.getElementById('rack');
+[360, 390, 430].forEach((w) => rack.appendChild(makeUnit(w)));
+
+function bindToggle(id, cls) {
+  const button = document.getElementById(id);
+  button.addEventListener('click', () => {
+    const on = button.getAttribute('aria-pressed') !== 'true';
+    button.setAttribute('aria-pressed', String(on));
+    document.querySelectorAll('.frame').forEach((frame) => frame.classList.toggle(cls, on));
+  });
+}
+bindToggle('zones', 'zones-on');
+bindToggle('safe', 'safe-on');
+bindToggle('reduced', 'reduced');
+</script>
+</body>
+</html>

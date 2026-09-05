@@ -301,10 +301,12 @@
   gap: 2px;
 }
 
+/* 44 on both axes, not 40 by 44: the interactive prototype measured this one
+   at 40px across, under the floor the tokens set (owner's addendum 1). */
 .arrow {
   display: grid;
   place-items: center;
-  width: 40px;
+  width: var(--tap);
   min-height: var(--tap);
   padding: 0;
   border: 0;

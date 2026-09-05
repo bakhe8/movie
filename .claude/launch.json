@@ -101,6 +101,18 @@
         "3200"
       ],
       "port": 3200
+    },
+    {
+      "name": "prototype-3210",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "3210",
+        "--directory",
+        "docs/design/prototype-2026-09-05"
+      ],
+      "port": 3210
     }
   ]
 }

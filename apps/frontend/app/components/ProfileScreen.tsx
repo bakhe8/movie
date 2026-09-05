@@ -499,11 +499,50 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
   // a hub of four now: the page opens on the four cards, and one of them at a
   // time takes the screen. No routing -- the shell owns the tabs, and this is
   // one tab's inside.
+  // One conventional glyph per card (owner's addendum 3): a face for the
+  // account, sliders for preferences, a shield for privacy, a chart for what
+  // the model has learned. Each is `aria-hidden` -- the card's own name is
+  // beside it, so nothing here depends on recognising a picture.
   const sections = [
-    { id: 'taste' as const, name: t.taste, hint: t.tasteHint },
-    { id: 'prefs' as const, name: t.prefs, hint: t.prefsHint },
-    { id: 'account' as const, name: t.account, hint: t.accountHint },
-    { id: 'privacy' as const, name: t.privacy, hint: t.privacyHint },
+    {
+      id: 'taste' as const,
+      name: t.taste,
+      hint: t.tasteHint,
+      icon: (
+        <>
+          <path d="M4 19V9M10 19V5M16 19v-7M20.5 19H3.5" />
+        </>
+      ),
+    },
+    {
+      id: 'prefs' as const,
+      name: t.prefs,
+      hint: t.prefsHint,
+      icon: (
+        <>
+          <path d="M4 7h9M17 7h3M4 17h3M11 17h9" />
+          <circle cx="15" cy="7" r="2" />
+          <circle cx="9" cy="17" r="2" />
+        </>
+      ),
+    },
+    {
+      id: 'account' as const,
+      name: t.account,
+      hint: t.accountHint,
+      icon: (
+        <>
+          <circle cx="12" cy="8.5" r="3.5" />
+          <path d="M5 20a7 7 0 0114 0" />
+        </>
+      ),
+    },
+    {
+      id: 'privacy' as const,
+      name: t.privacy,
+      hint: t.privacyHint,
+      icon: <path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" />,
+    },
   ];
   const current = sections.find((section) => section.id === open) ?? null;
 
@@ -539,6 +578,20 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
             {sections.map((section) => (
               <li key={section.id}>
                 <button type="button" className={styles.hubCard} onClick={() => setOpen(section.id)}>
+                  <svg
+                    className={styles.hubIcon}
+                    width="22"
+                    height="22"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.75"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    {section.icon}
+                  </svg>
                   <span className={styles.hubName}>{section.name}</span>
                   <span className={styles.hubHint}>{section.hint}</span>
                   <svg className={styles.hubChevron} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
