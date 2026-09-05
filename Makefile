@@ -11,7 +11,7 @@ help:
 	@echo "  make lint          Lint code"
 	@echo ""
 	@echo "Infrastructure Commands:"
-	@echo "  make docker-up     Start PostgreSQL & Redis"
+	@echo "  make docker-up     Start PostgreSQL"
 	@echo "  make docker-down   Stop containers"
 	@echo "  make docker-logs   View container logs"
 	@echo ""
@@ -53,9 +53,8 @@ lint:
 
 docker-up:
 	npm run docker:up
-	@echo "✅ PostgreSQL and Redis are running"
-	@echo "   PostgreSQL: localhost:5432"
-	@echo "   Redis: localhost:6379"
+	@echo "✅ PostgreSQL is running"
+	@echo "   PostgreSQL: localhost:5433 (host port; the container listens on 5432)"
 
 docker-down:
 	npm run docker:down

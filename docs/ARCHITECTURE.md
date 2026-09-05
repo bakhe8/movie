@@ -29,13 +29,13 @@ Two views are kept apart: **as built (2026-09-03)** and **target**. Anything mar
                               │   FTS, vector columns    │   │   taste-profile · shared-space │
                               └──────────────────────────┘   │   batch · enrichment jobs      │
                                                              └──────────────┬────────────────┘
-                              ┌──────────────────────────┐                  │ HTTPS, org-level retention
-                              │ Redis 7 (port 6379)      │                  ▼
-                              │ built: running, unused   │        ┌────────────────────┐
-                              │ target: BullMQ queue,    │        │ Anthropic Messages │
-                              │   cache — only when      │        │ API (enrichment,   │
-                              │   BP §12.3 triggers      │        │ explanations)      │
-                              └──────────────────────────┘        └────────────────────┘
+                                                                            │ HTTPS, org-level retention
+                                                                            ▼
+                                                                  ┌────────────────────┐
+                                                                  │ Anthropic Messages │
+                                                                  │ API (enrichment,   │
+                                                                  │ explanations)      │
+                                                                  └────────────────────┘
 ```
 
 Test infrastructure: the backend e2e suite runs against `moviedb_test`, a second database inside the same dev Postgres instance (board C-17) — not a separate container.
@@ -48,7 +48,7 @@ Test infrastructure: the backend e2e suite runs against `moviedb_test`, a second
 | Backend | identity (JWT), profiles, catalog read, exposure state, random triad generation + ranking storage, on-the-fly Personal Fit from the latest snapshot, rate limiting, CORS, validation | events (triads, replacements, watch events, outcomes), consents/privacy requests, imports, rights registry, recommendations log, experiments, admin, calls to the model service, attribution gate, audit log, OpenAPI |
 | Database | source of truth (7 tables) | full `BP §13.1` entity set, FTS on localized titles, pgvector candidates |
 | Model service | CLI training per profile, in-sample metric | training with temporal hold-out, selection policy, scoring, confidence, taste profile, shared-space batch retraining, enrichment jobs |
-| Redis | idle | queue for imports/enrichment/recompute; optional cache — introduced when `BP §12.3` says so |
+| Queue / cache | not deployed (ADR-93) | queue for imports/enrichment/recompute; optional cache — introduced when `BP §12.3` says so |
 | Object storage (S3-compatible) | — | import files, licensed assets, temporary copies |
 | Observability | Nest default logger | OpenTelemetry traces/metrics, Sentry, first-party analytics with the event trail |
 
@@ -186,7 +186,7 @@ Target (the rest of `api.py`: triads/select, score, taste-profile, shared-space/
 
 | Environment | Built | Required before Alpha |
 |---|---|---|
-| Local | `docker compose` Postgres (5433, also hosts `moviedb_test` for e2e — board C-17) + Redis (6379); `npm run dev` (frontend 3000, backend 3101); Python CLI | unchanged |
+| Local | `docker compose` Postgres (5433, also hosts `moviedb_test` for e2e — board C-17); `npm run dev` (frontend 3000, backend 3101); Python CLI | unchanged |
 | CI | `.github/workflows/ci.yml`: three jobs (backend, frontend, workers) on every push to `main` and every PR; `main` pushes no longer cancel each other (per-commit-sha concurrency group, PR branches still do) | unchanged |
 | Staging | `docker/Dockerfile` per service (`apps/backend`, `apps/frontend`, `services/workers`) + `docker/docker-compose.prod.yml`: one-shot `migrate` service before the app containers, secrets as files under `docker/secrets/` (never `.env`) read via `docker/read-secrets.sh`; `docker/backup-postgres.sh` / `restore-postgres.sh`, a full live restore drill run and documented (`ALPHA_PLAN_2026-09-04.md` §8.12) | feature flags |
 | Production | same images/compose as staging | managed Postgres with PITR and encryption at rest (ADR-24, still open), TLS, secrets manager, model rollback, OpenTelemetry + Sentry + first-party analytics, cost monitoring; data residency in KSA/region preferred ([PRIVACY.md](PRIVACY.md)) |
@@ -203,7 +203,7 @@ Hosting vendor is deliberately undecided (ADR-24); the earlier AWS/Vercel/Lambda
 | Independent teams / deploy boundaries | gradual service split with documented event contracts |
 | Large analytical event volume | warehouse/streaming after measuring the need |
 
-Until a signal fires: one NestJS process, one Python service, one Postgres, one Redis.
+Until a signal fires: one NestJS process, one Python service, one Postgres.
 
 ## 8. Observability (`BP §12.1`, `§16.2`)
 

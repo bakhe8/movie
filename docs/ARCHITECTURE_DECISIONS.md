@@ -637,7 +637,7 @@ The vendor question is closed: Railway + Cloudflare, owner decision O-2. The req
 
 ---
 
-## ADR-88 — Hosting: Railway + Cloudflare, kolme.app (ALPHA_PLAN 7.2, owner decision O-2, board C-18)
+## ADR-88 — Hosting: Railway + Cloudflare, kolme.app (ALPHA_PLAN 7.2, owner decision O-2, board C-18) — **Redis service removed by ADR-93 (2026-09-05)**
 
 Written by session C, who did the work; recorded here because this file has one owner. Numbered 88, not 87: ADR-87 was taken by the training-trigger fix committed in `19a1862` while this was being drafted.
 
@@ -682,6 +682,15 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 **Decision.** Below the floor the fallback is `REGULARIZATION_GRID[-1]`, the strongest value; at or above it the grid search is unchanged. "No information to select a regularization" argues for more caution, not less.
 **Consequences.** Early models shrink harder toward zero: relative order still drives recommendations, the confidence band was already capped at `initial` there, and a held-out slice takes over from the fifth triad on. No schema or API change; `chosen_regularization` is persisted as before.
 **Revisit when.** `§16` measures early-round recommendation quality, or the grid itself is retuned (a wider grid could make "strongest" too strong for 4 triads).
+
+---
+
+## ADR-93 — No Redis in any environment until a `BP §12.3` consumer exists (owner review of external dependencies, 2026-09-05)
+
+**Context.** Since ADR-10/ADR-25 Redis was "idle by design", yet it kept a container in the dev compose, a service and a volume in the prod compose and in the Railway plan (ADR-88), a port in the Makefile and `REDIS_URL` in every environment template — while no file under `apps/`, `services/` or `packages/` reads `REDIS_URL` or opens a Redis connection (M8 had already removed the client packages, ADR-46). The owner's review of external dependencies asked for anything that runs without a consumer to go.
+**Decision.** Redis is removed everywhere: both compose files, the Railway service list and click list, `REDIS_URL`, Makefile and QUICKSTART. ADR-10/25's rule is unchanged — a queue or shared cache is introduced when a `BP §12.3` signal fires — and the shared throttler store ADR-89 anticipates can be Postgres first.
+**Consequences.** One fewer container, volume, port and Railway service to pay for, patch and back up. `docker compose up` reports the old `movie-redis` container as an orphan once (`--remove-orphans` clears it); `movie_redis_data` holds nothing and can be deleted by hand. Partially supersedes ADR-88's service list.
+**Revisit when.** A `BP §12.3` trigger fires, or a multi-replica deploy needs a shared rate-limit store that Postgres measurably cannot carry.
 
 ---
 
@@ -781,6 +790,7 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 | 90 | Catalog ships with the schema: `npm run release` = migrate + seed + rights + IMDb | `BP §12.1`; owner rule 2026-09-05 | a production catalog editor, or Railway pre-deploy on `backend` |
 | 91 | Constraint names follow `FK_<table>_<column>`, derived by `ConventionNamingStrategy`; seven legacy hashes renamed | AUDIT_2026-09-05 follow-up; SCHEMA.md §1 | a second engine/schema, or TypeORM models index sort direction |
 | 92 | Below the 5-triad floor the strongest regularization serves, not the weakest | AUDIT_2026-09-05 H5; owner decision 2026-09-05; `BP §7.1` | `§16` early-round quality data, or a retuned grid |
+| 93 | No Redis in any environment until a `BP §12.3` consumer exists | owner review of external dependencies 2026-09-05; ADR-10/25/46/88 | a `§12.3` trigger, or a multi-replica shared throttler store |
 
 ## How to add a decision
 

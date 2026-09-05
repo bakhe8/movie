@@ -439,7 +439,7 @@ Still open (design, not spec): the visual direction itself (dark cinematic vs. l
 |---|---|---|---|
 | Monorepo (Next.js, NestJS, Python, shared types) | ✅ | — | ADR-1 |
 | Database schema (PostgreSQL) | ✅ | 🟡 | 30 tables, 27 migrations (the authoritative list is [SCHEMA.md](SCHEMA.md) §1); the seven-step plan M1–M7 is closed (ADR-51..57). Only `embeddings.vector`'s pgvector conversion is deferred — still `real[]` (ADR-57, `§12.1`) |
-| Docker Compose: Postgres + Redis + disposable `postgres-test` | ✅ | — | |
+| Docker Compose: Postgres (also hosts `moviedb_test`) | ✅ | — | Redis removed from every environment 2026-09-05 (ADR-93) |
 | Environment template | ✅ | — | `FRONTEND_URL` not yet in `.env.example`; `ANTHROPIC_FINGERPRINT_MODEL`/`ANTHROPIC_EXPLANATION_MODEL` (ADR-63; replaced the `OPENAI_*` pair added 2026-09-03 for gap 9) |
 | Documentation set | ✅ | — | reorganized 2026-09-03; index in [README.md](README.md) |
 | Plackett–Luce ranker (Python) | ✅ | ✅ | `§7.2`: listwise event, not three pairwise comparisons; deterministic init; refuses undescribed titles |
@@ -608,9 +608,9 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 
 | Item | Built | Blueprint | Evidence / gap |
 |---|---|---|---|
-| Local compose (Postgres 5433, Redis 6379, `postgres-test` 5544) | ✅ | — | |
+| Local compose (Postgres 5433, `moviedb_test` in the same instance) | ✅ | — | |
 | Indexes beyond PK/unique | ❌ | — | [SCHEMA.md](SCHEMA.md) M1 |
-| Redis usage (queue/cache) | ❌ | — | idle by design until `§12.3` (ADR-10, ADR-25) |
+| Queue / shared cache | ❌ | — | nothing deployed since ADR-93; added when a `§12.3` trigger fires (ADR-10, ADR-25) |
 | CI/CD, staging, prod, feature flags, model rollback | 🟡 | 🟡 | `§12.1`, `§18.1`. **Feature flags and model rollback are built and tested** (ADR-83, ADR-76; see the `§18.1` row below). CI runs on every push. Staging/prod: hosting is chosen (ADR-88, Railway + Cloudflare, `alpha.kolme.app`) and it has been live since 2026-09-04 (`kolme.app`, `api.kolme.app`); `backend`'s pre-deploy command is the release step — migrations, then catalog seed + rights + IMDb ratings, idempotent, before every deployment (ADR-90) |
 | Observability (OpenTelemetry, Sentry, first-party analytics) | 🟡 | ✅ analytics · ❌ tracing | `§12.1`, ADR-86. `analytics_events` + `AnalyticsService`, gated on the `analytics_first_party` consent (opt-in: no grant, no row). Ten closed event names; `triad_answered`/`watch_marked` are emitted server-side, the onboarding funnel and card opens via `POST /profiles/:id/analytics/events`. **OTel and Sentry are installed and working, and off by default** (A-15): tracing exports only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set — verified against a stub OTLP collector, two real span batches from live traffic — and Sentry only when `SENTRY_DSN` parses, which is checked rather than assumed. **No DSN or collector is configured in any environment yet**, so in practice nothing is being traced or reported today; that is a Railway variable away (ADR-88). |
 | Backups + restore drill | ✅ | 🟡 | `docker/backup-postgres.sh` / `restore-postgres.sh`; a live drill run and documented (ALPHA_PLAN_2026-09-04 §8.12, `244090d`), hardened in `eac0e06` (AUDIT_2026-09-05 H8/H9). Open: no scheduled backup runs on Railway yet (ADR-88) — `§18.1` |

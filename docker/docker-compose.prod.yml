@@ -9,14 +9,14 @@
 # for the list), never baked into an image and never read from the app's own
 # `.env` -- each service mounts only the files it needs via Compose's native
 # `secrets:` and reads them through `docker/read-secrets.sh` (the same
-# `<NAME>_FILE` convention the official postgres/redis images already use for
-# theirs, extended here to the three app images). `.env.prod` (also
+# `<NAME>_FILE` convention the official postgres image already uses for
+# its own, extended here to the three app images). `.env.prod` (also
 # gitignored) holds only non-secret configuration: ports, hosts, model ids,
 # feature flags -- the same shape as `.env.example`, minus every value this
 # file lists under `secrets:`.
 #
 # ADR-24 (hosting) is still open (ALPHA_PLAN 7.2); this compose assumes a
-# self-hosted/staging target with its own Postgres and Redis. A managed
+# self-hosted/staging target with its own Postgres. A managed
 # Postgres (the likely production choice, per ALPHA_PLAN 7.2's fixed
 # requirements) replaces the `postgres` service with an external
 # `DATABASE_URL`/`DB_HOST` and removes its volume -- nothing else here changes.
@@ -55,20 +55,6 @@ services:
       - movie-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-movieapp}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command: redis-server --appendonly yes
-    volumes:
-      - redis_data:/data
-    networks:
-      - movie-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -113,7 +99,6 @@ services:
       DB_PORT: "5432"
       POSTGRES_USER: ${POSTGRES_USER:-movieapp}
       POSTGRES_DB: ${POSTGRES_DB:-moviedb}
-      REDIS_URL: redis://redis:6379
       MODEL_SERVICE_URL: http://model-service:8001
       ANTHROPIC_FINGERPRINT_MODEL: ${ANTHROPIC_FINGERPRINT_MODEL:-claude-opus-5}
       ANTHROPIC_EXPLANATION_MODEL: ${ANTHROPIC_EXPLANATION_MODEL:-claude-opus-5}
@@ -138,8 +123,6 @@ services:
       - audit_ip_salt
     depends_on:
       postgres:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     networks:
       - movie-network
@@ -193,7 +176,6 @@ services:
 
 volumes:
   postgres_data:
-  redis_data:
 
 networks:
   movie-network:

@@ -7,7 +7,7 @@ Runs the current vertical slice on your machine: register → mark films watched
 | Tool | Version | Notes |
 |---|---|---|
 | Node.js + npm | 22.x / 10.x | `node --version` |
-| Docker Desktop | current | Postgres (pgvector image) + Redis |
+| Docker Desktop | current | Postgres (pgvector image) |
 | Python | 3.11+ | model service; `pip` or Poetry |
 | Git | any | |
 
@@ -45,7 +45,6 @@ cp .env.example .env
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `movieapp` / dev password / `moviedb` | docker compose, backend (password is **required**) |
 | `DB_HOST` / `DB_PORT` | `127.0.0.1` / `5433` | backend — port 5433 on the host maps to the container's 5432 |
 | `DATABASE_URL` | same values as above | Python trainer |
-| `REDIS_URL` | `redis://localhost:6379` | reserved (unused today) |
 | `API_PORT` | `3101` | backend |
 | `NEXT_PUBLIC_API_URL` | `http://localhost:3101/api` | frontend (also in `apps/frontend/.env.local`) |
 | `FRONTEND_URL` | not set → `http://localhost:3000` | backend CORS origin |
@@ -60,9 +59,9 @@ cp .env.example .env
 npm run docker:up
 ```
 
-Starts `movie-postgres` (host port 5433) and `movie-redis` (6379). Check with `docker ps`. The e2e test suite's database (`moviedb_test`) lives inside this same Postgres instance, not a separate container (board C-17, 2026-09-04) — `npm run test:e2e:up` (from `apps/backend`) creates it the first time, idempotently.
+Starts `movie-postgres` (host port 5433). Check with `docker ps`. The e2e test suite's database (`moviedb_test`) lives inside this same Postgres instance, not a separate container (board C-17, 2026-09-04) — `npm run test:e2e:up` (from `apps/backend`) creates it the first time, idempotently.
 
-The compose project name is pinned to `movie` in `docker/docker-compose.yml`, so every invocation (root scripts, `apps/backend` e2e, the Makefile) lands in one project and volumes are named `movie_postgres_data` / `movie_redis_data`. Containers created before that line existed show under a `docker` group in Docker Desktop and need a one-time recreate that keeps their data; the steps are in the comment at the top of `docker/docker-compose.yml`.
+The compose project name is pinned to `movie` in `docker/docker-compose.yml`, so every invocation (root scripts, `apps/backend` e2e, the Makefile) lands in one project and the volume is named `movie_postgres_data`. Containers created before that line existed show under a `docker` group in Docker Desktop and need a one-time recreate that keeps their data; the steps are in the comment at the top of `docker/docker-compose.yml`.
 
 ## 4. Database
 
@@ -174,7 +173,6 @@ Four Railway services (live, `backend` and `frontend` are built by Railway's Rai
 | Service | Config-as-code path | Public domain | Notes |
 |---|---|---|---|
 | `postgres` | — (deploy from Docker image `ankane/pgvector:latest`, not Railway's own Postgres plugin — that plugin doesn't ship pgvector) | none (private) | Attach a Railway Volume at `/var/lib/postgresql/data`. Region: **EU-West** (Railway has no Middle East region). Railway's own backup/PITR tier on a bring-your-own-image service is more limited than a fully managed Postgres — run `docker/backup-postgres.sh` on a schedule (Railway Cron service) until/unless this moves to a managed provider |
-| `redis` | — (Docker image `redis:7-alpine`, command `redis-server --appendonly yes`) | none (private) | Volume at `/data` |
 | `backend` | `apps/backend/railway.json` | `api.kolme.app` / `api.alpha.kolme.app` | Root directory = repo root. **Pre-deploy command** `npm run release --workspace=@movie/backend` (Settings → Deploy): migrations, then the catalog seed (`seed-demo --catalog-only`, no persona accounts), the rights-registry rows and the IMDb ratings, in the same image before every deployment — idempotent, and a failure stops the deploy (ADR-90). The catalog is never a separate manual step |
 | `frontend` | `apps/frontend/railway.json` | `kolme.app` / `alpha.kolme.app` | Root directory = repo root |
 | `model-service` (workers) | `services/workers/railway.json` | none (private, reached via `MODEL_SERVICE_URL`) | Root directory = repo root |
@@ -184,7 +182,6 @@ Four Railway services (live, `backend` and `frontend` are built by Railway's Rai
 | Variable | Set on | Value |
 |---|---|---|
 | `DATABASE_URL` | `backend`, `model-service` | `postgresql://movieapp:<password>@${{postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/moviedb` — build with Railway's `${{ServiceName.VAR}}` reference picker in the dashboard; A-14 made `DATABASE_URL` win over `DB_*` in `database.config.ts`, so this one variable is enough for the backend too now |
-| `REDIS_URL` | `backend` | `redis://${{redis.RAILWAY_PRIVATE_DOMAIN}}:6379` |
 | `MODEL_SERVICE_URL` | `backend` | `http://${{model-service.RAILWAY_PRIVATE_DOMAIN}}:8001` |
 | `NEXT_PUBLIC_API_URL` | `frontend` | `https://api.kolme.app/api` (prod) / `https://api.alpha.kolme.app/api` (staging) |
 | `JWT_SECRET`, `ANTHROPIC_API_KEY`, `TMDB_API_KEY`, `MODEL_SERVICE_TOKEN`, `AUDIT_IP_SALT` | `backend` (as needed) | generate fresh values — never reuse `.env`'s dev placeholders |
@@ -197,14 +194,13 @@ Four Railway services (live, `backend` and `frontend` are built by Railway's Rai
 
 1. Railway dashboard → New Project → Deploy from GitHub repo → `bakhe8/movie`.
 2. Add the `postgres` service: Docker Image → `ankane/pgvector:latest`, region EU-West, attach a Volume at `/var/lib/postgresql/data`, set its three variables above.
-3. Add `redis`: Docker Image → `redis:7-alpine`, command override, attach a Volume at `/data`.
-4. Add `backend`: from the same GitHub repo, root directory `/`, config-as-code path `apps/backend/railway.json`; set its variables.
-5. On `backend`, Settings → Deploy → Add pre-deploy step: `npm run release --workspace=@movie/backend`. Its first deployment then creates the schema and loads the catalog before the app receives traffic, and every later deployment repeats the (idempotent) release first. No separate migrate service.
-6. Add `model-service`: same repo/root, config-as-code path `services/workers/railway.json`; set its variables.
-7. Add `frontend`: same repo/root, config-as-code path `apps/frontend/railway.json`; set `NEXT_PUBLIC_API_URL` once `backend`'s domain is known (step 8).
-8. In Railway, generate/attach custom domains: `api.kolme.app` → `backend`, `kolme.app` → `frontend` (and the `alpha.` pair for staging, as a second environment or a second project).
-9. In Cloudflare (`kolme.app` zone): add CNAME records for `kolme.app`/`www`, `api`, `alpha`, `api.alpha` pointing at the hostnames Railway generated in step 8; proxy (orange cloud) on for TLS/WAF.
-10. Verify: `https://kolme.app` loads, `https://api.kolme.app/api/health` answers, register → watch → rank → train → recommendations end to end (same walk as §6) against the live URL.
+3. Add `backend`: from the same GitHub repo, root directory `/`, config-as-code path `apps/backend/railway.json`; set its variables.
+4. On `backend`, Settings → Deploy → Add pre-deploy step: `npm run release --workspace=@movie/backend`. Its first deployment then creates the schema and loads the catalog before the app receives traffic, and every later deployment repeats the (idempotent) release first. No separate migrate service.
+5. Add `model-service`: same repo/root, config-as-code path `services/workers/railway.json`; set its variables.
+6. Add `frontend`: same repo/root, config-as-code path `apps/frontend/railway.json`; set `NEXT_PUBLIC_API_URL` once `backend`'s domain is known (step 7).
+7. In Railway, generate/attach custom domains: `api.kolme.app` → `backend`, `kolme.app` → `frontend` (and the `alpha.` pair for staging, as a second environment or a second project).
+8. In Cloudflare (`kolme.app` zone): add CNAME records for `kolme.app`/`www`, `api`, `alpha`, `api.alpha` pointing at the hostnames Railway generated in step 7; proxy (orange cloud) on for TLS/WAF.
+9. Verify: `https://kolme.app` loads, `https://api.kolme.app/api/health` answers, register → watch → rank → train → recommendations end to end (same walk as §6) against the live URL.
 
 ## 9. Troubleshooting
 
