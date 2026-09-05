@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { ServiceUnavailableException } from '@nestjs/common';
 import type { DataSource } from 'typeorm';
 import { AppController } from './app.controller';
