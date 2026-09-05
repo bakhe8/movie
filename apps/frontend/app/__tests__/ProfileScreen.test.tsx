@@ -39,6 +39,7 @@ vi.mock('../lib/api', () => ({
   api: {
     updateProfile: vi.fn().mockResolvedValue({}),
     getTrainingStatus: vi.fn(),
+    getReadiness: vi.fn(),
     requestTraining: vi.fn(),
     getRecommendations: vi.fn(),
     getCompletedTriads: vi.fn().mockResolvedValue([]),
@@ -64,6 +65,14 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockUseSession.mockReturnValue({ ...BASE_SESSION, profile: { ...BASE_SESSION.profile, pausedAt: null } } as unknown as ReturnType<typeof useSession>);
   mockApi.getTrainingStatus.mockResolvedValue({ state: 'idle', latestSnapshot: null, completedTriads: 0, nextTrainingAt: null, job: null });
+  // The readiness panel lives in the model section (ADR-103); an unmocked
+  // rejection here would only add noise to tests about other sections.
+  mockApi.getReadiness.mockResolvedValue({
+    ordinalModel: { status: 'not_ready', reason: 'insufficient_triads', action: 'rank_more_triads', publishedAt: null, modelVersion: null },
+    semanticProfile: { status: 'not_ready', reason: 'insufficient_triads', action: 'rank_more_triads', publishedAt: null, modelVersion: null },
+    recommendation: { status: 'not_ready', reason: 'insufficient_triads', action: 'rank_more_triads', publishedAt: null, modelVersion: null },
+    availability: { status: 'not_ready', reason: 'no_availability_data_source', action: null, publishedAt: null, modelVersion: null },
+  });
   mockApi.getRecommendations.mockResolvedValue({ state: 'pending', needed: 3 });
   mockApi.getConsents.mockResolvedValue([]);
   mockApi.listPrivacyRequests.mockResolvedValue([]);

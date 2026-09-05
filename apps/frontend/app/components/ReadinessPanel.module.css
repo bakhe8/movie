@@ -1,0 +1,106 @@
+/* The four readiness capabilities (ADR-103). Tokens only, both themes from
+   them; no semantic colour, in line with the identity's Q6/Q16/Q23 -- a
+   capability that is not ready is a quieter row, never a red one. */
+
+.panel {
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.heading {
+  margin: 0;
+  font-size: var(--fs-13);
+  font-weight: var(--w-semibold);
+  color: var(--muted);
+}
+
+.muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-13);
+}
+
+.list {
+  display: grid;
+  gap: var(--sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: grid;
+  gap: var(--sp-1);
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--well);
+}
+
+.line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.name {
+  font-size: var(--fs-14);
+  font-weight: var(--w-semibold);
+  color: var(--text);
+}
+
+.badge {
+  padding: 2px var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-chip);
+  font-size: var(--fs-12);
+  font-weight: var(--w-medium);
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+/* Ready carries the accent edge; working is the same chip without it;
+   absent stays hollow and dashed, the same vocabulary the poster slot and
+   the "no source yet" chip already use. */
+.ready {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.working {
+  color: var(--text);
+}
+
+.absent {
+  border-style: dashed;
+  color: var(--muted);
+}
+
+.what,
+.reason,
+.action,
+.meta {
+  margin: 0;
+  font-size: var(--fs-13);
+  line-height: var(--lh-body);
+}
+
+.what,
+.meta {
+  color: var(--muted);
+}
+
+.meta {
+  font-size: var(--fs-12);
+}
+
+.reason {
+  color: var(--text);
+}
+
+.action {
+  color: var(--text);
+  font-weight: var(--w-medium);
+}

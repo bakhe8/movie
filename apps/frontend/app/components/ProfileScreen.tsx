@@ -7,6 +7,7 @@ import { formatConfidence, formatNumber } from '../lib/format';
 import { MARKETS, PLATFORMS } from '../lib/onboarding-options';
 import { useSession } from '../lib/session';
 import { ConsentsPanel } from './ConsentsPanel';
+import { ReadinessPanel } from './ReadinessPanel';
 import styles from './ProfileScreen.module.css';
 
 type Lang = 'ar' | 'en';
@@ -205,6 +206,8 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
   const [watched, setWatched] = useState<number | null>(null);
   const [model, setModel] = useState<ModelStatus>({ kind: 'loading' });
   const [retraining, setRetraining] = useState(false);
+  // Bumped after a training request so the readiness panel re-reads.
+  const [retrainKey, setRetrainKey] = useState(0);
   const [retrainError, setRetrainError] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -414,6 +417,7 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
     try {
       await api.requestTraining(profileId);
       setModel({ kind: 'building' });
+      setRetrainKey((key) => key + 1);
     } catch (error) {
       // Said, not swallowed: the live round of 2026-09-05 pressed this button
       // and saw nothing at all (brief P0-01). The state stays; the reason the
@@ -632,6 +636,14 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
             {retrainError}
           </p>
         )}
+        {/* The four capabilities, straight from the readiness contract
+            (ADR-103). It sits under the model block rather than replacing
+            it: the block above is what this profile's model *is*, the panel
+            is what the product can do for you right now and what it still
+            needs -- the question the brief §5.1 said one "trained or not"
+            flag could never answer. `retrainKey` re-reads it after a
+            training request, so the panel and the button never disagree. */}
+        <ReadinessPanel profileId={profileId ?? null} lang={lang} refreshKey={retrainKey} />
         <p>{t.detailPending}</p>
       </section>
 
