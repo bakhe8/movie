@@ -29,7 +29,7 @@ export type ResolvedTheme = 'light' | 'dark';
 // every visitor's saved theme choice.
 export const STORAGE_KEY = 'reel.theme';
 // The two grounds are --bg in each theme (styles/tokens.css).
-const LIGHT_GROUND = '#f4f4fa';
+const LIGHT_GROUND = '#f7f6fc';
 const DARK_GROUND = '#06070f';
 const QUERY = '(prefers-color-scheme: dark)';
 

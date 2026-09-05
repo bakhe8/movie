@@ -12,7 +12,8 @@ import { STORAGE_KEY, ThemeProvider, useTheme } from '../lib/theme';
  * the device until the visitor says otherwise. L1 replaces the light palette
  * underneath all of this; none of it may change with the palette.
  */
-const LIGHT_GROUND = '#f4f4fa';
+// ADR-112: the montage light ground (styles/tokens.css --bg).
+const LIGHT_GROUND = '#f7f6fc';
 const DARK_GROUND = '#06070f';
 
 // One fake OS, whose scheme can change while the page is open.

@@ -14,13 +14,13 @@ describe('manifest', () => {
   });
 
   // O-13أ / ADR-111: the installed app carries the product's own name and the
-  // indigo accent, matching the domain and styles/tokens.css.
+  // light-mode cobalt accent (ADR-112), matching the domain and styles/tokens.css.
   it('installs as Kolme with the accent as its theme colour', () => {
     const declared = manifest();
 
     expect(declared.name).toBe('Kolme');
     expect(declared.short_name).toBe('Kolme');
-    expect(declared.theme_color).toBe('#5b4bd6');
-    expect(declared.background_color).toBe('#f4f4fa');
+    expect(declared.theme_color).toBe('#2445e8');
+    expect(declared.background_color).toBe('#f7f6fc');
   });
 });

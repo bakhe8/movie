@@ -17,8 +17,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: 'Personalized film recommendations from triadic rankings.',
     start_url: '/',
     display: 'standalone',
-    background_color: '#f4f4fa',
-    theme_color: '#5b4bd6',
+    background_color: '#f7f6fc',
+    theme_color: '#2445e8',
     dir: 'auto',
     categories: ['entertainment'],
     icons: [
