@@ -174,8 +174,19 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
           <span className={position === 1 ? `${styles.badge} ${styles.first}` : styles.badge} aria-label={t.position(position)}>
             {formatNumber(position, lang)}
           </span>
-          {/* The poster slot is always present (owner decision 2026-09-04); hollow until licensed. */}
-          <Poster title={title} size="sm" />
+          {/* The poster slot is always present (owner decision 2026-09-04);
+              hollow until licensed. It opens the work page too: the title's
+              22px text was the only way in, and nobody found it
+              (UX_AUDIT_MOBILE_2026-09-05 P0 #7). Not focusable and hidden
+              from assistive tech on purpose -- the title button below is the
+              same destination, already in the tab order and already named. */}
+          {onOpen ? (
+            <button type="button" className={styles.posterButton} tabIndex={-1} aria-hidden="true" onClick={onOpen}>
+              <Poster title={title} size="md" />
+            </button>
+          ) : (
+            <Poster title={title} size="md" />
+          )}
           <div className={styles.titles}>
             <h4 className={styles.title}>
               {onOpen ? (
@@ -214,83 +225,85 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
         </p>
       )}
 
-      {/* Separate values in labelled cells; no cell repeats another and nothing
-          is merged (blueprint §4.4, ADR-20, ADR-33). Unknown is hollow, never 0. */}
-      <dl className={isRanking ? `${styles.cells} ${styles.cellsTwo}` : styles.cells}>
-        {isRanking ? (
-          <div className={styles.cell}>
-            <dt>{t.rankingCell}</dt>
-            <dd>
-              {/* The position is the value; the meter only restates its tertile. */}
-              {meter}
-              <span className={styles.word}>{t.fitLevel[fit.level]}</span>
-              <span className={styles.pos}>{t.rankingPosition(formatNumber(position, lang), formatNumber(count, lang))}</span>
-            </dd>
-          </div>
-        ) : (
-          <div className={styles.cell}>
-            <dt>{t.fit}</dt>
-            <dd>
-              {/* Unlabelled meter (ADR-33 §3); the band only limits the fill. */}
-              {meter}
-              <span className={styles.word}>{t.fitLevel[fit.level]}</span>
-              <span className={styles.pos}>{t.fitPosition(formatNumber(fit.position, lang), formatNumber(fit.count, lang))}</span>
-            </dd>
-          </div>
-        )}
-
-        {!isRanking && !withoutQuality && fullQuality && <PublicQualityCell quality={fullQuality} lang={lang} />}
-
-        {!isRanking && !withoutQuality && !fullQuality && (
-          <div className={styles.cell}>
-            <dt>{t.quality}</dt>
-            <dd>
-              {quality && quality.value !== null ? (
-                <>
-                  <span className={styles.num}>{formatNumber(quality.value, lang)}</span>
-                  <span className={styles.numSub}>
-                    {[quality.votes !== null ? t.votes(formatNumber(quality.votes, lang)) : null, ...quality.sources]
-                      .filter(Boolean)
-                      .join(' · ') || t.sourceUnknown}
-                  </span>
-                </>
-              ) : (
-                <span className={`${styles.chip} ${styles.hollow}`}>{t.qualityUnknown}</span>
-              )}
-            </dd>
-          </div>
-        )}
-
-        {!isRanking && (
-          <div className={styles.cell}>
-            <dt>{t.availability}</dt>
-            <dd>
-              {watch && watch.providers.length > 0 ? (
-                <div className={styles.chips}>
-                  {watch.providers.map((provider) => (
-                    <span key={`${provider.name}-${provider.market}`} className={styles.chip}>
-                      {provider.name} · {provider.market}
-                    </span>
-                  ))}
-                </div>
-              ) : watch && watch.available === true ? (
-                <span className={styles.chip}>{t.available}</span>
-              ) : watch && watch.available === false ? (
-                <span className={`${styles.chip} ${styles.hollow}`}>{t.unavailable}</span>
-              ) : (
-                <span className={`${styles.chip} ${styles.hollow}`}>{t.availabilityUnknown}</span>
-              )}
-            </dd>
-          </div>
-        )}
-
-        <div className={styles.cell}>
-          <dt>{t.confidence}</dt>
-          <dd>
-            <span className={styles.band}>{confidence.label}</span>
-            <span className={styles.copy}>{confidence.copy}</span>
-            {fingerprintCoverage < 1 && <span className={styles.copy}>{t.partialFingerprint}</span>}
+      {/* One value strip, not four labelled cells (ADR-111): the fit bar
+          carries the fit and, in its fill, the confidence; the rest is one
+          quiet line. Unknown is a hollow chip, never a sentence repeated on
+          every card (UX_AUDIT_MOBILE_2026-09-05 P0 #1 and #4). Each value
+          keeps its own name for assistive tech. */}
+      <dl className={styles.strip}>
+        <div className={styles.fitRow}>
+          <dt className={styles.srOnly}>{isRanking ? t.rankingCell : t.fit}</dt>
+          <dd className={styles.fitValue}>
+            {meter}
+            <span className={styles.word}>{t.fitLevel[fit.level]}</span>
+            <span className={styles.pos}>
+              {isRanking
+                ? t.rankingPosition(formatNumber(position, lang), formatNumber(count, lang))
+                : t.fitPosition(formatNumber(fit.position, lang), formatNumber(fit.count, lang))}
+            </span>
           </dd>
+        </div>
+
+        <div className={styles.metaRow}>
+          {!isRanking && !withoutQuality && fullQuality && <PublicQualityCell quality={fullQuality} lang={lang} />}
+
+          {!isRanking && !withoutQuality && !fullQuality && (
+            <div className={styles.meta}>
+              <dt className={styles.srOnly}>{t.quality}</dt>
+              <dd className={styles.metaValue}>
+                {quality && quality.value !== null ? (
+                  <>
+                    <span className={styles.num}>{formatNumber(quality.value, lang)}</span>
+                    <span className={styles.numSub}>
+                      {[quality.votes !== null ? t.votes(formatNumber(quality.votes, lang)) : null, ...quality.sources]
+                        .filter(Boolean)
+                        .join(' · ') || t.sourceUnknown}
+                    </span>
+                  </>
+                ) : (
+                  <span className={`${styles.chip} ${styles.hollow}`}>{t.qualityUnknown}</span>
+                )}
+              </dd>
+            </div>
+          )}
+
+          {!isRanking && (
+            <div className={styles.meta}>
+              <dt className={styles.srOnly}>{t.availability}</dt>
+              <dd className={styles.metaValue}>
+                {watch && watch.providers.length > 0 ? (
+                  <div className={styles.chips}>
+                    {watch.providers.map((provider) => (
+                      <span key={`${provider.name}-${provider.market}`} className={styles.chip}>
+                        {provider.name} · {provider.market}
+                      </span>
+                    ))}
+                  </div>
+                ) : watch && watch.available === true ? (
+                  <span className={styles.chip}>{t.available}</span>
+                ) : watch && watch.available === false ? (
+                  <span className={`${styles.chip} ${styles.hollow}`}>{t.unavailable}</span>
+                ) : (
+                  <span className={`${styles.chip} ${styles.hollow}`}>{t.availabilityUnknown}</span>
+                )}
+              </dd>
+            </div>
+          )}
+
+          <div className={styles.meta}>
+            <dt className={styles.srOnly}>{t.confidence}</dt>
+            <dd className={styles.metaValue}>
+              {/* The word alone. Its sentence used to repeat on every card --
+                  thirteen times on one screen -- and now belongs to the
+                  screen's own "your taste so far" line (audit P0 #4); the
+                  caveat stays available to assistive tech. */}
+              <span className={styles.band}>{confidence.label}</span>
+              <span className={styles.srOnly}>
+                {confidence.copy}
+                {fingerprintCoverage < 1 ? ` ${t.partialFingerprint}` : ''}
+              </span>
+            </dd>
+          </div>
         </div>
       </dl>
 

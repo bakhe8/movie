@@ -15,8 +15,10 @@
   width: 56px;
 }
 
+/* The floor for a poster a decision is made from (UX_AUDIT_MOBILE_2026-09-05
+   P0 #1, identity decision Q14: never under 90px on the phone). */
 .md {
-  width: 72px;
+  width: 96px;
 }
 
 .lg {
@@ -45,7 +47,7 @@
   }
 
   .md {
-    width: 84px;
+    width: 104px;
   }
 
   .lg {

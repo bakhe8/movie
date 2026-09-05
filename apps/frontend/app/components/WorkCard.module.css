@@ -21,6 +21,17 @@
   align-items: center;
 }
 
+/* The poster is a second way into the work page, so it gets the pointer and
+   nothing else: no border, no focus ring, not in the tab order (the title
+   button is). */
+.posterButton {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
 .badge {
   display: grid;
   place-items: center;
@@ -87,8 +98,70 @@
   white-space: nowrap;
 }
 
-/* --- The four cells ------------------------------------------------------- */
+/* --- The value strip (ADR-111) -------------------------------------------
+   One strip, two rows: the fit bar with its word, then everything else on a
+   single quiet line. It replaces the two-by-two grid of labelled cells that
+   made a 411px card and pushed the poster down to a thumbnail
+   (UX_AUDIT_MOBILE_2026-09-05 P0 #1). The names stay for assistive tech. */
 
+.strip {
+  display: grid;
+  gap: var(--sp-2);
+  margin: 0;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+}
+
+.fitRow,
+.meta {
+  min-width: 0;
+}
+
+.fitValue {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+  font-size: var(--fs-14);
+  line-height: var(--lh-ui);
+}
+
+/* The bar takes the row's spare width; the word and the position follow. */
+.fitValue .meter {
+  flex: 1;
+  min-width: 64px;
+}
+
+.metaRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+}
+
+.metaValue {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+  font-size: var(--fs-14);
+  line-height: var(--lh-ui);
+}
+
+/* Named for assistive tech, drawn by the shapes themselves. */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Kept for the work page, which still lays its values out as cells. */
 .cells {
   display: grid;
   grid-template-columns: 1fr 1fr;
