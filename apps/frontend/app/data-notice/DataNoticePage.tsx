@@ -15,8 +15,8 @@ import styles from './DataNoticePage.module.css';
  * default. Linked from every attribution line through <DataNoticeBadge />.
  */
 const chrome = {
-  ar: { brand: 'Kolme', toApp: 'إلى التطبيق', other: 'اللغة: English', updated: 'آخر تحديث', terms: 'شروط الاستخدام', privacy: 'إشعار الخصوصية' },
-  en: { brand: 'Kolme', toApp: 'To the app', other: 'اللغة: العربية', updated: 'Last updated', terms: 'Terms of Use', privacy: 'Privacy Notice' },
+  ar: { brand: 'Kolme', toApp: 'إلى التطبيق', other: 'اللغة: English', updated: 'آخر تحديث', terms: 'شروط الاستخدام', privacy: 'إشعار الخصوصية', scrollColumns: 'اسحب أفقيًا لرؤية بقية الأعمدة' },
+  en: { brand: 'Kolme', toApp: 'To the app', other: 'اللغة: العربية', updated: 'Last updated', terms: 'Terms of Use', privacy: 'Privacy Notice', scrollColumns: 'Swipe sideways to see more columns' },
 };
 
 export function DataNoticePage({ lang }: { lang: Lang }) {
@@ -71,9 +71,16 @@ export function DataNoticePage({ lang }: { lang: Lang }) {
         ))}
 
         <section className={legal.section}>
-          <h2>{doc.sourcesHead}</h2>
+          <h2 id="sources-heading">{doc.sourcesHead}</h2>
           <p>{doc.sourcesIntro}</p>
-          <div className={styles.tableWrap}>
+          <div className={styles.tableFrame}>
+            <div className={styles.scrollHint}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M4 12h16M8 8l-4 4 4 4M16 8l4 4-4 4" />
+              </svg>
+              <span>{c.scrollColumns}</span>
+            </div>
+            <div className={styles.tableWrap} role="region" aria-labelledby="sources-heading" tabIndex={0}>
             <table className={styles.sources}>
               <thead>
                 <tr>
@@ -97,6 +104,7 @@ export function DataNoticePage({ lang }: { lang: Lang }) {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         </section>
 

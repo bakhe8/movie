@@ -9,6 +9,7 @@ vi.mock('../lib/api', () => ({
   api: {
     getWatchedTitles: vi.fn().mockResolvedValue([]),
     getWatchlist: vi.fn().mockResolvedValue([]),
+    getReadiness: vi.fn(),
     getStarterTitles: vi.fn(),
     listTitles: vi.fn(),
     setTitleState: vi.fn().mockResolvedValue({}),
@@ -22,7 +23,7 @@ const mockApi = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 // UX_AUDIT_MOBILE_2026-09-05 P1 #16 and the owner's interaction addendum:
 // "ماذا شاهدت؟" is a visual question, and it was being asked with text cards
 // carrying English Wikipedia paragraphs. It is a poster grid now: one tap
-// marks, the same tap again takes it back, and nothing hides behind a press.
+// marks, confirmed films move to watch history, and nothing hides behind a press.
 const title = (id: string, ar: string): Title => ({
   id,
   internalId: `i-${id}`,
@@ -38,6 +39,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockApi.getWatchedTitles.mockResolvedValue([]);
   mockApi.getWatchlist.mockResolvedValue([]);
+  mockApi.getReadiness.mockResolvedValue({ recommendation: { status: 'not_ready' } });
   mockApi.getStarterTitles.mockResolvedValue([title('a', 'العراب'), title('b', 'أنورا')]);
   mockApi.setTitleState.mockResolvedValue({});
   mockApi.listTitles.mockReset();
@@ -191,22 +193,53 @@ describe('DiscoverScreen', () => {
     expect(screen.getByRole('button', { name: 'شاهدت «أنورا»' })).toBeInTheDocument();
   });
 
-  it('marks with one tap and takes it back with the same one', async () => {
+  it('moves a marked film out of Discover and keeps its history one tap away', async () => {
     const user = userEvent.setup();
-    render(<DiscoverScreen lang="ar" profileId="p1" />);
+    const openHistory = vi.fn();
+    render(<DiscoverScreen lang="ar" profileId="p1" onOpenHistory={openHistory} />);
 
     const tile = await screen.findByRole('button', { name: 'شاهدت «العراب»' });
     expect(tile).toHaveAttribute('aria-pressed', 'false');
 
     await user.click(tile);
 
-    const marked = await screen.findByRole('button', { name: /مسجَّل كمُشاهَد/ });
-    expect(marked).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'شاهدت «العراب»' })).toBeNull());
     expect(mockApi.setTitleState).toHaveBeenLastCalledWith('p1', 'a', expect.objectContaining({ state: 'watched' }));
+    await user.click(screen.getByRole('button', { name: /عرض سجل المشاهدة/ }));
+    expect(openHistory).toHaveBeenCalledTimes(1);
+  });
 
-    await user.click(marked);
+  it('hides existing watched films and removes first-run copy once recommendations are ready', async () => {
+    mockApi.getReadiness.mockResolvedValue({ recommendation: { status: 'ready' } });
+    mockApi.getWatchedTitles.mockResolvedValue([
+      { id: 's-a', titleId: 'a', state: 'watched', title: title('a', 'العراب') },
+      { id: 's-c', titleId: 'c', state: 'watched', title: title('c', 'فيلم ثالث') },
+      { id: 's-d', titleId: 'd', state: 'watched', title: title('d', 'فيلم رابع') },
+    ]);
 
-    expect(mockApi.setTitleState).toHaveBeenLastCalledWith('p1', 'a', { state: 'not_watched' });
+    render(<DiscoverScreen lang="ar" profileId="p1" onOpenHistory={vi.fn()} />);
+
+    expect(await screen.findByRole('heading', { name: 'عناوين أخرى لاكتشافها' })).toBeInTheDocument();
+    expect(screen.queryByText('بدايات متنوعة، قبل أن نتعرّف على ذوقك.')).toBeNull();
+    expect(screen.getByRole('heading', { name: 'اكتشف ما فاتك.' })).toBeInTheDocument();
+    expect(screen.queryByText('المس صور ثلاثة أفلام شاهدتها. ثم نبدأ حكاية ذوقك.')).toBeNull();
+    expect(screen.queryByRole('button', { name: /العراب/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /عرض سجل المشاهدة/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'شاهدت «أنورا»' })).toBeInTheDocument();
+  });
+
+  it('keeps the first-run copy when ranking is unlocked but recommendations are not ready yet', async () => {
+    mockApi.getWatchedTitles.mockResolvedValue([
+      { id: 's-a', titleId: 'a', state: 'watched', title: title('a', 'العراب') },
+      { id: 's-c', titleId: 'c', state: 'watched', title: title('c', 'فيلم ثالث') },
+      { id: 's-d', titleId: 'd', state: 'watched', title: title('d', 'فيلم رابع') },
+    ]);
+
+    render(<DiscoverScreen lang="ar" profileId="p1" />);
+
+    expect(await screen.findByRole('heading', { name: 'عناوين للبدء' })).toBeInTheDocument();
+    expect(screen.getByText('بدايات متنوعة، قبل أن نتعرّف على ذوقك.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'شاهدته؟ لمسة واحدة.' })).toBeInTheDocument();
   });
 
   it('gives "later" its own named target instead of a hidden gesture', async () => {
@@ -227,5 +260,19 @@ describe('DiscoverScreen', () => {
     await user.click(await screen.findByRole('button', { name: 'العراب' }));
 
     expect(onOpenTitle).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the title, year and watched cue inside the poster tile', async () => {
+    const onOpenTitle = vi.fn();
+    render(<DiscoverScreen lang="ar" profileId="p1" onOpenTitle={onOpenTitle} />);
+
+    const titleControl = await screen.findByRole('button', { name: 'العراب' });
+    const card = titleControl.closest('li');
+    const tile = card?.firstElementChild;
+
+    expect(card?.children).toHaveLength(1);
+    expect(tile).toContainElement(titleControl);
+    expect(tile).toHaveTextContent('1972');
+    expect(tile).toHaveTextContent('شاهدته');
   });
 });

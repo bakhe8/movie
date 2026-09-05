@@ -5,6 +5,7 @@ import { api, type ProfileReadiness, type Recommendation, type RecommendationTra
 import { TRACK_COPY } from '../lib/copy';
 import { formatConfidence, formatNumber, todayLocal, topTraits, type PersonalFitLevel } from '../lib/format';
 import { WorkCard } from './WorkCard';
+import { HorizontalShelf } from './HorizontalShelf';
 import { Poster } from './Poster';
 import { genreLabel } from '../lib/genres';
 import { Toast } from '../lib/toast';
@@ -667,14 +668,43 @@ function ProfileRecommendations({ lang, profileId, onGoToRank, onGoToDiscover, o
         return (
           <section key={track} className={styles.track} data-track={track} aria-label={tracks[track].name}>
             <div className={styles.trackHeader}>
-              <h3>{tracks[track].name}</h3>
-              <p>{tracks[track].purpose}</p>
+              <span className={styles.trackIcon} aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  {track === 'safe' ? <path d="M20.8 4.6a5.4 5.4 0 0 0-7.6 0L12 5.8l-1.2-1.2a5.4 5.4 0 0 0-7.6 7.6L12 21l8.8-8.8a5.4 5.4 0 0 0 0-7.6Z" /> : track === 'discovery' ? <><circle cx="12" cy="12" r="9" /><path d="m16 8-2.5 5.5L8 16l2.5-5.5L16 8Z" /></> : <><circle cx="12" cy="12" r="3" /><ellipse cx="12" cy="12" rx="11" ry="5" transform="rotate(-35 12 12)" /><path d="M7 3a10 10 0 0 1 12 14M5 7a10 10 0 0 0 12 14" /></>}
+                </svg>
+              </span>
+              <div className={styles.trackCopy}>
+                <h3>{tracks[track].name}</h3>
+                <p>{lang === 'ar'
+                  ? ({ safe: 'قريب من الأفلام التي تحبها', discovery: 'جديد عليك، وله صلة بذوقك', outside_usual: 'خطوة أبعد عن اختياراتك المعتادة' })[track]
+                  : ({ safe: 'Close to the films you love', discovery: 'Something new, connected to your taste', outside_usual: 'A step beyond your usual choices' })[track]}</p>
+              </div>
+              <span className={styles.trackNumber} dir="ltr" aria-hidden="true">{formatNumber(TRACK_ORDER.indexOf(track) + 1, lang)}<span> / {formatNumber(TRACK_ORDER.length, lang)}</span></span>
             </div>
             {trackItems.length === 0 ? (
               <p className={styles.empty}>{t.emptyTrack}</p>
             ) : (
-              <>
-              <ol className={isExpanded ? styles.list : styles.rail}>
+              <HorizontalShelf
+                lang={lang}
+                label={tracks[track].name}
+                expanded={isExpanded}
+                className={isExpanded ? styles.list : styles.rail}
+                footerAction={
+                  <button
+                    type="button"
+                    className={styles.more}
+                    aria-expanded={isExpanded}
+                    onClick={() => setExpanded((current) => {
+                      const next = new Set(current);
+                      if (next.has(track)) next.delete(track);
+                      else next.add(track);
+                      return next;
+                    })}
+                  >
+                    {isExpanded ? t.showLess : hidden > 0 ? t.showMore(formatNumber(hidden, lang)) : t.openTrack}
+                  </button>
+                }
+              >
                 {shown.map((rec, index) => (
                   <li key={rec.title.id} className={styles.item}>
                     {/* The work card owns the four values and the reason
@@ -707,24 +737,7 @@ function ProfileRecommendations({ lang, profileId, onGoToRank, onGoToDiscover, o
                     />
                   </li>
                 ))}
-              </ol>
-              {(
-                <button
-                  type="button"
-                  className={styles.more}
-                  onClick={() =>
-                    setExpanded((current) => {
-                      const next = new Set(current);
-                      if (next.has(track)) next.delete(track);
-                      else next.add(track);
-                      return next;
-                    })
-                  }
-                >
-                  {isExpanded ? t.showLess : hidden > 0 ? t.showMore(formatNumber(hidden, lang)) : t.openTrack}
-                </button>
-              )}
-              </>
+              </HorizontalShelf>
             )}
           </section>
         );
