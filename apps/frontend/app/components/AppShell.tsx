@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import styles from './AppShell.module.css';
 import { ThemeToggle } from '../lib/theme';
 import prefStyles from '../lib/ThemeToggle.module.css';
@@ -163,6 +163,19 @@ export function AppShell({
   const menuId = useId();
   const hasNav = Boolean(view && onNavigate);
 
+  // Moving between sections replaces everything under the header, but a
+  // tap on a tab left focus on the tab -- assistive tech kept announcing
+  // the old section while sighted users saw the new one. Focus moves to
+  // the new content on every section change, skipping the first render so
+  // page load keeps the browser's own starting point (AUDIT_2026-09-05 §4).
+  const mainRef = useRef<HTMLElement>(null);
+  const shownView = useRef(view);
+  useEffect(() => {
+    if (shownView.current === view) return;
+    shownView.current = view;
+    mainRef.current?.focus();
+  }, [view]);
+
   // The drawer closes with the action taken from it or from the bar: moving
   // to a section, or flipping the language (the header it belonged to moves on).
   function go(item: View) {
@@ -244,7 +257,9 @@ export function AppShell({
         </div>
       </header>
 
-      <main id="main-content" className={styles.content}>{children}</main>
+      <main id="main-content" ref={mainRef} tabIndex={-1} className={styles.content}>
+        {children}
+      </main>
 
       {hasNav && (
         <nav className={styles.tabs} aria-label={t.navTabs}>

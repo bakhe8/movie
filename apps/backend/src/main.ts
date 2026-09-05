@@ -4,6 +4,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './modules/app/app.module';
 import { initObservability } from './observability/observability';
+import { corsOrigin } from './config/cors.config';
 
 async function bootstrap() {
   // Before the app: instrumentation has to patch http and pg before anything
@@ -38,9 +39,10 @@ async function bootstrap() {
     transform: true,
   }));
 
-  // CORS
+  // CORS: FRONTEND_URL, or the Next dev server locally; a deployment with
+  // it unset refuses to boot rather than silently refusing every browser.
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: corsOrigin(),
     credentials: true,
   });
 

@@ -175,6 +175,7 @@ The vendor question is closed: Railway + Cloudflare, owner decision O-2. The req
 
 **Decision.** JWT bearer tokens (as built) with refresh tokens added before Alpha; bcrypt passwords (library choice: ADR-27); per-endpoint throttling on auth; owner-only profile routes verified by the e2e IDOR suite on every change; `users.role` (`user`/`admin`) gates the internal board; staff actions are audit-logged; optional MFA later (`BP §21.3`).
 **Update, `7603900`.** Refresh tokens implemented: rotated on every use, with family-level reuse detection — presenting a superseded token revokes the whole rotation chain (`refresh_tokens` table, `familyId`). `AdminGuard` implemented and checks `users.role === 'admin'`; the admin board's routes (`admin.controller.ts`, board B-4) sit behind it, and since `31a2ac1` the client resolves that same check before mounting `/admin` (AUDIT_2026-09-05 C1).
+**Update (2026-09-05, AUDIT_2026-09-05 §4).** Accepted for Alpha, on the record: the access and refresh tokens live in `localStorage` (`session.tsx`), not in an httpOnly cookie. No XSS vector exists in the frontend today (no `dangerouslySetInnerHTML` anywhere), the refresh token rotates with family-level reuse detection, and a cookie design needs either a same-origin API or a CSRF scheme the split `kolme.app`/`api.kolme.app` hosting (ADR-88) does not have. Revisit when a third-party script or rich-text rendering enters the frontend, or when the API moves behind the site's own origin.
 
 ## ADR-27 — Password hashing library: `bcryptjs`, not `bcrypt`
 

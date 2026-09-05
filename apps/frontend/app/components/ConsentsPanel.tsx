@@ -110,35 +110,37 @@ export function ConsentsPanel({ lang }: { lang: Lang }) {
   const [busy, setBusy] = useState<Declinable | null>(null);
   const [notice, setNotice] = useState<{ key: 'saved' | 'failed' } | null>(null);
 
-  const load = useCallback(async () => {
-    setPhase({ kind: 'loading' });
+  // The one read path (AUDIT_2026-09-05 §4: the mount effect used to carry
+  // its own copy of this). State is set only after the response, and only
+  // while the caller still wants it -- the mount effect passes a guard that
+  // flips on unmount, the retry passes nothing.
+  const load = useCallback(async (isCurrent: () => boolean = () => true) => {
     try {
       const consents = await api.getConsents();
+      if (!isCurrent()) return;
       setLatest(latestByPurpose(consents));
       setPhase({ kind: 'ready' });
     } catch {
-      setPhase({ kind: 'failed' });
+      if (isCurrent()) setPhase({ kind: 'failed' });
     }
   }, []);
 
-  // First read: state is set only inside the promise callbacks, after the
-  // response, never synchronously in the effect; `load` serves the retry.
   useEffect(() => {
     let cancelled = false;
-    api
-      .getConsents()
-      .then((consents) => {
-        if (cancelled) return;
-        setLatest(latestByPurpose(consents));
-        setPhase({ kind: 'ready' });
-      })
-      .catch(() => {
-        if (!cancelled) setPhase({ kind: 'failed' });
-      });
+    // load()'s own setState calls all happen after an `await`, inside its
+    // async body, never synchronously in this effect -- the standard
+    // "fetch on mount" pattern (same note as RankScreen).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load(() => !cancelled);
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [load]);
+
+  function retry() {
+    setPhase({ kind: 'loading' });
+    void load();
+  }
 
   useEffect(() => {
     if (!notice) return;
@@ -178,7 +180,7 @@ export function ConsentsPanel({ lang }: { lang: Lang }) {
       {phase.kind === 'failed' && (
         <div className={styles.row}>
           <span className={styles.muted}>{t.loadFailed}</span>
-          <button type="button" className={styles.retry} onClick={load}>
+          <button type="button" className={styles.retry} onClick={retry}>
             {t.retry}
           </button>
         </div>

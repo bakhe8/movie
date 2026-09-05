@@ -132,7 +132,7 @@ const LOOPBACK = new Set(['localhost', '127.0.0.1', '::1', '0.0.0.0']);
 const LOCAL_NODE_ENVS = new Set(['development', 'test']);
 const DEPLOYMENT_MARKERS = ['RAILWAY_ENVIRONMENT_NAME', 'RAILWAY_PROJECT_ID', 'RAILWAY_SERVICE_ID'];
 
-function deployedEnvironment(): string | null {
+export function deployedEnvironment(): string | null {
   const nodeEnv = process.env.NODE_ENV?.trim();
   if (nodeEnv) {
     return LOCAL_NODE_ENVS.has(nodeEnv) ? null : `NODE_ENV=${nodeEnv}`;
