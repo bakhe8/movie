@@ -433,6 +433,16 @@ Still open (design, not spec): the visual direction itself (dark cinematic vs. l
 
 ---
 
+## Audited on 2026-09-05 (UX-A — mobile audit at `cd31d86`, design direction ADR-111)
+
+| Gap | What changed | Proof |
+|---|---|---|
+| The mobile UI told its logic in paragraphs: 6065px/741-word home with 56px posters and "unknown" ×26, triad save button off-screen (1125px), 113px two-row header, English paragraphs leading Arabic cards, 3714px profile page | Audit with DOM measurements and a prioritised list (8 P0, 8 P1, 4 P2), one visual grammar (ADR-111), brand fixed to **Kolme** (O-13أ), seven canvas mockups for owner approval, implementation order for UX-B | `docs/UX_AUDIT_MOBILE_2026-09-05.md` §1–4 · `docs/design/mobile-2026-09-05/` · canvas «نماذج Kolme للجوال» |
+
+Still open: implementation (UX-B) — no code changed in this audit.
+
+---
+
 ## Project setup
 
 | Item | Built | Blueprint | Evidence / gap |

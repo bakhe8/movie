@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Readex+Pro:wght@500;600;700&display=swap">
+  <style>
+    body { margin: 0; background: #000000; color: #ecf1f1; font-family: 'IBM Plex Sans Arabic', 'Segoe UI', 'Noto Sans Arabic', sans-serif; font-size: 16px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+    a { color: #2cc4b6; } a:hover { color: #5fd6cb; }
+    .disp { font-family: 'Readex Pro', 'IBM Plex Sans Arabic', sans-serif; line-height: 1.3; }
+    .num { font-variant-numeric: tabular-nums; }
+    .cell { display: flex; flex-direction: column; gap: 6px; }
+    .poster { position: relative; width: 105px; height: 158px; border-radius: 8px; overflow: hidden; }
+    .poster .ini { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: 'Readex Pro', sans-serif; font-weight: 700; font-size: 44px; color: rgba(255,255,255,0.14); }
+    .poster.on { outline: 2px solid #2cc4b6; outline-offset: -2px; }
+    .check { position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; border-radius: 14px; background: #2cc4b6; color: #062a27; display: flex; align-items: center; justify-content: center; }
+    .ttl { font-size: 13px; line-height: 1.4; font-weight: 500; max-height: 36px; overflow: hidden; }
+    .yr { font-size: 12px; line-height: 1.4; color: #9aa9a9; direction: ltr; text-align: right; }
+  </style>
+</helmet>
+<div style="position: relative; width: 375px; height: 812px; overflow: hidden; background: #000000; direction: rtl;">
+
+  <header style="height: 56px; display: flex; align-items: center; justify-content: space-between; padding: 0 6px; border-bottom: 1px solid #263030; background: #000000;">
+    <div style="width: 44px; height: 44px;"></div>
+    <div style="display: flex; align-items: center; gap: 8px; direction: ltr;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="#2cc4b6"><rect x="2" y="6" width="6" height="12" rx="1.5"></rect><rect x="9" y="3" width="6" height="18" rx="1.5"></rect><rect x="16" y="6" width="6" height="12" rx="1.5"></rect></svg>
+      <span class="disp" style="font-size: 20px; font-weight: 600;">Kolme</span>
+    </div>
+    <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #9aa9a9;">لاحقًا</div>
+  </header>
+
+  <main style="display: flex; flex-direction: column; gap: 16px; padding: 16px 16px 0 16px;">
+
+    <div style="display: flex; flex-direction: column; gap: 2px;">
+      <span class="num" style="font-size: 13px; line-height: 1.4; color: #2cc4b6; font-weight: 500;">الخطوة 2 من 2</span>
+      <h2 class="disp" style="margin: 0; font-size: 26px; font-weight: 600;">ماذا شاهدت؟</h2>
+      <p style="margin: 0; font-size: 14px; color: #9aa9a9;">المس ما شاهدته. ثلاثة تكفي للبدء.</p>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 12px; border-radius: 8px; background: #121616; border: 1px solid #263030; color: #9aa9a9;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.2-4.2"></path></svg>
+      <span style="font-size: 14px;">ابحث بالعربي أو الإنجليزي</span>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 14px;">
+      <div class="cell"><div class="poster on" style="background: linear-gradient(160deg, #c94f8a, #1b2121);"><span class="ini">B</span><span class="check"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"></path></svg></span></div><div class="ttl">باربي</div><div class="yr num">2023</div></div>
+      <div class="cell"><div class="poster" style="background: linear-gradient(160deg, #3a6a5a, #1b2121);"><span class="ini">H</span></div><div class="ttl">هجان</div><div class="yr num">2024</div></div>
+      <div class="cell"><div class="poster on" style="background: linear-gradient(160deg, #7a3a4a, #1b2121);"><span class="ini">J</span><span class="check"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"></path></svg></span></div><div class="ttl">جوكر</div><div class="yr num">2019</div></div>
+      <div class="cell"><div class="poster" style="background: linear-gradient(160deg, #d08a3a, #1b2121);"><span class="ini">C</span></div><div class="ttl">كوكو</div><div class="yr num">2017</div></div>
+      <div class="cell"><div class="poster" style="background: linear-gradient(160deg, #2f5c6a, #1b2121);"><span class="ini">A</span></div><div class="ttl">الوصول</div><div class="yr num">2016</div></div>
+      <div class="cell"><div class="poster on" style="background: linear-gradient(160deg, #5c4a2a, #1b2121);"><span class="ini">G</span><span class="check"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"></path></svg></span></div><div class="ttl">العراب</div><div class="yr num">1972</div></div>
+      <div class="cell"><div class="poster" style="background: linear-gradient(160deg, #4a6a9a, #1b2121);"><span class="ini">E</span></div><div class="ttl">كل شيء في كل مكان</div><div class="yr num">2022</div></div>
+      <div class="cell"><div class="poster" style="background: linear-gradient(160deg, #6a4a8a, #1b2121);"><span class="ini">A</span></div><div class="ttl">أنورا</div><div class="yr num">2024</div></div>
+      <div class="cell"><div class="poster" style="background: linear-gradient(160deg, #b0532e, #1b2121);"><span class="ini">R</span></div><div class="ttl">آر آر آر</div><div class="yr num">2022</div></div>
+    </div>
+
+  </main>
+
+  <div style="position: absolute; bottom: 0; left: 0; right: 0; padding: 12px 16px 16px 16px; background: linear-gradient(180deg, rgba(0,0,0,0) 0%, #000000 30%);">
+    <div style="display: flex; align-items: center; justify-content: space-between; height: 48px; padding: 0 16px; border-radius: 8px; background: #2cc4b6; color: #062a27; font-weight: 600; font-size: 16px;">
+      <span>ابدأ الترتيب</span>
+      <span class="num" style="font-size: 14px; font-weight: 500;">3 أفلام</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

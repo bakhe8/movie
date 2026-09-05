@@ -963,3 +963,16 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 2. Write Context · Decision · Rationale · Consequences · Revisit when; cite the `BP §`.
 3. Update the affected contract doc ([API.md](API.md), [SCHEMA.md](SCHEMA.md), [RANKING_ALGORITHM.md](RANKING_ALGORITHM.md), [FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md)) in the same change.
 4. Add the row to the summary table and a line to [README.md](README.md) if a new document was created.
+## ADR-111 — The screen shows the working logic instead of explaining it (UX-A mobile audit, 2026-09-05)
+
+**Context.** The mobile audit at `cd31d86` (`docs/UX_AUDIT_MOBILE_2026-09-05.md`) measured a home screen of 13 cards, 6065px and 741 words with 56px posters and "unknown" stated 26 times; a triad screen whose save button sits at 1125px in an 812px viewport; a 113px two-row header duplicating the theme toggle; English Wikipedia paragraphs leading Arabic cards; and a 3714px profile page. The product's logic (rank three → learn traits → suggest in three lanes) was told in paragraphs and never shown.
+
+**Decision.** One visual grammar across all screens: (1) poster first, ≥96px wide, and the poster opens the work page; (2) the four values (Q16) render as one "value strip" — fit bar + word in the accent, confidence as the bar's dashing/opacity, quality a muted number with its source, availability a platform chip or a hollow chip; unknown is a hollow mark, never repeated text; (3) the three lanes are horizontal shelves in their role colours (`--role-safe/discovery/outside`) under a "your taste so far" strip that states confidence once; (4) the triad, its numerals and its save button fit one viewport; (5) a single-row 56px header (menu · Kolme · search) with theme and language inside the menu (Q20); (6) the work page opens on a 16:9 backdrop (Q21) with the English synopsis collapsed; (7) the profile is a hub of four cards with sub-pages; (8) onboarding step 3 is replaced by a tappable poster grid. The brand is **Kolme** alone (O-13أ) with a three-card mark. Internal terms (`plackett-luce`, "صفحة العمل", "بصمة", "في هذا المسار") never reach the screen.
+
+**Rationale.** Each item removes a place where the user had to read to understand what the shape could have shown. The tokens, type, radii and the two themes (Q1–Q15) are unchanged; this ADR spends them differently.
+
+**Consequences.** UX-B implements screen by screen in the order in the audit §4, with before/after captures at 375px in both themes and no API contract change. Approved mockups: Claude Design canvas «نماذج Kolme للجوال»; source under `docs/design/mobile-2026-09-05/`.
+
+**Revisit when.** Availability data exists for a market (the hollow chip gains real logos), or the model publishes more than two traits per profile (the trait chips need a cap).
+
+---

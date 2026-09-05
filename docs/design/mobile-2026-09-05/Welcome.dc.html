@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Readex+Pro:wght@500;600;700&display=swap">
+  <style>
+    body { margin: 0; background: #000000; color: #ecf1f1; font-family: 'IBM Plex Sans Arabic', 'Segoe UI', 'Noto Sans Arabic', sans-serif; font-size: 16px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+    a { color: #2cc4b6; } a:hover { color: #5fd6cb; }
+    .disp { font-family: 'Readex Pro', 'IBM Plex Sans Arabic', sans-serif; line-height: 1.3; }
+    .num { font-variant-numeric: tabular-nums; }
+    .poster { position: absolute; width: 104px; height: 156px; border-radius: 8px; overflow: hidden; }
+    .poster .ini { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: 'Readex Pro', sans-serif; font-weight: 700; font-size: 44px; color: rgba(255,255,255,0.14); }
+    .rank { position: absolute; top: -14px; right: -6px; width: 32px; height: 32px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-family: 'Readex Pro', sans-serif; font-weight: 700; font-size: 16px; background: #2cc4b6; color: #062a27; }
+  </style>
+</helmet>
+<div style="position: relative; width: 375px; height: 812px; overflow: hidden; background: #000000; direction: rtl;">
+
+  <header style="height: 56px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px;">
+    <div style="display: flex; align-items: center; gap: 8px; direction: ltr;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="#2cc4b6"><rect x="2" y="6" width="6" height="12" rx="1.5"></rect><rect x="9" y="3" width="6" height="18" rx="1.5"></rect><rect x="16" y="6" width="6" height="12" rx="1.5"></rect></svg>
+      <span class="disp" style="font-size: 20px; font-weight: 600;">Kolme</span>
+    </div>
+    <div style="height: 44px; display: flex; align-items: center; font-size: 14px; color: #9aa9a9;">EN</div>
+  </header>
+
+  <div style="position: relative; height: 250px; margin: 24px 16px 0 16px; background: #121616; border-radius: 8px;">
+    <div class="poster" style="right: 22px; top: 50px; transform: rotate(6deg); background: linear-gradient(160deg, #b0532e, #1b2121);"><span class="ini">R</span></div>
+    <div class="poster" style="right: 134px; top: 34px; background: linear-gradient(160deg, #d08a3a, #1b2121); box-shadow: 0 0 0 1px #263030;"><span class="ini">C</span></div>
+    <div class="poster" style="right: 246px; top: 50px; transform: rotate(-6deg); background: linear-gradient(160deg, #c94f8a, #1b2121);"><span class="ini">B</span></div>
+    <div style="position: absolute; right: 60px; top: 30px; width: 32px; height: 32px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-family: 'Readex Pro', sans-serif; font-weight: 700; background: #2cc4b6; color: #062a27;">2</div>
+    <div style="position: absolute; right: 170px; top: 14px; width: 32px; height: 32px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-family: 'Readex Pro', sans-serif; font-weight: 700; background: #2cc4b6; color: #062a27;">1</div>
+    <div style="position: absolute; right: 282px; top: 30px; width: 32px; height: 32px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-family: 'Readex Pro', sans-serif; font-weight: 700; background: #2cc4b6; color: #062a27;">3</div>
+  </div>
+
+  <main style="display: flex; flex-direction: column; gap: 16px; padding: 28px 16px 0 16px;">
+    <h1 class="disp" style="margin: 0; font-size: 34px; font-weight: 600;">ثلاثة أفلام تكفي</h1>
+    <p style="margin: 0; font-size: 16px; color: #9aa9a9;">رتّب ما شاهدت حسب إعجابك، ونتعلّم ذوقك منه. لا نجوم ولا إعجاب، ولا نبيع ملفك.</p>
+
+    <div style="display: flex; flex-direction: column; gap: 10px; padding-top: 8px;">
+      <div style="display: flex; align-items: center; justify-content: center; height: 48px; border-radius: 8px; background: #2cc4b6; color: #062a27; font-weight: 600; font-size: 16px;">ابدأ ببريدك</div>
+      <div style="display: flex; align-items: center; justify-content: center; height: 48px; border-radius: 8px; border: 1px solid #263030; color: #ecf1f1; font-weight: 600; font-size: 16px;">لديّ حساب</div>
+    </div>
+
+    <p style="margin: 0; font-size: 12px; color: #9aa9a9; text-align: center;">للبالغين · <a href="#" style="text-decoration: none;">الشروط</a> · <a href="#" style="text-decoration: none;">الخصوصية</a> · <a href="#" style="text-decoration: none;">المصادر والحقوق</a></p>
+  </main>
+</div>
+</x-dc>
+</body>
+</html>
