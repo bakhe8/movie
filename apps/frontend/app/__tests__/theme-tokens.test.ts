@@ -37,7 +37,10 @@ describe('ADR-112 light foundation', () => {
     expect(light['position-highlight-ink']).toBe('#202033');
     const slots = css.slice(css.indexOf('/* New semantic slots'), css.indexOf('/* Base application'));
     expect(slots.match(/--position-highlight: var\(--accent-soft\);/g)).toHaveLength(2);
-    expect(slots.match(/--position-highlight-ink: var\(--accent\);/g)).toHaveLength(2);
+    // Ink is --text, not --accent: an accent numeral on a 16% accent wash
+    // measures 4.49:1 on a card and 4.05:1 on the well, under the AA floor
+    // (L2, when the rank badge became the token's first consumer).
+    expect(slots.match(/--position-highlight-ink: var\(--text\);/g)).toHaveLength(2);
   });
 
   it('keeps foregrounds AA on each light surface and their role washes', () => {

@@ -139,15 +139,21 @@
 
 /* New semantic slots resolve to the existing dark treatment. The original
    two dark blocks above stay unchanged; no existing dark token is replaced. */
+/* The dark marker inherits the indigo wash, as L1 intended, but its ink is
+   the text colour rather than the accent: a numeral in --accent on a 16%
+   accent wash measures 4.49:1 on a card and 4.05:1 on the well, under the
+   4.5 AA floor the acceptance matrix requires. --text reads 12.95 and 11.7
+   on the same two grounds. Changed when L2 gave the token its first consumer
+   (the rank badge, owner's decision 2026-09-05); no other dark value moved. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --position-highlight: var(--accent-soft);
-    --position-highlight-ink: var(--accent);
+    --position-highlight-ink: var(--text);
   }
 }
 :root[data-theme="dark"] {
   --position-highlight: var(--accent-soft);
-  --position-highlight-ink: var(--accent);
+  --position-highlight-ink: var(--text);
 }
 
 /* Base application of the tokens. Specificity matches globals.css's

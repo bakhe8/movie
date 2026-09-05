@@ -255,14 +255,21 @@
   cursor: grabbing;
 }
 
+/* The rank position is where the montage highlight lands (owner's decision
+   2026-09-05, the one consumer ADR-112 L0 reserved it for). The border is not
+   decoration: lime on a white card measures 1.1:1, so without an edge the
+   chip has no shape in light -- the L0 map calls for a blue outline wherever
+   the marker stands on its own. In dark the same three declarations resolve
+   to the indigo wash with text-coloured numerals. */
 .badge {
   display: grid;
   place-items: center;
   width: 28px;
   height: 28px;
+  border: 1px solid var(--accent);
   border-radius: 14px;
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: var(--position-highlight);
+  color: var(--position-highlight-ink);
   font-size: var(--fs-13);
   font-weight: var(--w-semibold);
   font-variant-numeric: tabular-nums;
