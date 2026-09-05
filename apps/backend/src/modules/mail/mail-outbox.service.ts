@@ -13,6 +13,8 @@ export interface QueuedMail {
   to: string;
   subject: string;
   text: string;
+  // Optional rich part, sealed beside the text; the text always stands alone.
+  html?: string | null;
   // After this the message is worthless (a reset link past its TTL) and is
   // marked dead instead of retried.
   expiresAt?: Date | null;
@@ -109,6 +111,7 @@ export class MailOutboxService implements OnModuleInit, OnModuleDestroy {
         toAddress: mail.to,
         subject: mail.subject,
         bodySealed: this.cipher.seal(mail.text),
+        htmlSealed: mail.html ? this.cipher.seal(mail.html) : null,
         status: 'pending',
         attempts: 0,
         nextAttemptAt: new Date(),
@@ -173,15 +176,29 @@ export class MailOutboxService implements OnModuleInit, OnModuleDestroy {
       return this.finish(row, 'dead', row.attempts, 'expired before delivery', null, now);
     }
     let text: string;
+    let html: string | null = null;
     try {
       text = this.cipher.open(row.bodySealed ?? Buffer.alloc(0));
+      // A row queued before the column existed has no HTML part, and the
+      // text part is the whole message: absence is not a failure.
+      if (row.htmlSealed) {
+        html = this.cipher.open(row.htmlSealed);
+      }
     } catch {
       // A rotated JWT_SECRET, or a row written by another key: fail closed.
       return this.finish(row, 'dead', row.attempts, 'sealed body unreadable', null, now);
     }
     const attempts = row.attempts + 1;
     try {
-      const receipt = await this.mailer.send({ to: row.toAddress, subject: row.subject, text, idempotencyKey: row.id });
+      // `html` only when there is one: a text-only message keeps the exact
+      // payload it had before the column existed.
+      const receipt = await this.mailer.send({
+        to: row.toAddress,
+        subject: row.subject,
+        text,
+        ...(html ? { html } : {}),
+        idempotencyKey: row.id,
+      });
       return this.finish(row, 'delivered', attempts, null, receipt.providerMessageId, now);
     } catch (error) {
       const message = (error instanceof Error ? error.message : String(error)).slice(0, LAST_ERROR_MAX);
@@ -218,6 +235,7 @@ export class MailOutboxService implements OnModuleInit, OnModuleDestroy {
         providerMessageId,
         deliveredAt: status === 'delivered' ? now : null,
         bodySealed: null,
+        htmlSealed: null,
       },
     );
     if (status === 'dead') {

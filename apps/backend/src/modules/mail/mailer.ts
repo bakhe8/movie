@@ -6,6 +6,9 @@ export interface OutgoingMail {
   to: string;
   subject: string;
   text: string;
+  // Optional rich part; the text part is always the whole message on its own,
+  // so a client that refuses HTML loses nothing.
+  html?: string | null;
   // Set by the outbox to its row id, so a retry after a lost response can
   // never deliver the same message twice on a provider that honours it.
   idempotencyKey?: string;
@@ -36,7 +39,7 @@ export class LogMailer extends Mailer {
   private readonly logger = new Logger(LogMailer.name);
 
   async send(mail: OutgoingMail): Promise<MailReceipt> {
-    this.logger.log(`[mail:log] to=${mail.to} subject=${mail.subject}\n${mail.text}`);
+    this.logger.log(`[mail:log] to=${mail.to} subject=${mail.subject}${mail.html ? ' (+html)' : ''}\n${mail.text}`);
     return { providerMessageId: null };
   }
 }
@@ -76,7 +79,13 @@ export class ResendHttpMailer extends Mailer {
       response = await this.fetchImpl(this.endpoint, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ from: this.from, to: mail.to, subject: mail.subject, text: mail.text }),
+        body: JSON.stringify({
+          from: this.from,
+          to: mail.to,
+          subject: mail.subject,
+          text: mail.text,
+          ...(mail.html ? { html: mail.html } : {}),
+        }),
         signal: AbortSignal.timeout(RESEND_TIMEOUT_MS),
       });
     } catch (error) {
@@ -144,6 +153,7 @@ export class SmtpMailer extends Mailer {
       to: mail.to,
       subject: mail.subject,
       text: mail.text,
+      ...(mail.html ? { html: mail.html } : {}),
     });
     // A server can take the session and still refuse the recipient: nodemailer
     // then resolves with the address under `rejected` and nothing under

@@ -47,6 +47,11 @@ export class MailOutbox {
   @Column({ type: 'bytea', nullable: true })
   bodySealed: Buffer | null;
 
+  // The HTML part, sealed with the same key -- it carries the same link.
+  // NULL for a text-only message and once the row is delivered or dead.
+  @Column({ type: 'bytea', nullable: true })
+  htmlSealed: Buffer | null;
+
   @Column({ type: 'varchar', length: 16, default: 'pending' })
   status: MailOutboxStatus;
 

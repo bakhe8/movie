@@ -106,6 +106,26 @@ describe('MailOutboxService', () => {
     expect(send).toHaveBeenCalledExactlyOnceWith({ to: mail.to, subject: mail.subject, text: mail.text, idempotencyKey: result.id });
   });
 
+  // The reset message carries a branded HTML part beside its text one (owner
+  // decision 2026-09-05); it is sealed with the same key, wiped with the same
+  // row, and a message without one is sent exactly as it always was.
+  it('seals an HTML part beside the text and hands both to the transport', async () => {
+    send.mockRejectedValueOnce(new Error('provider outage'));
+    const html = '<html><body>https://app/reset-password?token=abc123</body></html>';
+
+    const result = await service.enqueue({ ...mail, html });
+
+    const row = repo.rows.get(result.id)!;
+    expect(row.status).toBe('pending');
+    expect(row.htmlSealed).toBeInstanceOf(Buffer);
+    expect(row.htmlSealed!.toString('utf8')).not.toContain('reset-password');
+
+    await service.runDue(new Date(Date.now() + DAY_MS));
+
+    expect(send).toHaveBeenLastCalledWith({ to: mail.to, subject: mail.subject, text: mail.text, html, idempotencyKey: result.id });
+    expect(repo.rows.get(result.id)!.htmlSealed).toBeNull();
+  });
+
   it('keeps the body sealed at rest while pending, never in clear text', async () => {
     send.mockRejectedValueOnce(new Error('provider outage'));
 

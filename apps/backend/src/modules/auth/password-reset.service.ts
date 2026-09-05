@@ -9,6 +9,7 @@ import { RefreshToken } from '../../entities/refresh-token.entity';
 import { User } from '../../entities/user.entity';
 import { AuditService } from '../audit/audit.service';
 import { MailOutboxService } from '../mail/mail-outbox.service';
+import { passwordResetMail } from './password-reset-email';
 import { captureException } from '../../observability/observability';
 
 export function hashResetToken(raw: string): string {
@@ -86,12 +87,16 @@ export class PasswordResetService {
     // request went nowhere instead of finding an orphaned live row.
     let outcome: 'delivered' | 'queued' | 'failed' = 'failed';
     try {
+      // One place composes the message (password-reset-email.ts): the same
+      // link on a button and as text, in both languages, in Kolme's colours.
+      const message = passwordResetMail(link, Math.round(this.ttlMs / 60_000));
       const queued = await this.outbox.enqueue({
         userId: user.id,
         kind: 'password_reset',
         to: user.email,
-        subject: 'إعادة تعيين كلمة المرور · Reset your password',
-        text: `افتح الرابط لتعيين كلمة مرور جديدة (صالح ${Math.round(this.ttlMs / 60_000)} دقيقة):\n${link}\n\nOpen this link to set a new password. If you did not ask for this, ignore this message.`,
+        subject: message.subject,
+        text: message.text,
+        html: message.html,
         expiresAt: reset.expiresAt,
       });
       outcome = queued.status === 'delivered' ? 'delivered' : queued.status === 'pending' ? 'queued' : 'failed';
