@@ -13,6 +13,7 @@ import { Profile } from '../../entities/profile.entity';
 import { Triad } from '../../entities/triad.entity';
 import { UserModelSnapshot } from '../../entities/user-model-snapshot.entity';
 import { ModelServiceClient, ModelServiceError, ModelServiceJob } from './model-service.client';
+import { captureException } from '../../observability/observability';
 
 export type TrainingState =
   | 'disabled' // MODEL_SERVICE_URL unset: training is the manual CLI only
@@ -122,6 +123,7 @@ export class TrainingService {
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       this.logger.warn(`automatic training skipped for profile ${profileId}: ${reason}`);
+      captureException(error, { profileId, job: 'automatic-training' });
     }
   }
 
@@ -214,6 +216,7 @@ export class TrainingService {
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       this.logger.warn(`training status unavailable for profile ${profile.id}: ${reason}`);
+      captureException(error, { profileId: profile.id, job: 'training-status' });
       return { state: 'unknown', job: null, nextTrainingAt };
     }
     return { state: job ? job.status : 'idle', job, nextTrainingAt };
