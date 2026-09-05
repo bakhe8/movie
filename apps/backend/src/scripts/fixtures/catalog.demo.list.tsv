@@ -318,3 +318,129 @@ other	ID	popular	2011	The Raid	en:The_Raid_(2011_film)
 other	SN	niche	2019	Atlantics	en:Atlantics
 other	SE	niche	1966	Persona	en:Persona_(1966_film)
 other	HU	niche	2015	Son of Saul	en:Son_of_Saul
+# C-16 expansion (board O-5, owner approved 2026-09-05): 125 rows from catalog.expansion.candidates.tsv, verified Wikidata QIDs with IMDb ids; slice from the home country (Arab League -> ar, anglophone -> en, else other), tier from Wikidata sitelink breadth (>=60 popular, >=25 mid, else niche).
+other	BF	niche	1982	Wend Kuuni	en:Wend_Kuuni
+other	BW	mid	1980	The Gods Must Be Crazy	en:The_Gods_Must_Be_Crazy
+other	CD	mid	2017	Félicité	en:Félicité_(2017_film)
+other	ET	niche	2008	Teza	en:Teza_(film)
+other	KE	niche	2018	Rafiki	en:Rafiki_(film)
+other	KE	niche	2012	Nairobi Half Life	en:Nairobi_Half_Life
+other	KE	niche	2018	Supa Modo	en:Supa_Modo
+other	ML	niche	1987	Yeelen	en:Yeelen
+other	ML	niche	2006	Bamako	en:Bamako_(film)
+other	NG	niche	2018	Lionheart	en:Lionheart_(2018_film)
+other	NG	niche	2014	Half of a Yellow Sun	en:Half_of_a_Yellow_Sun_(film)
+other	SN	niche	2024	Dahomey	en:Dahomey_(film)
+other	SN	niche	1966	Black Girl	en:Black_Girl_(1966_film)
+other	SN	niche	1973	Touki Bouki	en:Touki_Bouki
+other	SN	niche	2004	Moolaadé	en:Moolaadé
+other	SN	niche	1992	Hyènes	en:Hyenas_(1992_film)
+other	SN	niche	1975	Xala	en:Xala
+other	ZA	mid	2005	Tsotsi	en:Tsotsi
+other	ZA	mid	1989	A Dry White Season	en:A_Dry_White_Season
+other	ZA	niche	2020	My Octopus Teacher	en:My_Octopus_Teacher
+other	ZA	niche	1992	Sarafina!	en:Sarafina!_(film)
+other	ZA	niche	2005	U-Carmen eKhayelitsha	en:U-Carmen_eKhayelitsha
+other	ZM	niche	2017	I Am Not a Witch	en:I_Am_Not_a_Witch
+ar	DZ	mid	1969	Z	en:Z_(1969_film)
+ar	DZ	mid	2006	Days of Glory	en:Days_of_Glory_(2006_film)
+ar	DZ	niche	1967	The Stranger	en:The_Stranger_(1967_film)
+ar	IQ	mid	2004	Turtles Can Fly	en:Turtles_Can_Fly
+ar	IQ	niche	2006	Dreams	en:Dreams_(2006_film)
+ar	LY	mid	1976	The Message	en:The_Message_(1976_film)
+ar	SD	niche	2019	Talking About Trees	en:Talking_About_Trees
+ar	TN	niche	2010	Outside the Law	en:Outside_the_Law_(2010_film)
+ar	TN	niche	2018	Dear Son	en:Dear_Son
+other	BA	mid	2001	No Man's Land	en:No_Man's_Land_(2001_film)
+other	BE	mid	2014	Two Days, One Night	en:Two_Days,_One_Night
+other	BE	niche	2011	The Kid with a Bike	en:The_Kid_with_a_Bike
+other	CN	mid	1991	Raise the Red Lantern	en:Raise_the_Red_Lantern
+other	CN	niche	2013	A Touch of Sin	en:A_Touch_of_Sin
+other	FI	mid	2002	The Man Without a Past	en:The_Man_Without_a_Past
+other	FR	mid	2013	Blue Is the Warmest Colour	en:Blue_Is_the_Warmest_Colour
+other	GR	mid	1964	Zorba the Greek	en:Zorba_the_Greek_(film)
+other	GR	mid	2009	Dogtooth	en:Dogtooth_(film)
+other	GR	niche	2016	Suntan	en:Suntan_(2016_film)
+other	IT	mid	1994	Il Postino: The Postman	en:Il_Postino:_The_Postman
+other	TW	niche	1991	A Brighter Summer Day	en:A_Brighter_Summer_Day
+other	TW	niche	2005	Three Times	en:Three_Times
+other	CZ	mid	1966	Closely Watched Trains	en:Closely_Watched_Trains
+other	CZ	mid	1965	The Shop on Main Street	en:The_Shop_on_Main_Street
+other	CZ	mid	1997	Kolya	en:Kolya_(film)
+other	GE	mid	1984	Repentance	en:Repentance_(1987_film)
+other	GE	niche	2014	Corn Island	en:Corn_Island_(film)
+other	GE	niche	2017	My Happy Family	en:My_Happy_Family
+other	HU	mid	1981	Mephisto	en:Mephisto_(1981_film)
+other	HU	niche	1994	Sátántangó	en:Sátántangó
+other	HU	niche	2000	Werckmeister Harmonies	en:Werckmeister_Harmonies
+other	KZ	mid	2007	Mongol	en:Mongol_(film)
+other	KZ	niche	2008	Tulpan	en:Tulpan
+other	KZ	niche	2013	Harmony Lessons	en:Harmony_Lessons
+other	PL	popular	2002	The Pianist	en:The_Pianist_(2002_film)
+other	PL	mid	2007	Katyń	en:Katyń_(film)
+other	PL	mid	2023	The Zone of Interest	en:The_Zone_of_Interest_(film)
+other	PL	mid	1993	Three Colours: Blue	en:Three_Colours:_Blue
+other	PL	mid	1994	Three Colours: Red	en:Three_Colours:_Red
+other	PL	mid	2018	Cold War	en:Cold_War_(2018_film)
+other	PL	mid	1958	Ashes and Diamonds	en:Ashes_and_Diamonds_(film)
+other	PL	mid	1977	Man of Marble	en:Man_of_Marble
+other	RO	mid	2007	4 Months, 3 Weeks and 2 Days	en:4_Months,_3_Weeks_and_2_Days
+other	RO	niche	2016	Graduation	en:Graduation_(2016_film)
+other	RO	niche	2005	The Death of Mr. Lazarescu	en:The_Death_of_Mr._Lazarescu
+other	RS	mid	1995	Underground	en:Underground_(1995_film)
+other	RU	mid	1962	Ivan's Childhood	en:Ivan's_Childhood
+other	RU	mid	1969	Well, Just You Wait!	en:Well,_Just_You_Wait!
+other	RU	mid	1994	Burnt by the Sun	en:Burnt_by_the_Sun
+other	RU	mid	1985	Come and See	en:Come_and_See
+other	RU	mid	2014	Leviathan	en:Leviathan_(2014_film)
+other	RU	mid	1929	Man with a Movie Camera	en:Man_with_a_Movie_Camera
+other	RU	mid	1957	The Cranes Are Flying	en:The_Cranes_Are_Flying
+other	ID	mid	2012	The Act of Killing	en:The_Act_of_Killing
+other	IR	niche	2016	Under the Shadow	en:Under_the_Shadow
+other	JP	mid	1988	Grave of the Fireflies	en:Grave_of_the_Fireflies
+other	JP	mid	1998	Ring	en:Ring_(film)
+other	JP	mid	1999	Audition	en:Audition_(1999_film)
+other	MK	mid	2019	Honeyland	en:Honeyland
+en	US	mid	2008	Man on Wire	en:Man_on_Wire
+en	US	niche	2014	A Girl Walks Home Alone at Night	en:A_Girl_Walks_Home_Alone_at_Night
+en	US	niche	1994	Hoop Dreams	en:Hoop_Dreams
+other	AR	mid	2004	The Motorcycle Diaries	en:The_Motorcycle_Diaries_(film)
+other	AR	niche	2016	Zama	en:Zama_(film)
+other	AR	niche	2004	The Holy Girl	en:The_Holy_Girl
+other	AR	niche	2001	La Ciénaga	en:La_ciénaga_(film)
+other	BR	mid	1959	Black Orpheus	en:Black_Orpheus
+other	BR	mid	1998	Central Station	en:Central_Station_(film)
+other	CL	mid	2017	A Fantastic Woman	en:A_Fantastic_Woman
+other	CL	niche	2009	The Maid	en:The_Maid_(2009_film)
+other	CO	mid	2015	Embrace of the Serpent	en:Embrace_of_the_Serpent
+other	CU	mid	1993	Strawberry and Chocolate	en:Strawberry_and_Chocolate
+other	CU	niche	1968	Memories of Underdevelopment	en:Memories_of_Underdevelopment
+other	GT	niche	2015	Ixcanul	en:Ixcanul
+other	MX	mid	2006	Pan's Labyrinth	en:Pan's_Labyrinth
+other	MX	mid	1961	Viridiana	en:Viridiana
+other	MX	mid	2000	Amores perros	en:Amores_perros
+other	PE	mid	1972	Aguirre, the Wrath of God	en:Aguirre,_the_Wrath_of_God
+other	PE	mid	1982	Fitzcarraldo	en:Fitzcarraldo
+other	PE	mid	2009	The Milk of Sorrow	en:The_Milk_of_Sorrow
+other	PE	niche	2006	Madeinusa	en:Madeinusa
+other	BD	niche	2002	Matir Moina	en:Matir_Moina
+other	ID	niche	2014	The Raid 2	en:The_Raid_2
+other	ID	niche	2017	Marlina the Murderer in Four Acts	en:Marlina_the_Murderer_in_Four_Acts
+other	MY	niche	2023	Tiger Stripes	en:Tiger_Stripes_(film)
+other	MY	niche	2004	Sepet	en:Sepet
+other	PH	niche	2016	The Woman Who Left	en:The_Woman_Who_Left
+other	PH	niche	2013	Norte, the End of History	en:Norte,_the_End_of_History
+other	PH	niche	2013	Metro Manila	en:Metro_Manila_(film)
+other	PK	niche	2024	The Glassworker	en:The_Glassworker
+other	PK	niche	1998	Jinnah	en:Jinnah_(film)
+other	PK	niche	2003	Khamosh Pani	en:Khamosh_Pani
+other	PK	niche	2013	Zinda Bhaag	en:Zinda_Bhaag
+other	TH	mid	2010	Uncle Boonmee Who Can Recall His Past Lives	en:Uncle_Boonmee_Who_Can_Recall_His_Past_Lives
+other	TH	mid	2003	Ong-Bak: Muay Thai Warrior	en:Ong-Bak
+other	TH	niche	2024	How to Make Millions Before Grandma Dies	en:How_to_Make_Millions_Before_Grandma_Dies
+other	TH	niche	2017	Bad Genius	en:Bad_Genius_(2017_film)
+other	TH	niche	2021	Memoria	en:Memoria_(2021_film)
+other	TH	niche	2004	Tropical Malady	en:Tropical_Malady
+other	TH	niche	2015	Cemetery of Splendour	en:Cemetery_of_Splendour
+other	TH	niche	2006	Syndromes and a Century	en:Syndromes_and_a_Century
+other	VN	niche	1993	The Scent of Green Papaya	en:The_Scent_of_Green_Papaya
