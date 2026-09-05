@@ -1,0 +1,24 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "//": "P0-5. Reference only: Railway has no config-as-code path for a project's services (deprecated, same as apps/backend/railway.json), so these two Cron services are created by hand in the dashboard -- this documents what to set. Two separate services from the same image (docker/backup.Dockerfile), same Postgres and R2 variables (Shared Variables, board .claude/SESSIONS.md P0-5/O-8): 'backup-postgres' runs backup-postgres-to-r2.sh daily; 'restore-drill' runs restore-drill-from-r2.sh weekly, with its own RESTORE_DRILL_DB variable pointed at a disposable database name. Root directory: repo root.",
+  "services": [
+    {
+      "name": "backup-postgres",
+      "build": { "builder": "DOCKERFILE", "dockerfilePath": "docker/backup.Dockerfile" },
+      "deploy": {
+        "cronSchedule": "0 3 * * *",
+        "startCommand": "backup-postgres-to-r2.sh",
+        "restartPolicyType": "NEVER"
+      }
+    },
+    {
+      "name": "restore-drill",
+      "build": { "builder": "DOCKERFILE", "dockerfilePath": "docker/backup.Dockerfile" },
+      "deploy": {
+        "cronSchedule": "0 4 * * 0",
+        "startCommand": "restore-drill-from-r2.sh",
+        "restartPolicyType": "NEVER"
+      }
+    }
+  ]
+}
