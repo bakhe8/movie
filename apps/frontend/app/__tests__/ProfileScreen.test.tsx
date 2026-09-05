@@ -84,15 +84,48 @@ beforeEach(() => {
   mockApi.updateProfile.mockResolvedValue({});
 });
 
-function renderProfile() {
-  return render(<ProfileScreen lang="ar" />);
+// UX_AUDIT_MOBILE_2026-09-05 P1 #10: the profile is a hub of four cards now,
+// so a test about the model or about privacy opens that card first, the way a
+// reader does.
+async function renderProfile(section?: 'ملف الذوق' | 'الخصوصية') {
+  const view = render(<ProfileScreen lang="ar" />);
+  if (section) {
+    await userEvent.setup().click(await screen.findByRole('button', { name: new RegExp(section) }));
+  }
+  return view;
 }
+
 
 // ── training state ────────────────────────────────────────────────────────────
 
 describe('ProfileScreen — training state', () => {
+  it('opens on four cards, not on one long page', async () => {
+    render(<ProfileScreen lang="ar" />);
+
+    // The hub names the four and shows nothing else: no 28-country list, no
+    // alias id, no consent dates until a card is opened.
+    expect(await screen.findByRole('button', { name: /ملف الذوق/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /التفضيلات/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /الحساب/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /الخصوصية/ })).toBeInTheDocument();
+    expect(screen.queryByLabelText('السوق')).toBeNull();
+  });
+
+  it('takes the reader into a card and back out again', async () => {
+    const user = userEvent.setup();
+    render(<ProfileScreen lang="ar" />);
+
+    await user.click(await screen.findByRole('button', { name: /التفضيلات/ }));
+    expect(screen.getByLabelText('السوق')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'إلى ملفي' }));
+
+    expect(screen.queryByLabelText('السوق')).toBeNull();
+    expect(screen.getByRole('button', { name: /الخصوصية/ })).toBeInTheDocument();
+  });
+
   it('shows untrained message when no snapshot exists', async () => {
-    renderProfile();
+    await renderProfile('ملف الذوق');
     await waitFor(() => expect(screen.getByText(/لم يُدرَّب نموذجك بعد/)).toBeInTheDocument());
   });
 
@@ -104,7 +137,7 @@ describe('ProfileScreen — training state', () => {
       nextTrainingAt: null,
       job: { id: 'j1', status: 'running', startedAt: new Date().toISOString() },
     });
-    renderProfile();
+    await renderProfile('ملف الذوق');
     await waitFor(() => expect(screen.getByText(/جارٍ بناء ملفك/)).toBeInTheDocument());
   });
 
@@ -124,7 +157,7 @@ describe('ProfileScreen — training state', () => {
       recommendation: { status: 'ready', reason: null, action: null, publishedAt: null, modelVersion: 'plackett-luce-v3', confidenceBand: 'strong' },
       availability: { status: 'not_ready', reason: 'no_availability_data_source', action: null, publishedAt: null, modelVersion: null, confidenceBand: null },
     });
-    renderProfile();
+    await renderProfile('ملف الذوق');
     // Named twice on this screen: the model section and the readiness panel.
     await waitFor(() => expect(screen.getAllByText(/plackett-luce-v3/).length).toBeGreaterThan(0));
     // Arabic label for 'strong' band
@@ -140,7 +173,7 @@ describe('ProfileScreen — training state', () => {
 describe('ProfileScreen — pause/resume toggle', () => {
   it('calls pauseAll when "إيقاف المعالجة" is clicked', async () => {
     const user = userEvent.setup();
-    renderProfile();
+    await renderProfile('الخصوصية');
     const pauseBtn = await screen.findByRole('button', { name: /إيقاف المعالجة/i });
     await user.click(pauseBtn);
     await waitFor(() => expect(mockApi.pauseAll).toHaveBeenCalledOnce());
@@ -152,7 +185,7 @@ describe('ProfileScreen — pause/resume toggle', () => {
       ...BASE_SESSION,
       profile: { ...BASE_SESSION.profile, pausedAt: new Date().toISOString() },
     } as unknown as ReturnType<typeof useSession>);
-    renderProfile();
+    await renderProfile('الخصوصية');
     const resumeBtn = await screen.findByRole('button', { name: /استئناف المعالجة/i });
     await user.click(resumeBtn);
     await waitFor(() => expect(mockApi.resumeAll).toHaveBeenCalledOnce());
@@ -164,7 +197,7 @@ describe('ProfileScreen — pause/resume toggle', () => {
 describe('ProfileScreen — reset taste', () => {
   it('shows confirmation dialog before resetting', async () => {
     const user = userEvent.setup();
-    renderProfile();
+    await renderProfile('الخصوصية');
     const resetBtn = await screen.findByRole('button', { name: /مسح ملف الذوق/i });
     await user.click(resetBtn);
     expect(await screen.findByRole('button', { name: /تأكيد|نعم.*مسح|confirm/i })).toBeInTheDocument();
@@ -172,7 +205,7 @@ describe('ProfileScreen — reset taste', () => {
 
   it('cancels without calling resetProfile', async () => {
     const user = userEvent.setup();
-    renderProfile();
+    await renderProfile('الخصوصية');
     const resetBtn = await screen.findByRole('button', { name: /مسح ملف الذوق/i });
     await user.click(resetBtn);
     const cancelBtn = await screen.findByRole('button', { name: /إلغاء|cancel/i });
@@ -192,7 +225,7 @@ describe('ProfileScreen — training failures', () => {
       nextTrainingAt: 13,
       job: { id: 'job-9', status: 'failed', errorKind: 'invalid', error: 'no fingerprints' },
     });
-    renderProfile();
+    await renderProfile('ملف الذوق');
     const alert = await screen.findByText(/لا تملك بعدُ تحليلًا منشورًا/);
     expect(alert).toHaveTextContent(/job-9/);
     expect(screen.queryByText(/لم يُدرَّب نموذجك بعد/)).not.toBeInTheDocument();
@@ -200,7 +233,7 @@ describe('ProfileScreen — training failures', () => {
 
   it('says training is not enabled on this server, with no button to press', async () => {
     mockApi.getTrainingStatus.mockResolvedValue({ state: 'disabled', latestSnapshot: null, completedTriads: 10, nextTrainingAt: null, job: null });
-    renderProfile();
+    await renderProfile('ملف الذوق');
     await screen.findByText(/غير مفعَّل على هذا الخادم/);
     expect(screen.queryByRole('button', { name: /حدّث نموذجي/ })).not.toBeInTheDocument();
   });
@@ -208,7 +241,7 @@ describe('ProfileScreen — training failures', () => {
   it('shows why a train request was refused instead of staying silent', async () => {
     const user = userEvent.setup();
     mockApi.requestTraining.mockRejectedValue(new Error('503'));
-    renderProfile();
+    await renderProfile('ملف الذوق');
     const button = await screen.findByRole('button', { name: /حدّث نموذجي/ });
     await user.click(button);
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/تعذّر إرسال طلب التدريب/));

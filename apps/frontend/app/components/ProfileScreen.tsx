@@ -19,6 +19,12 @@ const labels = {
     account: 'الحساب',
     logout: 'تسجيل الخروج',
     taste: 'ملف الذوق',
+    tasteHint: 'ما تعلّمه نموذجك عنك، وما صار جاهزًا.',
+    prefs: 'التفضيلات',
+    prefsHint: 'اسم ملفك، ولغة الواجهة، وسوقك، ومنصاتك.',
+    accountHint: 'بريدك وتسجيل الخروج.',
+    privacyHint: 'الموافقات، والتصدير، والحذف، وإيقاف المعالجة.',
+    backToProfile: 'إلى ملفي',
     nameLabel: 'اسم ملف الذوق',
     languageLabel: 'لغة الواجهة',
     arabic: 'العربية',
@@ -102,6 +108,12 @@ const labels = {
     account: 'Account',
     logout: 'Log out',
     taste: 'Taste profile',
+    tasteHint: 'What your model has learned, and what is ready.',
+    prefs: 'Preferences',
+    prefsHint: 'Your profile name, interface language, market and platforms.',
+    accountHint: 'Your email and sign out.',
+    privacyHint: 'Consents, export, deletion and pausing.',
+    backToProfile: 'Back to profile',
     nameLabel: 'Taste profile name',
     languageLabel: 'Interface language',
     arabic: 'العربية',
@@ -194,6 +206,8 @@ type ModelStatus =
 export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLanguageChange?: (lang: Lang) => void }) {
   const { user, profile, logout, refreshProfile } = useSession();
   const t = labels[lang];
+  // Which of the four the reader is inside; null is the hub.
+  const [open, setOpen] = useState<'taste' | 'prefs' | 'account' | 'privacy' | null>(null);
   const [name, setName] = useState(profile?.name ?? '');
   const [language, setLanguage] = useState<PreferredLanguage>(profile?.preferredLanguage ?? 'ar');
   const [market, setMarket] = useState(profile?.market ?? '');
@@ -479,11 +493,33 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
     }
   }
 
+  // UX_AUDIT_MOBILE_2026-09-05 P1 #10: one 3714px page held the account, the
+  // preferences, a 28-country list, the alias id, the model, the readiness
+  // panel, every consent with its date, and four irreversible actions. It is
+  // a hub of four now: the page opens on the four cards, and one of them at a
+  // time takes the screen. No routing -- the shell owns the tabs, and this is
+  // one tab's inside.
+  const sections = [
+    { id: 'taste' as const, name: t.taste, hint: t.tasteHint },
+    { id: 'prefs' as const, name: t.prefs, hint: t.prefsHint },
+    { id: 'account' as const, name: t.account, hint: t.accountHint },
+    { id: 'privacy' as const, name: t.privacy, hint: t.privacyHint },
+  ];
+  const current = sections.find((section) => section.id === open) ?? null;
+
   return (
     <div className={styles.screen}>
       <div className={styles.header}>
         <p className={styles.eyebrow}>{t.eyebrow}</p>
-        <h2>{t.title}</h2>
+        <h2>{current ? current.name : t.title}</h2>
+        {current && (
+          <button type="button" className={styles.back} onClick={() => setOpen(null)}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M9 6l6 6-6 6" />
+            </svg>
+            {t.backToProfile}
+          </button>
+        )}
       </div>
 
       {notice && (
@@ -492,88 +528,31 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
         </p>
       )}
 
-      <section className={styles.section} aria-label={t.account}>
-        <h3>{t.account}</h3>
-        {user && (
-          <p>
-            <span className={styles.strong}>
-              {user.firstName} {user.lastName}
-            </span>
-            <br />
-            {user.email}
-          </p>
-        )}
-        <div className={styles.row}>
-          <button type="button" className={styles.ghost} onClick={logout}>
-            {t.logout}
-          </button>
-        </div>
-      </section>
-
-      <section className={styles.section} aria-label={t.taste}>
-        <h3>{t.taste}</h3>
-        <div className={styles.field}>
-          <label htmlFor="profile-name">{t.nameLabel}</label>
-          <input id="profile-name" value={name} maxLength={255} onChange={(event) => setName(event.target.value)} />
-        </div>
-        <div className={styles.field}>
-          <label htmlFor="profile-language">{t.languageLabel}</label>
-          <select
-            id="profile-language"
-            value={language}
-            onChange={(event) => setLanguage(event.target.value as PreferredLanguage)}
-          >
-            <option value="ar">{t.arabic}</option>
-            <option value="en">{t.english}</option>
-          </select>
-        </div>
-        <div className={styles.field}>
-          <label htmlFor="profile-market">{t.marketLabel}</label>
-          <select id="profile-market" value={market} onChange={(event) => setMarket(event.target.value)}>
-            <option value="" disabled={market !== ''}>
-              {t.marketPlaceholder}
-            </option>
-            {MARKETS.map((option) => (
-              <option key={option.code} value={option.code}>
-                {lang === 'ar' ? option.ar : option.en}
-              </option>
-            ))}
-          </select>
-        </div>
-        <fieldset className={`${styles.field} ${styles.fieldset}`}>
-          <legend>{t.platformsLabel}</legend>
-          <div className={styles.chips}>
-            {PLATFORMS.map((option) => {
-              const on = platforms.has(option.id);
-              return (
-                <button
-                  key={option.id}
-                  type="button"
-                  className={on ? `${styles.chipToggle} ${styles.chipOn}` : styles.chipToggle}
-                  aria-pressed={on}
-                  onClick={() => togglePlatform(option.id)}
-                >
-                  {lang === 'ar' ? option.ar : option.en}
+      {!current && (
+        <>
+          {user && (
+            <div className={styles.who}>
+              <span className={styles.strong}>{user.email}</span>
+            </div>
+          )}
+          <ul className={styles.hub}>
+            {sections.map((section) => (
+              <li key={section.id}>
+                <button type="button" className={styles.hubCard} onClick={() => setOpen(section.id)}>
+                  <span className={styles.hubName}>{section.name}</span>
+                  <span className={styles.hubHint}>{section.hint}</span>
+                  <svg className={styles.hubChevron} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M15 6l-6 6 6 6" />
+                  </svg>
                 </button>
-              );
-            })}
-          </div>
-        </fieldset>
-        <p>{t.settingsNote}</p>
-        <div className={styles.row}>
-          <button type="button" className={styles.primary} onClick={save} disabled={!dirty || saving || name.trim().length === 0}>
-            {saving ? t.saving : t.save}
-          </button>
-        </div>
-        {profile && (
-          <p>
-            <span className={styles.strong}>{t.tasteId}</span>
-            <br />
-            <code className={styles.code}>{profile.id}</code>
-            <br />
-            {t.tasteIdNote}
-          </p>
-        )}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {open === 'taste' && (
+        <section className={styles.section} aria-label={t.taste}>
 
         <dl className={styles.stats}>
           <div className={styles.stat}>
@@ -646,9 +625,98 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
             training request, so the panel and the button never disagree. */}
         <ReadinessPanel profileId={profileId ?? null} lang={lang} refreshKey={retrainKey} />
         <p>{t.detailPending}</p>
-      </section>
+        </section>
+      )}
 
-      <section className={styles.section} aria-label={t.privacy}>
+      {open === 'prefs' && (
+        <section className={styles.section} aria-label={t.prefs}>
+        <div className={styles.field}>
+          <label htmlFor="profile-name">{t.nameLabel}</label>
+          <input id="profile-name" value={name} maxLength={255} onChange={(event) => setName(event.target.value)} />
+        </div>
+        <div className={styles.field}>
+          <label htmlFor="profile-language">{t.languageLabel}</label>
+          <select
+            id="profile-language"
+            value={language}
+            onChange={(event) => setLanguage(event.target.value as PreferredLanguage)}
+          >
+            <option value="ar">{t.arabic}</option>
+            <option value="en">{t.english}</option>
+          </select>
+        </div>
+        <div className={styles.field}>
+          <label htmlFor="profile-market">{t.marketLabel}</label>
+          <select id="profile-market" value={market} onChange={(event) => setMarket(event.target.value)}>
+            <option value="" disabled={market !== ''}>
+              {t.marketPlaceholder}
+            </option>
+            {MARKETS.map((option) => (
+              <option key={option.code} value={option.code}>
+                {lang === 'ar' ? option.ar : option.en}
+              </option>
+            ))}
+          </select>
+        </div>
+        <fieldset className={`${styles.field} ${styles.fieldset}`}>
+          <legend>{t.platformsLabel}</legend>
+          <div className={styles.chips}>
+            {PLATFORMS.map((option) => {
+              const on = platforms.has(option.id);
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  className={on ? `${styles.chipToggle} ${styles.chipOn}` : styles.chipToggle}
+                  aria-pressed={on}
+                  onClick={() => togglePlatform(option.id)}
+                >
+                  {lang === 'ar' ? option.ar : option.en}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+        <p>{t.settingsNote}</p>
+        <div className={styles.row}>
+          <button type="button" className={styles.primary} onClick={save} disabled={!dirty || saving || name.trim().length === 0}>
+            {saving ? t.saving : t.save}
+          </button>
+        </div>
+        {profile && (
+          <p>
+            <span className={styles.strong}>{t.tasteId}</span>
+            <br />
+            <code className={styles.code}>{profile.id}</code>
+            <br />
+            {t.tasteIdNote}
+          </p>
+        )}
+        </section>
+      )}
+
+      {open === 'account' && (
+        <section className={styles.section} aria-label={t.account}>
+        <h3>{t.account}</h3>
+        {user && (
+          <p>
+            <span className={styles.strong}>
+              {user.firstName} {user.lastName}
+            </span>
+            <br />
+            {user.email}
+          </p>
+        )}
+        <div className={styles.row}>
+          <button type="button" className={styles.ghost} onClick={logout}>
+            {t.logout}
+          </button>
+        </div>
+        </section>
+      )}
+
+      {open === 'privacy' && (
+        <section className={styles.section} aria-label={t.privacy}>
         <h3>{t.privacy}</h3>
         <p>{t.privacyBody}</p>
         <p>
@@ -770,7 +838,8 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
           </button>
         </div>
         {pauseNotice && <p className={styles.notice} role="status">{pauseNotice}</p>}
-      </section>
+        </section>
+      )}
     </div>
   );
 }
