@@ -10,6 +10,7 @@ import {
 import { User } from './user.entity';
 
 export type PreferredLanguage = 'ar' | 'en';
+export type PreferredAppearance = 'cinema' | 'premiere' | 'montage';
 
 @Entity('profiles')
 @Unique(['userId', 'name'])
@@ -30,6 +31,11 @@ export class Profile {
   // taste prior (blueprint §4.1, §10.2).
   @Column({ type: 'varchar', length: 5, default: 'ar' })
   preferredLanguage: PreferredLanguage;
+
+  // A display preference only; never an input to taste or recommendations.
+  // Null preserves the browser/default appearance until an explicit choice.
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  preferredAppearance: PreferredAppearance | null;
 
   // Onboarding (blueprint §4.1, SPECIFICATION §5.1 step 2). Both shape
   // display and Watchability only -- never a taste prior (§4.1, §10.2).

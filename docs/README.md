@@ -25,7 +25,8 @@ Languages: product/vision in Arabic; engineering contracts in English; UI copy i
 | [RANKING_ALGORITHM.md](RANKING_ALGORITHM.md) | EN | contract | utility model, listwise Plackett–Luce, calibration onto the shared space, exceptions, training/evaluation protocol, triad selection policy, confidence, tracks and rerank, attribution gate, model-service interface |
 | [FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md) | EN | contract | data layers, fingerprint V1 (frozen, 13 features) and V2 family plan, unknown handling, enrichment pipeline and acceptance tests |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | EN | derived | components as built vs target, request flows, code layout, security model, environments, split triggers, observability |
-| [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) | EN | decisions | ADR-1…112 — every engineering choice with its blueprint anchor and revisit trigger |
+| [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) | EN | decisions | ADR-1…113 — every engineering choice with its blueprint anchor and revisit trigger |
+| [CINEMATIC_REDESIGN_2026-09-05.md](CINEMATIC_REDESIGN_2026-09-05.md) | AR | design implementation | isolated owner-requested redesign, three profile-saved appearances, shared behavior, migration and visual verification limits (ADR-113) |
 | [THEME_MODES_2026-09-05.md](THEME_MODES_2026-09-05.md) | AR | design contract | owner-approved separation of the preserved black/indigo dark mode from the white/blue/lime GPT light target; shared-component boundary, exclusive ownership order and acceptance matrix (ADR-112) |
 | [PRIVACY.md](PRIVACY.md) | EN | controls | PDPL-aligned data inventory, consent purposes, rights and endpoints, processors, security controls, residency, retention, deletion, breach response, pre-launch checklist |
 | [DATA_LICENSING.md](DATA_LICENSING.md) | EN | controls | rights registry rule, source-by-source terms and allowed use, Phase 0 catalog steps, attribution, legal checklist, red flags |
@@ -45,7 +46,7 @@ Languages: product/vision in Arabic; engineering contracts in English; UI copy i
 | Role | Then read |
 |---|---|
 | Backend | [API.md](API.md), [SCHEMA.md](SCHEMA.md), [ARCHITECTURE.md](ARCHITECTURE.md) §3–§5, ADR-15/16/17/25/26 |
-| Frontend | [THEME_MODES_2026-09-05.md](THEME_MODES_2026-09-05.md) and ADR-112 first for any visual work; then [SPECIFICATION.md](SPECIFICATION.md) §5, [API.md](API.md), blueprint `§4`, `§9.3`–`§9.4`, ADR-5/20/21/33, [UI_MOCKUP_REVIEW_2026-09-03.md](UI_MOCKUP_REVIEW_2026-09-03.md) |
+| Frontend | [CINEMATIC_REDESIGN_2026-09-05.md](CINEMATIC_REDESIGN_2026-09-05.md) and ADR-113 for the current owner-requested redesign; [THEME_MODES_2026-09-05.md](THEME_MODES_2026-09-05.md) and ADR-112 remain the prior light/dark contract; then [SPECIFICATION.md](SPECIFICATION.md) §5, [API.md](API.md), blueprint `§4`, `§9.3`–`§9.4`, ADR-5/20/21/33, [UI_MOCKUP_REVIEW_2026-09-03.md](UI_MOCKUP_REVIEW_2026-09-03.md) |
 | Model / ML | [RANKING_ALGORITHM.md](RANKING_ALGORITHM.md), [FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md), blueprint `§7`–`§10`, `§16`, ADR-3/13/19/21/22 |
 | Data / content | [DATA_LICENSING.md](DATA_LICENSING.md), [FINGERPRINT_SCHEMA.md](FINGERPRINT_SCHEMA.md), blueprint `§6`, `§11`, `§15` |
 | Product / lead | blueprint in full, [SPECIFICATION.md](SPECIFICATION.md) §9–§11, [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md), ADR summary table |
@@ -86,3 +87,4 @@ Rules: never add an endpoint list, schema fragment or threshold to a second docu
 | 2026-09-04 | Alpha plan added ([ALPHA_PLAN_2026-09-04.md](ALPHA_PLAN_2026-09-04.md)): ordered phases with estimates from `1a62cb3` to the Alpha gate |
 | 2026-09-05 | theme-mode contract added ([THEME_MODES_2026-09-05.md](THEME_MODES_2026-09-05.md), ADR-112): preserve the black/indigo dark mode, implement the white/blue/lime GPT direction only as light, and sequence ownership so shared interaction and components are not rebuilt |
 | 2026-09-05 | Wave 1 strategy and measurement audit added ([WAVE1_AUDIT_AND_DECISION_2026-09-05.md](WAVE1_AUDIT_AND_DECISION_2026-09-05.md)): reconciles four reviews and proposes a conditional 15-person research decision, with evidence matrix, metric definitions, positioning limits, and operational gates |
+| 2026-09-05 | Owner-requested cinematic redesign added (ADR-113): shared image-led interfaces, three saved appearances and additive profile migration; implementation review is separate from visual acceptance and deployment |

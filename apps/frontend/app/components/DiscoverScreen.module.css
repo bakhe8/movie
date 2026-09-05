@@ -1,385 +1,81 @@
-/* Discover (blueprint §4.2, SPEC §5.1 step 3): build the watched set fast --
-   a starter list, search, and the progress toward the three titles that unlock
-   ranking. On app/styles/tokens.css only; both themes from the tokens.
-   The screen's one filled button is "go to ranking" once unlocked (decision Q6);
-   per-card "watched" is outlined in the accent so three of them do not shout. */
-
-.screen {
-  display: grid;
-  gap: var(--sp-6);
-  width: min(100%, 720px);
-  margin-inline: auto;
-}
-
-/* --- Header --------------------------------------------------------------- */
-
-.header {
-  display: grid;
-  gap: var(--sp-2);
-}
-
-.eyebrow {
-  margin: 0;
-  color: var(--accent);
-  font-size: var(--fs-13);
-  font-weight: var(--w-semibold);
-}
-
-.header h2 {
-  margin: 0;
-  font-size: var(--fs-26);
-  text-wrap: balance;
-}
-
-.hint {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--fs-14);
-}
-
-/* --- Status --------------------------------------------------------------- */
-
-.status {
-  margin: 0;
-  padding: var(--sp-3) var(--sp-4);
-  border-inline-start: 3px solid var(--accent);
-  border-radius: var(--r-chip);
-  background: var(--surface);
-  font-size: var(--fs-14);
-}
-
-.error {
-  border-inline-start-color: var(--muted);
-}
-
-/* --- Progress toward the first triad -------------------------------------- */
-
-.progress {
-  display: grid;
-  gap: var(--sp-2);
-  padding: var(--sp-4);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-card);
-}
-
-.progressRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-3);
-}
-
-.progressText {
-  margin: 0;
-  font-size: var(--fs-16);
-  font-weight: var(--w-semibold);
-}
-
-.progressNote {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--fs-13);
-  line-height: var(--lh-body);
-}
-
-/* Three dots, one per unlocking title: filled in the accent as they land. */
-.dots {
-  display: flex;
-  gap: var(--sp-2);
-}
-
-.dot {
-  width: 12px;
-  height: 12px;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  background: transparent;
-}
-
-.dotOn {
-  border-color: var(--accent);
-  background: var(--accent);
-}
-
-/* --- Search --------------------------------------------------------------- */
-
-.search {
-  display: grid;
-  gap: var(--sp-1);
-}
-
-.search label {
-  color: var(--muted);
-  font-size: var(--fs-13);
-  font-weight: var(--w-medium);
-}
-
-.search input {
-  min-height: 44px;
-  padding: 0 var(--sp-3);
-  border: 1px solid var(--line);
-  border-radius: var(--r-button);
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-  font-size: var(--fs-16);
-}
-
-.search input:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.sectionTitle {
-  margin: 0;
-  font-size: var(--fs-20);
-}
-
-.empty {
-  margin: 0;
-  padding: var(--sp-3) var(--sp-4);
-  border: 1px dashed var(--line);
-  border-radius: var(--r-card);
-  color: var(--muted);
-  font-size: var(--fs-14);
-}
-
-/* --- Title cards in the well (decision Q5) -------------------------------- */
-
-/* --- The poster grid -------------------------------------------------------
-   "ماذا شاهدت؟" is a visual question, so the answer is a poster you tap, not
-   a text card with a foreign-language paragraph in it
-   (UX_AUDIT_MOBILE_2026-09-05 P1 #16; the interaction addendum's "replace
-   typing with pictures and taps"). Three columns at 375px. */
-
-.grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--sp-4) var(--sp-3);
-  margin: 0;
-  padding: var(--sp-3);
-  list-style: none;
-  background: var(--well);
-  border-radius: var(--r-card);
-}
-
-.cell {
-  display: grid;
-  gap: var(--sp-1);
-  min-width: 0;
-}
-
-.tile {
-  position: relative;
-}
-
-.pick {
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  border-radius: var(--r-chip);
-  background: transparent;
-  cursor: pointer;
-}
-
-.pick .poster,
-.poster {
-  width: 100%;
-}
-
-/* Marked: the poster carries the accent edge and a tick. Tapping again takes
-   it back, which is this screen's undo. */
-.picked .poster {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-
-.check {
-  position: absolute;
-  inset-block-start: 6px;
-  inset-inline-start: 6px;
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 14px;
-  background: var(--accent);
-  color: var(--accent-ink);
-}
-
-/* Second intent, its own target: no long press hides anything here. */
-.saveLater {
-  position: absolute;
-  inset-block-start: 0;
-  inset-inline-end: 0;
-  display: grid;
-  place-items: center;
-  width: var(--tap);
-  height: var(--tap);
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: #ffffff;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
-  cursor: pointer;
-}
-
-.saved {
-  color: var(--role-later);
-}
-
-.saveLater:disabled {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.title {
-  margin: 0;
-  font-family: var(--font-ui);
-  font-size: var(--fs-13);
-  font-weight: var(--w-semibold);
-  line-height: var(--lh-ui);
-  overflow-wrap: anywhere;
-}
-
-.year {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--fs-12);
-  font-variant-numeric: tabular-nums;
-  direction: ltr;
-  text-align: start;
-}
-
-@media (min-width: 900px) {
-  .grid {
-    grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
-    gap: var(--sp-6) var(--sp-4);
-  }
-}
-
-/* --- Actions -------------------------------------------------------------- */
-
-.ghost {
-  min-height: var(--tap);
-  padding: 0 var(--sp-3);
-  border-radius: var(--r-button);
-  font: inherit;
-  font-size: var(--fs-14);
-  font-weight: var(--w-medium);
-  line-height: var(--lh-ui);
-}
-
-/* "Watched it": outlined in the accent -- the card's main action without
-   competing with the screen's filled button. */
-
-.ghost {
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--text);
-}
-
-.ghost:disabled {
-  color: var(--muted);
-  opacity: 0.7;
-}
-
-.more {
-  width: 100%;
-  min-height: 44px;
-}
-
-/* The screen's single filled action (Q6): on to the ranking, once unlocked. */
-.cta {
-  width: 100%;
-  min-height: 48px;
-  margin-top: var(--sp-2);
-  border: 0;
-  border-radius: var(--r-button);
-  background: var(--accent);
-  color: var(--accent-ink);
-  font: inherit;
-  font-size: var(--fs-16);
-  font-weight: var(--w-semibold);
-}
-
-.retry {
-  width: 100%;
-  min-height: 48px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-button);
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  font-size: var(--fs-16);
-  font-weight: var(--w-semibold);
-}
-
-.ghost:focus-visible,
-.cta:focus-visible,
-.retry:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-/* --- Loading -------------------------------------------------------------- */
-
-.skeleton {
-  height: 96px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-card);
-  background: var(--surface);
-}
-
-@media (min-width: 900px) {
-  .screen {
-    gap: var(--sp-8);
-  }
-
-  .header h2 {
-    font-size: var(--fs-34);
-  }
-}
-
-/* The title as a button when the card opens the work page: text only. */
-.titleButton {
-  /* The whole title line is the control; a tap-height hit area is drawn by
-     ::before so the layout does not move (audit 2026-09-04). */
-  position: relative;
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-}
-
-.titleButton::before {
-  content: "";
-  position: absolute;
-  inset: -11px 0;
-}
-
-.titleButton:hover {
-  color: var(--accent);
-}
-
-.titleButton:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: var(--r-chip);
-}
-
-/* "On your list" (decision 27): the later hue on its soft wash. */
-.ghost.later,
-.ghost.later:disabled {
-  border-color: var(--role-later);
-  background: var(--role-later-soft);
-  color: var(--role-later);
-  opacity: 1;
+.screen { display: grid; gap: 22px; width: 100%; margin-inline: auto; }
+.header { display: grid; grid-template-columns: 1fr 1fr; align-items: center; min-height: 270px; gap: 20px; padding: 28px 36px; background: radial-gradient(ellipse at 15% 70%, var(--role-discovery-soft), transparent 70%), radial-gradient(ellipse at 80% 0%, var(--accent-soft), transparent 70%); border-radius: var(--scene-radius); overflow: hidden; }
+.headerCopy { position: relative; z-index: 1; }
+.eyebrow { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; color: var(--accent); font-size: 13px; font-weight: 600; }
+.eyebrow span { font-size: 20px; }
+.header h2 { margin: 0; font-size: clamp(27px, 3.8vw, 48px); line-height: 1.45; text-wrap: balance; }
+.hint { max-width: 400px; margin: 14px 0 0; color: var(--muted); font-size: 15px; }
+.filmFan { display: flex; justify-content: center; align-items: center; direction: ltr; min-width: 0; height: 240px; padding-inline: 25px; }
+.fanPoster { width: clamp(70px, 11vw, 135px); margin-inline: -22px; box-shadow: var(--cinema-shadow); border: 3px solid var(--surface); transform: rotate(-13deg) translateY(10px); transition: transform 350ms; }
+.fanPoster:nth-child(2) { z-index: 1; transform: rotate(-5deg) translateY(-9px); }
+.fanPoster:nth-child(3) { z-index: 2; transform: rotate(5deg) translateY(-4px); }
+.fanPoster:nth-child(4) { z-index: 3; transform: rotate(16deg) translateY(16px); }
+.header:hover .fanPoster:nth-child(3) { transform: rotate(5deg) translateY(-16px); }
+.progress { display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 24px; row-gap: 5px; padding: 18px 22px; border-block: 1px solid var(--line-soft); }
+.progressRow { display: flex; align-items: center; gap: 16px; grid-column: 1; }
+.progressText { margin: 0; font-size: 14px; font-weight: 600; }
+.progressNote { margin: 0; color: var(--muted); font-size: 12px; }
+.dots { display: flex; gap: 5px; }
+.dot { width: 16px; height: 22px; border: 1px solid var(--line); border-radius: 4px; transform: rotate(-8deg); transition: background 220ms, transform 220ms; }
+.dotOn { background: var(--accent); border-color: var(--accent); transform: rotate(0); box-shadow: var(--shadow-small); }
+.progress .cta { grid-column: 2; grid-row: 1 / 3; }
+.search { position: relative; }
+.search label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.searchIcon { position: absolute; inset-inline-start: 20px; top: 50%; transform: translateY(-50%); display: flex; color: var(--muted); pointer-events: none; }
+.search input { width: 100%; min-height: 58px; padding: 10px 20px; padding-inline-start: 54px; border: 1px solid var(--line-soft); border-radius: 100px; background: var(--surface); color: var(--text); font-size: 16px; box-shadow: var(--shadow-small); }
+.filters { display: flex; gap: 8px; overflow-x: auto; padding: 3px 2px 8px; scrollbar-width: none; }
+.filters button { display: inline-flex; flex: none; align-items: center; gap: 7px; min-height: 44px; padding: 8px 18px; border: 1px solid var(--line-soft); border-radius: 100px; background: var(--surface); color: var(--muted); font-size: 13px; }
+.filters button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); box-shadow: var(--shadow-small); }
+.genreDot { width: 7px; height: 7px; border-radius: 50%; background: var(--role-discovery); }
+.filters button:nth-child(3n) .genreDot { background: var(--role-safe); }
+.filters button:nth-child(4n) .genreDot { background: var(--role-outside); }
+.sectionTitle { margin: 4px 0 -12px; font-size: 21px; }
+.grid { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 28px 22px; margin: 0; padding: 4px 0; list-style: none; }
+.cell { display: flex; flex-direction: column; gap: 7px; min-width: 0; animation: reveal 330ms ease both; }
+.cell:nth-child(3n+2) { animation-delay: 45ms; }
+.cell:nth-child(3n+3) { animation-delay: 90ms; }
+.tile { position: relative; border-radius: var(--poster-radius); box-shadow: var(--shadow-small); transition: transform 240ms, box-shadow 240ms; }
+.tile:hover { transform: translateY(-6px); box-shadow: var(--cinema-shadow); }
+.pick { display: block; position: relative; width: 100%; padding: 0; border: 0; border-radius: var(--poster-radius); background: var(--well); overflow: hidden; }
+.pick .poster, .poster { width: 100%; }
+.pickHint { position: absolute; inset-inline: 0; bottom: 0; display: flex; justify-content: center; align-items: center; gap: 6px; min-height: 40px; padding: 14px 4px 6px; color: var(--cinema-ink); font-size: 12px; background: linear-gradient(transparent, var(--cinema-scrim)); }
+.picked { outline: 3px solid var(--accent); outline-offset: 3px; }
+.picked .poster { filter: saturate(.65); }
+.check { position: absolute; inset-block-start: 10px; inset-inline-start: 10px; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); animation: pop 260ms ease-out; box-shadow: var(--shadow-small); }
+.saveLater { position: absolute; inset-block-start: 5px; inset-inline-end: 5px; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: var(--cinema-scrim); color: var(--cinema-ink); backdrop-filter: blur(8px); }
+.saved { color: var(--position-highlight-ink); background: var(--position-highlight); }
+.saveLater:disabled { visibility: hidden; }
+.title { margin: 4px 0 0; font-family: var(--font-ui); font-size: 14px; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+.titleButton { display: block; width: 100%; min-height: 44px; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: start; }
+.titleButton:hover { color: var(--accent); }
+.year { margin: -6px 0 0; color: var(--muted); font-size: 12px; }
+.ghost, .cta, .retry { min-height: 46px; padding: 10px 22px; border: 1px solid var(--line-soft); border-radius: var(--r-button); color: var(--text); background: var(--surface); font-size: 14px; font-weight: 600; }
+.cta { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); box-shadow: 0 5px 16px var(--accent-soft); }
+.more { justify-self: center; min-width: 220px; }
+.empty, .status { margin: 0; padding: 24px; border: 1px dashed var(--line); border-radius: var(--r-card); color: var(--muted); }
+.skeleton { height: 150px; border-radius: var(--r-card); background: linear-gradient(110deg,var(--well) 25%,var(--surface) 40%,var(--well) 55%); background-size: 200% 100%; animation: shimmer 1.6s infinite; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+@keyframes reveal { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes pop { 0% { transform: scale(.4); } 65% { transform: scale(1.15); } 100% { transform: scale(1); } }
+@media (max-width: 899px) { .grid { grid-template-columns: repeat(4,minmax(0,1fr)); gap: 24px 14px; } .header { padding: 24px; } }
+@media (max-width: 560px) {
+  .screen { gap: 18px; }
+  .header { grid-template-columns: 1.2fr 1fr; min-height: 205px; padding: 20px 18px; gap: 5px; }
+  .headerCopy { min-width: 0; }
+  .header h2 { font-size: 25px; }
+  .hint { font-size: 11px; margin-top: 8px; }
+  .eyebrow { margin-bottom: 5px; }
+  .filmFan { height: 150px; justify-content: center; padding-inline: 12px; margin-block-start: 0; }
+  .fanPoster { width: 63px; margin-inline: -22px; }
+  .grid { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 20px 12px; }
+  .progress { padding: 14px 0; column-gap: 8px; }
+  .progressRow { gap: 8px; flex-wrap: wrap; }
+  .progressText { font-size: 12px; }
+  .progressNote { font-size: 11px; }
+  .progress .cta { font-size: 12px; padding: 8px 14px; }
+  .dot { width: 12px; height: 17px; }
+  .title { font-size: 12px; }
+  .search input { min-height: 54px; }
+  .saveLater { width: 44px; height: 44px; inset-block-start: 0; inset-inline-end: 0; border-radius: 0 0 16px 0; }
+  .pickHint { font-size: 10px; min-height: 32px; }
 }

@@ -1,0 +1,3 @@
+.mark { display: inline-grid; flex: none; place-items: center; width: 42px; height: 42px; border-radius: 12px; background: var(--cinema-logo-ground); color: var(--cinema-logo-ink); box-shadow: var(--shadow-small); overflow: hidden; }
+.mark img { object-fit: contain; }
+.mark b { font: 700 14px var(--font-display); }

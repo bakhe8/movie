@@ -1,21 +1,18 @@
-/* Home: "tonight's decision" (blueprint §5.3, §4.4). Three short tracks of
-   work cards (components/WorkCard), or the honest "still learning" state
-   before a model exists. On app/styles/tokens.css only; both themes from the
-   tokens. The screen's one filled button is "go to ranking" in the pending
-   state (decision Q6); the cards' own actions are outlined. */
+/* Cinematic recommendation shelves. All imagery is supplied by the title API. */
 
 .screen {
   display: grid;
-  gap: var(--sp-6);
-  width: min(100%, 720px);
+  gap: 26px;
+  width: min(100%, 1280px);
   margin-inline: auto;
+  min-width: 0;
 }
 
-/* --- Header --------------------------------------------------------------- */
-
 .header {
-  display: grid;
-  gap: var(--sp-2);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 16px;
 }
 
 .eyebrow {
@@ -27,327 +24,606 @@
 
 .header h2 {
   margin: 0;
-  font-size: var(--fs-26);
-  text-wrap: balance;
+  font-size: clamp(24px, 3vw, 36px);
+  letter-spacing: -.035em;
 }
 
-.hint {
+.hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, .7fr);
+  align-items: center;
+  gap: 24px;
+  min-height: 500px;
+  padding: clamp(26px, 5vw, 68px);
+  border-radius: var(--scene-radius, 28px);
+  background: var(--cinema-scrim, var(--text));
+  color: var(--cinema-ink, var(--accent-ink));
+  box-shadow: 0 25px 60px var(--cinema-shadow-color, transparent);
+}
+
+.heroBackdrop {
+  position: absolute;
+  z-index: -3;
+  inset: 0;
+  background: var(--hero-image) center 33% / cover no-repeat;
+  opacity: .8;
+  transform: scale(1.025);
+}
+
+.hero::before {
+  content: '';
+  position: absolute;
+  z-index: -2;
+  inset: 0;
+  background: linear-gradient(90deg, var(--cinema-scrim, var(--text)) 5%, color-mix(in srgb, var(--cinema-scrim, var(--text)) 85%, transparent) 36%, color-mix(in srgb, var(--cinema-scrim, var(--text)) 20%, transparent)), linear-gradient(0deg, var(--cinema-scrim, var(--text)), transparent 75%);
+}
+
+[dir='rtl'] .hero::before {
+  transform: scaleX(-1);
+}
+
+.hero::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: radial-gradient(ellipse at 75% 110%, color-mix(in srgb, var(--accent) 36%, transparent), transparent 65%);
+  pointer-events: none;
+}
+
+.heroContent {
+  min-width: 0;
+  display: grid;
+  gap: 13px;
+  justify-items: start;
+}
+
+.heroKicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 30px;
+  font-size: 12px;
+  background: color-mix(in srgb, var(--cinema-ink, var(--accent-ink)) 9%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.heroKicker i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cinema-ink, var(--accent-ink));
+  box-shadow: 0 0 14px currentColor;
+}
+
+.heroCaption {
+  margin: 6px 0 0;
+  font-size: clamp(14px, 1.8vw, 19px);
+  opacity: .78;
+}
+
+.heroTitle {
   margin: 0;
-  color: var(--muted);
-  font-size: var(--fs-14);
-  line-height: var(--lh-body);
+  font-family: var(--font-display);
+  font-size: clamp(32px, 5.7vw, 72px);
+  font-weight: var(--w-bold);
+  line-height: 1.08;
+  letter-spacing: -.045em;
+  text-wrap: balance;
+  max-width: 12ch;
 }
 
-/* --- "Your taste so far" (ADR-111) ----------------------------------------
-   The screen's one statement about the model: two counts, the traits it is
-   leaning on, and the confidence band -- once, instead of a sentence under
-   each of thirteen cards (UX_AUDIT_MOBILE_2026-09-05 P0 #4, #15). */
+.heroArabic {
+  margin: 0;
+  font-size: 20px;
+  font-weight: var(--w-medium);
+}
+
+.heroMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px 14px;
+  font-size: 12px;
+  opacity: .8;
+}
+
+.heroMeta span + span::before {
+  content: '·';
+  margin-inline-end: 14px;
+}
+
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.heroPrimary, .heroSave {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 48px;
+  border-radius: 14px;
+  padding: 9px 19px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: var(--w-semibold);
+  cursor: pointer;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.heroPrimary {
+  border: 0;
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.heroSave {
+  border: 1px solid color-mix(in srgb, var(--cinema-ink, var(--accent-ink)) 30%, transparent);
+  color: inherit;
+  background: color-mix(in srgb, var(--cinema-ink, var(--accent-ink)) 9%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.heroActions svg {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+
+.heroSave:disabled {
+  opacity: .7;
+  cursor: default;
+}
+
+.heroPosterWrap {
+  justify-self: center;
+  transform: rotate(5deg);
+  width: min(100%, 220px);
+  perspective: 800px;
+}
+
+.heroPoster {
+  width: 100%;
+  border-radius: var(--poster-radius, 15px);
+  border: 1px solid color-mix(in srgb, var(--cinema-ink, var(--accent-ink)) 20%, transparent);
+  box-shadow: 0 30px 50px var(--cinema-shadow-color, transparent);
+  transform: rotateY(-9deg);
+}
+
+.heroEdition {
+  position: absolute;
+  bottom: 20px;
+  inset-inline-end: 28px;
+  font-size: 9px;
+  letter-spacing: .22em;
+  opacity: .6;
+}
 
 .taste {
-  display: grid;
-  gap: var(--sp-3);
-  margin-top: var(--sp-1);
-  padding: var(--sp-3);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-card);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 20px 30px;
+  padding-block: 5px 17px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 25%, transparent);
 }
 
 .counts {
   display: flex;
-  gap: var(--sp-6);
+  gap: 24px;
   margin: 0;
+}
+
+.counts > div {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
 }
 
 .counts dd {
   margin: 0;
   font-family: var(--font-display);
-  font-size: var(--fs-20);
+  font-size: 22px;
   font-weight: var(--w-semibold);
-  line-height: var(--lh-heading);
 }
 
 .counts dt {
   color: var(--muted);
-  font-size: var(--fs-12);
-  line-height: var(--lh-ui);
+  font-size: 11px;
 }
 
 .traitRow {
   display: flex;
+  flex: 1;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-2);
+  gap: 8px;
 }
 
 .trait {
-  padding: 2px var(--sp-2);
-  border-radius: var(--r-chip);
+  padding: 4px 11px;
+  border-radius: 20px;
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: var(--fs-12);
-  line-height: 1.6;
+  font-size: 11px;
 }
 
-.traitsPending,
-.confidenceOnce {
+.traitsPending, .confidenceOnce {
   color: var(--muted);
-  font-size: var(--fs-12);
-  line-height: 1.6;
+  font-size: 11px;
 }
 
-/* The band sits at the row's end, away from the traits it qualifies. */
 .confidenceOnce {
   margin-inline-start: auto;
 }
 
-/* --- Status and empty states ---------------------------------------------- */
-
-.status {
-  margin: 0;
-  padding: var(--sp-3) var(--sp-4);
-  border-inline-start: 3px solid var(--accent);
-  border-radius: var(--r-chip);
-  background: var(--surface);
-  font-size: var(--fs-14);
-}
-
-.error {
-  border-inline-start-color: var(--muted);
-}
-
-.empty {
-  margin: 0;
-  padding: var(--sp-3) var(--sp-4);
-  border: 1px dashed var(--line);
-  border-radius: var(--r-card);
-  color: var(--muted);
-  font-size: var(--fs-14);
-}
-
-/* "Still learning your taste": a plain statement, not an error. */
-.pending {
-  display: grid;
-  gap: var(--sp-3);
-  padding: var(--sp-6) var(--sp-4);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-card);
-}
-
-.pending h3 {
-  margin: 0;
-  font-size: var(--fs-20);
-}
-
-.pending p {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--fs-14);
-  line-height: var(--lh-body);
-}
-
-/* The training job id, quoted back to support when a build fails. */
-.pending .support {
-  font-size: var(--fs-12);
-  font-variant-numeric: tabular-nums;
-  user-select: all;
-}
-
-/* --- Tracks --------------------------------------------------------------- */
-
 .track {
   display: grid;
-  gap: var(--sp-3);
+  gap: 16px;
+  min-width: 0;
+  --track-color: var(--role-safe);
+}
+
+.track[data-track='discovery'] {
+  --track-color: var(--role-discovery);
+}
+
+.track[data-track='outside_usual'] {
+  --track-color: var(--role-outside);
 }
 
 .trackHeader {
-  display: grid;
-  gap: var(--sp-1);
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 5px 14px;
 }
 
 .trackHeader h3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin: 0;
-  font-size: var(--fs-20);
+  font-size: clamp(20px, 2.4vw, 27px);
+  letter-spacing: -.025em;
+}
+
+.trackHeader h3::before {
+  content: '';
+  width: 5px;
+  height: 22px;
+  border-radius: 4px;
+  background: var(--track-color);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--track-color) 30%, transparent);
 }
 
 .trackHeader p {
   margin: 0;
   color: var(--muted);
-  font-size: var(--fs-13);
-  line-height: var(--lh-body);
+  font-size: 12px;
 }
-
-/* The cards of a track sit in the well (decision Q5). */
-.list {
-  display: grid;
-  gap: var(--sp-3);
-  margin: 0;
-  padding: var(--sp-3);
-  list-style: none;
-  background: var(--well);
-  border-radius: var(--r-card);
-}
-
-/* Wrapper for the work card (components/WorkCard.tsx); the card styles itself. */
-.item {
-  list-style: none;
-}
-
-/* --- The shelf (ADR-111) --------------------------------------------------
-   A track's preview is a row of tiles that scrolls sideways, so three tracks
-   fit a phone screen instead of thirteen stacked cards over 6065px. Opening
-   the track swaps this for `.list` and the full cards. */
 
 .rail {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: 132px;
-  gap: var(--sp-3);
-  margin: 0;
-  padding: var(--sp-3);
+  grid-auto-columns: 160px;
+  gap: 17px;
+  margin: -12px;
+  padding: 12px 12px 24px;
   list-style: none;
-  background: var(--well);
-  border-radius: var(--r-card);
   overflow-x: auto;
-  /* Chromium otherwise lets a long RTL shelf enlarge the root scroll area;
-     contain it without removing the shelf's own horizontal scrolling. */
   contain: layout paint;
   overscroll-behavior-x: contain;
   scroll-snap-type: x proximity;
-  /* Logical: in RTL the shelf starts at the right and scrolls left. */
-  scroll-padding-inline-start: var(--sp-3);
+  scroll-padding-inline-start: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--line) 40%, transparent) transparent;
 }
 
 .rail > li {
   scroll-snap-align: start;
+  min-width: 0;
 }
 
-@media (min-width: 900px) {
-  .rail {
-    /* Keep this five-slot grid in step with TRACK_PREVIEW. Fewer results keep
-       their tile proportions instead of stretching one card across the row. */
-    grid-auto-flow: row;
-    grid-template-columns: repeat(5, minmax(148px, 1fr));
-  }
+.item {
+  min-width: 0;
+  list-style: none;
+  animation: arrive 360ms ease both;
+}
 
-  .rail > li {
-    min-width: 0;
-  }
+.item:nth-child(2) {
+  animation-delay: 35ms;
+}
+
+.item:nth-child(3) {
+  animation-delay: 70ms;
+}
+
+.item:nth-child(4) {
+  animation-delay: 105ms;
+}
+
+.item:nth-child(5) {
+  animation-delay: 140ms;
+}
+
+.list {
+  display: grid;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .more {
-  width: 100%;
+  justify-self: end;
+  width: auto;
+  min-width: 110px;
   min-height: 44px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-button);
-  background: transparent;
+  padding-inline: 17px;
+  border: 1px solid color-mix(in srgb, var(--line) 30%, transparent);
+  border-radius: 30px;
+  background: var(--surface);
   color: var(--text);
   font: inherit;
-  font-size: var(--fs-14);
+  font-size: 12px;
   font-weight: var(--w-medium);
+  cursor: pointer;
 }
 
-/* --- Buttons -------------------------------------------------------------- */
+.status, .empty {
+  margin: 0;
+  padding: 15px 18px;
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.error {
+  border-inline-start: 3px solid var(--muted);
+}
+
+.empty {
+  background: transparent;
+  border: 1px dashed color-mix(in srgb, var(--line) 45%, transparent);
+}
+
+.pending {
+  display: grid;
+  gap: 15px;
+  max-width: 720px;
+  padding: clamp(24px, 5vw, 56px);
+  border-radius: var(--scene-radius, 28px);
+  background: radial-gradient(ellipse at top right, var(--accent-soft), transparent 75%), var(--surface);
+  border: 1px solid color-mix(in srgb, var(--line) 25%, transparent);
+  box-shadow: 0 18px 55px var(--cinema-shadow-color, transparent);
+}
+
+.pending::before {
+  content: '';
+  display: block;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 10px;
+  border: 9px double var(--accent);
+  border-radius: 50%;
+  box-shadow: 26px 12px 0 -8px var(--accent-soft);
+}
+
+.pending h3 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.pending p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: var(--lh-body);
+}
+
+.pending .support {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  user-select: all;
+}
+
+.cta, .retry {
+  min-height: 48px;
+  padding: 10px 24px;
+  border-radius: 14px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: var(--w-semibold);
+  cursor: pointer;
+}
 
 .cta {
-  width: 100%;
-  min-height: 48px;
   border: 0;
-  border-radius: var(--r-button);
   background: var(--accent);
   color: var(--accent-ink);
-  font: inherit;
-  font-size: var(--fs-16);
-  font-weight: var(--w-semibold);
 }
 
 .retry {
-  width: 100%;
-  min-height: 48px;
   border: 1px solid var(--line);
-  border-radius: var(--r-button);
-  background: transparent;
+  background: var(--surface);
   color: var(--text);
-  font: inherit;
-  font-size: var(--fs-16);
-  font-weight: var(--w-semibold);
 }
-
-.more:focus-visible,
-.cta:focus-visible,
-.retry:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-/* --- Loading -------------------------------------------------------------- */
 
 .skeleton {
-  height: 120px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-card);
-  background: var(--surface);
+  height: 250px;
+  border-radius: 26px;
+  background: linear-gradient(110deg, var(--surface) 25%, var(--well) 45%, var(--surface) 65%);
+  background-size: 220% 100%;
+  animation: shimmer 1.8s linear infinite;
+}
+
+.more:focus-visible, .cta:focus-visible, .retry:focus-visible, .heroPrimary:focus-visible, .heroSave:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 4px;
+}
+
+@keyframes arrive {
+
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+
+  to {
+    background-position: -220% 0;
+  }
+}
+
+@media (hover: hover) {
+
+  .heroPrimary:hover, .heroSave:hover {
+    transform: translateY(-3px);
+  }
 }
 
 @media (min-width: 900px) {
+
   .screen {
-    gap: var(--sp-8);
+    gap: 32px;
   }
 
-  .ready {
-    width: 100%;
+  .rail {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 24px;
+  }
+
+  .list {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+
+  .screen {
+    gap: 22px;
+  }
+
+  .header {
+    gap: 5px 12px;
   }
 
   .header h2 {
-    font-size: var(--fs-34);
+    font-size: 25px;
+  }
+
+  .hero {
+    min-height: 485px;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 140px 23px 28px;
+    border-radius: 23px;
+  }
+
+  .hero::before {
+    background: linear-gradient(0deg, var(--cinema-scrim, var(--text)) 3%, color-mix(in srgb, var(--cinema-scrim, var(--text)) 85%, transparent) 35%, color-mix(in srgb, var(--cinema-scrim, var(--text)) 12%, transparent) 100%);
+  }
+
+  .heroBackdrop {
+    background-position: center 24%;
+  }
+
+  .heroTitle {
+    font-size: clamp(34px, 9vw, 48px);
+    max-width: 13ch;
+  }
+
+  .heroPosterWrap {
+    display: none;
+  }
+
+  .heroContent {
+    gap: 10px;
+  }
+
+  .heroCaption {
+    font-size: 14px;
+  }
+
+  .heroArabic {
+    font-size: 17px;
+  }
+
+  .heroMeta {
+    gap: 7px 10px;
+    font-size: 11px;
+  }
+
+  .heroMeta span + span::before {
+    margin-inline-end: 10px;
+  }
+
+  .heroActions {
+    gap: 8px;
+    width: 100%;
+  }
+
+  .heroPrimary, .heroSave {
+    flex: 1;
+    padding-inline: 10px;
+    font-size: 12px;
+  }
+
+  .heroEdition {
+    display: none;
   }
 
   .taste {
-    grid-template-columns: max-content minmax(0, 1fr);
-    align-items: center;
-    padding: var(--sp-4);
+    gap: 10px;
   }
 
-  .taste > :only-child {
-    grid-column: 1 / -1;
+  .counts {
+    gap: 20px;
   }
 
-  .trackHeader {
-    grid-template-columns: max-content minmax(0, 1fr);
-    align-items: baseline;
-    column-gap: var(--sp-3);
+  .counts dd {
+    font-size: 19px;
   }
 
-  .more {
-    justify-self: end;
-    width: auto;
-    min-width: 160px;
-    padding-inline: var(--sp-6);
+  .traitRow {
+    flex-basis: 100%;
+  }
+
+  .trackHeader p {
+    font-size: 11px;
   }
 }
 
-/* Track identity (decision 27): the heading takes the track's role hue and a
-   dot of it; the cards below stay neutral. */
-.trackHeader h3::before {
-  content: "";
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  margin-inline-end: var(--sp-2);
-  border-radius: 50%;
-  background: currentColor;
-  vertical-align: middle;
+@media (prefers-reduced-motion: reduce) {
+
+  .item, .skeleton {
+    animation: none;
+  }
+
+  .heroPrimary, .heroSave {
+    transition: none;
+  }
 }
 
-.track[data-track="safe"] h3 {
-  color: var(--role-safe);
-}
-
-.track[data-track="discovery"] h3 {
-  color: var(--role-discovery);
-}
-
-.track[data-track="outside_usual"] h3 {
-  color: var(--role-outside);
+.ready {
+  width: 100%;
 }

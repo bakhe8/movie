@@ -1,10 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { api, ApiError, type ProfileReadiness, type Recommendation, type RecommendationTrack, type TrainingSummary } from '../lib/api';
 import { TRACK_COPY } from '../lib/copy';
 import { formatConfidence, formatNumber, todayLocal, topTraits, type PersonalFitLevel } from '../lib/format';
 import { WorkCard } from './WorkCard';
+import { Poster } from './Poster';
+import { genreLabel } from '../lib/genres';
+import { Toast } from '../lib/toast';
 import styles from './RecommendationsScreen.module.css';
 
 type Lang = 'ar' | 'en';
@@ -18,6 +21,9 @@ const labels = {
   ar: {
     eyebrow: 'قرار الليلة',
     title: 'المقترح لك',
+    heroCaption: 'هذه الليلة، حكاية جديدة.',
+    exploreFilm: 'اكتشف الفيلم',
+    personalSelection: 'من اقتراحاتك',
     // The four values are shown, not described (ADR-111): the paragraph that
     // said so is gone, and this strip says what the model has learned so far
     // -- once, at the top, instead of a confidence sentence under every card.
@@ -93,6 +99,9 @@ const labels = {
   en: {
     eyebrow: "Tonight's pick",
     title: 'Recommended for you',
+    heroCaption: 'A new story. Tonight.',
+    exploreFilm: 'Explore the film',
+    personalSelection: 'Picked for you',
     tasteTitle: 'Your taste so far',
     rounds: 'rounds ranked',
     watchedTitles: 'films watched',
@@ -462,6 +471,16 @@ export function RecommendationsScreen({
   const rounds = phase.kind === 'ready' ? (phase.readiness?.rounds ?? null) : null;
   const band = phase.kind === 'ready' ? (phase.readiness?.recommendation.confidenceBand ?? null) : null;
   const traits = phase.kind === 'ready' ? topTraits(items.map((item) => item.reason), lang) : [];
+  // Choose artwork only from the recommendations already in the visible
+  // shelves. An absent image is never replaced by an invented film still.
+  const featured = items.find((item) => item.title.posterUrl && visibleIds.includes(item.recommendationId)) ?? items[0];
+  const featuredTrack = featured ? items.filter((item) => item.track === featured.track) : [];
+
+  function openFeatured() {
+    if (!featured || !onOpenTitle) return;
+    void api.recordOutcome(featured.recommendationId, 'clicked').catch(() => {});
+    onOpenTitle(featured, featuredTrack.indexOf(featured) + 1, featuredTrack.length, listed.has(featured.title.id));
+  }
 
   const tasteStrip = phase.kind === 'ready' && (rounds || traits.length > 0 || band) && (
     <section className={styles.taste} aria-label={t.tasteTitle}>
@@ -496,7 +515,6 @@ export function RecommendationsScreen({
     <div className={styles.header}>
       <p className={styles.eyebrow}>{t.eyebrow}</p>
       <h2>{t.title}</h2>
-      {tasteStrip}
     </div>
   );
 
@@ -559,9 +577,7 @@ export function RecommendationsScreen({
           <p>{copy.body}</p>
           {showSupport && <p className={styles.support}>{t.support(phase.training.jobId as string)}</p>}
           {notice && (
-            <p className={styles.status} role="status">
-              {notice}
-            </p>
+            <Toast message={notice} onDismiss={() => setNotice(null)} tone={notice === t.trainFailed ? 'error' : 'success'} />
           )}
           {action && (
             <button type="button" className={styles.cta} onClick={action.run} disabled={requesting}>
@@ -619,10 +635,37 @@ export function RecommendationsScreen({
   return (
     <div className={`${styles.screen} ${styles.ready}`}>
       {header}
+      {featured && (
+        <section className={styles.hero} aria-label={t.eyebrow}
+          style={featured.title.posterUrl ? ({ '--hero-image': `url("${featured.title.posterUrl}")` } as CSSProperties) : undefined}>
+          <div className={styles.heroBackdrop} aria-hidden="true" />
+          <div className={styles.heroContent}>
+            <span className={styles.heroKicker}><i aria-hidden="true" />{t.personalSelection}</span>
+            <p className={styles.heroCaption}>{t.heroCaption}</p>
+            <h3 className={styles.heroTitle} dir="auto">{featured.title.titleEn || featured.title.titleAr}</h3>
+            {lang === 'ar' && featured.title.titleAr !== featured.title.titleEn && <p className={styles.heroArabic}>{featured.title.titleAr}</p>}
+            <div className={styles.heroMeta}>
+              {featured.title.releaseYear && <span>{featured.title.releaseYear}</span>}
+              {featured.title.genres?.slice(0, 2).map((genre) => <span key={genre}>{genreLabel(genre, lang)}</span>)}
+              <span>{tracks[featured.track].name}</span>
+            </div>
+            <div className={styles.heroActions}>
+              {onOpenTitle && <button type="button" className={styles.heroPrimary} onClick={openFeatured}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4" /></svg>{t.exploreFilm}
+              </button>}
+              <button type="button" className={styles.heroSave} onClick={() => addToList(featured)} disabled={busyTitleId === featured.title.id || listed.has(featured.title.id)}>
+                <svg viewBox="0 0 24 24" fill={listed.has(featured.title.id) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" aria-hidden="true"><path d="M7 4h10v16l-5-3.5L7 20z" /></svg>
+                {listed.has(featured.title.id) ? t.added : t.addToList}
+              </button>
+            </div>
+          </div>
+          <div className={styles.heroPosterWrap} aria-hidden="true"><Poster title={featured.title} size="lg" className={styles.heroPoster} name={featured.title.titleEn} /></div>
+          <span className={styles.heroEdition} aria-hidden="true">KOLME / TONIGHT</span>
+        </section>
+      )}
+      {tasteStrip}
       {notice && (
-        <p className={styles.status} role="status">
-          {notice}
-        </p>
+        <Toast message={notice} onDismiss={() => setNotice(null)} tone={notice === t.actionFailed ? 'error' : 'success'} />
       )}
       {items.length === 0 && <p className={styles.status}>{t.emptyAll}</p>}
 

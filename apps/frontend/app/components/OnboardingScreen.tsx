@@ -6,6 +6,7 @@ import { api, ApiError, CONSENT_VERSION, type PreferredLanguage } from '../lib/a
 import { MARKETS, PLATFORMS } from '../lib/onboarding-options';
 import { formatNumber } from '../lib/format';
 import { useSession } from '../lib/session';
+import { PlatformMark } from './PlatformMark';
 import styles from './OnboardingScreen.module.css';
 
 type Lang = 'ar' | 'en';
@@ -21,7 +22,7 @@ const labels = {
     stepOf: (n: string, total: string) => `الخطوة ${n} من ${total}`,
     skip: 'لاحقًا',
     // Step 1 (blueprint §4.1: account + interface language + market + platforms)
-    step1Title: 'لغتك وسوقك ومنصاتك',
+    step1Title: 'جهّز مكانك في الصف الأول',
     step1Lead: 'تؤثر هذه الاختيارات في العرض والتوفر فقط.',
     // Verbatim from blueprint §4.1 -- the promise that makes this step safe to ask.
     step1Note: 'لغة الواجهة والمنطقة تؤثران في العرض والتوفر، لا في افتراض الذوق. اختيار العربية لا يعني تفضيل الأفلام العربية، والإقامة في السعودية لا تعني خفض ترتيب الأعمال الأجنبية.',
@@ -77,7 +78,7 @@ const labels = {
   en: {
     stepOf: (n: string, total: string) => `Step ${n} of ${total}`,
     skip: 'Later',
-    step1Title: 'Your language, market and platforms',
+    step1Title: 'Make yourself a front-row seat',
     step1Lead: 'These choices affect display and availability only.',
     step1Note: 'Interface language and region affect display and availability, not what we assume about your taste. Choosing Arabic does not mean preferring Arabic films, and living in Saudi Arabia does not down-rank foreign ones.',
     language: 'Interface language',
@@ -234,7 +235,7 @@ export function OnboardingScreen({
       <span>{t.stepOf(formatNumber(step, lang), formatNumber(STEP_COUNT, lang))}</span>
       <div className={styles.dots} aria-hidden="true">
         {Array.from({ length: STEP_COUNT }, (_, index) => (
-          <span key={index} className={index < step ? `${styles.dot} ${styles.dotOn}` : styles.dot} />
+          <span key={index} className={index < step ? `${styles.dot} ${styles.dotOn}` : styles.dot}>{index < step - 1 ? '✓' : formatNumber(index + 1, lang)}</span>
         ))}
       </div>
     </div>
@@ -245,21 +246,22 @@ export function OnboardingScreen({
       <div className={styles.screen}>
         {progress}
         <div className={styles.header}>
+          <svg className={styles.introIcon} width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="12" rx="3" /><path d="M8 20h8M12 16v4M10 8l5 2.5-5 2.5z" /></svg>
           <h2>{t.step1Title}</h2>
           <p className={styles.lead}>{t.step1Lead}</p>
         </div>
         <div className={styles.card}>
-          <div className={styles.field}>
-            <label htmlFor="onboarding-language">{t.language}</label>
-            <select
-              id="onboarding-language"
-              value={language}
-              onChange={(event) => setLanguage(event.target.value as PreferredLanguage)}
-            >
-              <option value="ar">{t.arabic}</option>
-              <option value="en">{t.english}</option>
-            </select>
-          </div>
+          <fieldset className={`${styles.field} ${styles.fieldset}`}>
+            <legend>{t.language}</legend>
+            <div className={styles.languageChoices}>
+              {(['ar', 'en'] as const).map((choice) => (
+                <button key={choice} type="button" aria-pressed={language === choice} onClick={() => setLanguage(choice)}>
+                  <span aria-hidden="true">{choice === 'ar' ? 'ع' : 'A'}</span>
+                  {choice === 'ar' ? t.arabic : t.english}
+                </button>
+              ))}
+            </div>
+          </fieldset>
           <div className={styles.field}>
             <label htmlFor="onboarding-market">{t.market}</label>
             <select id="onboarding-market" value={market} onChange={(event) => setMarket(event.target.value)}>
@@ -285,7 +287,9 @@ export function OnboardingScreen({
                     aria-pressed={on}
                     onClick={() => togglePlatform(option.id)}
                   >
+                    <PlatformMark id={option.id} name={option.en} />
                     {lang === 'ar' ? option.ar : option.en}
+                    <span className={styles.platformCheck} aria-hidden="true">{on ? '✓' : '+'}</span>
                   </button>
                 );
               })}
@@ -315,6 +319,7 @@ export function OnboardingScreen({
       <div className={styles.screen}>
         {progress}
         <div className={styles.header}>
+          <svg className={styles.introIcon} width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 3h12v18H6zM9 8h6M9 12h6M9 16h3" /></svg>
           <h2>{t.step2Title}</h2>
           <p className={styles.lead}>{t.step2Lead}</p>
         </div>

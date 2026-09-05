@@ -1,6 +1,6 @@
 import '../../jest-dom-vitest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DiscoverScreen } from '../components/DiscoverScreen';
 import type { Title } from '../lib/api';
@@ -43,6 +43,45 @@ beforeEach(() => {
 });
 
 describe('DiscoverScreen', () => {
+  it('clears the displayed-genre filter when changing catalogue scope', async () => {
+    const user = userEvent.setup();
+    mockApi.getStarterTitles.mockResolvedValue([{ ...title('a', 'العراب'), genres: ['Crime'] }, { ...title('b', 'أنورا'), genres: ['Drama'] }]);
+    mockApi.listTitles.mockResolvedValue({ items: [{ ...title('c', 'الكثيب'), genres: ['Science Fiction'] }], total: 1 });
+    render(<DiscoverScreen lang="ar" profileId="p1" />);
+    await user.click(await screen.findByRole('button', { name: 'جريمة' }));
+    expect(screen.queryByRole('button', { name: 'شاهدت «أنورا»' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'تصفّح الكتالوج كاملًا' }));
+    expect(await screen.findByRole('button', { name: 'شاهدت «الكثيب»' })).toBeInTheDocument();
+    expect(mockApi.setTitleState).not.toHaveBeenCalled();
+  });
+
+  it('keeps independently saving films disabled until each request settles', async () => {
+    const user = userEvent.setup();
+    let finishA!: () => void;
+    let finishB!: () => void;
+    mockApi.setTitleState.mockImplementation((_profile: string, id: string) => new Promise<void>((resolve) => { if (id === 'a') finishA = resolve; else finishB = resolve; }));
+    render(<DiscoverScreen lang="ar" profileId="p1" />);
+    const first = await screen.findByRole('button', { name: 'شاهدت «العراب»' });
+    const second = screen.getByRole('button', { name: 'شاهدت «أنورا»' });
+    await user.click(first);
+    await user.click(second);
+    expect(first).toBeDisabled();
+    expect(second).toBeDisabled();
+    await act(async () => finishA());
+    expect(second).toBeDisabled();
+    await act(async () => finishB());
+    expect(mockApi.setTitleState).toHaveBeenCalledTimes(2);
+  });
+
+  it('announces failed saving as an error and keeps the film unmarked', async () => {
+    const user = userEvent.setup();
+    mockApi.setTitleState.mockRejectedValue(new Error('offline'));
+    render(<DiscoverScreen lang="ar" profileId="p1" />);
+    await user.click(await screen.findByRole('button', { name: 'شاهدت «العراب»' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('تعذّر الحفظ');
+    expect(screen.getByRole('button', { name: 'شاهدت «العراب»' })).toHaveAttribute('aria-pressed', 'false');
+  });
+
   it('asks with posters, not with paragraphs', async () => {
     render(<DiscoverScreen lang="ar" profileId="p1" />);
     await screen.findByRole('button', { name: 'شاهدت «العراب»' });

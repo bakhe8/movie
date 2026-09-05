@@ -10,4 +10,6 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Kolme theme boundary
 
+Owner redesign request (2026-09-05): for `codex/cinematic-redesign`, ADR-113 and `../../docs/CINEMATIC_REDESIGN_2026-09-05.md` supersede the visual preservation/L1-only constraints below. `cinema / premiere / montage` are independent of `system / light / dark`; one shared component/state tree and honest data semantics remain mandatory. `app/styles/cinematic.css` centrally owns new color, depth and shape tokens. Visual acceptance remains with the owner. Use the isolated worktree ownership ledger; do not edit the active L2 files in another checkout.
+
 Before visual work, read `../../docs/THEME_MODES_2026-09-05.md` and ADR-112. The existing near-black/deep-indigo dark mode is preserved; the white/blue/lime GPT «طاولة المونتاج» target applies to light only and is not implemented yet. Treat the current light values and old palette wording in `app/styles/tokens.css` as transitional, not as the accepted light target. Both modes use one route/component/state tree: do not fork screens or rebuild shared interaction. Claim exact files in `.claude/SESSIONS.md`; only one owner may change the light-token/manifest/boot bundle at a time, and screen owners consume those tokens without editing that bundle in parallel.

@@ -5,7 +5,7 @@ import '../../jest-dom-vitest';
  * your taste", no reason, no button).
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RecommendationsScreen } from '../components/RecommendationsScreen';
 
@@ -151,17 +151,18 @@ describe('RecommendationsScreen — ready', () => {
     const { container } = render(<RecommendationsScreen lang="ar" profileId="p1" />);
     await screen.findByLabelText('ذوقك حتى الآن');
 
-    // A shelf carries tiles: poster, title and fit only. Production quality
-    // and availability are restored with the rest of the full card.
+    // The actual rating source is visible on the shelf; the detailed reading
+    // stays behind a disclosure, with the full card available on expansion.
     expect(container.querySelectorAll('[class*="rail"]').length).toBeGreaterThan(0);
     expect(container.querySelectorAll('[class*="metaRow"]')).toHaveLength(0);
-    expect(container.querySelector('img[alt="IMDb"]')).toBeNull();
-    expect(screen.queryByText(/بتاريخ/)).toBeNull();
+    expect(container.querySelector('summary img[alt="IMDb"]')).not.toBeNull();
+    expect(container.querySelectorAll('details[open]')).toHaveLength(0);
+    for (const date of screen.getAllByText(/بتاريخ/)) expect(date).not.toBeVisible();
     expect(screen.queryByText('غير معروف بعد')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'أضف إلى قائمتي' })).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'أضف إلى قائمتي' }).length).toBeGreaterThan(0);
 
-    // Every track opens, not only the ones with items left over: the tiles
-    // carry no actions, so the way in must always be there.
+    // Every track still expands for secondary detail, while saving and
+    // marking watched are already available on its compact tiles.
     await user.click(screen.getAllByRole('button', { name: 'افتح المسار' })[0]);
 
     expect(container.querySelectorAll('[class*="rail"]').length).toBeLessThan(3);
@@ -169,6 +170,33 @@ describe('RecommendationsScreen — ready', () => {
     expect(container.querySelector('img[alt="IMDb"]')).not.toBeNull();
     expect(screen.getAllByText(/بتاريخ/).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button', { name: 'أضف إلى قائمتي' }).length).toBeGreaterThan(0);
+  });
+
+  it('saves from the shelf without opening a film and shows the saved outcome in place', async () => {
+    const user = userEvent.setup();
+    const open = vi.fn();
+    mockApi.setTitleState.mockResolvedValue({});
+    render(<RecommendationsScreen lang="ar" profileId="p1" onOpenTitle={open} />);
+    const card = await screen.findByRole('article', { name: 'يد إلهية' });
+    await user.click(within(card).getByRole('button', { name: 'أضف إلى قائمتي' }));
+    expect(mockApi.setTitleState).toHaveBeenCalledWith('p1', 'a', { state: 'watchlist' });
+    expect(mockApi.recordOutcome).toHaveBeenCalledWith('r-a', 'saved');
+    expect(within(card).getByRole('button', { name: 'في قائمتك' })).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent('أُضيف «يد إلهية» إلى قائمتك.');
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it('opens the featured film with the same recommendation context and its supplied artwork', async () => {
+    const user = userEvent.setup();
+    const open = vi.fn();
+    const featured = { ...item('b', 'لا بلد للعجائز', 'safe'), title: { ...title('b', 'لا بلد للعجائز'), posterUrl: 'https://images.example/actual-b.jpg' } };
+    mockApi.getRecommendations.mockResolvedValue({ state: 'ready', items: [item('a', 'يد إلهية', 'safe'), featured] });
+    render(<RecommendationsScreen lang="ar" profileId="p1" onOpenTitle={open} />);
+    const hero = await screen.findByRole('region', { name: 'قرار الليلة' });
+    expect(hero.style.getPropertyValue('--hero-image')).toBe('url("https://images.example/actual-b.jpg")');
+    await user.click(within(hero).getByRole('button', { name: 'اكتشف الفيلم' }));
+    expect(open).toHaveBeenCalledWith(featured, 2, 2, false);
+    expect(mockApi.recordOutcome).toHaveBeenCalledWith('r-b', 'clicked');
   });
 });
 

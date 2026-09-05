@@ -1,283 +1,43 @@
-/* App shell (identity decisions Q19 revised, Q20): two bars.
-   Phone: a top bar with menu (start) · brand (centre) · search (end), a
-   preferences drawer under it, the content, and five fixed tabs at the bottom.
-   Wide: one header with brand · sections inline · preferences; no bottom tabs.
-   On app/styles/tokens.css only; logical properties throughout. */
-
-.shell {
-  min-height: 100vh;
-}
-
-/* Skip navigation: visually hidden until focused by keyboard. */
-.skipNav {
-  position: absolute;
-  inset-inline-start: 50%;
-  transform: translateX(-50%);
-  top: -100%;
-  z-index: 9999;
-  padding: 0.5rem 1rem;
-  background: var(--color-bg);
-  color: var(--color-text);
-  border: 2px solid var(--color-accent);
-  border-radius: 0 0 4px 4px;
-  font-size: 0.9rem;
-  white-space: nowrap;
-  text-decoration: none;
-}
-.skipNav:focus {
-  top: 0;
-}
-
-/* Room for the fixed bottom tabs on the phone (tab height + safe area). */
-.withNav {
-  padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
-}
-
-/* --- Top bar -------------------------------------------------------------- */
-
-.header {
-  position: sticky;
-  top: 0;
-  z-index: 3;
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
-}
-
-.bar {
-  display: grid;
-  grid-template-columns: 44px 1fr 44px;
-  align-items: center;
-  gap: var(--sp-2);
-  min-height: 56px;
-  padding: var(--sp-1) max(var(--sp-3), calc((100vw - 1080px) / 2));
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--sp-2);
-  margin: 0;
-  font-size: var(--fs-16);
-  font-weight: var(--w-bold);
-}
-
-/* The mark is the accent-coloured triad glyph itself (ADR-111), not a
-   filled tile with an initial in it. */
-.mark {
-  display: grid;
-  place-items: center;
-  color: var(--accent);
-}
-
-.iconButton {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--r-button);
-  background: transparent;
-  color: var(--text);
-}
-
-.iconButton svg {
-  width: 24px;
-  height: 24px;
-}
-
-.iconButton[aria-expanded="true"] {
-  background: var(--well);
-}
-
-.searchSpacer {
-  width: 44px;
-  height: 44px;
-}
-
-/* Inline sections and inline preferences: wide screens only. */
-.inlineNav,
-.prefsInline {
-  display: none;
-}
-
-/* The brand is the header's centre column; the display face gives the
-   wordmark its own voice next to the mark. */
-.brand {
-  font-family: var(--font-display);
-}
-
-.language {
-  min-height: var(--tap);
-  min-width: 44px;
-  padding: 6px 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-button);
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  font-size: var(--fs-13);
-  font-weight: var(--w-semibold);
-}
-
-/* --- Preferences drawer (phone) ------------------------------------------- */
-
-.menu {
-  display: grid;
-  gap: var(--sp-3);
-  padding: var(--sp-3) max(var(--sp-3), calc((100vw - 1080px) / 2)) var(--sp-4);
-  border-top: 1px solid var(--line);
-  background: var(--surface);
-}
-
-/* The `hidden` attribute must win over the grid display above. */
-.menu[hidden] {
-  display: none;
-}
-
-.menuTitle {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--fs-13);
-  font-weight: var(--w-medium);
-}
-
-/* --- Content -------------------------------------------------------------- */
-
-.content {
-  width: min(100%, 1080px);
-  margin: 0 auto;
-  padding: var(--sp-6) var(--sp-4) var(--sp-8);
-}
-
-/* --- Bottom tabs (phone) -------------------------------------------------- */
-
-.tabs {
-  position: fixed;
-  z-index: 3;
-  inset-inline: 0;
-  bottom: 0;
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  padding: var(--sp-1) var(--sp-1) calc(var(--sp-1) + env(safe-area-inset-bottom, 0px));
-  background: var(--surface);
-  border-top: 1px solid var(--line);
-}
-
-.tab,
-.inlineTab {
-  display: grid;
-  justify-items: center;
-  gap: 3px;
-  min-height: 52px;
-  padding: var(--sp-1) 2px;
-  border: 0;
-  border-radius: var(--r-button);
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  font-size: var(--fs-12);
-  font-weight: var(--w-medium);
-  line-height: 1.2;
-}
-
-.tab span,
-.inlineTab span {
-  max-width: 100%;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.tab svg,
-.inlineTab svg {
-  width: 24px;
-  height: 24px;
-}
-
-/* The current section: the accent, and a slightly heavier stroke. */
-.tab[aria-current="page"],
-.inlineTab[aria-current="page"] {
-  color: var(--accent);
-  font-weight: var(--w-semibold);
-}
-
-.tab[aria-current="page"] svg,
-.inlineTab[aria-current="page"] svg {
-  stroke-width: 2.4;
-}
-
-/* --- Focus ---------------------------------------------------------------- */
-
-.iconButton:focus-visible,
-.language:focus-visible,
-.tab:focus-visible,
-.inlineTab:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-/* --- Wide screens --------------------------------------------------------- */
-
-@media (min-width: 900px) {
-  .withNav {
-    padding-bottom: 0;
-  }
-
-  .bar {
-    grid-template-columns: auto 1fr auto;
-    min-height: 64px;
-  }
-
-  .brand {
-    justify-content: flex-start;
-    font-size: var(--fs-20);
-  }
-
-  /* Menu, search and the drawer are phone affordances. */
-  .menuButton,
-  .searchButton,
-  .searchSpacer,
-  .menu {
-    display: none;
-  }
-
-  .inlineNav {
-    display: flex;
-    justify-content: center;
-    gap: var(--sp-1);
-  }
-
-  .inlineTab {
-    grid-auto-flow: column;
-    align-items: center;
-    gap: var(--sp-2);
-    min-height: var(--tap);
-    padding: var(--sp-1) var(--sp-3);
-    font-size: var(--fs-14);
-  }
-
-  .inlineTab svg {
-    width: 20px;
-    height: 20px;
-  }
-
-  .inlineTab[aria-current="page"] {
-    background: var(--accent-soft);
-  }
-
-  .prefsInline {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-2);
-  }
-
-  .tabs {
-    display: none;
-  }
-
-  .content {
-    padding: var(--sp-8) var(--sp-4);
-  }
+/* One shared composition; appearance tokens change shape, color and depth. */
+.shell { min-height: 100dvh; }
+.skipNav { position: fixed; inset-inline-start: 16px; top: -100px; z-index: 99; padding: 12px 18px; background: var(--surface); color: var(--text); border: 2px solid var(--accent); border-radius: 12px; }
+.skipNav:focus { top: 12px; }
+.withNav { padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)); }
+.header { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 88%, transparent); border-bottom: 1px solid var(--line-soft); backdrop-filter: blur(22px); }
+.bar { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 8px; min-height: 68px; padding: 6px max(16px, calc((100vw - var(--scene-width)) / 2)); }
+.brand { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0; font-size: 23px; font-family: var(--font-display); font-weight: 700; }
+.mark { display: grid; place-items: center; color: var(--accent); filter: drop-shadow(0 3px 10px var(--ambient-glow)); }
+.iconButton { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid var(--line-soft); border-radius: 50%; background: var(--surface); color: var(--text); }
+.iconButton svg { width: 21px; height: 21px; }
+.iconButton[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
+.searchSpacer { width: 44px; height: 44px; }
+.inlineNav, .prefsInline { display: none; }
+.language { min-height: 44px; min-width: 44px; border: 0; border-radius: 50%; background: var(--well); color: var(--text); font-size: 13px; font-weight: 600; }
+.menu { display: grid; gap: 12px; padding: 16px 24px 24px; border-top: 1px solid var(--line-soft); background: var(--surface); animation: arrive 240ms ease both; }
+.menu[hidden] { display: none; }
+.menuTitle { margin: 0; color: var(--muted); font-size: 13px; }
+.appearanceLink { display: flex; align-items: center; gap: 10px; width: fit-content; min-height: 44px; padding: 8px 16px; border: 1px solid var(--line-soft); border-radius: var(--r-button); color: var(--text); background: var(--well); }
+.appearanceLink span { font-size: 22px; color: var(--accent); }
+.content { width: min(100%, var(--scene-width)); margin: 0 auto; padding: 24px 20px 40px; scroll-margin-top: 86px; }
+.content:focus { outline: none; }
+.scene { min-width: 0; animation: arrive var(--scene-motion) cubic-bezier(.2,.8,.2,1) both; }
+.tabs { position: fixed; z-index: 30; inset-inline: 12px; bottom: max(10px, env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 2px; padding: 7px 5px; background: color-mix(in srgb,var(--surface) 94%, transparent); backdrop-filter: blur(24px); border: 1px solid var(--line-soft); border-radius: 24px; box-shadow: var(--cinema-shadow); }
+.tab, .inlineTab { display: grid; align-content: center; justify-items: center; gap: 5px; min-height: 52px; padding: 5px 2px; border: 0; border-radius: 17px; background: transparent; color: var(--muted); font-size: 11px; font-weight: 500; line-height: 1.2; }
+.tab span, .inlineTab span { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tab svg, .inlineTab svg { width: 21px; height: 21px; }
+.tab[aria-current="page"], .inlineTab[aria-current="page"] { color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.tab[aria-current="page"] svg { transform: translateY(-1px); }
+@keyframes arrive { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@media (min-width: 1050px) {
+  .withNav { padding-bottom: 0; }
+  .bar { grid-template-columns: auto 1fr auto; min-height: 86px; gap: 24px; }
+  .brand { justify-content: flex-start; font-size: 27px; }
+  .menuButton, .searchButton, .searchSpacer, .menu, .tabs { display: none; }
+  .inlineNav { display: flex; justify-content: center; gap: 5px; }
+  .inlineTab { grid-auto-flow: column; align-items: center; gap: 8px; min-height: 44px; padding: 10px 15px; font-size: 14px; border-radius: 100px; }
+  .inlineTab:hover { color: var(--text); background: var(--well); }
+  .inlineTab[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
+  .inlineTab svg { width: 19px; height: 19px; }
+  .prefsInline { display: flex; align-items: center; gap: 10px; }
+  .content { padding: 32px 28px 64px; }
 }

@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import type { Title } from '../lib/api';
 import styles from './Poster.module.css';
 
@@ -32,7 +33,8 @@ export function Poster({
 }) {
   const classes = [styles.poster, styles[size], className].filter(Boolean).join(' ');
   const url = title?.posterUrl ?? null;
-  if (url) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  if (url && failedUrl !== url) {
     // The browser fetches this from the image host itself (TMDB today), so
     // that host sees the request. `no-referrer` keeps it from also learning
     // which page of ours the viewer was on -- the page path is the part that
@@ -41,7 +43,7 @@ export function Poster({
     // same URL; this attribute keeps the guarantee on the element itself,
     // wherever the markup is served from.
     // eslint-disable-next-line @next/next/no-img-element
-    return <img className={classes} src={url} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" />;
+    return <img className={classes} src={url} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailedUrl(url)} />;
   }
   // The empty slot is drawn, not left blank (remediation brief P1-05 /
   // L10N-01): a dashed 2:3 frame with a neutral film mark, so a title with no

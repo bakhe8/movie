@@ -64,7 +64,7 @@ describe('WorkScreen', () => {
     expect(details?.textContent).toContain('surreal black comedy');
   });
 
-  it('leaves an Arabic synopsis where the reader can just read it', async () => {
+  it('folds a local-language synopsis too, leaving the image and actions first', async () => {
     const arabic = { ...title, description: 'فيلم كوميديا سوداء من إخراج إيليا سليمان.' };
     mockApi.getTitle.mockResolvedValue(arabic);
     render(
@@ -79,7 +79,9 @@ describe('WorkScreen', () => {
     await screen.findByRole('heading', { name: 'يد إلهية' });
 
     expect(screen.getByText(/إخراج إيليا سليمان/)).toBeInTheDocument();
-    expect(document.querySelector('details')).toBeNull();
+    const synopsis = document.querySelector('details');
+    expect(synopsis).not.toHaveAttribute('open');
+    expect(synopsis?.querySelector('summary')).toHaveTextContent('عن الفيلم');
   });
 
   it('puts what the reader can do above the reference material', async () => {

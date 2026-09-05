@@ -7,6 +7,15 @@ import { UpdateProfileDto } from './update-profile.dto';
 // at the HTTP boundary -- ProfilesService trusts the DTO was already
 // validated, so this is the only place an empty `name` would be caught.
 describe('UpdateProfileDto', () => {
+  it.each(['cinema', 'premiere', 'montage', null])('accepts the appearance preference %s', async (preferredAppearance) => {
+    expect(await validate(plainToInstance(UpdateProfileDto, { preferredAppearance }))).toHaveLength(0);
+  });
+
+  it.each(['dark', 'system', '', 'Cinema', 1, ['cinema']])('rejects invalid appearance %s', async (preferredAppearance) => {
+    const errors = await validate(plainToInstance(UpdateProfileDto, { preferredAppearance }));
+    expect(errors.some((error) => error.property === 'preferredAppearance')).toBe(true);
+  });
+
   it('rejects an empty name instead of silently blanking the profile out', async () => {
     const dto = plainToInstance(UpdateProfileDto, { name: '' });
 

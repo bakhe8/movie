@@ -9,6 +9,23 @@
   margin-inline: auto;
 }
 
+/* Onboarding uses visual platform choices and one-tap language selection;
+   disclosures retain their full, visible wording. */
+.screen { width: min(100%, 820px); }
+.screen .header { position: relative; padding-inline-start: 68px; min-height: 58px; }
+.introIcon { position: absolute; inset-inline-start: 0; inset-block-start: 0; width: 52px; height: 52px; padding: 10px; border-radius: 18px; color: var(--accent); background: var(--accent-soft); }
+.screen .header h2 { font-size: clamp(24px, 3.2vw, 36px); letter-spacing: -.025em; }
+.screen .card { padding: clamp(20px, 3.5vw, 34px); border-radius: 26px; border-color: var(--line-soft, var(--line)); box-shadow: var(--cinema-shadow, var(--shadow-float)); background: radial-gradient(ellipse at 100% 0, var(--ambient-glow, var(--accent-soft)), transparent 60%), var(--surface); gap: 24px; }
+.languageChoices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.languageChoices button { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 52px; border: 1px solid var(--line); border-radius: 14px; color: var(--text); background: var(--surface); font: inherit; font-size: 14px; cursor: pointer; }
+.languageChoices button span { font-size: 23px; font-weight: 700; }
+.languageChoices button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.languageChoices button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media (prefers-reduced-motion: no-preference) {
+  .card, .list { animation: stepEnter 350ms both; }
+  @keyframes stepEnter { from { opacity: 0; translate: 0 12px; } to { opacity: 1; translate: 0 0; } }
+}
+
 /* --- Progress: "step n of 2" + two dots ----------------------------------- */
 
 .progress {
@@ -27,8 +44,10 @@
 }
 
 .dot {
-  width: 10px;
-  height: 10px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
   border: 1px solid var(--line);
   border-radius: 50%;
   background: transparent;
@@ -37,6 +56,7 @@
 .dotOn {
   border-color: var(--accent);
   background: var(--accent);
+  color: var(--accent-ink);
 }
 
 /* --- Header --------------------------------------------------------------- */
@@ -83,7 +103,7 @@
 }
 
 .field select {
-  min-height: 44px;
+  min-height: 52px;
   padding: 0 var(--sp-3);
   border: 1px solid var(--line);
   border-radius: var(--r-button);
@@ -111,30 +131,44 @@
 }
 
 .chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
   margin-top: var(--sp-2);
 }
 
 /* Platform chips: selected = accent outline + soft fill, never a filled button. */
 .chip {
-  min-height: var(--tap);
-  padding: 0 var(--sp-3);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 96px;
+  padding: 14px 8px;
   border: 1px solid var(--line);
-  border-radius: var(--r-button);
-  background: transparent;
+  border-radius: 18px;
+  background: var(--surface);
   color: var(--text);
   font: inherit;
   font-size: var(--fs-14);
   font-weight: var(--w-medium);
+  cursor: pointer;
+  transition: transform 170ms, background 170ms, border-color 170ms;
 }
+
+.chip:hover { transform: translateY(-3px); border-color: var(--accent); }
+.chip:active { transform: scale(.96); }
+.platformCheck { position: absolute; inset-inline-end: 7px; inset-block-start: 5px; color: var(--muted); font-size: 13px; }
+.chipOn .platformCheck { color: var(--accent); }
 
 .chipOn {
   border-color: var(--accent);
   background: var(--accent-soft);
   color: var(--accent);
   font-weight: var(--w-semibold);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
 .chip:focus-visible {
@@ -177,7 +211,7 @@
   padding: var(--sp-3) var(--sp-4);
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--r-card);
+  border-radius: 18px;
   font-size: var(--fs-14);
   line-height: var(--lh-body);
 }
@@ -204,12 +238,13 @@
   min-height: 48px;
   padding: 0 var(--sp-4);
   border: 0;
-  border-radius: var(--r-button);
+  border-radius: 100px;
   background: var(--accent);
   color: var(--accent-ink);
   font: inherit;
   font-size: var(--fs-16);
   font-weight: var(--w-semibold);
+  box-shadow: 0 8px 24px var(--accent-soft);
 }
 
 .primary:disabled {

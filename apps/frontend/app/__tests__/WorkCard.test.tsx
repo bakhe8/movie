@@ -1,6 +1,7 @@
 import '../../jest-dom-vitest';
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { WorkCard } from '../components/WorkCard';
 import type { Recommendation, Title } from '../lib/api';
 import type { PublicQuality } from '../public-quality/types';
@@ -112,7 +113,9 @@ describe('WorkCard', () => {
     expect(container.querySelectorAll('[class*="strip"]')).toHaveLength(1);
   });
 
-  it('keeps a compact shelf tile to poster, title and personal fit', () => {
+  it('keeps a compact shelf visual and offers immediate save and watched actions', () => {
+    const onAddToList = vi.fn();
+    const onMarkWatched = vi.fn();
     const { container } = render(
       <WorkCard
         lang="ar"
@@ -123,8 +126,8 @@ describe('WorkCard', () => {
         listed={false}
         busy={false}
         onOpen={() => {}}
-        onAddToList={vi.fn()}
-        onMarkWatched={vi.fn()}
+        onAddToList={onAddToList}
+        onMarkWatched={onMarkWatched}
         onNotRelevant={vi.fn()}
       />,
     );
@@ -133,13 +136,54 @@ describe('WorkCard', () => {
     expect(screen.getByRole('button', { name: 'يد إلهية' })).toBeInTheDocument();
     expect(container.querySelector('[class*="fitRow"]')).not.toBeNull();
     expect(container.querySelector('[class*="metaRow"]')).toBeNull();
-    expect(container.querySelector('img[alt="IMDb"]')).toBeNull();
-    expect(container).not.toHaveTextContent('250,000');
+    expect(container.querySelector('summary img[alt="IMDb"]')).not.toBeNull();
+    expect(container.querySelector('details')).not.toHaveAttribute('open');
+    expect(screen.getByText(/250,000/)).not.toBeVisible();
     expect(container).not.toHaveTextContent('MUBI');
     expect(container).not.toHaveTextContent('غير محسوم');
-    expect(screen.queryByRole('button', { name: 'أضف إلى قائمتي' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'شاهدته' })).toBeNull();
+    screen.getByRole('button', { name: 'أضف إلى قائمتي' }).click();
+    screen.getByRole('button', { name: 'شاهدته' }).click();
+    expect(onAddToList).toHaveBeenCalledTimes(1);
+    expect(onMarkWatched).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('button', { name: 'ليس اقتراحًا مناسبًا' })).toBeNull();
+  });
+
+  it('shows the actual IMDb source score and discloses its dated reading and exact attribution', async () => {
+    const user = userEvent.setup();
+    const source = { ...productionRecommendation.publicQuality.sources[0], value: 6.4, attribution: 'Exact IMDb source attribution.' };
+    const measuredRecommendation: Recommendation & { publicQuality: PublicQuality } = {
+      ...productionRecommendation,
+      publicQuality: { value: 9.9, votes: null, sources: [source] },
+    };
+    const { container } = render(<WorkCard lang="ar" position={1} count={7} compact listed={false} busy={false}
+      recommendation={measuredRecommendation} />);
+    const details = container.querySelector('details') as HTMLDetailsElement;
+    const summary = details.querySelector('summary') as HTMLElement;
+    expect(summary).toHaveTextContent('6.4');
+    expect(summary).not.toHaveTextContent('9.9');
+    expect(summary.querySelector('img')).toHaveAttribute('src', '/brand/imdb.svg');
+    expect(details).not.toHaveAttribute('open');
+    expect(screen.getByText(source.attribution)).not.toBeVisible();
+    await user.click(summary);
+    expect(details).toHaveAttribute('open');
+    expect(screen.getByText(source.attribution)).toBeVisible();
+    expect(screen.getByText(/250,000 تصويت/)).toBeVisible();
+    expect(screen.getByText(/بتاريخ/)).toBeVisible();
+  });
+
+  it('never puts an IMDb mark on an unattributed, different-source, or unknown score', () => {
+    const qualities: Array<PublicQuality | undefined> = [
+      undefined,
+      { ...productionRecommendation.publicQuality, sources: [{ ...productionRecommendation.publicQuality.sources[0], source: 'other' }] },
+      { ...productionRecommendation.publicQuality, sources: [{ ...productionRecommendation.publicQuality.sources[0], value: null }] },
+    ];
+    const { container, rerender } = render(<WorkCard lang="ar" position={1} count={7} compact listed={false} busy={false} recommendation={recommendation} />);
+    for (const publicQuality of qualities) {
+      const sourcedRecommendation: Recommendation & { publicQuality?: PublicQuality } = { ...productionRecommendation, publicQuality };
+      rerender(<WorkCard lang="ar" position={1} count={7} compact listed={false} busy={false} recommendation={sourcedRecommendation} />);
+      expect(container.querySelector('img[alt="IMDb"]')).toBeNull();
+      expect(container.querySelector('details')).toBeNull();
+    }
   });
 
   it('restores production quality and availability on the full card', () => {

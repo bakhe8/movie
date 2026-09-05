@@ -8,10 +8,15 @@ import '../../jest-dom-vitest';
  * 3. Reset taste dialog: cancel keeps profile; confirm calls resetProfile
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render as renderView, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ProfileScreen } from '../components/ProfileScreen';
 import { useSession } from '../lib/session';
+import { AppearanceProvider } from '../lib/appearance';
+
+function render(ui: React.ReactNode) {
+  return renderView(<AppearanceProvider>{ui}</AppearanceProvider>);
+}
 
 // ── mock session ──────────────────────────────────────────────────────────────
 

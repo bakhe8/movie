@@ -445,6 +445,10 @@ Still open: the Cron service and its two variables are the owner's one-time setu
 
 ## Audited on 2026-09-05 (UX-A — mobile audit at `cd31d86`, design direction ADR-111)
 
+| Current owner request | Implementation | Verification boundary |
+|---|---|---|
+| Cinematic redesign from `b87577f` (ADR-113) | Shared image-led home, film, discovery, ranking, library, profile and onboarding; visual platform marks, toast feedback and three profile-backed appearances | 151 frontend tests, 28 profile backend tests, production webpack build; isolated fixture browser QA in `CINEMATIC_REDESIGN_2026-09-05.md`. Migration application, owner visual acceptance and deployment remain pending |
+
 | Gap | What changed | Proof |
 |---|---|---|
 | The mobile UI told its logic in paragraphs: 6065px/741-word home with 56px posters and "unknown" ×26, triad save button off-screen (1125px), 113px two-row header, English paragraphs leading Arabic cards, 3714px profile page | Audit with DOM measurements and a prioritised list (8 P0, 8 P1, 4 P2), one visual grammar (ADR-111), brand fixed to **Kolme** (O-13أ), seven canvas mockups for owner approval, implementation order for UX-B | `docs/UX_AUDIT_MOBILE_2026-09-05.md` §1–4 · `docs/design/mobile-2026-09-05/` · canvas «نماذج Kolme للجوال» |

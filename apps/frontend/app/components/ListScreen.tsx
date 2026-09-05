@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { api, ApiError, type LibraryRankingItem, type Title, type UserTitleState } from '../lib/api';
+import { api, ApiError, type LibraryRankingItem, type Title, type TitleState, type UserTitleState } from '../lib/api';
 import { formatNumber, formatWatchedOn, todayLocal } from '../lib/format';
+import { Toast } from '../lib/toast';
 import { Poster } from './Poster';
 import styles from './ListScreen.module.css';
 import { WorkCard } from './WorkCard';
@@ -16,9 +17,10 @@ const labels = {
   ar: {
     eyebrow: 'المكتبة',
     title: 'قائمتي',
-    hint: 'ما حفظته للمشاهدة، وكيف يرتّب نموذجك ما شاهدته، وسجل مشاهداتك.',
+    openFilm: 'افتح الفيلم',
+    hint: 'أفلام لليلة القادمة. وذكريات تستحق العودة.',
     filterLabel: 'تصفية بالاسم',
-    filterPlaceholder: 'اكتب جزءًا من الاسم',
+    filterPlaceholder: 'ابحث في مكتبتك',
     watchlist: 'للمشاهدة لاحقًا',
     watchlistEmpty: 'لم تحفظ شيئًا بعد. من التوصيات أو اكتشف اضغط «لاحقًا».',
     ranking: 'ترتيبك الشخصي',
@@ -54,9 +56,10 @@ const labels = {
   en: {
     eyebrow: 'Library',
     title: 'My list',
-    hint: 'What you saved to watch, how your model orders what you have watched, and your watch history.',
+    openFilm: 'Open film',
+    hint: 'Your next movie night. Your favourite memories.',
     filterLabel: 'Filter by name',
-    filterPlaceholder: 'Type part of a name',
+    filterPlaceholder: 'Find a film in your library',
     watchlist: 'To watch later',
     watchlistEmpty: 'Nothing saved yet. Press “Later” on a recommendation or in Discover.',
     ranking: 'Your personal ranking',
@@ -97,11 +100,13 @@ export function ListScreen({
   lang,
   profileId,
   onOpenTitle,
+  onOpenCatalogTitle,
 }: {
   lang: Lang;
   profileId: string;
   // Opens the work page with this ranking row as its context (blueprint §5.3).
   onOpenTitle?: (item: LibraryRankingItem, count: number) => void;
+  onOpenCatalogTitle?: (title: Title, state: TitleState) => void;
 }) {
   const t = labels[lang];
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
@@ -109,6 +114,7 @@ export function ListScreen({
   const [watchlist, setWatchlist] = useState<UserTitleState[]>([]);
   const [ranking, setRanking] = useState<Ranking>({ kind: 'loading' });
   const [filter, setFilter] = useState('');
+  const [activeSection, setActiveSection] = useState<'watchlist' | 'ranking' | 'timeline'>('watchlist');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   // The diary editor open on one timeline item: date as yyyy-mm-dd, notes as typed.
@@ -157,6 +163,26 @@ export function ListScreen({
     if (!title) return null;
     const alt = lang === 'ar' ? title.titleEn : title.titleAr;
     return alt && alt !== nameOf(title, '') ? alt : null;
+  }
+
+  function catalogPoster(state: UserTitleState, size: 'md' | 'lg', className?: string) {
+    const poster = <Poster title={state.title} size={size} name={nameOf(state.title, '')} className={className} />;
+    const title = state.title;
+    return title && onOpenCatalogTitle ? (
+      <button type="button" className={styles.posterOpen} aria-label={`${t.openFilm}: ${nameOf(title, '')}`} onClick={() => onOpenCatalogTitle(title, state.state)}>
+        {poster}
+      </button>
+    ) : poster;
+  }
+
+  function catalogHeading(state: UserTitleState) {
+    const title = state.title;
+    const name = nameOf(title, state.titleId);
+    return (
+      <h4 className={styles.title}>
+        {title && onOpenCatalogTitle ? <button type="button" className={styles.titleOpen} onClick={() => onOpenCatalogTitle(title, state.state)}>{name}</button> : name}
+      </h4>
+    );
   }
 
   function matches(title: Title | undefined) {
@@ -239,9 +265,16 @@ export function ListScreen({
 
   const header = (
     <div className={styles.header}>
+      <div className={styles.headerCopy}>
       <p className={styles.eyebrow}>{t.eyebrow}</p>
       <h2>{t.title}</h2>
       <p className={styles.hint}>{t.hint}</p>
+      </div>
+      <div className={styles.posterFan} aria-hidden="true">
+        {(watchlist.length ? watchlist : watched).slice(0, 3).map((state) => (
+          <Poster key={state.id} title={state.title} name={nameOf(state.title, '')} size="md" className={styles.fanPoster} />
+        ))}
+      </div>
     </div>
   );
 
@@ -285,13 +318,37 @@ export function ListScreen({
     <div className={styles.screen}>
       {header}
       {notice && (
-        <p className={styles.status} role="status">
-          {notice}
-        </p>
+        <Toast message={notice} tone={notice === t.actionFailed ? 'error' : 'success'} onDismiss={() => setNotice(null)} />
       )}
+
+      <div className={styles.libraryTabs} role="tablist" aria-label={t.eyebrow}>
+        {([
+          { id: 'watchlist', label: t.watchlist, count: watchlist.length, path: 'M6 3h12v18l-6-4-6 4z' },
+          { id: 'ranking', label: t.ranking, count: ranking.kind === 'ready' ? ranking.items.length : null, path: 'M4 20V10h4v10M10 20V4h4v16M16 20v-7h4v7' },
+          { id: 'timeline', label: t.timeline, count: watched.length, path: 'M12 8v5l3 2M21 12a9 9 0 1 1-3-6.7M21 3v6h-6' },
+        ] as const).map((tab) => (
+          <button key={tab.id} id={`library-tab-${tab.id}`} type="button" role="tab" aria-selected={activeSection === tab.id} aria-controls={`library-${tab.id}`} tabIndex={activeSection === tab.id ? 0 : -1} onClick={() => setActiveSection(tab.id)}
+            onKeyDown={(event) => {
+              const ids = ['watchlist', 'ranking', 'timeline'] as const;
+              const nextKey = lang === 'ar' ? 'ArrowLeft' : 'ArrowRight';
+              const previousKey = lang === 'ar' ? 'ArrowRight' : 'ArrowLeft';
+              if (![nextKey, previousKey, 'Home', 'End'].includes(event.key)) return;
+              event.preventDefault();
+              const index = ids.indexOf(tab.id);
+              const next = event.key === 'Home' ? ids[0] : event.key === 'End' ? ids[2] : ids[(index + (event.key === nextKey ? 1 : 2)) % 3];
+              setActiveSection(next);
+              document.getElementById(`library-tab-${next}`)?.focus();
+            }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={tab.path} /></svg>
+            <span>{tab.label}</span>
+            {tab.count !== null && <b>{formatNumber(tab.count, lang)}</b>}
+          </button>
+        ))}
+      </div>
 
       <div className={styles.filter}>
         <label htmlFor="library-filter">{t.filterLabel}</label>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg>
         <input
           id="library-filter"
           type="search"
@@ -302,7 +359,7 @@ export function ListScreen({
         />
       </div>
 
-      <section className={styles.section} data-role="later" aria-label={t.watchlist}>
+      <section id="library-watchlist" role="tabpanel" aria-labelledby="library-tab-watchlist" hidden={activeSection !== 'watchlist'} className={styles.section} data-role="later">
         <div className={styles.sectionHeader}>
           <h3>
             {t.watchlist}
@@ -314,26 +371,27 @@ export function ListScreen({
         ) : visibleWatchlist.length === 0 ? (
           <p className={styles.empty}>{t.noMatch}</p>
         ) : (
-          <ul className={styles.list}>
+          <ul className={`${styles.list} ${styles.posterGrid}`}>
             {visibleWatchlist.map((state) => {
               const meta = state.title?.releaseYear ? String(state.title.releaseYear) : '';
               const busy = busyId === state.titleId;
               return (
                 <li key={state.id} className={styles.card}>
                   <div className={styles.cardHead}>
-                    <Poster title={state.title} size="md" />
+                    {catalogPoster(state, 'lg', styles.libraryPoster)}
                     <div className={styles.cardBody}>
-                      <h4 className={styles.title}>{nameOf(state.title, state.titleId)}</h4>
+                      {catalogHeading(state)}
                       {altOf(state.title) && <p className={styles.alt}>{altOf(state.title)}</p>}
                       {meta && <p className={styles.meta}>{meta}</p>}
                     </div>
                   </div>
                   <div className={styles.actions}>
                     <button type="button" className={styles.ghost} onClick={() => markWatched(state)} disabled={busy}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>
                       {t.watched}
                     </button>
-                    <button type="button" className={styles.ghost} onClick={() => clearState(state, t.removedNotice)} disabled={busy}>
-                      {t.remove}
+                    <button type="button" className={`${styles.ghost} ${styles.iconAction}`} aria-label={`${t.remove}: ${nameOf(state.title, state.titleId)}`} onClick={() => clearState(state, t.removedNotice)} disabled={busy}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg>
                     </button>
                   </div>
                 </li>
@@ -343,7 +401,7 @@ export function ListScreen({
         )}
       </section>
 
-      <section className={styles.section} aria-label={t.ranking}>
+      <section id="library-ranking" role="tabpanel" aria-labelledby="library-tab-ranking" hidden={activeSection !== 'ranking'} className={styles.section}>
         <div className={styles.sectionHeader}>
           <h3>{t.ranking}</h3>
           <p>{t.rankingNote}</p>
@@ -384,7 +442,7 @@ export function ListScreen({
           ))}
       </section>
 
-      <section className={styles.section} aria-label={t.timeline}>
+      <section id="library-timeline" role="tabpanel" aria-labelledby="library-tab-timeline" hidden={activeSection !== 'timeline'} className={styles.section}>
         <div className={styles.sectionHeader}>
           <h3>
             {t.timeline}
@@ -403,9 +461,9 @@ export function ListScreen({
               return (
                 <li key={state.id} className={editing ? `${styles.card} ${styles.cardEditing}` : styles.card}>
                   <div className={styles.cardHead}>
-                    <Poster title={state.title} size="md" />
+                    {catalogPoster(state, 'md')}
                     <div className={styles.cardBody}>
-                      <h4 className={styles.title}>{nameOf(state.title, state.titleId)}</h4>
+                      {catalogHeading(state)}
                       {altOf(state.title) && <p className={styles.alt}>{altOf(state.title)}</p>}
                       <p className={styles.meta}>{state.watchedOn ? formatWatchedOn(state.watchedOn, lang) : t.noDate}</p>
                       {!editing && state.notes && <p className={styles.noteText}>{state.notes}</p>}

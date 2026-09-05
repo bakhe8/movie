@@ -1007,3 +1007,13 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 **Revisit when.** The owner replaces either visual reference, or measured usability requires behaviour—not merely presentation—to differ by mode.
 
 ---
+
+## ADR-113 — Image-led scenes and profile-backed appearances (owner request, 2026-09-05)
+
+**Context.** The owner rejected the current text-heavy, uniform compositions and requested images, depth, motion, fewer interactions and multiple saved appearances.
+**Decision.** The redesign replaces the visual constraints of ADR-111/112 for this branch: one shared component/state tree supports `cinema / premiere / montage` independently of `system / light / dark`. `cinematic.css` owns new semantic palette/depth/shape tokens. Existing base scheme and its storage key remain compatible.
+**Behavior.** Poster-first selection, direct shelf actions, graphic progress, progressive disclosure and accessible toast feedback retain ranking/quality/availability semantics. Reduced motion, visible keyboard alternatives and 44px controls remain required. Film covers use API-provided imagery; no missing rating, availability or movie image is fabricated.
+**Persistence.** `Profile.preferredAppearance` is nullable and enum-validated through PATCH; an additive migration precedes backend deployment. Profile patches update submitted fields only, preventing concurrent settings from overwriting appearance. The browser scopes its cache per profile, serializes preference writes and confirms the response before announcing success.
+**Acceptance.** Implementation and local review are recorded in `CINEMATIC_REDESIGN_2026-09-05.md`; automated checks and fixture screenshots do not constitute the owner's visual acceptance or production deployment.
+
+---
