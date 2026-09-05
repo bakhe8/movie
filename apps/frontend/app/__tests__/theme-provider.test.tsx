@@ -8,9 +8,9 @@ import { STORAGE_KEY, ThemeProvider, useTheme } from '../lib/theme';
  * Guard 2 of 3 for the three-state theme choice (ADR-112; THEME_MODES §3).
  *
  * The provider is what keeps `system` a live third state rather than a
- * one-time guess: it removes the attribute and the stored key, and follows
- * the device until the visitor says otherwise. L1 replaces the light palette
- * underneath all of this; none of it may change with the palette.
+ * one-time guess: it removes the attribute, remembers the explicit selection,
+ * and follows the device until the visitor says otherwise. L1 replaces the
+ * light palette underneath all of this; none of it may change with the palette.
  */
 // ADR-112: the montage light ground (styles/tokens.css --bg).
 const LIGHT_GROUND = '#f7f6fc';
@@ -135,7 +135,7 @@ describe('ThemeProvider', () => {
     expect(chrome()).toBe(LIGHT_GROUND);
   });
 
-  it('gives the device back when the visitor returns to `system`', async () => {
+  it('gives the device back and remembers when the visitor returns to `system`', async () => {
     const user = userEvent.setup();
     setSystemDark(true);
     render(
@@ -148,7 +148,7 @@ describe('ThemeProvider', () => {
     await user.click(screen.getByRole('button', { name: 'system' }));
 
     expect(attribute()).toBeNull();
-    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(localStorage.getItem(STORAGE_KEY)).toBe('system');
     expect(screen.getByTestId('resolved')).toHaveTextContent('dark');
   });
 

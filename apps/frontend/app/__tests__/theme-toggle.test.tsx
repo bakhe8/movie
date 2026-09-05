@@ -71,6 +71,7 @@ describe('ThemeToggle', () => {
     await user.click(screen.getByRole('radio', { name: 'نظام' }));
 
     expect(document.documentElement.getAttribute('data-theme')).toBeNull();
+    expect(localStorage.getItem('reel.theme')).toBe('system');
     expect(screen.getByRole('radio', { name: 'نظام' })).toHaveAttribute('aria-checked', 'true');
   });
 

@@ -47,7 +47,7 @@ describe('shared theme provider and toggle', () => {
     expect(localStorage.getItem('reel.theme')).toBe('dark');
     fireEvent.click(screen.getByRole('radio', { name: lang === 'ar' ? 'نظام' : 'Auto' }));
     expect(document.documentElement).not.toHaveAttribute('data-theme');
-    expect(localStorage.getItem('reel.theme')).toBeNull();
+    expect(localStorage.getItem('reel.theme')).toBe('system');
     expect(screen.getByTestId('resolution')).toHaveTextContent('system/dark');
     expect(screen.getAllByRole('radio').filter(el => el.getAttribute('aria-checked') === 'true')).toHaveLength(1);
   });
@@ -61,6 +61,19 @@ describe('shared theme provider and toggle', () => {
     render(<Mount/>);
     expect(screen.getByTestId('resolution')).toHaveTextContent(`${saved}/${saved}`);
     expect(chrome()).toBe(saved === 'light' ? '#f7f6fc' : '#06070f');
+  });
+
+  it('restores an explicit system choice and keeps following the OS after remount', () => {
+    localStorage.setItem('reel.theme', 'system');
+    systemDark = true;
+    const mounted = render(<Mount/>);
+    expect(screen.getByTestId('resolution')).toHaveTextContent('system/dark');
+    mounted.unmount();
+
+    systemDark = false;
+    render(<Mount/>);
+    expect(screen.getByTestId('resolution')).toHaveTextContent('system/light');
+    expect(localStorage.getItem('reel.theme')).toBe('system');
   });
 
   it('follows live OS changes only in system mode and cleans up listeners', () => {

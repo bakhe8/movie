@@ -6,10 +6,11 @@ import styles from './ThemeToggle.module.css';
 /**
  * Theme preference (docs/IDENTITY_DECISIONS_2026-09-03.md, Q1–Q2).
  *
- * Three states: `system` (default; never stored unless chosen explicitly),
- * `light`, `dark`. An explicit choice is stored in localStorage under
- * STORAGE_KEY and applied as `data-theme` on <html>; `system` removes the
- * attribute so the CSS falls back to `prefers-color-scheme`.
+ * Three states: `system` (default), `light`, `dark`. Every explicit choice is
+ * stored in localStorage under STORAGE_KEY; a missing key still defaults a
+ * first-time visitor to `system`. Light and dark are applied as `data-theme`
+ * on <html>; `system` removes the attribute so the CSS falls back to
+ * `prefers-color-scheme`.
  *
  * The attribute is also set BEFORE first paint by public/theme-boot.js
  * (loaded `beforeInteractive` from app/layout.tsx), so a saved choice never
@@ -45,7 +46,7 @@ function readStored(): ThemePreference {
   if (sessionPreference) return sessionPreference;
   try {
     const v = localStorage.getItem(STORAGE_KEY);
-    return v === 'light' || v === 'dark' ? v : 'system';
+    return v === 'system' || v === 'light' || v === 'dark' ? v : 'system';
   } catch {
     return 'system';
   }
@@ -123,15 +124,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const setPreference = useCallback((pref: ThemePreference) => {
     try {
-      if (pref === 'system') localStorage.removeItem(STORAGE_KEY);
-      else localStorage.setItem(STORAGE_KEY, pref);
+      localStorage.setItem(STORAGE_KEY, pref);
       // Storage holds it now, so the page-lifetime copy is no longer needed --
       // and must go, or a stale one would outrank what was just written.
       sessionPreference = null;
     } catch {
       // Storage unavailable: the choice still applies for this page and simply
-      // is not remembered. `system` is kept too, so a `removeItem` that failed
-      // cannot leave the visitor pinned to the old stored value.
+      // is not remembered. `system` is kept too, so the visitor can always
+      // return to following the device even when site data is blocked.
       sessionPreference = pref;
     }
     notifyPreference();
