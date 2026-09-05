@@ -187,7 +187,7 @@ Four Railway services (live, `backend` and `frontend` are built by Railway's Rai
 | `JWT_SECRET`, `ANTHROPIC_API_KEY`, `TMDB_API_KEY`, `MODEL_SERVICE_TOKEN`, `AUDIT_IP_SALT` | `backend` (as needed) | generate fresh values — never reuse `.env`'s dev placeholders |
 | `POSTGRES_PASSWORD`, `POSTGRES_USER`, `POSTGRES_DB` | `postgres` | generate a fresh password; `movieapp` / `moviedb` |
 | `API_PORT`, `PORT`, `MODEL_SERVICE_PORT` | each service | `3101` / `3110` / `8001` (Railway also injects its own `PORT`; keep these explicit since the app code reads them by these names) |
-| `MAIL_TRANSPORT`, `RESEND_API_KEY`, `MAIL_FROM_ADDRESS` | `backend` | mail transport (A-9/ADR-85); `kolme.app` is already verified in Resend (auto-configured via Cloudflare) |
+| `MAIL_TRANSPORT`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM_ADDRESS` | `backend` | mail transport (ADR-85/ADR-95): `smtp` against any SMTP server; for Resend (O-3) `smtp.resend.com`, `465`, user `resend`, password = its API key; `kolme.app` is already verified there (auto-configured via Cloudflare) |
 | `SENTRY_DSN`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, `OTEL_TRACES_SAMPLE_RATE` | `backend` | observability (A-11/ADR-86) — unset in dev, Sentry and tracing each start only when their variable is set here; the last two default to `reel-backend` and `1` (`.env.example`) |
 
 **Owner's click list, in order** (nothing here has been done yet):

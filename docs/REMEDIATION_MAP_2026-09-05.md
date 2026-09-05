@@ -49,5 +49,5 @@
 1. خدمة الخلفية: `MODEL_SERVICE_URL` و`MODEL_SERVICE_TOKEN` مضبوطان؟ وهل يظهر في سجلها `MODEL_SERVICE_URL is not set`؟
 2. خدمة `model-service` منشورة و`/health` فيها يجيب؟
 3. آخر نشر: سطر `[release] catalog: N titles` — N = 300؟
-4. `MAIL_TRANSPORT=resend` و`MAIL_FROM_ADDRESS` (معلّق منذ الجولة السابقة).
+4. `MAIL_TRANSPORT=smtp` مع `SMTP_HOST`/`SMTP_USER`/`SMTP_PASSWORD` و`MAIL_FROM_ADDRESS` (ADR-95) (معلّق منذ الجولة السابقة).
 5. القراران **O-6** (المجمَّع opt-in؟) و**O-7** (Kolme/Reel).

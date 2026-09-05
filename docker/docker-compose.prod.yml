@@ -36,6 +36,8 @@ secrets:
     file: ./secrets/model_service_token.txt
   audit_ip_salt:
     file: ./secrets/audit_ip_salt.txt
+  smtp_password:
+    file: ./secrets/smtp_password.txt
   database_url:
     file: ./secrets/database_url.txt
 
@@ -108,12 +110,18 @@ services:
       TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
       PRIVACY_DELETE_SAFETY_DAYS: ${PRIVACY_DELETE_SAFETY_DAYS:-7}
       PRIVACY_SWEEP_INTERVAL_MS: ${PRIVACY_SWEEP_INTERVAL_MS:-60000}
+      MAIL_TRANSPORT: ${MAIL_TRANSPORT:-log}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-}
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
       JWT_SECRET_FILE: /run/secrets/jwt_secret
       ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
       TMDB_API_KEY_FILE: /run/secrets/tmdb_api_key
       MODEL_SERVICE_TOKEN_FILE: /run/secrets/model_service_token
       AUDIT_IP_SALT_FILE: /run/secrets/audit_ip_salt
+      SMTP_PASSWORD_FILE: /run/secrets/smtp_password
     secrets:
       - postgres_password
       - jwt_secret
@@ -121,6 +129,7 @@ services:
       - tmdb_api_key
       - model_service_token
       - audit_ip_salt
+      - smtp_password
     depends_on:
       postgres:
         condition: service_healthy

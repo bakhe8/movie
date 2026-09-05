@@ -87,7 +87,7 @@ describe('PasswordResetService', () => {
     // failure is audited instead.
     it('resolves like a success when the mail provider fails, revoking the undelivered token and auditing the failure', async () => {
       users.findOne.mockResolvedValue(activeUser);
-      mailer.send.mockRejectedValue(new Error('Resend rejected the message: domain is not verified'));
+      mailer.send.mockRejectedValue(new Error('SMTP server rejected the message for someone@example.com'));
 
       await expect(service.request(activeUser.email, '1.2.3.4')).resolves.toBeUndefined();
 
