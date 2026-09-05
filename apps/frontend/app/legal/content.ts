@@ -1,8 +1,8 @@
-// Terms and Privacy Notice: first drafts for legal review, written from
+// Terms and Privacy Notice: user-facing copy written from
 // docs/PRIVACY.md (principles §1, inventory §2, consent §3, rights §5,
 // processors §6, retention §9, transparency §12) and the blueprint's promises.
-// Every sentence states what the product actually does today or names what is
-// not built yet; nothing here promises more than the code delivers.
+// Every sentence states what the product actually does today; nothing here
+// promises more than the code delivers.
 // Changing a purpose's text bumps CONSENT_VERSION and re-asks (PRIVACY.md §3).
 
 export type Lang = 'ar' | 'en';
@@ -22,14 +22,14 @@ export interface LegalDocument {
   sections: LegalSection[];
 }
 
-const UPDATED = '2026-09-04';
+const UPDATED = '2026-09-05';
 
 export const LEGAL: Record<LegalKind, Record<Lang, LegalDocument>> = {
   terms: {
     ar: {
       title: 'شروط الاستخدام',
       updated: UPDATED,
-      draftNotice: 'نسخة أولية بانتظار المراجعة القانونية. تُعرض حتى لا يوافق أحد على نص لا يستطيع قراءته.',
+      draftNotice: 'تصف هذه الشروط الخدمة وحقوقك كما تعمل حاليًا. يظهر تاريخ آخر تحديث أعلى الصفحة.',
       intro: 'Kolme خدمة توصيات أفلام تتعلم ذوقك من ترتيبك لأفلام شاهدتها، ثلاثة في كل مرة. باستخدامك الخدمة توافق على ما يلي.',
       sections: [
         {
@@ -77,7 +77,7 @@ export const LEGAL: Record<LegalKind, Record<Lang, LegalDocument>> = {
         {
           head: 'إنهاء الحساب',
           paragraphs: [
-            'يمكنك مسح ملف ذوقك الآن من الملف الشخصي. حذف الحساب وتصدير بياناتك ميزتان موعودتان لم تُبنيا بعد، وحين تُبنيان سيُعلن تفصيل مهلة الأمان قبل الحذف النهائي.',
+            'يمكنك من الملف الشخصي تنزيل نسخة من بياناتك بصيغة JSON بعد تأكيد كلمة المرور، أو مسح ملف ذوقك مع بقاء حسابك. ويمكنك طلب حذف الحساب بعد تأكيد كلمة المرور؛ يوقف الطلب معالجة ملفاتك ويحدد موعد التنفيذ بعد مهلة أمان، ويمكن إلغاؤه حتى ذلك الموعد. بعد تنفيذ الحذف لا يمكن التراجع.',
           ],
         },
         {
@@ -89,7 +89,7 @@ export const LEGAL: Record<LegalKind, Record<Lang, LegalDocument>> = {
     en: {
       title: 'Terms of Use',
       updated: UPDATED,
-      draftNotice: 'A first draft pending legal review. Shown so that nobody agrees to a text they cannot read.',
+      draftNotice: 'These terms describe the service and your rights as they work today. The last-updated date appears above.',
       intro: 'Kolme is a film recommendation service that learns your taste from how you rank films you have watched, three at a time. By using the service you agree to the following.',
       sections: [
         {
@@ -137,7 +137,7 @@ export const LEGAL: Record<LegalKind, Record<Lang, LegalDocument>> = {
         {
           head: 'Ending your account',
           paragraphs: [
-            'You can wipe your taste profile now from your profile. Account deletion and data export are promised features not built yet; when they are, the safety period before final deletion will be stated.',
+            'From your profile, you can download a JSON copy of your data after confirming your password, or wipe your taste profile while keeping your account. You can also request account deletion after confirming your password; the request pauses processing for your profiles, sets an execution date after a safety period, and can be cancelled until that date. Deletion cannot be undone after it runs.',
           ],
         },
         {
@@ -151,7 +151,7 @@ export const LEGAL: Record<LegalKind, Record<Lang, LegalDocument>> = {
     ar: {
       title: 'إشعار الخصوصية',
       updated: UPDATED,
-      draftNotice: 'نسخة أولية بانتظار المراجعة القانونية. كل جملة هنا تصف ما يفعله المنتج فعلًا اليوم أو تسمّي ما لم يُبنَ بعد.',
+      draftNotice: 'يصف هذا الإشعار البيانات التي تعالجها الخدمة وحقوقك المتاحة حاليًا. يظهر تاريخ آخر تحديث أعلى الصفحة.',
       intro: 'ملفك خاص افتراضيًا: لا صفحة عامة، ولا مشاركة إلا بقرارك، ولا يُباع ملف ذوقك، ولا نستنتج سمات حساسة من مشاهداتك.',
       sections: [
         {
@@ -188,8 +188,8 @@ export const LEGAL: Record<LegalKind, Record<Lang, LegalDocument>> = {
           items: [
             'مسح ملف الذوق: متاح الآن من الملف الشخصي؛ يحذف الجولات والعلامات والنموذج ويبقي الحساب.',
             'تغيير الموافقات الاختيارية: متاح الآن من الملف الشخصي.',
-            'الوصول والتصدير: موعود، لم يُبنَ بعد.',
-            'الحذف: موعود، لم يُبنَ بعد؛ سيُعلن تفصيل مهلة الأمان قبل الحذف النهائي حين يُبنى.',
+            'الوصول والتصدير: متاحان الآن من الملف الشخصي؛ بعد تأكيد كلمة المرور يمكنك تنزيل نسخة JSON قابلة للنقل من بيانات حسابك وملفاتك وطلبات الخصوصية.',
+            'الحذف: متاح الآن من الملف الشخصي بعد تأكيد كلمة المرور. يوقف الطلب معالجة ملفاتك ويحدد موعد التنفيذ بعد مهلة أمان؛ يمكنك إلغاء الطلب حتى ذلك الموعد، وبعد التنفيذ لا يمكن التراجع.',
             'التصحيح: بيانات المصدر عبر الدعم؛ تصحيح الذوق بجولة ترتيب جديدة، فالأصل لا يُعدَّل في مكانه.',
             'الاعتراض على القرار الآلي: التوصيات اقتراحات، ولا يُحجب عنك شيء بقرار آلي.',
           ],
@@ -224,7 +224,7 @@ export const LEGAL: Record<LegalKind, Record<Lang, LegalDocument>> = {
     en: {
       title: 'Privacy Notice',
       updated: UPDATED,
-      draftNotice: 'A first draft pending legal review. Every sentence here describes what the product actually does today or names what is not built yet.',
+      draftNotice: 'This notice describes the data the service processes and the rights available to you today. The last-updated date appears above.',
       intro: 'Your profile is private by default: no public page, no sharing unless you choose it, your taste profile is never sold, and no sensitive trait is ever inferred from what you watch.',
       sections: [
         {
@@ -261,8 +261,8 @@ export const LEGAL: Record<LegalKind, Record<Lang, LegalDocument>> = {
           items: [
             'Wipe the taste profile: available now from your profile; deletes rounds, marks and the model and keeps the account.',
             'Change the optional consents: available now from your profile.',
-            'Access and export: promised, not built yet.',
-            'Deletion: promised, not built yet; the safety period before final deletion will be stated when it is.',
+            'Access and export: available now from your profile; after confirming your password, you can download a portable JSON copy of your account, profiles and privacy requests.',
+            'Deletion: available now from your profile after confirming your password. The request pauses processing for your profiles and sets an execution date after a safety period; you can cancel until that date, and deletion cannot be undone after it runs.',
             'Correction: source data through support; taste corrections through a new ranking round, since originals are never edited in place.',
             'Objecting to automated decisions: recommendations are suggestions, and nothing is withheld from you by an automated decision.',
           ],
