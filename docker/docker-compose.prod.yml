@@ -38,12 +38,14 @@ secrets:
     file: ./secrets/audit_ip_salt.txt
   smtp_password:
     file: ./secrets/smtp_password.txt
+  resend_api_key:
+    file: ./secrets/resend_api_key.txt
   database_url:
     file: ./secrets/database_url.txt
 
 services:
   postgres:
-    image: ankane/pgvector:latest
+    image: pgvector/pgvector:0.8.6-pg15
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-movieapp}
@@ -115,6 +117,7 @@ services:
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
       MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-}
+      MAIL_OUTBOX_SWEEP_INTERVAL_MS: ${MAIL_OUTBOX_SWEEP_INTERVAL_MS:-30000}
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
       JWT_SECRET_FILE: /run/secrets/jwt_secret
       ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
@@ -122,6 +125,7 @@ services:
       MODEL_SERVICE_TOKEN_FILE: /run/secrets/model_service_token
       AUDIT_IP_SALT_FILE: /run/secrets/audit_ip_salt
       SMTP_PASSWORD_FILE: /run/secrets/smtp_password
+      RESEND_API_KEY_FILE: /run/secrets/resend_api_key
     secrets:
       - postgres_password
       - jwt_secret
@@ -130,6 +134,7 @@ services:
       - model_service_token
       - audit_ip_salt
       - smtp_password
+      - resend_api_key
     depends_on:
       postgres:
         condition: service_healthy

@@ -14,7 +14,7 @@ A personal film-taste assistant that learns from one question only — "rank the
 | `apps/backend` | NestJS 10, TypeORM 0.3 (migrations only), Passport JWT, class-validator, @nestjs/throttler; global prefix `/api` |
 | `services/workers` | Python 3.11+, NumPy/SciPy (Plackett–Luce), Pydantic, Anthropic SDK (enrichment); Poetry |
 | `packages/shared` | shared TypeScript types (fingerprint) |
-| `docker/` | Dev: PostgreSQL (`ankane/pgvector`, also hosts the e2e suite's `moviedb_test` database — board C-17). Staging/prod: `Dockerfile` per service, `docker-compose.prod.yml` (file-based secrets, one-shot migrations), backup/restore scripts |
+| `docker/` | Dev: PostgreSQL 15 (`pgvector/pgvector:0.8.6-pg15`, pinned — ADR-98; also hosts the e2e suite's `moviedb_test` database — board C-17). Staging/prod: `Dockerfile` per service, `docker-compose.prod.yml` (file-based secrets, one-shot migrations), backup/restore scripts |
 
 ## Repository layout
 

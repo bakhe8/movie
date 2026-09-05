@@ -8,7 +8,7 @@ import { PasswordReset } from '../../entities/password-reset.entity';
 import { RefreshToken } from '../../entities/refresh-token.entity';
 import { User } from '../../entities/user.entity';
 import { AuditService } from '../audit/audit.service';
-import { Mailer } from '../mail/mailer';
+import { MailOutboxService } from '../mail/mail-outbox.service';
 
 export function hashResetToken(raw: string): string {
   return createHash('sha256').update(raw).digest('hex');
@@ -29,7 +29,7 @@ export class PasswordResetService {
     private readonly resetsRepository: Repository<PasswordReset>,
     @InjectRepository(RefreshToken)
     private readonly refreshTokensRepository: Repository<RefreshToken>,
-    private readonly mailer: Mailer,
+    private readonly outbox: MailOutboxService,
     private readonly audit: AuditService,
     config: ConfigService,
   ) {
@@ -74,26 +74,33 @@ export class PasswordResetService {
     );
 
     const link = `${this.appUrl}/reset-password?token=${raw}`;
-    // A provider failure (bounce, outage, unverified sender) must resolve
-    // exactly like a success from outside: letting it propagate would answer
-    // 500 for a real address and 202 for an unknown one -- the membership
-    // oracle this route exists not to be (AUDIT_2026-09-05 H1). The token is
-    // revoked (nobody ever received it), and the failure is logged and
-    // audited so an operator can see the request went nowhere instead of
-    // finding an orphaned live row.
-    let delivered = true;
+    // The message is a mail_outbox row first (ADR-97): a provider failure is
+    // retried with backoff until the link expires, so a blip at the provider
+    // costs a delay, not the request. Nothing here may answer differently
+    // for a real address than for an unknown one -- the membership oracle
+    // this route exists not to be (AUDIT_2026-09-05 H1) -- so a failure to
+    // even queue resolves like a success from outside. A row that is dead
+    // on its first attempt (nobody will ever receive it) revokes the token,
+    // and both cases are logged and audited so an operator can see the
+    // request went nowhere instead of finding an orphaned live row.
+    let outcome: 'delivered' | 'queued' | 'failed' = 'failed';
     try {
-      await this.mailer.send({
+      const queued = await this.outbox.enqueue({
+        userId: user.id,
+        kind: 'password_reset',
         to: user.email,
         subject: 'إعادة تعيين كلمة المرور · Reset your password',
         text: `افتح الرابط لتعيين كلمة مرور جديدة (صالح ${Math.round(this.ttlMs / 60_000)} دقيقة):\n${link}\n\nOpen this link to set a new password. If you did not ask for this, ignore this message.`,
+        expiresAt: reset.expiresAt,
       });
+      outcome = queued.status === 'delivered' ? 'delivered' : queued.status === 'pending' ? 'queued' : 'failed';
     } catch (error) {
-      delivered = false;
       // User id only: never the address, the link or the token.
       this.logger.error(
-        `password-reset mail not delivered for user ${user.id}: ${error instanceof Error ? error.message : String(error)}`,
+        `password-reset mail could not be queued for user ${user.id}: ${error instanceof Error ? error.message : String(error)}`,
       );
+    }
+    if (outcome === 'failed') {
       await this.resetsRepository.update({ id: reset.id }, { revokedAt: new Date() });
     }
 
@@ -102,8 +109,8 @@ export class PasswordResetService {
       action: 'auth.password_reset.requested',
       resource: 'user',
       resourceId: user.id,
-      status: delivered ? 'ok' : 'failed',
-      reason: delivered ? null : 'mail_send_failed',
+      status: outcome === 'delivered' ? 'ok' : outcome === 'queued' ? 'scheduled' : 'failed',
+      reason: outcome === 'delivered' ? null : outcome === 'queued' ? 'mail_queued_for_retry' : 'mail_send_failed',
       ip,
     });
   }

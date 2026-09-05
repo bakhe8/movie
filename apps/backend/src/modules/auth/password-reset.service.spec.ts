@@ -6,7 +6,7 @@ import { PasswordReset } from '../../entities/password-reset.entity';
 import { RefreshToken } from '../../entities/refresh-token.entity';
 import { User } from '../../entities/user.entity';
 import type { AuditService } from '../audit/audit.service';
-import type { Mailer } from '../mail/mailer';
+import type { MailOutboxService } from '../mail/mail-outbox.service';
 import { PasswordResetService, hashResetToken } from './password-reset.service';
 
 function repoMock() {
@@ -26,7 +26,7 @@ describe('PasswordResetService', () => {
   let users: ReturnType<typeof repoMock>;
   let resets: ReturnType<typeof repoMock>;
   let refreshTokens: ReturnType<typeof repoMock>;
-  let mailer: { send: ReturnType<typeof vi.fn> };
+  let outbox: { enqueue: ReturnType<typeof vi.fn> };
   let audit: { record: ReturnType<typeof vi.fn> };
   let service: PasswordResetService;
 
@@ -36,13 +36,13 @@ describe('PasswordResetService', () => {
     users = repoMock();
     resets = repoMock();
     refreshTokens = repoMock();
-    mailer = { send: vi.fn(async () => undefined) };
+    outbox = { enqueue: vi.fn(async () => ({ id: 'mail-1', status: 'delivered' })) };
     audit = { record: vi.fn(async () => ({})) };
     service = new PasswordResetService(
       users as unknown as Repository<User>,
       resets as unknown as Repository<PasswordReset>,
       refreshTokens as unknown as Repository<RefreshToken>,
-      mailer as unknown as Mailer,
+      outbox as unknown as MailOutboxService,
       audit as unknown as AuditService,
       configOf({ FRONTEND_URL: 'https://kolme.app/' }),
     );
@@ -54,14 +54,14 @@ describe('PasswordResetService', () => {
 
       await expect(service.request('nobody@example.com', '1.2.3.4')).resolves.toBeUndefined();
 
-      expect(mailer.send).not.toHaveBeenCalled();
+      expect(outbox.enqueue).not.toHaveBeenCalled();
       expect(resets.save).not.toHaveBeenCalled();
       expect(audit.record).toHaveBeenCalledWith(
         expect.objectContaining({ actorUserId: null, status: 'failed', reason: 'no_reset_sent: no account' }),
       );
     });
 
-    it('revokes older live links, stores only a hash, and mails a link carrying the raw token', async () => {
+    it('revokes older live links, stores only a hash, and queues a link carrying the raw token that expires with the row', async () => {
       users.findOne.mockResolvedValue(activeUser);
 
       await service.request(activeUser.email, null);
@@ -70,24 +70,43 @@ describe('PasswordResetService', () => {
         expect.objectContaining({ userId: 'user-1' }),
         expect.objectContaining({ revokedAt: expect.any(Date) }),
       );
-      const saved = resets.save.mock.calls[0][0] as { tokenHash: string };
-      const mail = mailer.send.mock.calls[0][0] as { to: string; text: string };
+      const saved = resets.save.mock.calls[0][0] as { tokenHash: string; expiresAt: Date };
+      const mail = outbox.enqueue.mock.calls[0][0] as { userId: string; kind: string; to: string; text: string; expiresAt: Date };
       const link = mail.text.match(/https?:\/\/\S+/)?.[0] ?? '';
       const raw = new URL(link).searchParams.get('token') ?? '';
       expect(raw).not.toBe('');
       expect(saved.tokenHash).toBe(hashResetToken(raw));
       expect(mail.text).not.toContain(saved.tokenHash);
       expect(mail.to).toBe(activeUser.email);
+      expect(mail).toMatchObject({ userId: 'user-1', kind: 'password_reset', expiresAt: saved.expiresAt });
       expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ actorUserId: 'user-1', status: 'ok' }));
     });
 
-    // H1: a provider failure must be indistinguishable from a success from
-    // outside -- a 500 here, next to the 202 an unknown address gets, would
-    // be a membership oracle. The undelivered token is revoked and the
-    // failure is audited instead.
-    it('resolves like a success when the mail provider fails, revoking the undelivered token and auditing the failure', async () => {
+    // ADR-97: a provider failure leaves the row pending for the sweep to
+    // retry; the token stays live (the link may still arrive) and the audit
+    // says so.
+    it('resolves like a success when the first send fails, keeping the token for the retry and auditing the queueing', async () => {
       users.findOne.mockResolvedValue(activeUser);
-      mailer.send.mockRejectedValue(new Error('SMTP server rejected the message for someone@example.com'));
+      outbox.enqueue.mockResolvedValue({ id: 'mail-1', status: 'pending' });
+
+      await expect(service.request(activeUser.email, '1.2.3.4')).resolves.toBeUndefined();
+
+      expect(resets.update).not.toHaveBeenCalledWith({ id: 'reset-1' }, expect.anything());
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({ actorUserId: 'user-1', status: 'scheduled', reason: 'mail_queued_for_retry' }),
+      );
+    });
+
+    // H1: a failure must be indistinguishable from a success from outside --
+    // a 500 here, next to the 202 an unknown address gets, would be a
+    // membership oracle. A row dead on arrival (nobody will ever receive
+    // it) or a queue that cannot be written revokes the token and audits.
+    it.each([
+      ['the row is dead on its first attempt', () => outbox.enqueue.mockResolvedValue({ id: 'mail-1', status: 'dead' })],
+      ['the outbox cannot be written', () => outbox.enqueue.mockRejectedValue(new Error('connection refused'))],
+    ])('resolves like a success when %s, revoking the undelivered token and auditing the failure', async (_case, arrange) => {
+      users.findOne.mockResolvedValue(activeUser);
+      arrange();
 
       await expect(service.request(activeUser.email, '1.2.3.4')).resolves.toBeUndefined();
 

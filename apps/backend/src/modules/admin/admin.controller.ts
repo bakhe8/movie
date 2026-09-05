@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Reques
 import { AuthGuard } from '@nestjs/passport';
 import { AdminGuard } from '../auth/admin.guard';
 import type { SafeUser } from '../auth/auth.service';
+import { MailOutboxService } from '../mail/mail-outbox.service';
 import { Actor, AdminCatalogService } from './admin-catalog.service';
 import { AdminMetricsService } from './admin-metrics.service';
 import { AdminModelsService } from './admin-models.service';
@@ -42,6 +43,7 @@ export class AdminController {
     private readonly models: AdminModelsService,
     private readonly ops: AdminOpsService,
     private readonly metrics: AdminMetricsService,
+    private readonly outbox: MailOutboxService,
   ) {}
 
   // ---- catalog and rights ------------------------------------------------
@@ -157,6 +159,13 @@ export class AdminController {
   @Get('audit-log')
   listAuditLog(@Query() query: ListAuditLogQueryDto) {
     return this.ops.listAuditLog(query);
+  }
+
+  // Where each outgoing mail stands (ADR-97): counts per status and the
+  // latest rows -- never an address or a body.
+  @Get('mail-outbox')
+  mailOutbox() {
+    return this.outbox.summary();
   }
 
   // ---- metrics board (BP §18.1) -----------------------------------------

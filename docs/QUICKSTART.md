@@ -7,7 +7,7 @@ Runs the current vertical slice on your machine: register → mark films watched
 | Tool | Version | Notes |
 |---|---|---|
 | Node.js + npm | 22.x / 10.x | `node --version` |
-| Docker Desktop | current | Postgres (pgvector image) |
+| Docker Desktop | current | Postgres 15 (`pgvector/pgvector:0.8.6-pg15`, pinned) |
 | Python | 3.11+ | model service; `pip` or Poetry |
 | Git | any | |
 
@@ -172,7 +172,7 @@ Four Railway services (live, `backend` and `frontend` are built by Railway's Rai
 
 | Service | Config-as-code path | Public domain | Notes |
 |---|---|---|---|
-| `postgres` | — (deploy from Docker image `ankane/pgvector:latest`, not Railway's own Postgres plugin — that plugin doesn't ship pgvector) | none (private) | Attach a Railway Volume at `/var/lib/postgresql/data`. Region: **EU-West** (Railway has no Middle East region). Railway's own backup/PITR tier on a bring-your-own-image service is more limited than a fully managed Postgres — run `docker/backup-postgres.sh` on a schedule (Railway Cron service) until/unless this moves to a managed provider |
+| `postgres` | — (deploy from Docker image `pgvector/pgvector:0.8.6-pg15` — pinned, PG 15 like the existing volume (ADR-98) — not Railway's own Postgres plugin, which doesn't ship pgvector) | none (private) | Attach a Railway Volume at `/var/lib/postgresql/data`. Region: **EU-West** (Railway has no Middle East region). Railway's own backup/PITR tier on a bring-your-own-image service is more limited than a fully managed Postgres — run `docker/backup-postgres.sh` on a schedule (Railway Cron service) until/unless this moves to a managed provider |
 | `backend` | `apps/backend/railway.json` | `api.kolme.app` / `api.alpha.kolme.app` | Root directory = repo root. **Pre-deploy command** `npm run release --workspace=@movie/backend` (Settings → Deploy): migrations, then the catalog seed (`seed-demo --catalog-only`, no persona accounts), the rights-registry rows and the IMDb ratings, in the same image before every deployment — idempotent, and a failure stops the deploy (ADR-90). The catalog is never a separate manual step |
 | `frontend` | `apps/frontend/railway.json` | `kolme.app` / `alpha.kolme.app` | Root directory = repo root |
 | `model-service` (workers) | `services/workers/railway.json` | none (private, reached via `MODEL_SERVICE_URL`) | Root directory = repo root |
@@ -187,13 +187,15 @@ Four Railway services (live, `backend` and `frontend` are built by Railway's Rai
 | `JWT_SECRET`, `ANTHROPIC_API_KEY`, `TMDB_API_KEY`, `MODEL_SERVICE_TOKEN`, `AUDIT_IP_SALT` | `backend` (as needed) | generate fresh values — never reuse `.env`'s dev placeholders |
 | `POSTGRES_PASSWORD`, `POSTGRES_USER`, `POSTGRES_DB` | `postgres` | generate a fresh password; `movieapp` / `moviedb` |
 | `API_PORT`, `PORT`, `MODEL_SERVICE_PORT` | each service | `3101` / `3110` / `8001` (Railway also injects its own `PORT`; keep these explicit since the app code reads them by these names) |
-| `MAIL_TRANSPORT`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM_ADDRESS` | `backend` | mail transport (ADR-85/ADR-95): `smtp` against any SMTP server; for Resend (O-3) `smtp.resend.com`, `465`, user `resend`, password = its API key; `kolme.app` is already verified there (auto-configured via Cloudflare) |
+| `MAIL_TRANSPORT`, `RESEND_API_KEY`, `MAIL_FROM_ADDRESS` (optional `MAIL_OUTBOX_SWEEP_INTERVAL_MS`) | `backend` | mail (ADR-85/97): `resend` — one HTTPS request, the only transport that works on Railway below Pro (outbound SMTP is Pro-only); `kolme.app` is verified there (auto-configured via Cloudflare). `log` is refused in production. `smtp` (+ `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASSWORD`) is the VPS path. Queued mail and its state: `GET /api/admin/mail-outbox` |
 | `SENTRY_DSN`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, `OTEL_TRACES_SAMPLE_RATE` | `backend` | observability (A-11/ADR-86) — unset in dev, Sentry and tracing each start only when their variable is set here; the last two default to `reel-backend` and `1` (`.env.example`) |
+
+Prove delivery before trusting a provider (ADR-97): `npx tsx apps/backend/src/scripts/mail-probe.ts you@example.com` sends one probe through the configured transport and the outbox — the exact path a password-reset mail takes — and prints the row's state; run it with the live variables (`railway run …`) to see the message land in a real mailbox.
 
 **Owner's click list, in order** (nothing here has been done yet):
 
 1. Railway dashboard → New Project → Deploy from GitHub repo → `bakhe8/movie`.
-2. Add the `postgres` service: Docker Image → `ankane/pgvector:latest`, region EU-West, attach a Volume at `/var/lib/postgresql/data`, set its three variables above.
+2. Add the `postgres` service: Docker Image → `pgvector/pgvector:0.8.6-pg15`, region EU-West, attach a Volume at `/var/lib/postgresql/data`, set its three variables above.
 3. Add `backend`: from the same GitHub repo, root directory `/`, config-as-code path `apps/backend/railway.json`; set its variables.
 4. On `backend`, Settings → Deploy → Add pre-deploy step: `npm run release --workspace=@movie/backend`. Its first deployment then creates the schema and loads the catalog before the app receives traffic, and every later deployment repeats the (idempotent) release first. No separate migrate service.
 5. Add `model-service`: same repo/root, config-as-code path `services/workers/railway.json`; set its variables.

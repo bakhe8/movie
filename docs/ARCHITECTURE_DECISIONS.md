@@ -703,7 +703,7 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 
 ---
 
-## ADR-95 — Mail leaves through a generic SMTP adapter, not a vendor SDK (owner review of external dependencies, 2026-09-05)
+## ADR-95 — Mail leaves through a generic SMTP adapter, not a vendor SDK (owner review of external dependencies, 2026-09-05) — **partially superseded by ADR-97 (2026-09-05): the Resend transport is back, over HTTPS**
 
 **Context.** ADR-85's second transport was `ResendMailer` over the Resend SDK: one npm package and one adapter written to one vendor's response shape, for the single mail this product sends (the password-reset link). The owner's review asked which external dependencies an internal, easily verified piece could replace. A self-hosted mail server is not that piece — deliverability, IP reputation and SPF/DKIM/DMARC upkeep are a full-time burden for one mail — but the *SDK* is: every provider, Resend included, accepts the same SMTP session.
 **Decision.** `MAIL_TRANSPORT=smtp` with `SmtpMailer` over nodemailer (zero dependencies, bundled types). `SMTP_HOST` and `MAIL_FROM_ADDRESS` are required at boot, `SMTP_USER`/`SMTP_PASSWORD` come together or not at all, `SMTP_PORT` defaults to 587; 465 selects implicit TLS, and whenever credentials are configured nodemailer is told `requireTLS`, so a server that will not STARTTLS gets no password. A send whose recipient the server rejected (nodemailer resolves, with the address under `rejected`) throws, as the Resend adapter did for its `error` field, and no log line ever carries a credential or the body. The `resend` package and transport name are gone; `MAIL_TRANSPORT=resend` fails at boot with a message that names `smtp`. O-3 stands: Resend is reached as `smtp.resend.com:465`, user `resend`, password = its API key.
@@ -718,6 +718,24 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 **Decision.** `pending` carries `training: { state, jobId, errorKind, completedTriads, nextTrainingAt }` (`TrainingService.summarize`, no HTTP beyond the model-service job lookup the status route already made). Once `needed` is 0 the home screen names the situation — building (and polls), never requested (with «درّب نموذجي الآن» right there), failed with `invalid` = the ranked titles lack published fingerprints, failed with an error, finished-but-unpublished, disabled on this server, service unreachable — with the job id as a support code where one exists, and says why a train request was refused. The profile screen does the same. `GET /api/health` answers 503 `empty_catalog` over zero titles: the release seeds before traffic (ADR-90), so an empty catalog is always a failed release, and Railway's health check must say so before a user does.
 **Consequences.** The API shape is additive; every designed state stays a 200 (ADR-81). A pending home screen costs one model-service round-trip (5 s timeout) — only while there is no model. Not done here, by design: the four readiness statuses of the brief's §5.1 (queue item 8) and unique-set counting for the threshold (queue item 3, revises ADR-34).
 **Revisit when.** Queue item 8 folds `training` into a readiness contract, or the model service gains a push/callback so polling can go.
+
+---
+
+## ADR-97 — Mail: delivery rented behind an owned seam, a Postgres outbox, no `log` in production (owner decision 2026-09-05; partially supersedes ADR-95)
+
+**Context.** ADR-95 dropped the Resend adapter for a generic SMTP one while the Railway backend was set to `resend`, so the next deploy refused to boot (~06:30, hotfix `f9eedd4`). The owner then ruled on mail as a category: no self-run mail server (IP reputation, bounces, SPF/DKIM/DMARC are a full-time burden for one message), no SMTP from Railway (outbound SMTP is Pro-only; Free/Hobby must use an HTTPS API), and everything else owned — templates, tokens, retries, status — behind the `Mailer` seam, so the provider is one adapter and one variable.
+**Decision.** Three transports: `resend` as one HTTPS POST with an `Idempotency-Key` (no SDK), `smtp` for the VPS path, `log` for development only — refused when `NODE_ENV=production`. Every message is a `mail_outbox` row first (ADR-91 names, cascades with the account): `enqueue()` attempts at once, a failure is retried by a sweep (`MAIL_OUTBOX_SWEEP_INTERVAL_MS`, default 30 s) with backoff 30 s → 32 min over 8 attempts and never past the message's `expiresAt` (a reset link's TTL); the body rests only sealed (AES-256-GCM under an HKDF subkey of `JWT_SECRET`) and is wiped when the row leaves `pending`, so ADR-85's "a database read never yields a credential" still holds; delivered and dead rows purge after 7 days; `GET /admin/mail-outbox` shows status without address or body. Password reset audits `ok` / `scheduled` / `failed` and revokes the token only when the row is dead or could not be written.
+**Consequences.** No provider SDK; a provider blip costs a delay, not a lost reset; an operator sees every message's state. New boot rule in production: `MAIL_TRANSPORT` must be `resend` or `smtp` with its variables — the kind of change the incident rule says is announced on the board before the push. Verified on stubs: 33 mailer, 9 outbox and 5 cipher unit tests; password-reset unit and e2e suites; migration applied to dev and test databases.
+**Revisit when.** A second mail kind wants templates, a second replica needs a row claim (`SKIP LOCKED`), or a provider's webhooks or tracking are worth an SDK.
+
+---
+
+## ADR-98 — Postgres image pinned: `pgvector/pgvector:0.8.6-pg15`, not `ankane/pgvector:latest` (owner review of external dependencies, 2026-09-05)
+
+**Context.** Every environment named `ankane/pgvector:latest`, which resolves to PostgreSQL 15.4 with pgvector 0.5.1 built on 2023-10-11 and never rebuilt since — three years of missing OS and Postgres patches behind a tag that suggests the opposite; CI and the Railway `postgres` service pulled the same image. The existing volumes are PG 15 data directories.
+**Decision.** `pgvector/pgvector:0.8.6-pg15` — the maintained successor image, same major, rebuilt 2026-08 — in both compose files, CI and the Railway instructions; the tag is exact, so a change of image is a change in git. The `vector` extension in existing databases stays at its installed 0.5.1 (nothing uses it, ADR-57) until an `ALTER EXTENSION vector UPDATE` is wanted.
+**Consequences.** Same data directory, no migration; the Railway `postgres` service needs its image string changed by the owner (a redeploy, not a data change). Verified: the dev container recreated on the new image over the existing volume, `SELECT version()` reports 15.x, and the backend e2e suite passes against it.
+**Revisit when.** PG 16+ is wanted (a dump/restore, not an image swap), or pgvector columns are finally used (ADR-2).
 
 ---
 
@@ -820,6 +838,8 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 | 93 | No Redis in any environment until a `BP §12.3` consumer exists | owner review of external dependencies 2026-09-05; ADR-10/25/46/88 | a `§12.3` trigger, or a multi-replica shared throttler store |
 | 94 | UI fonts ship in the repository (`next/font/local`), not fetched from Google at build time | owner review of external dependencies 2026-09-05; IDENTITY Q9 | a new weight/script, or a `next/font/local` contract change |
 | 95 | Mail leaves through a generic SMTP adapter (nodemailer), the Resend SDK is gone; O-3 stands as an SMTP endpoint | owner review of external dependencies 2026-09-05; ADR-85, O-3 | a second mail kind (templates), or volume needing a queue |
+| 97 | Mail: `resend` over HTTPS (no SDK), `smtp` for a VPS, `log` refused in production; every message a `mail_outbox` row with sealed body, backoff retries and an admin view | owner mail decision 2026-09-05; ADR-85, ADR-95, O-3 | a second mail kind, a second replica, or provider webhooks |
+| 98 | Postgres image pinned to `pgvector/pgvector:0.8.6-pg15` (was `ankane/pgvector:latest` = PG 15.4 from 2023) | owner review of external dependencies 2026-09-05 | PG 16+ (dump/restore), or pgvector columns in use |
 
 ## How to add a decision
 

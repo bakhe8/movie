@@ -14,6 +14,7 @@ import { ExperimentAssignment } from '../entities/experiment-assignment.entity';
 import { Experiment } from '../entities/experiment.entity';
 import { LibraryImport } from '../entities/library-import.entity';
 import { LocalizedTitle } from '../entities/localized-title.entity';
+import { MailOutbox } from '../entities/mail-outbox.entity';
 import { ModelVersion } from '../entities/model-version.entity';
 import { Outcome } from '../entities/outcome.entity';
 import { Person } from '../entities/person.entity';
@@ -45,6 +46,7 @@ config({ path: resolve(process.cwd(), '../../.env') });
 const ENTITIES: DataSourceOptions['entities'] = [
   User,
   PasswordReset,
+  MailOutbox,
   RefreshToken,
   Profile,
   Title,

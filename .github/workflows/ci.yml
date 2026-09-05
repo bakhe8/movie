@@ -31,7 +31,7 @@ jobs:
       # with `moviedb_test` as its database, so apps/backend/test/test-db-env.js
       # needs no change.
       postgres:
-        image: ankane/pgvector:latest
+        image: pgvector/pgvector:0.8.6-pg15
         env:
           POSTGRES_USER: movieapp
           POSTGRES_PASSWORD: test_password

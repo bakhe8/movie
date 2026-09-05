@@ -132,6 +132,17 @@ password_resets (                                                -- ALPHA_PLAN 3
   INDEX ("userId")
 )
 
+mail_outbox (                                                    -- ADR-97: every outgoing mail is a row first, the provider call second
+  id uuid PK, "userId" uuid FK users ON DELETE CASCADE,          -- nullable; a deleted account takes its pending mail with it
+  kind varchar(64) NOT NULL, "toAddress" varchar NOT NULL, subject varchar NOT NULL,
+  "bodySealed" bytea,                                            -- AES-256-GCM under an HKDF subkey of JWT_SECRET; NULL once delivered or dead
+  status varchar(16) NOT NULL DEFAULT 'pending',                 -- pending | delivered | dead
+  attempts int NOT NULL DEFAULT 0, "nextAttemptAt" timestamp NOT NULL, "expiresAt" timestamp,
+  "lastError" varchar(500), "providerMessageId" varchar, "deliveredAt" timestamp,
+  "createdAt" timestamp NOT NULL DEFAULT now(), "updatedAt" timestamp NOT NULL DEFAULT now(),
+  INDEX ("userId"), INDEX (status, "nextAttemptAt")            -- the sweep's scan; delivered/dead rows purge after 7 days
+)
+
 refresh_tokens (                                                 -- ADR-26: rotated refresh tokens with family-level reuse detection
   id uuid PK, "userId" uuid NOT NULL FK users ON DELETE CASCADE, -- a privacy purge takes every session with the account
   "tokenHash" varchar(64) UNIQUE NOT NULL,                       -- sha256 of the raw token; the raw value is never stored
