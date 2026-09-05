@@ -1,11 +1,63 @@
 /* Sources table of the data notice: the page's own measure and tokens; the
    table scrolls inside its wrapper on narrow screens so the page never does. */
 
-.tableWrap {
-  overflow-x: auto;
-  margin-top: var(--sp-3);
+.tableFrame {
+  container-type: inline-size;
+  margin-block-start: var(--sp-3);
   border: 1px solid var(--line);
   border-radius: var(--r-button);
+  background: var(--well);
+  box-shadow: var(--shadow-small);
+}
+
+.scrollHint {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-block-end: 1px solid var(--line);
+  color: var(--muted);
+  font-size: var(--fs-13);
+  line-height: var(--lh-ui);
+}
+
+.scrollHint svg {
+  flex: none;
+  color: var(--accent);
+}
+
+.tableWrap {
+  max-width: 100%;
+  overflow-x: auto;
+  border-radius: inherit;
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent) var(--well);
+}
+
+.tableWrap:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.tableWrap::-webkit-scrollbar {
+  height: 8px;
+}
+
+.tableWrap::-webkit-scrollbar-track {
+  background: var(--well);
+}
+
+.tableWrap::-webkit-scrollbar-thumb {
+  border: 2px solid var(--well);
+  border-radius: var(--r-chip);
+  background: var(--accent);
+}
+
+/* The cue belongs to narrow table regions, regardless of viewport size. */
+@container (min-width: 520px) {
+  .scrollHint {
+    display: none;
+  }
 }
 
 .sources {

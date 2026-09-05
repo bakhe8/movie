@@ -284,68 +284,106 @@
 
 .track {
   display: grid;
-  gap: 12px;
+  gap: 14px;
   min-width: 0;
-  --track-color: var(--role-safe);
+  --track-color: var(--shelf-safe);
+  --track-ground: var(--shelf-safe-soft);
+  padding: 16px 14px 14px;
+  border: 1px solid color-mix(in srgb, var(--track-color) 34%, var(--line-soft, var(--line)));
+  border-inline-start: 3px solid var(--track-color);
+  border-radius: 24px;
+  background: linear-gradient(150deg, var(--surface), var(--track-ground));
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--track-color) 8%, transparent);
+}
+
+.track + .track {
+  margin-block-start: 8px;
 }
 
 .track[data-track='discovery'] {
-  --track-color: var(--role-discovery);
+  --track-color: var(--shelf-discovery);
+  --track-ground: var(--shelf-discovery-soft);
 }
 
 .track[data-track='outside_usual'] {
-  --track-color: var(--role-outside);
+  --track-color: var(--shelf-outside);
+  --track-ground: var(--shelf-outside-soft);
 }
 
 .trackHeader {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 4px 12px;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding-block-end: 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--track-color) 22%, transparent);
+}
+
+.trackCopy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.trackIcon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 42px;
+  color: var(--track-color);
+  background: var(--track-ground);
+  border: 1px solid color-mix(in srgb, var(--track-color) 30%, transparent);
+  border-radius: 12px;
+}
+
+.trackIcon svg {
+  width: 23px;
+  height: 23px;
+}
+
+.trackNumber {
+  align-self: start;
+  color: var(--track-color);
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.trackNumber span {
+  font-size: 11px;
+  color: var(--muted);
 }
 
 .trackHeader h3 {
-  display: flex;
-  align-items: center;
-  gap: 10px;
   margin: 0;
-  font-size: 21px;
+  font-size: 19px;
   letter-spacing: -.025em;
   line-height: 1.4;
-}
-
-.trackHeader h3::before {
-  content: '';
-  width: 5px;
-  height: 22px;
-  border-radius: 4px;
-  background: var(--track-color);
-  box-shadow: 0 0 20px color-mix(in srgb, var(--track-color) 30%, transparent);
 }
 
 .trackHeader p {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
 .rail {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: 148px;
-  gap: 14px;
-  margin: -12px;
-  padding: 12px 12px 24px;
+  grid-auto-columns: calc((100% - 12px) / 1.85);
+  gap: 12px;
+  margin: 0;
+  padding: 4px 0 14px;
   list-style: none;
   overflow-x: auto;
   contain: layout paint;
   overscroll-behavior-x: contain;
   scroll-snap-type: x proximity;
-  scroll-padding-inline-start: 12px;
+  scroll-padding-inline-start: 0;
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--line) 40%, transparent) transparent;
-  padding-block-end: 20px;
+  scrollbar-color: color-mix(in srgb, var(--track-color) 55%, transparent) transparent;
 }
 
 .rail > li {
@@ -397,6 +435,17 @@
   font-size: 12px;
   font-weight: var(--w-medium);
   cursor: pointer;
+  flex: none;
+}
+
+.more:hover {
+  color: var(--track-color);
+  border-color: var(--track-color);
+}
+
+.more:focus-visible {
+  outline: 2px solid var(--track-color);
+  outline-offset: 3px;
 }
 
 .status, .empty {
@@ -660,6 +709,18 @@
 
   .track {
     gap: 16px;
+    padding: 24px;
+    border-radius: 28px;
+  }
+
+  .trackHeader {
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+    gap: 14px;
+  }
+
+  .trackIcon {
+    width: 44px;
+    height: 48px;
   }
 
   .trackHeader h3 {

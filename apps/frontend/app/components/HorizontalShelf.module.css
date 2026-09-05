@@ -1,0 +1,30 @@
+.shelf { min-width: 0; }
+.shelf > ol:focus-visible { outline: 2px solid var(--track-color, var(--accent)); outline-offset: 4px; }
+.footer { display: grid; gap: 6px; margin-top: 2px; }
+.hint { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: .72rem; line-height: 1.5; }
+.range { flex-shrink: 0; color: var(--text); font-variant-numeric: tabular-nums; }
+.actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; min-width: 0; }
+.arrows { display: flex; gap: 6px; flex-shrink: 0; }
+.arrow { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid var(--line-soft); border-radius: var(--r-button); color: var(--track-color, var(--accent)); background: var(--track-ground, var(--surface)); cursor: pointer; transition: transform 160ms ease, border-color 160ms ease, background 160ms ease; }
+.arrow svg { width: 19px; height: 19px; }
+.arrow:focus-visible { outline: 2px solid var(--track-color, var(--accent)); outline-offset: 3px; }
+.arrow:active:not(:disabled) { transform: scale(.94); }
+.arrow:disabled { color: var(--muted); opacity: .4; cursor: default; }
+.footerAction { min-width: 0; margin-inline-start: auto; }
+.footer:not([data-controls]) .actions { justify-content: flex-end; }
+.srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+
+@media (hover: hover) and (pointer: fine) {
+  .arrow:hover:not(:disabled) { border-color: var(--track-color, var(--accent)); background: color-mix(in srgb, var(--track-color, var(--accent)) 10%, var(--track-ground, var(--surface))); transform: translateY(-2px); }
+}
+
+@media (min-width: 640px) {
+  .footer[data-controls] { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+  .hint { justify-content: flex-start; gap: 16px; }
+  .actions { flex-shrink: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arrow { transition: none; }
+  .arrow:hover:not(:disabled), .arrow:active:not(:disabled) { transform: none; }
+}

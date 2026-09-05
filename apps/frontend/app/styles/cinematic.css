@@ -26,6 +26,10 @@
   --r-button: 14px;
   --r-card: 20px;
   --r-chip: 8px;
+  /* Shelf-only cinema light palette, including the default appearance. */
+  --shelf-safe: #1c667a; --shelf-safe-soft: #dceff5;
+  --shelf-discovery: #793d77; --shelf-discovery-soft: #f3dfef;
+  --shelf-outside: #85541f; --shelf-outside-soft: #fae7c8;
 }
 :root[data-appearance="premiere"] {
   --bg: #faf6ef; --surface: #fffcf6; --well: #f0e5d6; --line: #897a67;
@@ -45,6 +49,14 @@
   --scene-radius: 2px; --poster-radius: 3px; --r-card: 6px; --r-button: 6px;
   --ambient-glow: rgba(119, 157, 70, .08); --cinema-shadow: 8px 10px 0 color-mix(in srgb, var(--accent) 12%, transparent);
 }
+/* Other compositions and every night palette retain their role colors. */
+:root[data-appearance="premiere"],
+:root[data-appearance="montage"],
+:root[data-theme="dark"] {
+  --shelf-safe: var(--role-safe); --shelf-safe-soft: var(--role-safe-soft);
+  --shelf-discovery: var(--role-discovery); --shelf-discovery-soft: var(--role-discovery-soft);
+  --shelf-outside: var(--role-outside); --shelf-outside-soft: var(--role-outside-soft);
+}
 /* Scheme remains orthogonal: each composition has its own night palette. */
 :root[data-theme="dark"][data-appearance="premiere"] {
   --bg: #130f0c; --surface: #231b15; --well: #32271e; --line: #65513d; --text: #fff0de; --muted: #c5ad93;
@@ -59,6 +71,11 @@
   --role-later: #b8dca1; --role-later-soft: #2c3e24; --position-highlight: #e9ff72; --position-highlight-ink: #172326;
 }
 @media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --shelf-safe: var(--role-safe); --shelf-safe-soft: var(--role-safe-soft);
+    --shelf-discovery: var(--role-discovery); --shelf-discovery-soft: var(--role-discovery-soft);
+    --shelf-outside: var(--role-outside); --shelf-outside-soft: var(--role-outside-soft);
+  }
   :root:not([data-theme="light"])[data-appearance="premiere"] {
     --bg: #130f0c; --surface: #231b15; --well: #32271e; --line: #65513d; --text: #fff0de; --muted: #c5ad93;
     --accent: #f2b779; --accent-ink: #2b170a; --accent-soft: #483221; --role-safe: #96d4b5; --role-safe-soft: #22392f;
