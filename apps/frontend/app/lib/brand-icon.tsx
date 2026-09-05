@@ -10,7 +10,7 @@ import { ImageResponse } from 'next/og';
 // from app/styles/tokens.css -- an icon file cannot read CSS variables, and a
 // PNG in the OS chrome has one fixed appearance, so the light pair is used in
 // both themes (the same reason manifest.ts carries one static colour pair).
-const ACCENT = '#5b4bd6';
+const ACCENT = '#2445e8';
 const INK = '#ffffff';
 
 export function renderBrandIcon(size: number, { maskable = false }: { maskable?: boolean } = {}) {

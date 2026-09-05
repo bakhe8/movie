@@ -10,47 +10,45 @@
    before first paint by the boot script in app/layout.tsx and kept in sync
    by app/lib/theme.tsx.
 
-   Palette: deep indigo (ADR-111 amendment, owner decision 2026-09-05, which
-   supersedes the teal of decisions Q6/Q7). Three light role hues were
-   darkened from the decided values at the contrast check, the same way the
-   old accent was: #1E7FA0/#B0338F/#B85A10 read 3.79/4.69/3.87 against the
-   --well they sit on, so they ship as #14637F/#A52F86/#964709 (5.59/5.20/
-   5.45). Every text-on-ground pair in both themes is >= 4.5:1. */
+   Light: approved montage palette (ADR-112), with the semantic map and
+   contrast measurements in docs/design/light-theme-gpt-2026-09-05/README.md.
+   Dark: the existing ADR-111 indigo palette is preserved byte-for-byte.
+   L1 changes colour infrastructure only; L2 consumes the bounded position
+   highlight without duplicating screens or interaction. */
 
 :root {
   color-scheme: light;
 
-  /* Light palette — off-white with a hint of the accent hue (Q5), a darker
-     "well" behind poster rows (Q5), no shadows on cards (Q8). */
-  --bg: #f4f4fa;
+  /* Light ground and foreground; the root also serves system-light. */
+  --bg: #f7f6fc;
   --surface: #ffffff;
-  --well: #e9e9f5;
-  --line: #d4d5e8;
-  --muted: #5e6285;
-  --text: #171a33;
+  --well: #eceeff;
+  --line: #7b83a8;
+  --muted: #57596e;
+  --text: #202033;
 
-  /* Single action colour (Q6, ADR-111): the only saturated colour in the UI. */
-  --accent: #5b4bd6; /* 5.1:1 on --well, 6.1:1 on white, 6.1:1 with white ink */
+  /* Blue owns action and brand. White ink on blue: 6.79:1. */
+  --accent: #2445e8;
   --accent-ink: #ffffff;
-  --accent-soft: rgba(91, 75, 214, 0.12);
-  /* Role hues (decision 27, 2026-09-04): each carries one meaning -- the three
-     recommendation tracks and the "later" list state -- never the action,
-     the fit meter or the confidence. Values searched for >= 4.5:1 as text on
-     bg, surface, well and their own soft wash in this theme. */
-  --role-safe: #14637f;
-  --role-safe-soft: rgba(20, 99, 127, 0.12);
-  --role-discovery: #a52f86;
-  --role-discovery-soft: rgba(165, 47, 134, 0.12);
-  --role-outside: #964709;
-  --role-outside-soft: rgba(150, 71, 9, 0.12);
-  --role-later: #885007;
-  --role-later-soft: rgba(136, 80, 7, 0.12);
+  --accent-soft: #eceeff;
 
-  /* Poster edge: visible in light only (Q5, Q14). */
+  /* Track names and saved-for-later remain separate semantic roles.
+     Labels, not colour alone, identify each track. */
+  --role-safe: #2445e8;
+  --role-safe-soft: #eceeff;
+  --role-discovery: #334a86;
+  --role-discovery-soft: #eceeff;
+  --role-outside: #57596e;
+  --role-outside-soft: #eceeff;
+  --role-later: #334a86;
+  --role-later-soft: #eceeff;
+
+  /* Bounded rank/current-track marker, never a fit/quality/confidence value
+     or general success/action colour. L2 adds its screen consumers. */
+  --position-highlight: #e9ff72;
+  --position-highlight-ink: #202033;
   --poster-edge: var(--line);
-
-  /* Floating layers (menu, sheet) take one shadow in light only (Q8). */
-  --shadow-float: 0 12px 32px rgba(12, 14, 40, 0.18);
+  --shadow-float: 0 12px 32px rgba(36, 69, 232, 0.14);
 
   /* Type (Q9–Q11). Font families come from next/font in app/layout.tsx. */
   --font-ui: var(--font-plex-arabic), "Segoe UI", "Noto Sans Arabic", system-ui, sans-serif;
@@ -137,6 +135,19 @@
   --role-later-soft: rgba(222, 133, 18, 0.16);
   --poster-edge: transparent;
   --shadow-float: none;
+}
+
+/* New semantic slots resolve to the existing dark treatment. The original
+   two dark blocks above stay unchanged; no existing dark token is replaced. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --position-highlight: var(--accent-soft);
+    --position-highlight-ink: var(--accent);
+  }
+}
+:root[data-theme="dark"] {
+  --position-highlight: var(--accent-soft);
+  --position-highlight-ink: var(--accent);
 }
 
 /* Base application of the tokens. Specificity matches globals.css's
