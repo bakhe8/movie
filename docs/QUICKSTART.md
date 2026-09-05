@@ -91,7 +91,7 @@ npm run dev
 1. Open the frontend, create an account. A profile named «ملف الذوق الرئيسي» is created automatically.
 2. **اكتشف / Discover**: search and mark at least 3 films as watched (more gives more triads).
 3. **رتّب / Rank**: reorder the three cards (drag or ↑/↓) and save; the next triad loads.
-4. Train the model for your profile (profile id from `GET /api/profiles` with your token, or from the database):
+4. For CLI-only development, you can train a profile directly (profile id from `GET /api/profiles` with your token, or from the database):
 
 ```bash
 cd services/workers && python -m src.training <profile-uuid>
@@ -99,7 +99,7 @@ cd services/workers && python -m src.training <profile-uuid>
 
 (with Poetry: `poetry run python -m src.training <profile-uuid>`)
 
-Or run `make model-service` (the training HTTP service on 127.0.0.1:8001) before starting the backend so training happens automatically after each completed triad; without it, training stays this manual step.
+Normally run `make model-service` (the training HTTP service on 127.0.0.1:8001) before starting the backend. The backend then builds automatically at the configured evidence thresholds (3 learning triads, then every 5 by default), repairs an eligible/stale profile on later reads, and the UI follows progress without a training button. Without the service, the UI correctly reports an operator configuration problem; a person is never asked to repair it (ADR-114).
 
 5. **قائمتي / My list** now shows a recommendation list computed from the snapshot. Until a snapshot exists the API answers 409 and the UI shows "not ready yet".
 

@@ -181,10 +181,7 @@ export type RecommendationsResponse =
   // model service at all -- so the screen never has to say "still learning"
   // over a failure it cannot see (live round 2026-09-05, brief P0-01/P0-03).
   | { state: 'pending'; needed: number; training: TrainingSummary }
-  | { state: 'paused' }
-  // A snapshot from before a fingerprint-dimension change (ADR-69/75): it
-  // cannot be scored against, and the next training run replaces it.
-  | { state: 'model_outdated' };
+  | { state: 'paused' };
 
 // The library's personal ranking (blueprint §5.3 "ترتيب شخصي", SPECIFICATION
 // §5.4): the profile's watched, fingerprinted titles ordered by the same
@@ -239,12 +236,24 @@ export class RecommendationsService {
   async findForProfile(userId: string, profileId: string, limit: number): Promise<RecommendationsResponse> {
     const outcome = await this.resolveSnapshot(userId, profileId);
     if (outcome.state === 'pending') {
-      const training = await this.trainingService.summarize(outcome.profile);
+      let training = await this.trainingService.summarize(outcome.profile);
+      if (training.state === 'idle' && training.completedTriads >= this.trainingService.firstTriadCount) {
+        await this.trainingService.ensureAutomaticTraining(userId, profileId);
+        training = await this.trainingService.summarize(outcome.profile);
+      }
       return {
         state: 'pending',
         needed: Math.max(0, this.trainingService.firstTriadCount - training.completedTriads),
         training,
       };
+    }
+    if (outcome.state === 'model_outdated') {
+      // A schema deployment invalidated derived state; schedule the rebuild
+      // while preserving the person's saved evidence. Returning the ordinary
+      // pending shape also keeps the existing silent poll path in charge.
+      await this.trainingService.ensureAutomaticTraining(userId, profileId);
+      const training = await this.trainingService.summarize(outcome.profile);
+      return { state: 'pending', needed: 0, training };
     }
     if (outcome.state !== 'ready') {
       return outcome;
@@ -542,9 +551,21 @@ export class RecommendationsService {
       throw new ConflictException({ statusCode: 409, message: 'This profile is paused', error: 'Conflict', reason: 'profile_paused' });
     }
     if (outcome.state === 'model_outdated') {
-      throw new ConflictException('The latest preference model has an incompatible fingerprint dimension');
+      await this.trainingService.ensureAutomaticTraining(userId, profileId);
+      throw new ConflictException({
+        statusCode: 409,
+        message: 'The preference model is being rebuilt automatically',
+        error: 'Conflict',
+        reason: 'model_refreshing',
+      });
     }
-    throw new ConflictException('Recommendations are unavailable until the preference model is trained');
+    await this.trainingService.ensureAutomaticTraining(userId, profileId);
+    throw new ConflictException({
+      statusCode: 409,
+      message: 'The preference model is being built automatically',
+      error: 'Conflict',
+      reason: 'model_pending',
+    });
   }
 
   // ADR-103 (remediation brief §5.1): the same ready/pending/paused/
@@ -576,7 +597,7 @@ export class RecommendationsService {
     | { state: 'ready'; snapshot: UserModelSnapshot }
     | { state: 'pending'; profile: Profile }
     | { state: 'paused' }
-    | { state: 'model_outdated' }
+    | { state: 'model_outdated'; profile: Profile }
   > {
     const profile = await this.profilesRepository.findOne({ where: { id: profileId, userId } });
     if (!profile) {
@@ -608,7 +629,7 @@ export class RecommendationsService {
       return { state: 'pending', profile };
     }
     if (snapshot.weights.length !== FINGERPRINT_DIMENSIONS.length) {
-      return { state: 'model_outdated' };
+      return { state: 'model_outdated', profile };
     }
     return { state: 'ready', snapshot };
   }

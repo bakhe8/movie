@@ -25,7 +25,7 @@ const labels = {
     watchlistEmpty: 'لم تحفظ شيئًا بعد. من التوصيات أو اكتشف اضغط «لاحقًا».',
     ranking: 'ترتيبك الشخصي',
     rankingNote: 'بحسب نموذجك لا بحسب أي تقييم، وتغيّره جولات الترتيب القادمة.',
-    rankingPending: 'يظهر ترتيبك بعد أن يُدرَّب نموذجك على جولات ترتيب كافية.',
+    rankingPending: 'يُبنى ترتيبك تلقائيًا بعد اكتمال جولات كافية، وسيظهر هنا عند جاهزيته.',
     rankingEmpty: 'لا أفلام مُشاهَدة يمكن ترتيبها بعد.',
     rankingFailed: 'تعذّر تحميل الترتيب.',
     partialFingerprint: 'بعض سمات هذا الفيلم غير معروفة، فخُفّضت الثقة درجة.',
@@ -64,7 +64,7 @@ const labels = {
     watchlistEmpty: 'Nothing saved yet. Press “Later” on a recommendation or in Discover.',
     ranking: 'Your personal ranking',
     rankingNote: 'By your model, not by any rating; upcoming ranking rounds change it.',
-    rankingPending: 'Your ranking appears once your model has been trained on enough ranking rounds.',
+    rankingPending: 'Your ranking is built automatically after enough rounds and will appear here when ready.',
     rankingEmpty: 'No watched films can be ranked yet.',
     rankingFailed: 'The ranking could not be loaded.',
     partialFingerprint: 'Some of this film’s traits are unknown, so confidence was lowered one band.',
@@ -151,9 +151,9 @@ export function ListScreen({
     setPendingTitles(new Set(mutationLocks.current));
   }
 
-  const loadRanking = useCallback(async () => {
+  const loadRanking = useCallback(async (silent = false) => {
     const request = ++rankingRequest.current;
-    setRanking({ kind: 'loading' });
+    if (!silent) setRanking({ kind: 'loading' });
     try {
       const items = await api.getLibraryRanking(profileId);
       if (request === rankingRequest.current) setRanking({ kind: 'ready', items });
@@ -181,6 +181,16 @@ export function ListScreen({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
+
+  // A 409 here is a designed "derived state pending" response, not a task
+  // for the person. Keep checking quietly until the automatic build publishes.
+  useEffect(() => {
+    if (ranking.kind !== 'pending') return;
+    const id = window.setInterval(() => {
+      void loadRanking(true);
+    }, 5000);
+    return () => window.clearInterval(id);
+  }, [ranking.kind, loadRanking]);
 
   useEffect(() => {
     if (!notice) return;

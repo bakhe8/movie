@@ -24,7 +24,9 @@ export type ReadinessReason =
   | 'no_availability_data_source'
   | null;
 
-export type ReadinessAction = 'rank_more_triads' | 'watch_more_titles' | 'request_training' | 'resume_processing' | 'retry' | null;
+// Only genuine choices the person can make belong here. Training, retries,
+// schema refreshes and catalog expansion are system/operator work (ADR-114).
+export type ReadinessAction = 'mark_watched_titles' | 'rank_more_triads' | 'resume_processing' | null;
 
 export interface CapabilityReadiness {
   status: ReadinessStatus;
@@ -109,7 +111,7 @@ export class ProfileReadinessService {
   ) {}
 
   async forProfile(userId: string, profileId: string): Promise<ProfileReadiness> {
-    const [snapshotState, training, watchedTitles, confidenceBand] = await Promise.all([
+    const [snapshotState, initialTraining, watchedTitles, confidenceBand] = await Promise.all([
       this.recommendationsService.snapshotState(userId, profileId),
       // Ownership is checked here (404 for someone else's profile) before
       // the watched count below is read.
@@ -117,7 +119,15 @@ export class ProfileReadinessService {
       this.eligibleWatchedCount(profileId),
       this.recommendationsService.modelConfidence(userId, profileId),
     ]);
-    const model = this.modelCapability(snapshotState, training, confidenceBand);
+    let training = initialTraining;
+    const needsReadRepair =
+      snapshotState === 'model_outdated' ||
+      (snapshotState === 'pending' && training.state === 'idle' && training.completedTriads >= this.trainingService.firstTriadCount);
+    if (needsReadRepair) {
+      await this.trainingService.ensureAutomaticTraining(userId, profileId);
+      training = await this.trainingService.status(userId, profileId);
+    }
+    const model = this.modelCapability(snapshotState, training, confidenceBand, watchedTitles);
     const recommendation = await this.recommendationCapability(model, profileId);
     return {
       rounds: {
@@ -145,6 +155,7 @@ export class ProfileReadinessService {
     snapshotState: 'ready' | 'pending' | 'paused' | 'model_outdated',
     training: TrainingStatus,
     confidenceBand: ConfidenceBand | null,
+    watchedTitles: number,
   ): CapabilityReadiness {
     const published = training.latestSnapshot
       ? {
@@ -157,11 +168,34 @@ export class ProfileReadinessService {
     if (snapshotState === 'ready') {
       return { status: 'ready', reason: null, action: null, ...published };
     }
-    // A snapshot exists but no longer matches the current fingerprint
-    // schema (ADR-69/75 dimension changes) -- the next training run
-    // replaces it; ranking a few more triads is what actually triggers one.
+    // A snapshot exists but no longer matches the current fingerprint schema.
+    // Readiness has already scheduled its replacement above: a deployment is
+    // never converted into homework for the person whose choices are saved.
     if (snapshotState === 'model_outdated') {
-      return { status: 'stale', reason: 'fingerprint_schema_changed', action: 'rank_more_triads', ...published };
+      if (training.state === 'queued' || training.state === 'running') {
+        return {
+          status: training.state === 'queued' ? 'queued' : 'processing',
+          reason: 'fingerprint_schema_changed',
+          action: null,
+          publishedAt: null,
+          modelVersion: null,
+          confidenceBand: null,
+        };
+      }
+      if (training.state === 'disabled') {
+        return { status: 'not_ready', reason: 'model_service_disabled', action: null, publishedAt: null, modelVersion: null, confidenceBand: null };
+      }
+      if (training.state === 'failed') {
+        return {
+          status: 'failed',
+          reason: training.job?.errorKind === 'invalid' ? 'insufficient_fingerprint_coverage' : 'model_service_error',
+          action: null,
+          publishedAt: null,
+          modelVersion: null,
+          confidenceBand: null,
+        };
+      }
+      return { status: 'stale', reason: 'fingerprint_schema_changed', action: null, publishedAt: null, modelVersion: null, confidenceBand: null };
     }
     if (snapshotState === 'paused') {
       return { status: 'not_ready', reason: 'processing_paused', action: 'resume_processing', publishedAt: null, modelVersion: null, confidenceBand: null };
@@ -178,12 +212,17 @@ export class ProfileReadinessService {
       case 'failed':
         return training.job?.errorKind === 'invalid'
           ? { status: 'failed', reason: 'insufficient_fingerprint_coverage', action: null, ...published }
-          : { status: 'failed', reason: 'model_service_error', action: 'retry', ...published };
+          : { status: 'failed', reason: 'model_service_error', action: null, ...published };
       case 'idle':
       default:
         return training.completedTriads < this.trainingService.firstTriadCount
-          ? { status: 'not_ready', reason: 'insufficient_triads', action: 'rank_more_triads', ...published }
-          : { status: 'eligible', reason: null, action: 'request_training', ...published };
+          ? {
+              status: 'not_ready',
+              reason: 'insufficient_triads',
+              action: watchedTitles < 3 ? 'mark_watched_titles' : 'rank_more_triads',
+              ...published,
+            }
+          : { status: 'eligible', reason: null, action: null, ...published };
     }
   }
 
@@ -206,7 +245,7 @@ export class ProfileReadinessService {
       : {
           status: 'not_ready',
           reason: 'insufficient_eligible_candidates',
-          action: 'watch_more_titles',
+          action: null,
           publishedAt: model.publishedAt,
           modelVersion: model.modelVersion,
           confidenceBand: model.confidenceBand,
