@@ -20,9 +20,11 @@ const labels = {
   ar: {
     eyebrow: 'اكتشف',
     title: 'شاهدته؟ لمسة واحدة.',
+    titleReady: 'اكتشف ما فاتك.',
     // Blueprint §4.2: quick picks from known titles, plus search; the start
     // must not become a long data-entry task.
     hint: 'المس صور ثلاثة أفلام شاهدتها. ثم نبدأ حكاية ذوقك.',
+    hintReady: 'اقتراحاتك في الرئيسية. وهنا تستطيع توسيع سجل المشاهدة وقتما تشاء.',
     searchLabel: 'ابحث بالاسم العربي أو الإنجليزي',
     searchPlaceholder: 'مثال: الوصول، Arrival',
     progress: (count: string) => `سجّلت ${count} كمُشاهَدة`,
@@ -31,24 +33,25 @@ const labels = {
       n === 1 ? 'بقي فيلم واحد لفتح الترتيب.' : n === 2 ? 'بقي فيلمان لفتح الترتيب.' : 'بقيت ثلاثة أفلام لفتح الترتيب.',
     unlocked: 'الترتيب متاح. كل فيلم إضافي يحسّن جولاتك.',
     goRank: 'إلى الترتيب',
+    history: (count: string) => `سجل المشاهدة · ${count}`,
+    openHistory: (count: string) => `عرض سجل المشاهدة، ${count}`,
     starter: 'عناوين للبدء',
+    continueDiscovering: 'عناوين أخرى لاكتشافها',
     starterHint: 'بدايات متنوعة، قبل أن نتعرّف على ذوقك.',
     browseAll: 'تصفّح الكتالوج كاملًا',
     catalogue: (count: string) => `الكتالوج كاملًا: ${count}`,
     backToStarter: 'العودة إلى عناوين البدء',
     results: (count: string) => `نتائج البحث: ${count}`,
     noResults: 'لا نتائج. جرّب اسمًا آخر أو الاسم بلغة أخرى.',
+    noUnwatched: 'لا توجد عناوين جديدة هنا. أفلامك المُشاهَدة محفوظة في السجل.',
     more: 'عرض المزيد',
     watched: 'شاهدته',
     // A tile has no room for words, so each target says its own name.
     markWatchedOf: (name: string) => `شاهدت «${name}»`,
-    watchedOf: (name: string) => `«${name}» مسجَّل كمُشاهَد — المس للتراجع`,
     laterOf: (name: string) => `احفظ «${name}» لاحقًا`,
     onListOf: (name: string) => `«${name}» في قائمتك`,
     later: 'لاحقًا',
     onList: 'في قائمتك',
-    watchedChip: 'مُشاهَد',
-    undo: 'تراجع',
     watchedNotice: (title: string) => `سُجّل «${title}» كمُشاهَد.`,
     laterNotice: (title: string) => `أُضيف «${title}» إلى قائمتك.`,
     undoNotice: (title: string) => `أُلغي تسجيل «${title}». لن يُحتسب ضدّه.`,
@@ -59,7 +62,9 @@ const labels = {
   en: {
     eyebrow: 'Discover',
     title: 'Seen it? Just tap it.',
+    titleReady: 'Discover what you missed.',
     hint: 'Tap three films you have seen. Your taste story starts here.',
+    hintReady: 'Your recommendations are on Home. Here, you can expand your watch history whenever you like.',
     searchLabel: 'Search by Arabic or English title',
     searchPlaceholder: 'e.g. Arrival, الوصول',
     progress: (count: string) => `You have marked ${count} as watched`,
@@ -67,23 +72,24 @@ const labels = {
     needMore: (n: number) => (n === 1 ? 'One more film unlocks ranking.' : `${n === 2 ? 'Two' : 'Three'} more films unlock ranking.`),
     unlocked: 'Ranking is unlocked. Every extra film improves your rounds.',
     goRank: 'Go to ranking',
+    history: (count: string) => `Watch history · ${count}`,
+    openHistory: (count: string) => `Open watch history, ${count}`,
     starter: 'Titles to start with',
+    continueDiscovering: 'More titles to discover',
     starterHint: 'A diverse starting point, before we get to know your taste.',
     browseAll: 'Browse the whole catalogue',
     catalogue: (count: string) => `Whole catalogue: ${count}`,
     backToStarter: 'Back to the starter titles',
     results: (count: string) => `Search results: ${count}`,
     noResults: 'No results. Try another name, or the name in the other language.',
+    noUnwatched: 'There are no new titles here. Your watched films are saved in your history.',
     more: 'Show more',
     watched: 'Watched it',
     markWatchedOf: (name: string) => `Watched ${name}`,
-    watchedOf: (name: string) => `${name} is marked watched — tap to undo`,
     laterOf: (name: string) => `Save ${name} for later`,
     onListOf: (name: string) => `${name} is on your list`,
     later: 'Later',
     onList: 'On your list',
-    watchedChip: 'Watched',
-    undo: 'Undo',
     watchedNotice: (title: string) => `“${title}” is marked as watched.`,
     laterNotice: (title: string) => `“${title}” was added to your list.`,
     undoNotice: (title: string) => `“${title}” is no longer marked. It does not count against it.`,
@@ -101,18 +107,23 @@ export function DiscoverScreen({
   lang,
   profileId,
   onGoToRank,
+  onOpenHistory,
   onOpenTitle,
   initialViewState,
 }: {
   lang: Lang;
   profileId: string;
   onGoToRank?: () => void;
+  // Watch history belongs to the library; Discover only offers titles that
+  // can still add something to the watched set.
+  onOpenHistory?: () => void;
   // Opens the work page for a catalogue title (no fit context here).
   onOpenTitle?: (title: Title, state: TitleState | null, viewState: DiscoverViewState) => void;
   initialViewState?: DiscoverViewState;
 }) {
   const t = labels[lang];
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
+  const [recommendationsReady, setRecommendationsReady] = useState(false);
   // The profile's existing marks, so a returning user sees what they already
   // logged instead of a blank slate (previously marks reset per session).
   const [states, setStates] = useState<Map<string, TitleState>>(new Map());
@@ -135,11 +146,18 @@ export function DiscoverScreen({
   const loadStates = useCallback(async () => {
     setPhase({ kind: 'loading' });
     try {
-      const [watched, watchlist] = await Promise.all([api.getWatchedTitles(profileId), api.getWatchlist(profileId)]);
+      // Readiness only chooses honest copy; a temporary failure must not make
+      // the catalogue itself unavailable.
+      const [watched, watchlist, readiness] = await Promise.all([
+        api.getWatchedTitles(profileId),
+        api.getWatchlist(profileId),
+        api.getReadiness(profileId).catch(() => null),
+      ]);
       const next = new Map<string, TitleState>();
       for (const state of watchlist) next.set(state.titleId, 'watchlist');
       for (const state of watched) next.set(state.titleId, 'watched');
       setStates(next);
+      setRecommendationsReady(readiness?.recommendation.status === 'ready');
       setPhase({ kind: 'ready' });
     } catch {
       setPhase({ kind: 'failed' });
@@ -248,18 +266,20 @@ export function DiscoverScreen({
   const watchedCount = [...states.values()].filter((state) => state === 'watched').length;
   const remaining = Math.max(0, UNLOCK_COUNT - watchedCount);
   const isSearch = query.trim().length > 0;
-  const genres = [...new Set(results.flatMap((title) => title.genres ?? []))].slice(0, 8);
-  const visibleResults = genre ? results.filter((title) => title.genres?.includes(genre)) : results;
+  const unwatchedResults = results.filter((title) => states.get(title.id) !== 'watched');
+  const genres = [...new Set(unwatchedResults.flatMap((title) => title.genres ?? []))].slice(0, 8);
+  const visibleResults = genre ? unwatchedResults.filter((title) => title.genres?.includes(genre)) : unwatchedResults;
+  const watchedCountLabel = t.progressUnit(watchedCount);
 
   const header = (
     <div className={styles.header}>
       <div className={styles.headerCopy}>
         <p className={styles.eyebrow}><span aria-hidden="true">✦</span> {t.eyebrow}</p>
-        <h2>{t.title}</h2>
-        <p className={styles.hint}>{t.hint}</p>
+        <h2>{recommendationsReady ? t.titleReady : t.title}</h2>
+        <p className={styles.hint}>{recommendationsReady ? t.hintReady : t.hint}</p>
       </div>
       <div className={styles.filmFan} aria-hidden="true">
-        {results.slice(0, 4).map((title) => <Poster key={title.id} title={title} name={title.titleEn} className={styles.fanPoster} />)}
+        {unwatchedResults.slice(0, 4).map((title) => <Poster key={title.id} title={title} name={title.titleEn} className={styles.fanPoster} />)}
       </div>
     </div>
   );
@@ -293,16 +313,26 @@ export function DiscoverScreen({
       {header}
 
       {/* Progress toward the three watched titles that unlock ranking. */}
-      <div className={remaining === 0 ? `${styles.progress} ${styles.progressReady}` : styles.progress} role="status">
+      <div className={remaining === 0 ? `${styles.progress} ${styles.progressReady}` : styles.progress}>
         <div className={styles.progressRow}>
-          <p className={styles.progressText}>{t.progress(t.progressUnit(watchedCount))}</p>
+          {onOpenHistory ? (
+            <button type="button" className={styles.historyLink} aria-label={t.openHistory(watchedCountLabel)} onClick={onOpenHistory}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 8v5l3 2" />
+                <path d="M21 12a9 9 0 1 1-3-6.7M21 3v6h-6" />
+              </svg>
+              {t.history(watchedCountLabel)}
+            </button>
+          ) : (
+            <p className={styles.progressText}>{t.progress(watchedCountLabel)}</p>
+          )}
           <div className={styles.dots} aria-hidden="true">
             {Array.from({ length: UNLOCK_COUNT }, (_, index) => (
               <span key={index} className={index < watchedCount ? `${styles.dot} ${styles.dotOn}` : styles.dot} />
             ))}
           </div>
         </div>
-        <p className={styles.progressNote}>{remaining > 0 ? t.needMore(remaining) : t.unlocked}</p>
+        <p className={styles.progressNote} role="status">{remaining > 0 ? t.needMore(remaining) : t.unlocked}</p>
         {remaining === 0 && onGoToRank && (
           <button type="button" className={styles.cta} onClick={onGoToRank}>
             {t.goRank}
@@ -331,47 +361,70 @@ export function DiscoverScreen({
       </div>}
 
       <h3 className={styles.sectionTitle}>
-        {genre ? `${genreLabel(genre, lang)} · ${formatNumber(visibleResults.length, lang)} ${lang === 'ar' ? 'من المعروض' : 'shown'}` : isSearch ? t.results(formatNumber(total, lang)) : browseAll ? t.catalogue(formatNumber(total, lang)) : t.starter}
+        {genre ? `${genreLabel(genre, lang)} · ${formatNumber(visibleResults.length, lang)} ${lang === 'ar' ? 'من المعروض' : 'shown'}` : isSearch ? t.results(formatNumber(total, lang)) : browseAll ? t.catalogue(formatNumber(total, lang)) : recommendationsReady ? t.continueDiscovering : t.starter}
       </h3>
-      {!isSearch && !browseAll && <p className={styles.progressNote}>{t.starterHint}</p>}
+      {!isSearch && !browseAll && !recommendationsReady && <p className={styles.progressNote}>{t.starterHint}</p>}
 
       {visibleResults.length === 0 && !searching ? (
-        <p className={styles.empty}>{t.noResults}</p>
+        <p className={styles.empty}>{results.length > 0 ? t.noUnwatched : t.noResults}</p>
       ) : (
         <ul className={styles.grid} aria-busy={searching}>
           {visibleResults.map((title) => {
             const name = lang === 'ar' ? title.titleAr : title.titleEn;
             const state = states.get(title.id);
-            const watched = state === 'watched';
             const listed = state === 'watchlist';
             const busy = busyIds.has(title.id);
 
             return (
               <li key={title.id} className={styles.cell}>
-                {/* The poster is the answer to "ماذا شاهدت؟": one tap marks it,
-                    the same tap again takes it back (UX_AUDIT_MOBILE_2026-09-05
-                    P1 #16 -- this screen used to ask a visual question with
-                    text cards and English paragraphs). A toggle, so assistive
-                    tech reads the state rather than guessing from a tick. */}
+                {/* The poster is the answer to "ماذا شاهدت؟": one tap marks it
+                    (UX_AUDIT_MOBILE_2026-09-05 P1 #16 -- this screen used to
+                    ask a visual question with text cards and English
+                    paragraphs). After the server confirms it, the film moves
+                    to the library's watch history instead of occupying a
+                    discovery slot. */}
                 <div className={styles.tile}>
                   <button
                     type="button"
-                    className={watched ? `${styles.pick} ${styles.picked}` : styles.pick}
-                    aria-pressed={watched}
-                    aria-label={watched ? t.watchedOf(name) : t.markWatchedOf(name)}
-                    onClick={() => setState(title, watched ? 'not_watched' : 'watched', watched ? t.undoNotice : t.watchedNotice)}
+                    className={styles.pick}
+                    aria-pressed="false"
+                    aria-label={t.markWatchedOf(name)}
+                    onClick={() => setState(title, 'watched', t.watchedNotice)}
                     disabled={busy}
                   >
                     <Poster title={title} size="md" className={styles.poster} name={name} />
-                    <span className={styles.pickHint} aria-hidden="true">{busy ? '…' : watched ? '✓' : <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg> {t.watched}</>}</span>
-                    {watched && (
-                      <span className={styles.check} aria-hidden="true">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M5 12l5 5 9-10" />
-                        </svg>
-                      </span>
-                    )}
                   </button>
+
+                  {/* Keep the watched action in its own corner so the film
+                      name remains the strongest content over the scrim. On
+                      the narrow three-column layout the word is visually
+                      hidden, while the button's accessible name stays full. */}
+                  <span className={styles.pickHint} aria-hidden="true">
+                    {busy ? (
+                      '…'
+                    ) : (
+                      <>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                          <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                        <span className={styles.pickHintLabel}>{t.watched}</span>
+                      </>
+                    )}
+                  </span>
+
+                  <div className={styles.posterMeta}>
+                    <h4 className={styles.title}>
+                      {onOpenTitle ? (
+                        <button type="button" className={styles.titleButton} onClick={() => onOpenTitle(title, state ?? null, { query, browseAll, genre, pagesLoaded: page })}>
+                          {name}
+                        </button>
+                      ) : (
+                        name
+                      )}
+                    </h4>
+                    {title.releaseYear && <span className={styles.year}>{String(title.releaseYear)}</span>}
+                  </div>
 
                   {/* Saving for later is a second, smaller intent; it keeps its
                       own target rather than hiding behind a long press, which
@@ -382,26 +435,13 @@ export function DiscoverScreen({
                     aria-pressed={listed}
                     aria-label={listed ? t.onListOf(name) : t.laterOf(name)}
                     onClick={() => setState(title, listed ? 'not_watched' : 'watchlist', listed ? t.undoNotice : t.laterNotice)}
-                    disabled={busy || watched}
+                    disabled={busy}
                   >
                     <svg width="18" height="18" viewBox="0 0 24 24" fill={listed ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round">
                       <path d="M7 4h10v16l-5-3.5L7 20z" />
                     </svg>
                   </button>
                 </div>
-
-                <h4 className={styles.title}>
-                  {onOpenTitle ? (
-                    <button type="button" className={styles.titleButton} onClick={() => onOpenTitle(title, state ?? null, { query, browseAll, genre, pagesLoaded: page })}>
-                      {name}
-                    </button>
-                  ) : (
-                    name
-                  )}
-                </h4>
-                {/* A year identifies; the other-language title and the synopsis
-                    belong to the film's own page, which the title opens. */}
-                {title.releaseYear && <p className={styles.year}>{String(title.releaseYear)}</p>}
               </li>
             );
           })}
