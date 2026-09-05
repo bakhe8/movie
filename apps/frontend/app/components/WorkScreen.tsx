@@ -132,16 +132,16 @@ const DIMENSION_NAMES: Record<Lang, Record<FingerprintDimension, string>> = {
 const labels = {
   ar: {
     back: 'رجوع',
-    eyebrow: 'صفحة العمل',
-    fingerprint: 'بصمة المحتوى',
+    fingerprint: 'سمات العمل',
     fingerprintNote: 'سمات مراجَعة تصف العمل نفسه، لا حكمًا عليه ولا توقعًا لذوقك.',
-    fingerprintPending: 'لم تُنشر بصمة هذا العمل بعد.',
+    fingerprintPending: 'لم تُنشر سمات هذا العمل بعد.',
     fit: 'ملاءمته لك',
     quality: 'الجودة العامة',
     qualityNote: 'درجة خارجية بمصدرها وتاريخها؛ لا تُدمج مع ملاءمتك ولا تُرتَّب بها.',
     fitNote: 'كما ظهرت في المكان الذي فتحت منه هذا العمل؛ أربع قيم منفصلة.',
     noContext: 'افتح هذا العمل من توصية أو من ترتيبك لترى ملاءمته لك هنا.',
     yourState: 'حالته عندك',
+    summaryForeign: 'الملخص (بالإنجليزية)',
     watched: 'شاهدته',
     later: 'لاحقًا',
     onList: 'في قائمتك',
@@ -155,16 +155,16 @@ const labels = {
   },
   en: {
     back: 'Back',
-    eyebrow: 'Work page',
-    fingerprint: 'Content fingerprint',
+    fingerprint: 'What the film is like',
     fingerprintNote: 'Reviewed traits describing the work itself -- not a verdict, not a prediction of your taste.',
-    fingerprintPending: 'This work’s fingerprint has not been published yet.',
+    fingerprintPending: 'These traits have not been published for this film yet.',
     fit: 'How it fits you',
     quality: 'Public quality',
     qualityNote: 'An external score with its source and date; never merged with your fit, never used to rank you.',
     fitNote: 'As shown where you opened this work from; four separate values.',
     noContext: 'Open this work from a recommendation or your ranking to see how it fits you here.',
     yourState: 'Your status',
+    summaryForeign: 'Summary (in Arabic)',
     watched: 'Watched it',
     later: 'Later',
     onList: 'On your list',
@@ -259,6 +259,10 @@ export function WorkScreen({
   const name = lang === 'ar' ? title.titleAr : title.titleEn;
   const alt = lang === 'ar' ? title.titleEn : title.titleAr;
   const showAlt = Boolean(alt && alt !== name);
+  // Catalogue text comes in the source's own language (Wikipedia today), so
+  // "is this the reader's language?" is answered by the script it is written
+  // in, not by a field the API does not send.
+  const foreignSynopsis = Boolean(title.description) && /[؀-ۿ]/.test(title.description ?? '') !== (lang === 'ar');
   const summary = (detail as PublicTitle).fingerprintSummary ?? null;
   const known = new Map((summary ?? []).map((entry) => [entry.key, entry.level]));
 
@@ -294,7 +298,6 @@ export function WorkScreen({
       >
         <Poster title={detail} size="lg" className={styles.headerPoster} />
         <div className={styles.headerText}>
-        <p className={styles.eyebrow}>{t.eyebrow}</p>
         <h2>{name}</h2>
         {(showAlt || title.releaseYear) && (
           <p className={styles.alt}>
@@ -319,11 +322,24 @@ export function WorkScreen({
             column beside a 120px poster wrapped every few words. */}
         <div className={styles.headerBelow}>
           {/* Catalogue descriptions arrive in their own language: direction from the text. */}
-          {title.description && (
-            <p className={styles.desc} dir="auto">
-              {title.description}
-            </p>
-          )}
+          {title.description &&
+            (foreignSynopsis ? (
+              /* An Arabic screen led with an English Wikipedia paragraph, left
+                 aligned inside a right-aligned card, before anything about the
+                 reader (UX_AUDIT_MOBILE_2026-09-05 P0 #6). Catalogue text
+                 arrives in whatever language the source wrote it, so when it
+                 is not the reader's it folds away under a named summary. */
+              <details className={styles.synopsis}>
+                <summary>{t.summaryForeign}</summary>
+                <p className={styles.desc} dir="auto">
+                  {title.description}
+                </p>
+              </details>
+            ) : (
+              <p className={styles.desc} dir="auto">
+                {title.description}
+              </p>
+            ))}
           {/* No attribution sentence here: every third-party credit on the page
               lives in the SourcesFooter at the end (owner, 2026-09-04). */}
         </div>
@@ -361,6 +377,34 @@ export function WorkScreen({
           </>
         )}
         {context.kind === 'none' && <span className={styles.hollow}>{t.noContext}</span>}
+      </section>
+
+      <section className={styles.section} aria-label={t.yourState}>
+        <h3>{t.yourState}</h3>
+        <div className={styles.actions}>
+          {state === 'watched' ? (
+            <>
+              <span className={styles.hollow}>{t.isWatched}</span>
+              <button type="button" className={styles.ghost} onClick={() => change('not_watched', t.undoNotice)} disabled={busy}>
+                {t.undo}
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" className={styles.primary} onClick={() => change('watched', t.watchedNotice)} disabled={busy}>
+                {t.watched}
+              </button>
+              <button
+                type="button"
+                className={state === 'watchlist' ? `${styles.ghost} ${styles.later}` : styles.ghost}
+                onClick={() => change('watchlist', t.laterNotice)}
+                disabled={busy || state === 'watchlist'}
+              >
+                {state === 'watchlist' ? t.onList : t.later}
+              </button>
+            </>
+          )}
+        </div>
       </section>
 
       {/* Public Quality: a fact about the title, separate from the fit
@@ -408,33 +452,6 @@ export function WorkScreen({
           Unmounting this one line is the whole removal once the agreements land. */}
       <SourcesFooter lang={lang} sources={collectSources(detail)} />
 
-      <section className={styles.section} aria-label={t.yourState}>
-        <h3>{t.yourState}</h3>
-        <div className={styles.actions}>
-          {state === 'watched' ? (
-            <>
-              <span className={styles.hollow}>{t.isWatched}</span>
-              <button type="button" className={styles.ghost} onClick={() => change('not_watched', t.undoNotice)} disabled={busy}>
-                {t.undo}
-              </button>
-            </>
-          ) : (
-            <>
-              <button type="button" className={styles.primary} onClick={() => change('watched', t.watchedNotice)} disabled={busy}>
-                {t.watched}
-              </button>
-              <button
-                type="button"
-                className={state === 'watchlist' ? `${styles.ghost} ${styles.later}` : styles.ghost}
-                onClick={() => change('watchlist', t.laterNotice)}
-                disabled={busy || state === 'watchlist'}
-              >
-                {state === 'watchlist' ? t.onList : t.later}
-              </button>
-            </>
-          )}
-        </div>
-      </section>
     </div>
   );
 }

@@ -54,7 +54,7 @@ export function collectSources(input: PageSourcesInput): PageSource[] {
 }
 
 const copy = {
-  ar: { label: 'المصادر', details: 'نصوص الإسناد', open: (name: string) => `الصفحة في ${name}` },
+  ar: { label: 'المصادر', details: 'حقوق المصادر ونصوصها', open: (name: string) => `الصفحة في ${name}` },
   en: { label: 'Sources', details: 'Attribution', open: (name: string) => `Page on ${name}` },
 };
 
