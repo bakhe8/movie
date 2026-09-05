@@ -34,6 +34,20 @@ export interface TrainingStatus {
   latestSnapshot: { modelVersion: string; trainingTriadCount: number; createdAt: Date } | null;
 }
 
+// What a screen needs in order to say *why* there is no model yet -- the
+// part of TrainingStatus that has no ownership check and no snapshot lookup,
+// for a caller (the recommendations route) that already resolved both. The
+// live round of 2026-09-05 saw ten completed rounds and "still learning your
+// taste" with no reason: `pending` carried a rounds-to-go count of 0 and
+// nothing else.
+export interface TrainingSummary {
+  state: TrainingState;
+  jobId: string | null;
+  errorKind: ModelServiceJob['errorKind'];
+  completedTriads: number;
+  nextTrainingAt: number | null;
+}
+
 export interface TrainingRequestResult {
   jobId: string;
   status: ModelServiceJob['status'];
@@ -170,22 +184,39 @@ export class TrainingService {
       ? { modelVersion: snapshot.modelVersion, trainingTriadCount: snapshot.trainingTriadCount, createdAt: snapshot.createdAt }
       : null;
 
+    const resolved = await this.resolveState(profile, completed);
+    return { ...resolved, completedTriads: completed, latestSnapshot };
+  }
+
+  // The state alone, for a caller that owns the profile already. Never
+  // throws: a model service that does not answer is a state ('unknown'),
+  // not a failed recommendations request.
+  async summarize(profile: Pick<Profile, 'id' | 'pausedAt'>): Promise<TrainingSummary> {
+    const completed = await this.countCompleted(profile.id);
+    const { state, job, nextTrainingAt } = await this.resolveState(profile, completed);
+    return { state, jobId: job?.id ?? null, errorKind: job?.errorKind ?? null, completedTriads: completed, nextTrainingAt };
+  }
+
+  private async resolveState(
+    profile: Pick<Profile, 'id' | 'pausedAt'>,
+    completed: number,
+  ): Promise<{ state: TrainingState; job: ModelServiceJob | null; nextTrainingAt: number | null }> {
     if (!this.client.enabled) {
-      return { state: 'disabled', job: null, completedTriads: completed, nextTrainingAt: null, latestSnapshot };
+      return { state: 'disabled', job: null, nextTrainingAt: null };
     }
     if (profile.pausedAt) {
-      return { state: 'paused', job: null, completedTriads: completed, nextTrainingAt: null, latestSnapshot };
+      return { state: 'paused', job: null, nextTrainingAt: null };
     }
     const nextTrainingAt = this.nextTrainingAt(completed);
     let job: ModelServiceJob | null;
     try {
-      job = await this.client.getLatestJob(profileId);
+      job = await this.client.getLatestJob(profile.id);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      this.logger.warn(`training status unavailable for profile ${profileId}: ${reason}`);
-      return { state: 'unknown', job: null, completedTriads: completed, nextTrainingAt, latestSnapshot };
+      this.logger.warn(`training status unavailable for profile ${profile.id}: ${reason}`);
+      return { state: 'unknown', job: null, nextTrainingAt };
     }
-    return { state: job ? job.status : 'idle', job, completedTriads: completed, nextTrainingAt, latestSnapshot };
+    return { state: job ? job.status : 'idle', job, nextTrainingAt };
   }
 
   private async countCompleted(profileId: string): Promise<number> {

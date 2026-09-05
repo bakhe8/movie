@@ -42,6 +42,14 @@ const labels = {
     modelRetrain: 'حدّث نموذجي',
     modelRetraining: 'جارٍ الطلب…',
     modelVersion: 'إصدار النموذج',
+    modelFailedInvalid: 'جولاتك محفوظة، لكن الأفلام التي رتّبتها لا تملك بعدُ تحليلًا منشورًا يكفي لبناء نموذج.',
+    modelFailed: 'تعذّر بناء نموذجك في آخر محاولة. اختياراتك محفوظة.',
+    modelNotPublished: 'اكتمل آخر تدريب ولم يُنشر نموذج. اختياراتك محفوظة.',
+    modelDisabled: 'التدريب غير مفعَّل على هذا الخادم؛ إعداد تشغيلي يعالجه مشغّل الخدمة، لا أنت.',
+    modelUnreachable: 'تعذّر الوصول إلى خدمة النموذج. حاول بعد قليل.',
+    modelSupport: (id: string) => `رمز الدعم: ${id}`,
+    trainFailed: 'تعذّر إرسال طلب التدريب.',
+    trainNeedRounds: 'أكمل جولة ترتيب واحدة على الأقل قبل التدريب.',
     confidence: 'الثقة',
     // Blueprint §5.3 "ملف الذوق": core tendencies, conditional tendencies,
     // unknown areas, exceptions, drift -- none of it exists in the API yet.
@@ -116,6 +124,14 @@ const labels = {
     modelRetrain: 'Update my model',
     modelRetraining: 'Requesting…',
     modelVersion: 'Model version',
+    modelFailedInvalid: 'Your rounds are saved, but the films you ranked do not yet have enough published analysis to build a model from.',
+    modelFailed: 'Your model could not be built on the last attempt. Your choices are saved.',
+    modelNotPublished: 'The last training run finished but no model was published. Your choices are saved.',
+    modelDisabled: 'Training is not enabled on this server; an operational setting for the service operator, not for you.',
+    modelUnreachable: 'The model service could not be reached. Try again in a moment.',
+    modelSupport: (id: string) => `Support code: ${id}`,
+    trainFailed: 'The training request could not be sent.',
+    trainNeedRounds: 'Complete at least one ranking round before training.',
     confidence: 'Confidence',
     detailPending: 'Stable tendencies, unknown areas and exceptions will appear here once the detailed taste profile is built.',
     privacy: 'Privacy',
@@ -166,6 +182,12 @@ type ModelStatus =
   | { kind: 'none' }
   | { kind: 'building' }
   | { kind: 'trained'; version: string; band: ConfidenceBand }
+  // The last job failed: 'invalid' = the ranked titles lack published
+  // fingerprints, 'error' = the service itself failed (brief P0-01). Before
+  // this, every one of these read as "not trained yet", with no reason.
+  | { kind: 'failed'; errorKind: 'invalid' | 'error' | null; jobId: string | null }
+  | { kind: 'not_published'; jobId: string | null }
+  | { kind: 'disabled' }
   | { kind: 'unknown' };
 
 export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLanguageChange?: (lang: Lang) => void }) {
@@ -183,6 +205,7 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
   const [watched, setWatched] = useState<number | null>(null);
   const [model, setModel] = useState<ModelStatus>({ kind: 'loading' });
   const [retraining, setRetraining] = useState(false);
+  const [retrainError, setRetrainError] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [exportPassword, setExportPassword] = useState('');
@@ -238,6 +261,15 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
         } catch {
           setModel({ kind: 'trained', version: status.latestSnapshot.modelVersion, band: 'initial' });
         }
+      } else if (status.state === 'failed') {
+        setModel({ kind: 'failed', errorKind: status.job?.errorKind ?? null, jobId: status.job?.id ?? null });
+      } else if (status.state === 'succeeded') {
+        // Built, never published: a job that ended well with nothing to serve.
+        setModel({ kind: 'not_published', jobId: status.job?.id ?? null });
+      } else if (status.state === 'disabled') {
+        setModel({ kind: 'disabled' });
+      } else if (status.state === 'unknown') {
+        setModel({ kind: 'unknown' });
       } else {
         setModel({ kind: 'none' });
       }
@@ -378,11 +410,24 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
   async function retrain() {
     if (!profileId || retraining || model.kind === 'building') return;
     setRetraining(true);
+    setRetrainError(null);
     try {
       await api.requestTraining(profileId);
       setModel({ kind: 'building' });
-    } catch {
-      // A failed request leaves the current state in place; the user can retry.
+    } catch (error) {
+      // Said, not swallowed: the live round of 2026-09-05 pressed this button
+      // and saw nothing at all (brief P0-01). The state stays; the reason the
+      // request was refused is shown under the button.
+      const reason = error instanceof ApiError ? (error.details ?? {}).reason : undefined;
+      setRetrainError(
+        reason === 'model_service_disabled'
+          ? t.modelDisabled
+          : reason === 'model_service_unreachable'
+            ? t.modelUnreachable
+            : reason === 'need_more_triads'
+              ? t.trainNeedRounds
+              : t.trainFailed,
+      );
     } finally {
       setRetraining(false);
     }
@@ -538,14 +583,7 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
 
         <h3>{t.model}</h3>
         {model.kind === 'loading' && <p>{t.loading}</p>}
-        {model.kind === 'none' && (
-          <>
-            <p>{t.modelNone}</p>
-            <button type="button" className={styles.secondary} onClick={retrain} disabled={retraining}>
-              {retraining ? t.modelRetraining : t.modelRetrain}
-            </button>
-          </>
-        )}
+        {model.kind === 'none' && <p>{t.modelNone}</p>}
         {model.kind === 'building' && (
           <p className={styles.buildingNote}>
             <span className={styles.spinner} aria-hidden="true" />
@@ -553,7 +591,20 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
             <span className={styles.buildingHint}>{t.modelBuildingNote}</span>
           </p>
         )}
-        {model.kind === 'unknown' && <p>{t.failed}</p>}
+        {model.kind === 'failed' && (
+          <p role="alert">
+            {model.errorKind === 'invalid' ? t.modelFailedInvalid : t.modelFailed}
+            {model.jobId && <> {t.modelSupport(model.jobId)}</>}
+          </p>
+        )}
+        {model.kind === 'not_published' && (
+          <p role="alert">
+            {t.modelNotPublished}
+            {model.jobId && <> {t.modelSupport(model.jobId)}</>}
+          </p>
+        )}
+        {model.kind === 'disabled' && <p role="alert">{t.modelDisabled}</p>}
+        {model.kind === 'unknown' && <p role="alert">{t.modelUnreachable}</p>}
         {model.kind === 'trained' && (
           <dl className={styles.stats}>
             <div className={styles.stat}>
@@ -569,10 +620,17 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
             </div>
           </dl>
         )}
-        {(model.kind === 'trained') && (
+        {/* Anything the user can retry or start: not while a build runs, and
+            not on a server that has no model service to ask. */}
+        {(model.kind === 'none' || model.kind === 'trained' || model.kind === 'failed' || model.kind === 'not_published' || model.kind === 'unknown') && (
           <button type="button" className={styles.secondary} onClick={retrain} disabled={retraining}>
             {retraining ? t.modelRetraining : t.modelRetrain}
           </button>
+        )}
+        {retrainError && (
+          <p className={styles.error} role="alert">
+            {retrainError}
+          </p>
         )}
         <p>{t.detailPending}</p>
       </section>

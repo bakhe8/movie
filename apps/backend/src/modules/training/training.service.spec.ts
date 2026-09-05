@@ -190,4 +190,31 @@ describe('TrainingService', () => {
       await expect(build().status('attacker', 'profile-1')).rejects.toBeInstanceOf(NotFoundException);
     });
   });
+
+  // What travels inside a pending recommendations answer (brief P0-01): the
+  // state and the failure kind, for a caller that owns the profile already.
+  describe('summarize', () => {
+    const profile = { id: 'profile-1', pausedAt: null };
+
+    it('reports the latest job with its id and failure kind', async () => {
+      triads.count.mockResolvedValueOnce(10);
+      client.getLatestJob.mockResolvedValueOnce(job({ id: 'job-9', status: 'failed', errorKind: 'invalid', error: 'no fingerprints' }));
+      await expect(build().summarize(profile)).resolves.toEqual({
+        state: 'failed',
+        jobId: 'job-9',
+        errorKind: 'invalid',
+        completedTriads: 10,
+        nextTrainingAt: 13,
+      });
+      expect(profiles.findOne).not.toHaveBeenCalled();
+    });
+
+    it('reports disabled, paused, idle and unknown without throwing', async () => {
+      await expect(build(configMock(), clientMock(false)).summarize(profile)).resolves.toMatchObject({ state: 'disabled', nextTrainingAt: null });
+      await expect(build().summarize({ id: 'profile-1', pausedAt: new Date() })).resolves.toMatchObject({ state: 'paused' });
+      await expect(build().summarize(profile)).resolves.toMatchObject({ state: 'idle', jobId: null, nextTrainingAt: 8 });
+      client.getLatestJob.mockRejectedValueOnce(new ModelServiceError('down', null));
+      await expect(build().summarize(profile)).resolves.toMatchObject({ state: 'unknown', jobId: null, errorKind: null });
+    });
+  });
 });

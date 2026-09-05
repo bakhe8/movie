@@ -151,6 +151,7 @@ describe('RecommendationsService', () => {
   let triadsRepository: { count: ReturnType<typeof vi.fn> };
   let posterService: { forTitles: ReturnType<typeof vi.fn> };
   let experimentsService: { armFor: ReturnType<typeof vi.fn> };
+  let trainingService: { firstTriadCount: number; summarize: ReturnType<typeof vi.fn> };
   let service: RecommendationsService;
 
   // Every 'ready' assertion below works on the items; the states have their
@@ -181,6 +182,11 @@ describe('RecommendationsService', () => {
     posterService = { forTitles: vi.fn().mockResolvedValue(new Map()) };
     // No running experiment: the default exploration share applies.
     experimentsService = { armFor: vi.fn().mockResolvedValue('control') };
+    // Nothing requested yet, no rounds: what a fresh profile's pending looks like.
+    trainingService = {
+      firstTriadCount: 3,
+      summarize: vi.fn().mockResolvedValue({ state: 'idle', jobId: null, errorKind: null, completedTriads: 0, nextTrainingAt: 3 }),
+    };
     service = new RecommendationsService(
       profilesRepository as unknown as Repository<Profile>,
       titlesRepository as unknown as Repository<Title>,
@@ -190,7 +196,7 @@ describe('RecommendationsService', () => {
       modelVersionsRepository as unknown as Repository<ModelVersion>,
       publicQualityService as unknown as PublicQualityService,
       triadsRepository as unknown as Repository<Triad>,
-      { firstTriadCount: 3 } as unknown as TrainingService,
+      trainingService as unknown as TrainingService,
       posterService as unknown as PosterService,
       experimentsService as unknown as ExperimentsService,
     );
@@ -337,12 +343,35 @@ describe('RecommendationsService', () => {
   });
 
   // Designed states are 200s with a discriminator, not 4xx (board B→A).
-  it('reports pending, with the rounds still needed, before the model is trained', async () => {
-    profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+  it('reports pending, with the rounds still needed and the training state, before the model is trained', async () => {
+    const profile = { id: 'profile-1', userId: 'user-1', pausedAt: null };
+    profilesRepository.findOne.mockResolvedValue(profile);
     snapshotsRepository.findOne.mockResolvedValue(null);
-    triadsRepository.count.mockResolvedValue(1);
+    const training = { state: 'idle', jobId: null, errorKind: null, completedTriads: 1, nextTrainingAt: 3 };
+    trainingService.summarize.mockResolvedValue(training);
 
-    expect(await service.findForProfile('user-1', 'profile-1', 10)).toEqual({ state: 'pending', needed: 2 });
+    expect(await service.findForProfile('user-1', 'profile-1', 10)).toEqual({ state: 'pending', needed: 2, training });
+    expect(trainingService.summarize).toHaveBeenCalledWith(profile);
+  });
+
+  // Ten rounds and no model must never read as "still learning": the
+  // failure travels with the pending state (live round 2026-09-05).
+  it('carries a failed training job inside pending once the rounds are enough', async () => {
+    profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1', pausedAt: null });
+    snapshotsRepository.findOne.mockResolvedValue(null);
+    trainingService.summarize.mockResolvedValue({
+      state: 'failed',
+      jobId: 'job-9',
+      errorKind: 'invalid',
+      completedTriads: 10,
+      nextTrainingAt: 13,
+    });
+
+    expect(await service.findForProfile('user-1', 'profile-1', 10)).toMatchObject({
+      state: 'pending',
+      needed: 0,
+      training: { state: 'failed', jobId: 'job-9', errorKind: 'invalid' },
+    });
   });
 
   it('reports paused rather than serving a paused profile (PRIVACY.md §4)', async () => {

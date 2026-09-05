@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { api, type Recommendation, type RecommendationTrack } from '../lib/api';
+import { api, ApiError, type Recommendation, type RecommendationTrack, type TrainingSummary } from '../lib/api';
 import { TRACK_COPY } from '../lib/copy';
 import { formatNumber, type PersonalFitLevel } from '../lib/format';
 import { WorkCard } from './WorkCard';
@@ -21,6 +21,27 @@ const labels = {
     hint: 'لكل فيلم أربع قيم منفصلة: الملاءمة الشخصية، الجودة العامة، التوفر، والثقة. لا نجمعها في رقم واحد.',
     pendingTitle: 'ما زلنا نتعلم ذوقك',
     pendingBody: 'التوصيات تظهر بعد أن يُدرَّب نموذجك على جولات ترتيب كافية.',
+    // Once the rounds are enough, the backend says what became of them; each
+    // situation is named here, never "still learning" over a failure the
+    // user cannot see (live round 2026-09-05, brief P0-01/P0-03).
+    training: {
+      building: { title: 'جارٍ بناء نموذجك', body: 'تُعالَج جولاتك الآن. يستغرق هذا عادةً بضع دقائق، وتتحدّث هذه الصفحة تلقائيًا.' },
+      notStarted: { title: 'جولاتك تكفي للبدء', body: 'اكتملت جولات كافية ولم يبدأ التدريب بعد. اطلبه الآن.' },
+      noFingerprints: {
+        title: 'جولاتك محفوظة، والنموذج ينتظر تحليل الأفلام',
+        body: 'الأفلام التي رتّبتها لا تملك بعدُ تحليلًا منشورًا يكفي لبناء نموذج. لم يضع شيء من اختياراتك؛ يُعاد التدريب عندما يُنشر التحليل أو عند طلبك.',
+      },
+      failed: { title: 'تعذّر بناء نموذجك', body: 'حدث خطأ أثناء التدريب. اختياراتك محفوظة.' },
+      notPublished: { title: 'اكتمل التدريب ولم يُنشر النموذج', body: 'اختياراتك محفوظة. أعد المحاولة، وإن تكرّر أرفق رمز الدعم.' },
+      disabled: { title: 'التدريب غير مفعَّل على هذا الخادم', body: 'جولاتك محفوظة. هذا إعداد تشغيلي يعالجه مشغّل الخدمة، لا أنت.' },
+      unreachable: { title: 'تعذّر الوصول إلى خدمة النموذج', body: 'جولاتك محفوظة. حاول بعد قليل.' },
+    },
+    trainNow: 'درّب نموذجي الآن',
+    trainRetry: 'أعد المحاولة',
+    trainRequesting: 'جارٍ الطلب…',
+    trainRequested: 'أُرسل طلب التدريب.',
+    trainFailed: 'تعذّر إرسال طلب التدريب.',
+    support: (id: string) => `رمز الدعم: ${id}`,
     pausedTitle: 'المعالجة موقوفة مؤقتًا',
     pausedBody: 'طلبك قيد التنفيذ. يمكنك استئناف المعالجة في إعدادات الخصوصية.',
     outdatedTitle: 'يحتاج نموذجك تحديثًا',
@@ -58,6 +79,24 @@ const labels = {
     hint: 'Each film shows four separate values: personal fit, public quality, availability and confidence. They are never merged into one number.',
     pendingTitle: 'Still learning your taste',
     pendingBody: 'Recommendations appear once your model has been trained on enough ranking rounds.',
+    training: {
+      building: { title: 'Building your model', body: 'Your rounds are being processed. This usually takes a few minutes; this page refreshes on its own.' },
+      notStarted: { title: 'Your rounds are enough to start', body: 'Enough rounds are complete, but training has not started yet. Request it now.' },
+      noFingerprints: {
+        title: 'Your rounds are saved; the model is waiting for the films’ analysis',
+        body: 'The films you ranked do not yet have enough published analysis to build a model from. Nothing you chose is lost; training runs again once the analysis is published, or when you ask.',
+      },
+      failed: { title: 'Your model could not be built', body: 'Training hit an error. Your choices are saved.' },
+      notPublished: { title: 'Training finished but no model was published', body: 'Your choices are saved. Try again; if it repeats, quote the support code.' },
+      disabled: { title: 'Training is not enabled on this server', body: 'Your rounds are saved. This is an operational setting for the service operator, not for you.' },
+      unreachable: { title: 'The model service could not be reached', body: 'Your rounds are saved. Try again in a moment.' },
+    },
+    trainNow: 'Train my model now',
+    trainRetry: 'Try again',
+    trainRequesting: 'Requesting…',
+    trainRequested: 'Training requested.',
+    trainFailed: 'The training request could not be sent.',
+    support: (id: string) => `Support code: ${id}`,
     pausedTitle: 'Processing paused',
     pausedBody: 'Your request is in progress. You can resume processing from privacy settings.',
     outdatedTitle: 'Model needs updating',
@@ -92,8 +131,43 @@ const labels = {
 };
 
 // `pending` carries the watched count so its one action leads where progress
-// is possible: the triad needs three watched titles first (SPEC §5.1).
-type Phase = { kind: 'loading' } | { kind: 'ready' } | { kind: 'pending'; watched: number | null } | { kind: 'paused' } | { kind: 'outdated' } | { kind: 'failed' };
+// is possible: the triad needs three watched titles first (SPEC §5.1). Once
+// `needed` is 0 it carries the training state instead, and the screen says
+// which of the situations below the user is actually in.
+type Phase =
+  | { kind: 'loading' }
+  | { kind: 'ready' }
+  | { kind: 'pending'; watched: number | null; needed: number; training: TrainingSummary }
+  | { kind: 'paused' }
+  | { kind: 'outdated' }
+  | { kind: 'failed' };
+
+type PendingSituation = 'rounds' | 'building' | 'notStarted' | 'noFingerprints' | 'failed' | 'notPublished' | 'disabled' | 'unreachable';
+
+function pendingSituation(needed: number, training: TrainingSummary): PendingSituation {
+  if (needed > 0) {
+    return 'rounds';
+  }
+  switch (training.state) {
+    case 'queued':
+    case 'running':
+      return 'building';
+    case 'failed':
+      return training.errorKind === 'invalid' ? 'noFingerprints' : 'failed';
+    // A job that succeeded with no snapshot to serve: built, never published.
+    case 'succeeded':
+      return 'notPublished';
+    case 'disabled':
+      return 'disabled';
+    case 'unknown':
+      return 'unreachable';
+    // 'idle': enough rounds, nothing ever requested (the automatic trigger
+    // missed, or the service was down at the time). 'paused' is answered at
+    // the top level and never reaches here.
+    default:
+      return 'notStarted';
+  }
+}
 
 export function RecommendationsScreen({
   lang,
@@ -115,11 +189,16 @@ export function RecommendationsScreen({
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   const [notice, setNotice] = useState<string | null>(null);
   const [busyTitleId, setBusyTitleId] = useState<string | null>(null);
+  const [requesting, setRequesting] = useState(false);
   const [listed, setListed] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<RecommendationTrack>>(new Set());
 
-  const load = useCallback(async () => {
-    setPhase({ kind: 'loading' });
+  // `silent` refreshes in place (the poll while a model is being built) --
+  // no skeleton flash every few seconds.
+  const load = useCallback(async (silent = false) => {
+    if (!silent) {
+      setPhase({ kind: 'loading' });
+    }
     try {
       // ADR-80: 200 with a discriminator instead of 409/400.
       // 15 items covers 3–5 per each of the three tracks (blueprint §5.3).
@@ -129,12 +208,14 @@ export function RecommendationsScreen({
         setPhase({ kind: 'ready' });
       } else if (result.state === 'pending') {
         let watched: number | null = null;
-        try {
-          watched = (await api.getWatchedTitles(profileId)).length;
-        } catch {
-          watched = null;
+        if (result.needed > 0) {
+          try {
+            watched = (await api.getWatchedTitles(profileId)).length;
+          } catch {
+            watched = null;
+          }
         }
-        setPhase({ kind: 'pending', watched });
+        setPhase({ kind: 'pending', watched, needed: result.needed, training: result.training });
       } else if (result.state === 'paused') {
         setPhase({ kind: 'paused' });
       } else {
@@ -157,6 +238,43 @@ export function RecommendationsScreen({
     const timer = window.setTimeout(() => setNotice(null), 4000);
     return () => window.clearTimeout(timer);
   }, [notice]);
+
+  // While the model service works on the rounds, refresh quietly until it is
+  // done -- the same 5-second poll the profile screen runs.
+  useEffect(() => {
+    if (phase.kind !== 'pending') return;
+    const { state } = phase.training;
+    if (state !== 'queued' && state !== 'running') return;
+    const id = window.setInterval(() => {
+      void load(true);
+    }, 5000);
+    return () => window.clearInterval(id);
+  }, [phase, load]);
+
+  // The request to train lives where the user waits for its result, not only
+  // under the profile screen, and its refusal is said (brief P0-01: the live
+  // round clicked "update my model" and saw nothing at all).
+  async function trainNow() {
+    setRequesting(true);
+    try {
+      await api.requestTraining(profileId);
+      setNotice(t.trainRequested);
+      await load(true);
+    } catch (error) {
+      const reason = error instanceof ApiError ? (error.details ?? {}).reason : undefined;
+      setNotice(
+        reason === 'model_service_disabled'
+          ? t.training.disabled.title
+          : reason === 'model_service_unreachable'
+            ? t.training.unreachable.title
+            : reason === 'paused'
+              ? t.pausedTitle
+              : t.trainFailed,
+      );
+    } finally {
+      setRequesting(false);
+    }
+  }
 
   async function addToList(rec: Recommendation) {
     const name = lang === 'ar' ? rec.title.titleAr : rec.title.titleEn;
@@ -207,24 +325,60 @@ export function RecommendationsScreen({
   }
 
   if (phase.kind === 'pending') {
+    const situation = pendingSituation(phase.needed, phase.training);
+    if (situation === 'rounds') {
+      return (
+        <div className={styles.screen}>
+          {header}
+          <div className={styles.pending} role="status">
+            <h3>{t.pendingTitle}</h3>
+            <p>{t.pendingBody}</p>
+            {/* One tap towards progress: Discover until three watched titles
+                exist (the triad is blocked below that), then the triad. */}
+            {phase.watched !== null && phase.watched < 3 && onGoToDiscover ? (
+              <button type="button" className={styles.cta} onClick={onGoToDiscover}>
+                {t.goDiscover}
+              </button>
+            ) : (
+              onGoToRank && (
+                <button type="button" className={styles.cta} onClick={onGoToRank}>
+                  {t.goRank}
+                </button>
+              )
+            )}
+          </div>
+        </div>
+      );
+    }
+    const copy = t.training[situation];
+    // 'building' and 'disabled' offer nothing to press: one is in progress,
+    // the other is not the user's to fix. 'unreachable' re-reads the state;
+    // every failure asks the model service again.
+    const action =
+      situation === 'notStarted'
+        ? { label: t.trainNow, run: trainNow }
+        : situation === 'unreachable'
+          ? { label: t.trainRetry, run: () => void load() }
+          : situation === 'failed' || situation === 'noFingerprints' || situation === 'notPublished'
+            ? { label: t.trainRetry, run: trainNow }
+            : null;
+    const showSupport = phase.training.jobId !== null && situation !== 'building' && situation !== 'notStarted';
     return (
       <div className={styles.screen}>
         {header}
-        <div className={styles.pending} role="status">
-          <h3>{t.pendingTitle}</h3>
-          <p>{t.pendingBody}</p>
-          {/* One tap towards progress: Discover until three watched titles
-              exist (the triad is blocked below that), then the triad. */}
-          {phase.watched !== null && phase.watched < 3 && onGoToDiscover ? (
-            <button type="button" className={styles.cta} onClick={onGoToDiscover}>
-              {t.goDiscover}
+        <div className={styles.pending} role={situation === 'building' ? 'status' : 'alert'}>
+          <h3>{copy.title}</h3>
+          <p>{copy.body}</p>
+          {showSupport && <p className={styles.support}>{t.support(phase.training.jobId as string)}</p>}
+          {notice && (
+            <p className={styles.status} role="status">
+              {notice}
+            </p>
+          )}
+          {action && (
+            <button type="button" className={styles.cta} onClick={action.run} disabled={requesting}>
+              {requesting ? t.trainRequesting : action.label}
             </button>
-          ) : (
-            onGoToRank && (
-              <button type="button" className={styles.cta} onClick={onGoToRank}>
-                {t.goRank}
-              </button>
-            )
           )}
         </div>
       </div>
@@ -267,7 +421,7 @@ export function RecommendationsScreen({
         <p className={`${styles.status} ${styles.error}`} role="alert">
           {t.failed}
         </p>
-        <button type="button" className={styles.retry} onClick={load}>
+        <button type="button" className={styles.retry} onClick={() => void load()}>
           {t.retry}
         </button>
       </div>

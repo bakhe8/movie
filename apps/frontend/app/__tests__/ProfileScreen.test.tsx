@@ -39,6 +39,7 @@ vi.mock('../lib/api', () => ({
   api: {
     updateProfile: vi.fn().mockResolvedValue({}),
     getTrainingStatus: vi.fn(),
+    requestTraining: vi.fn(),
     getRecommendations: vi.fn(),
     getCompletedTriads: vi.fn().mockResolvedValue([]),
     getWatchedTitles: vi.fn().mockResolvedValue([]),
@@ -155,5 +156,40 @@ describe('ProfileScreen — reset taste', () => {
     const cancelBtn = await screen.findByRole('button', { name: /إلغاء|cancel/i });
     await user.click(cancelBtn);
     expect(mockApi.resetProfile).not.toHaveBeenCalled();
+  });
+});
+
+// ── training failures are said, not swallowed (brief P0-01, live round 2026-09-05)
+
+describe('ProfileScreen — training failures', () => {
+  it('names the missing fingerprints and the support code when the last job failed as invalid', async () => {
+    mockApi.getTrainingStatus.mockResolvedValue({
+      state: 'failed',
+      latestSnapshot: null,
+      completedTriads: 10,
+      nextTrainingAt: 13,
+      job: { id: 'job-9', status: 'failed', errorKind: 'invalid', error: 'no fingerprints' },
+    });
+    renderProfile();
+    const alert = await screen.findByText(/لا تملك بعدُ تحليلًا منشورًا/);
+    expect(alert).toHaveTextContent(/job-9/);
+    expect(screen.queryByText(/لم يُدرَّب نموذجك بعد/)).not.toBeInTheDocument();
+  });
+
+  it('says training is not enabled on this server, with no button to press', async () => {
+    mockApi.getTrainingStatus.mockResolvedValue({ state: 'disabled', latestSnapshot: null, completedTriads: 10, nextTrainingAt: null, job: null });
+    renderProfile();
+    await screen.findByText(/غير مفعَّل على هذا الخادم/);
+    expect(screen.queryByRole('button', { name: /حدّث نموذجي/ })).not.toBeInTheDocument();
+  });
+
+  it('shows why a train request was refused instead of staying silent', async () => {
+    const user = userEvent.setup();
+    mockApi.requestTraining.mockRejectedValue(new Error('503'));
+    renderProfile();
+    const button = await screen.findByRole('button', { name: /حدّث نموذجي/ });
+    await user.click(button);
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/تعذّر إرسال طلب التدريب/));
+    expect(mockApi.requestTraining).toHaveBeenCalledWith('p1');
   });
 });

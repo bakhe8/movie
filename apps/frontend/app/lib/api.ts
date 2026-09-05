@@ -126,6 +126,21 @@ export interface UserTitleState {
 
 export type TriadStatus = 'active' | 'completed' | 'skipped';
 
+// GET .../training `state`, and the `training.state` inside a pending
+// recommendations answer: `disabled` = no model service on this server,
+// `idle` = nothing requested yet, `unknown` = the service did not answer.
+export type TrainingState = 'disabled' | 'paused' | 'idle' | 'queued' | 'running' | 'succeeded' | 'failed' | 'unknown';
+// 'invalid' = the ranked titles lack published fingerprints (nothing
+// trainable yet); 'error' = the service itself failed.
+export type TrainingErrorKind = 'invalid' | 'error' | null;
+export interface TrainingSummary {
+  state: TrainingState;
+  jobId: string | null;
+  errorKind: TrainingErrorKind;
+  completedTriads: number;
+  nextTrainingAt: number | null;
+}
+
 export interface Triad {
   id: string;
   profileId: string;
@@ -420,18 +435,21 @@ export const api = {
     }),
 
   // ADR-80: 200 with a state discriminator instead of 409. `needed` is the
-  // number of ranking rounds still missing before the first training run.
+  // number of ranking rounds still missing before the first training run;
+  // once it is 0, `training` says what became of those rounds, so the
+  // screen never shows "still learning" over a failure it cannot see.
   getRecommendations: (profileId: string, limit = 10) =>
     request<
       | { state: 'ready'; items: Recommendation[] }
-      | { state: 'pending'; needed: number }
+      | { state: 'pending'; needed: number; training: TrainingSummary }
       | { state: 'paused' }
       | { state: 'model_outdated' }
     >(`/profiles/${profileId}/recommendations?limit=${limit}`),
 
   getTrainingStatus: (profileId: string) =>
     request<{
-      state: 'idle' | 'queued' | 'running' | 'succeeded' | 'failed';
+      state: TrainingState;
+      job: { id: string; status: string; errorKind: TrainingErrorKind; error: string | null } | null;
       completedTriads: number;
       nextTrainingAt: number | null;
       latestSnapshot: { modelVersion: string; trainingTriadCount: number; createdAt: string } | null;

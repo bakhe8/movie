@@ -621,7 +621,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 
 | Definition-of-Done item | Status |
 |---|---|
-| New user reaches a first result unaided | 🟡 (backend now trains automatically after the 3rd triad, `4b8f877`; frontend still shows no waiting/progress state for it, F2 open) |
+| New user reaches a first result unaided | 🟡 (backend trains automatically after the 3rd triad, `4b8f877`; the home and profile screens now name every reason there is no model yet — building, never requested with a train-now button, failed for missing fingerprints, failed, unpublished, disabled, unreachable — instead of "still learning" (ADR-96, brief P0-01); what remains is the live proof on a deployed model service, `REMEDIATION_MAP_2026-09-05.md` §3) |
 | "Haven't watched" never enters the taste loss | ✅ (never enters training; `not_watched` stays a recommendation candidate; the two replacement controls exist end to end and record exposure only, ADR-17) |
 | Every result reproducible from event log + model version | 🟡 (training is deterministic; triads now carry `modelVersion` (`NULL` under `random-v1`, gap 3) but recommendations are still not persisted) |
 | Automated tests for triad, replacement, delete, export | ✅ |

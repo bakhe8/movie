@@ -712,6 +712,15 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 
 ---
 
+## ADR-96 — No screen says "still learning" over a failure it cannot see (remediation brief P0-01/P0-03, 2026-09-05)
+
+**Context.** The live black-box round of 2026-09-05 (`docs/REMEDIATION_MAP_2026-09-05.md`) completed ten rounds and stayed on «ما زلنا نتعلم ذوقك»; «حدّث نموذجي» answered nothing. The code made both unavoidable whenever training was disabled, unreachable or failing: `GET …/recommendations` answered `pending` with only a rounds-to-go count (0 after the third round), the profile screen mapped `failed`/`disabled`/`idle` alike to "not trained yet", and its retry swallowed every error. `GET …/training` already knew all of it.
+**Decision.** `pending` carries `training: { state, jobId, errorKind, completedTriads, nextTrainingAt }` (`TrainingService.summarize`, no HTTP beyond the model-service job lookup the status route already made). Once `needed` is 0 the home screen names the situation — building (and polls), never requested (with «درّب نموذجي الآن» right there), failed with `invalid` = the ranked titles lack published fingerprints, failed with an error, finished-but-unpublished, disabled on this server, service unreachable — with the job id as a support code where one exists, and says why a train request was refused. The profile screen does the same. `GET /api/health` answers 503 `empty_catalog` over zero titles: the release seeds before traffic (ADR-90), so an empty catalog is always a failed release, and Railway's health check must say so before a user does.
+**Consequences.** The API shape is additive; every designed state stays a 200 (ADR-81). A pending home screen costs one model-service round-trip (5 s timeout) — only while there is no model. Not done here, by design: the four readiness statuses of the brief's §5.1 (queue item 8) and unique-set counting for the threshold (queue item 3, revises ADR-34).
+**Revisit when.** Queue item 8 folds `training` into a readiness contract, or the model service gains a push/callback so polling can go.
+
+---
+
 ## Summary
 
 | # | Decision | Serves | Revisit trigger |

@@ -10,7 +10,7 @@ import { Triad } from '../../entities/triad.entity';
 import { EXPLORATION_SHARE_EXPERIMENT, ExperimentsService } from '../experiments/experiments.service';
 import { PosterService } from '../public-quality/poster.service';
 import { PublicQuality, PublicQualityService } from '../public-quality/public-quality.service';
-import { TrainingService } from '../training/training.service';
+import { TrainingService, type TrainingSummary } from '../training/training.service';
 import { FINGERPRINT_V2_DIMENSIONS, FINGERPRINT_V3_DIMENSIONS } from '../../entities/title-fingerprint.type';
 import { UserModelSnapshot } from '../../entities/user-model-snapshot.entity';
 import { UserTitleState } from '../../entities/user-title-state.entity';
@@ -156,9 +156,12 @@ export interface RecommendationResult {
 // 4xx stays for real errors: 401, and 404 for a profile that is not yours.
 export type RecommendationsResponse =
   | { state: 'ready'; items: RecommendationResult[] }
-  // `needed` counts the rounds still missing before the first training run;
-  // 0 means enough rounds were answered and training is on its way.
-  | { state: 'pending'; needed: number }
+  // `needed` counts the rounds still missing before the first training run.
+  // Once it is 0, `training` says what actually happened to those rounds --
+  // queued, running, failed (and how), never requested, or a server with no
+  // model service at all -- so the screen never has to say "still learning"
+  // over a failure it cannot see (live round 2026-09-05, brief P0-01/P0-03).
+  | { state: 'pending'; needed: number; training: TrainingSummary }
   | { state: 'paused' }
   // A snapshot from before a fingerprint-dimension change (ADR-69/75): it
   // cannot be scored against, and the next training run replaces it.
@@ -217,8 +220,12 @@ export class RecommendationsService {
   async findForProfile(userId: string, profileId: string, limit: number): Promise<RecommendationsResponse> {
     const outcome = await this.resolveSnapshot(userId, profileId);
     if (outcome.state === 'pending') {
-      const completed = await this.triadsRepository.count({ where: { profileId, status: 'completed' } });
-      return { state: 'pending', needed: Math.max(0, this.trainingService.firstTriadCount - completed) };
+      const training = await this.trainingService.summarize(outcome.profile);
+      return {
+        state: 'pending',
+        needed: Math.max(0, this.trainingService.firstTriadCount - training.completedTriads),
+        training,
+      };
     }
     if (outcome.state !== 'ready') {
       return outcome;
@@ -475,7 +482,12 @@ export class RecommendationsService {
   private async resolveSnapshot(
     userId: string,
     profileId: string,
-  ): Promise<{ state: 'ready'; snapshot: UserModelSnapshot } | { state: 'pending' } | { state: 'paused' } | { state: 'model_outdated' }> {
+  ): Promise<
+    | { state: 'ready'; snapshot: UserModelSnapshot }
+    | { state: 'pending'; profile: Profile }
+    | { state: 'paused' }
+    | { state: 'model_outdated' }
+  > {
     const profile = await this.profilesRepository.findOne({ where: { id: profileId, userId } });
     if (!profile) {
       throw new NotFoundException('Profile not found');
@@ -503,7 +515,7 @@ export class RecommendationsService {
       });
     }
     if (!snapshot) {
-      return { state: 'pending' };
+      return { state: 'pending', profile };
     }
     if (snapshot.weights.length !== FINGERPRINT_DIMENSIONS.length) {
       return { state: 'model_outdated' };

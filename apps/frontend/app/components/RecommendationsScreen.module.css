@@ -84,6 +84,13 @@
   line-height: var(--lh-body);
 }
 
+/* The training job id, quoted back to support when a build fails. */
+.pending .support {
+  font-size: var(--fs-12);
+  font-variant-numeric: tabular-nums;
+  user-select: all;
+}
+
 /* --- Tracks --------------------------------------------------------------- */
 
 .track {
