@@ -12,6 +12,7 @@ import { Profile } from '../src/entities/profile.entity';
 import { Title } from '../src/entities/title.entity';
 import { Triad } from '../src/entities/triad.entity';
 import { User } from '../src/entities/user.entity';
+import { WatchEvent } from '../src/entities/watch-event.entity';
 import { PrivacyService, subjectKeyFor } from '../src/modules/privacy/privacy.service';
 
 const PASSWORD = 'CorrectHorseBattery1';
@@ -73,6 +74,7 @@ describe('Privacy rights: export, reset, delete (real HTTP, real DB)', () => {
   let users: Repository<User>;
   let consents: Repository<Consent>;
   let triads: Repository<Triad>;
+  let watchEvents: Repository<WatchEvent>;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -86,6 +88,7 @@ describe('Privacy rights: export, reset, delete (real HTTP, real DB)', () => {
     profiles = app.get<Repository<Profile>>(getRepositoryToken(Profile));
     users = app.get<Repository<User>>(getRepositoryToken(User));
     triads = app.get<Repository<Triad>>(getRepositoryToken(Triad));
+    watchEvents = app.get<Repository<WatchEvent>>(getRepositoryToken(WatchEvent));
 
     const titlesRepository = app.get<Repository<Title>>(getRepositoryToken(Title));
     const suffix = Date.now();
@@ -146,6 +149,17 @@ describe('Privacy rights: export, reset, delete (real HTTP, real DB)', () => {
       expect(profile.titleStates[0].notes).toBe('kept through a reset');
       expect(profile.triads).toHaveLength(1);
       expect(profile.triads[0]).toMatchObject({ status: 'completed', replacements: [] });
+      // ADR-119: completing that round confirmed all three titles watched
+      // and recorded why -- the export surfaces those provenance rows
+      // without any export-side code caring about the new source value.
+      expect(profile.watchEvents).toHaveLength(3);
+      expect(profile.watchEvents).toEqual(
+        expect.arrayContaining(
+          titleIds.map((titleId) =>
+            expect.objectContaining({ titleId, source: 'triad_ranked', triadId: profile.triads[0].id, watchedAt: null }),
+          ),
+        ),
+      );
       expect(Array.isArray(document.consents)).toBe(true);
       expect(document.privacyRequests).toHaveLength(1);
       expect(document.privacyRequests[0]).toMatchObject({ type: 'export', status: 'done', id: document.meta.requestId });
@@ -185,6 +199,14 @@ describe('Privacy rights: export, reset, delete (real HTTP, real DB)', () => {
       await request(app.getHttpServer()).get('/consents').set('Authorization', `Bearer ${owner.token}`).expect(200);
       const audited = await audit.findOne({ where: { action: 'privacy.reset', resourceId: ownerProfileId } });
       expect(audited?.status).toBe('ok');
+
+      // "keeps ... watch history (title states, watch events)": the deleted
+      // triad's own three triad_ranked rows must survive with triadId set to
+      // NULL, not disappear or block the delete -- the real-DB proof that
+      // watch_events.triadId is ON DELETE SET NULL, not CASCADE/NO ACTION.
+      const survivingEvents = await watchEvents.find({ where: { profileId: ownerProfileId, source: 'triad_ranked' } });
+      expect(survivingEvents).toHaveLength(3);
+      expect(survivingEvents.every((event) => event.triadId === null)).toBe(true);
 
       // A fresh round can start again on the same watch history.
       await completeOneRound(app, owner.token, ownerProfileId);

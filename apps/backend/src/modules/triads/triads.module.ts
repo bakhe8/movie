@@ -12,6 +12,7 @@ import { TriadReplacement } from '../../entities/triad-replacement.entity';
 import { UserModelSnapshot } from '../../entities/user-model-snapshot.entity';
 import { Credit } from '../../entities/credit.entity';
 import { UserTitleState } from '../../entities/user-title-state.entity';
+import { WatchEvent } from '../../entities/watch-event.entity';
 import { TriadsController } from './triads.controller';
 import { TriadPolicyService } from './triad-policy.service';
 import { TriadsService } from './triads.service';
@@ -19,7 +20,7 @@ import { TriadsService } from './triads.service';
 @Module({
   imports: [
     AnalyticsModule,
-    TypeOrmModule.forFeature([Profile, Title, Triad, TriadReplacement, UserTitleState, Recommendation, Outcome, UserModelSnapshot, Credit]),
+    TypeOrmModule.forFeature([Profile, Title, Triad, TriadReplacement, UserTitleState, WatchEvent, Recommendation, Outcome, UserModelSnapshot, Credit]),
     PublicQualityModule,
     ExperimentsModule,
   ],

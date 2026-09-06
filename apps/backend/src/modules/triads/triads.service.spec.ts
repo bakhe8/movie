@@ -12,6 +12,7 @@ import { Title } from '../../entities/title.entity';
 import { Triad } from '../../entities/triad.entity';
 import { TriadReplacement } from '../../entities/triad-replacement.entity';
 import { UserTitleState } from '../../entities/user-title-state.entity';
+import { WatchEvent } from '../../entities/watch-event.entity';
 import { triadSetHash } from './triad-set';
 import { TriadsService } from './triads.service';
 
@@ -103,6 +104,23 @@ describe('TriadsService', () => {
       titleIds: [titleA, titleB, titleC],
     };
 
+    // Call order for a fresh completion: unlocked triad -> ownership -> the
+    // transaction (locked re-read of the triad, then one UserTitleState
+    // findOne per title inside confirmWatchedFromRanking, ADR-119). `locked`
+    // defaults to the same row; `existingState` is what each of the three
+    // findOne calls after it resolves to (null -- no prior row -- unless a
+    // test cares about an existing one).
+    function arrangeRank({
+      triad = { ...activeTriad },
+      locked = undefined as Record<string, unknown> | undefined,
+      existingState = null as Record<string, unknown> | null,
+    } = {}) {
+      triadsRepository.findOne.mockResolvedValueOnce(triad);
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      triadsRepository.manager.findOne.mockResolvedValueOnce(locked ?? triad).mockResolvedValue(existingState);
+      return triad;
+    }
+
     it('rejects a malformed ranking before touching the database', async () => {
       await expect(
         service.rank('user-1', 'triad-1', { ranking: [titleA, titleA, titleB] }), // not distinct
@@ -158,15 +176,17 @@ describe('TriadsService', () => {
     });
 
     it('accepts a valid ranking from the owning user, marks the triad completed, and records answeredAt', async () => {
-      triadsRepository.findOne.mockResolvedValue({ ...activeTriad });
-      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      arrangeRank();
 
       const result = await service.rank('user-1', 'triad-1', { ranking: validRanking, sessionId: 's1' });
 
       expect(result.status).toBe('completed');
       expect(result.ranking).toEqual(validRanking);
       expect(result.answeredAt).toBeInstanceOf(Date);
-      expect(triadsRepository.save).toHaveBeenCalled();
+      // The completion itself is written through the locked transaction's
+      // manager, not the plain repository (row lock, ADR-119).
+      expect(triadsRepository.manager.save).toHaveBeenCalled();
+      expect(triadsRepository.save).not.toHaveBeenCalled();
     });
 
     // ALPHA_PLAN 7.5: the round's duration measured from the row's own two
@@ -174,9 +194,7 @@ describe('TriadsService', () => {
     describe('analytics', () => {
       it('records the answered round with the duration between shown and answered', async () => {
         const shownAt = new Date(Date.now() - 4200);
-        triadsRepository.findOne.mockResolvedValue({ ...activeTriad, shownAt, modelVersion: 'adaptive-v1' });
-        profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
-        triadsRepository.save.mockImplementation((triad: Triad) => Promise.resolve(triad));
+        arrangeRank({ triad: { ...activeTriad, shownAt, modelVersion: 'adaptive-v1' } });
 
         await service.rank('user-1', 'triad-1', { ranking: validRanking });
 
@@ -189,13 +207,27 @@ describe('TriadsService', () => {
       // ADR-19: a round never marked shown has an unknown duration, and an
       // unknown is left out rather than reported as 0.
       it('omits the duration entirely when the round was never marked shown', async () => {
-        triadsRepository.findOne.mockResolvedValue({ ...activeTriad, shownAt: null });
-        profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
-        triadsRepository.save.mockImplementation((triad: Triad) => Promise.resolve(triad));
+        arrangeRank({ triad: { ...activeTriad, shownAt: null } });
 
         await service.rank('user-1', 'triad-1', { ranking: validRanking });
 
         expect(analyticsService.record.mock.calls[0][2]).not.toHaveProperty('durationMs');
+      });
+
+      // ADR-119: the ranking confirmation is exposure bookkeeping, not the
+      // user explicitly saying "I watched this" -- only WatchEventsService's
+      // own in_app/import/manual path ever inflates that counter.
+      it('never records watch_marked for the exposure confirmation rank() makes', async () => {
+        arrangeRank();
+
+        await service.rank('user-1', 'triad-1', { ranking: validRanking });
+
+        expect(analyticsService.record).not.toHaveBeenCalledWith(
+          expect.anything(),
+          'watch_marked',
+          expect.anything(),
+          expect.anything(),
+        );
       });
     });
 
@@ -205,8 +237,7 @@ describe('TriadsService', () => {
     // nothing.
     describe('ranked_later outcomes', () => {
       it('writes no outcome for a title that was never recommended (the common case)', async () => {
-        triadsRepository.findOne.mockResolvedValue({ ...activeTriad });
-        profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+        arrangeRank();
         recommendationsRepository.findOne.mockResolvedValue(null);
 
         await service.rank('user-1', 'triad-1', { ranking: validRanking });
@@ -215,8 +246,7 @@ describe('TriadsService', () => {
       });
 
       it('writes an outcome linking the most recent recommendation, with rankPosition matching the final ranking order', async () => {
-        triadsRepository.findOne.mockResolvedValue({ ...activeTriad });
-        profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+        arrangeRank();
         recommendationsRepository.findOne.mockImplementation(({ where }: { where: { titleId: string } }) =>
           where.titleId === titleA ? Promise.resolve({ id: 'rec-for-a', profileId: 'profile-1', titleId: titleA }) : Promise.resolve(null),
         );
@@ -236,8 +266,7 @@ describe('TriadsService', () => {
       });
 
       it('writes one outcome per recommended title when more than one of the three was recommended', async () => {
-        triadsRepository.findOne.mockResolvedValue({ ...activeTriad });
-        profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+        arrangeRank();
         recommendationsRepository.findOne.mockImplementation(({ where }: { where: { titleId: string } }) => {
           if (where.titleId === titleA) return Promise.resolve({ id: 'rec-a', profileId: 'profile-1', titleId: titleA });
           if (where.titleId === titleC) return Promise.resolve({ id: 'rec-c', profileId: 'profile-1', titleId: titleC });
@@ -250,8 +279,7 @@ describe('TriadsService', () => {
       });
 
       it('queries recommendations scoped to this profile, not just the title id', async () => {
-        triadsRepository.findOne.mockResolvedValue({ ...activeTriad });
-        profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+        arrangeRank();
 
         await service.rank('user-1', 'triad-1', { ranking: validRanking });
 
@@ -306,10 +334,8 @@ describe('TriadsService', () => {
       });
 
       it('persists the key on a fresh submission', async () => {
-        triadsRepository.findOne
-          .mockResolvedValueOnce(null) // no existing row for this key
-          .mockResolvedValueOnce({ ...activeTriad }); // the triad being ranked
-        profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+        triadsRepository.findOne.mockResolvedValueOnce(null); // no existing row for this key
+        arrangeRank(); // the triad being ranked, plus the locked re-read
 
         const result = await service.rank('user-1', 'triad-1', { ranking: validRanking }, idempotencyKey);
 
@@ -319,10 +345,11 @@ describe('TriadsService', () => {
       it('returns the winning row instead of erroring when it loses a race on the same idempotency key', async () => {
         triadsRepository.findOne
           .mockResolvedValueOnce(null) // no existing row for this key, when first checked
-          .mockResolvedValueOnce({ ...activeTriad }) // the triad being ranked
+          .mockResolvedValueOnce({ ...activeTriad }) // the triad being ranked (pre-transaction read)
           .mockResolvedValueOnce({ ...activeTriad, status: 'completed', idempotencyKey }); // winner, re-fetched by key
         profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
-        triadsRepository.save.mockRejectedValue({ code: '23505' });
+        triadsRepository.manager.findOne.mockResolvedValueOnce({ ...activeTriad }); // locked re-read, inside the transaction
+        triadsRepository.manager.save.mockRejectedValue({ code: '23505' });
 
         const result = await service.rank('user-1', 'triad-1', { ranking: validRanking }, idempotencyKey);
 
@@ -335,11 +362,98 @@ describe('TriadsService', () => {
           .mockResolvedValueOnce(null)
           .mockResolvedValueOnce({ ...activeTriad });
         profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
-        triadsRepository.save.mockRejectedValue(new Error('connection lost'));
+        triadsRepository.manager.findOne.mockResolvedValueOnce({ ...activeTriad });
+        triadsRepository.manager.save.mockRejectedValue(new Error('connection lost'));
 
         await expect(
           service.rank('user-1', 'triad-1', { ranking: validRanking }, idempotencyKey),
         ).rejects.toThrow('connection lost');
+      });
+    });
+
+    // ADR-119: comparing three films is stronger evidence of exposure than
+    // the watch list ever was, so completing a triad confirms all three as
+    // watched and records why -- through the same watch_events log
+    // WatchEventsService already writes to, not a parallel table. `watched`
+    // itself still never becomes a preference signal (that's `ranking`
+    // alone); these tests cover only the exposure side.
+    describe('confirms watched from ranking (ADR-119)', () => {
+      it('creates a watched UserTitleState row for each of the three titles when none exists', async () => {
+        arrangeRank({ existingState: null });
+
+        await service.rank('user-1', 'triad-1', { ranking: validRanking });
+
+        // The mock returns the same object it's given, which confirmWatchedFromRanking
+        // then mutates in place -- so by the time this assertion runs, each captured
+        // call carries the state/watchedAt it ends up with; objectContaining checks
+        // only the identity fields this call originally supplied.
+        for (const titleId of [titleA, titleB, titleC]) {
+          expect(triadsRepository.manager.create).toHaveBeenCalledWith(
+            UserTitleState,
+            expect.objectContaining({ profileId: 'profile-1', titleId }),
+          );
+        }
+        expect(triadsRepository.manager.save).toHaveBeenCalledWith(
+          expect.objectContaining({ state: 'watched', watchedAt: expect.any(Date) }),
+        );
+      });
+
+      it('leaves an already-watched title exactly as it was -- watchedOn is never overwritten', async () => {
+        const existingState = { profileId: 'profile-1', titleId: titleA, state: 'watched', watchedOn: '2026-01-01', watchedAt: new Date('2026-01-01') };
+        arrangeRank({ existingState });
+
+        await service.rank('user-1', 'triad-1', { ranking: validRanking });
+
+        expect(existingState).toMatchObject({ state: 'watched', watchedOn: '2026-01-01' });
+      });
+
+      // A ranking is definitive evidence (the user just compared the film to
+      // two others), so it outranks an exposure list that says otherwise --
+      // without fabricating a day nobody supplied (DATE-01).
+      it('upgrades a not_watched/watchlist/interested title to watched without inventing a watchedOn', async () => {
+        const existingState = { profileId: 'profile-1', titleId: titleB, state: 'not_watched', watchedOn: null, watchedAt: null };
+        arrangeRank({ existingState });
+
+        await service.rank('user-1', 'triad-1', { ranking: validRanking });
+
+        expect(existingState).toMatchObject({ state: 'watched', watchedOn: null });
+        expect(existingState.watchedAt).toBeInstanceOf(Date);
+      });
+
+      it('writes one triad_ranked watch_event per title, with no watchedAt guessed and linked to this triad', async () => {
+        arrangeRank();
+
+        await service.rank('user-1', 'triad-1', { ranking: validRanking });
+
+        for (const titleId of [titleA, titleB, titleC]) {
+          expect(triadsRepository.manager.create).toHaveBeenCalledWith(WatchEvent, {
+            profileId: 'profile-1',
+            titleId,
+            watchedAt: null,
+            source: 'triad_ranked',
+            triadId: 'triad-1',
+          });
+        }
+      });
+
+      it('never re-confirms watched on an idempotent replay -- no transaction runs at all', async () => {
+        const idempotencyKey = '99999999-9999-4999-8999-999999999999';
+        const alreadySubmitted = { ...activeTriad, status: 'completed' as const, ranking: validRanking, idempotencyKey };
+        triadsRepository.findOne.mockResolvedValueOnce(alreadySubmitted);
+        profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+
+        await service.rank('user-1', 'triad-1', { ranking: validRanking }, idempotencyKey);
+
+        expect(triadsRepository.manager.transaction).not.toHaveBeenCalled();
+      });
+
+      it('rejects when the locked re-read finds the triad already completed by a concurrent submission', async () => {
+        arrangeRank({ locked: { ...activeTriad, status: 'completed' } });
+
+        await expect(service.rank('user-1', 'triad-1', { ranking: validRanking })).rejects.toBeInstanceOf(
+          BadRequestException,
+        );
+        expect(triadsRepository.manager.save).not.toHaveBeenCalled();
       });
     });
   });

@@ -23,7 +23,7 @@
 |---|---|---|---|---|
 | Email, password hash, name | account, login, security | `terms_privacy` | until account deletion | `users` |
 | UI language, market, platforms | display and availability only — never taste | `terms_privacy` | until deletion | `profiles` |
-| Watched / not-watched / watchlist state, watch events (time, edition, audio, subtitles, provider) | personalization; Watchability | `watch_history` | until deletion/reset | `user_title_states`, `watch_events` |
+| Watched / not-watched / watchlist state, watch events (time, edition, audio, subtitles, provider; a ranked triad also confirms watched, ADR-119) | personalization; Watchability | `watch_history` | until deletion/reset | `user_title_states`, `watch_events` |
 | Imported lists (raw file, parsed rows, imported ratings) | populate watch history | `import_processing` | raw file deleted after parsing; rows until deletion/reset | object storage (temporary), `library_imports`, `watch_events` |
 | Triad events, replacements | individual taste model | `personalization_individual` | until deletion/reset | `triads`, `triad_replacements` |
 | Triad events pooled across profiles | shared latent space (`BP §7.5`) | `personalization_pooled` (separate, opt-out) | until deletion/reset; excluded from the next retrain on opt-out | read from `triads` by the batch job; no copy |

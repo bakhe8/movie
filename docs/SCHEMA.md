@@ -11,6 +11,8 @@ Naming (ADR-16): tables `snake_case` plural; columns are TypeORM's default `came
 
 ## 1. Current physical schema (migrated)
 
+TRIAD-WATCH / [ADR-119](ARCHITECTURE_DECISIONS.md#adr-119--ranking-a-triad-confirms-its-titles-watched-via-watch_events-not-a-parallel-table-triad-watch-2026-09-06): migration `1788492000000-AddTriadRankedWatchEvents` adds nullable `watch_events."triadId"` (`FK` to `triads`, `ON DELETE SET NULL`) plus a partial unique index on `("triadId", "titleId")` where `"triadId" IS NOT NULL`. `WatchEventSource` gains `'triad_ranked'`, written only by `TriadsService.rank()`; `CreateWatchEventDto` never accepts it from a client.
+
 CAT-1 / [ADR-116](ARCHITECTURE_DECISIONS.md#adr-116--cumulative-catalog-identity-no-automatic-rebind-cat-1-2026-09-06): migration `1788490000000-CatalogIdentityGuards` validates canonical Wikidata/IMDb/TMDB strings, adds unique expression indexes on `titles.externalIds`, and rejects updates to existing UUID/internalId/provider bindings while allowing missing provider IDs to be added. Legacy conflicts abort migration without rewriting works. CAT-1 local catalog admission is 389/425, with 36 Arabic-title blockers; this is not a 425 acceptance or a CAT-2 opening.
 
 **Pending deployment on `codex/cinematic-redesign` (ADR-113):** `1788488000000-AddProfileAppearance` adds `profiles."preferredAppearance" varchar(16) NULL` with `CHK_profiles_preferredAppearance` restricting non-null values to `cinema`, `premiere`, or `montage`. Existing profiles keep NULL, resolved to the default appearance by the client. The API accepts and returns this optional preference. This additive migration has been written and compiled, but has not been applied to a database in this redesign session; run it before deploying the updated backend. Its `down()` removes the check and column.
@@ -282,12 +284,14 @@ outcomes (                                                        -- BP §13.1; 
 
 watch_events (                                                    -- BP §6.2, §13.1
   id uuid PK, "profileId" uuid NOT NULL FK profiles ON DELETE CASCADE, "titleId" uuid NOT NULL FK titles,
-  "watchedAt" timestamp, source varchar NOT NULL,                 -- 'in_app' | 'import' | 'manual'
+  "watchedAt" timestamp, source varchar NOT NULL,                 -- 'in_app' | 'import' | 'manual' | 'triad_ranked' (ADR-119; internal-only, never accepted from CreateWatchEventDto)
   "editionId" uuid FK title_editions, "audioLanguage" varchar(5), "subtitleLanguage" varchar(5), provider varchar,
   "importId" uuid,                                                -- no FK, matches the target DDL literally
   "recommendationId" uuid FK recommendations,                     -- closes the loop (BP §4.5)
+  "triadId" uuid FK triads ON DELETE SET NULL,                    -- ADR-119; set only alongside source='triad_ranked' -- SET NULL so PrivacyService.reset()'s triad delete keeps this exposure row
   "createdAt" timestamp NOT NULL DEFAULT now(),
-  INDEX ("profileId"), INDEX ("titleId"), INDEX ("recommendationId") -- "titleId": AUDIT_2026-09-05 H7
+  UNIQUE ("triadId", "titleId") WHERE "triadId" IS NOT NULL,      -- ADR-119: at most one triad_ranked row per (triad, title)
+  INDEX ("profileId"), INDEX ("titleId"), INDEX ("recommendationId"), INDEX ("triadId") -- "titleId": AUDIT_2026-09-05 H7
 )
 
 public_quality_sources (                                          -- BP §10.3: per-source, never averaged into one number
@@ -549,6 +553,7 @@ Each step is one TypeORM migration; none require data backfill beyond defaults b
 ---
 
 **Changelog**
+- 2.34 (2026-09-06): migration `1788492000000-AddTriadRankedWatchEvents` (ADR-119) applied to `movie-postgres` and `moviedb_test` -- nullable `watch_events."triadId"` (`FK` to `triads`, `ON DELETE SET NULL`) and a partial unique index on `("triadId", "titleId")`; `WatchEventSource` gains `'triad_ranked'`. §1's `watch_events` DDL updated to match.
 - 2.33 (2026-09-05): ADR-113 adds the nullable `preferredAppearance` column and enum check in `1788488000000-AddProfileAppearance`; migration written and compiled on `codex/cinematic-redesign`, pending database application.
 - 2.32 (2026-09-05): twenty-eighth migration `RenameLegacyConstraintsToConvention` -- the six InitialSchema-era hashed foreign keys and the `user_title_states` unique renamed to the `FK_<table>_<column>` / `UQ_<table>_<columns>` convention every later migration used by hand; `ConventionNamingStrategy` now derives FK names, so entities and database agree (ADR-91). Same change: `outcomes.occurredAt` and `analytics_events.properties` defaults and the `recommendations` index declared the way the DDL has them. `schema:log` against `movie-postgres` is empty for the first time.
 - 2.31 (2026-09-05): twenty-seventh migration `SharedLatentSpaceVersionsCreatedAt` -- `shared_latent_space_versions.createdAt` backfilled, `DEFAULT now()`, `NOT NULL` (AUDIT_2026-09-05 M4); the table was empty everywhere. Same day, no migration: every entity column now names its type explicitly (board 16), no DDL change -- `schema:log` proposes nothing for those columns.
