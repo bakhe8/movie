@@ -5,7 +5,7 @@
  * field, assigns contiguous internalIds, and writes STAGED_NEW records. Read-only Wikidata calls only;
  * no writes to catalog.demo.json/seed/ADMIN.
  *
- *   npx tsx src/scripts/catalog-dev1000-merge-round2.ts [sourced-file.tsv]   # default: round2
+ *   npx tsx src/scripts/catalog-dev1000-merge-round2.ts [sourced-file.tsv] [maxNew]   # default: round2, unlimited
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -62,8 +62,10 @@ async function main() {
   const existingByWikidata = new Set(staging.map((r) => r.externalIds?.wikidata).filter(Boolean));
   const existingByImdb = new Set(staging.map((r) => r.externalIds?.imdb).filter(Boolean));
 
-  const fresh = rows.filter((r) => !existingByWikidata.has(r.qid) && !existingByImdb.has(r.imdb));
-  console.log(`${sourceFile}: ${rows.length} rows, already reserved: ${rows.length - fresh.length}, fresh: ${fresh.length}`);
+  const allFresh = rows.filter((r) => !existingByWikidata.has(r.qid) && !existingByImdb.has(r.imdb));
+  const maxNew = process.argv[3] ? Number(process.argv[3]) : undefined;
+  const fresh = maxNew !== undefined ? allFresh.slice(0, maxNew) : allFresh;
+  console.log(`${sourceFile}: ${rows.length} rows, already reserved: ${rows.length - allFresh.length}, fresh: ${allFresh.length}${maxNew !== undefined ? `, capped to ${fresh.length}` : ''}`);
 
   const resolved: ResolvedCandidate[] = [];
   const skipped: { row: Round2Row; reason: string }[] = [];
@@ -91,7 +93,12 @@ async function main() {
   console.log(`resolved (has enwiki title): ${resolved.length}, skipped: ${skipped.length}`);
   for (const s of skipped) console.log(`  skip ${s.row.qid} ${s.row.titleEn} (${s.row.year}): ${s.reason}`);
 
-  const newRecords = buildBatchRecords(staging, resolved);
+  // Never grow the dev1000 target past 1000 records, no matter how many resolved candidates remain.
+  const roomLeft = Math.max(0, 1000 - staging.length);
+  const capped = resolved.slice(0, roomLeft);
+  if (capped.length < resolved.length) console.log(`capping to the remaining room toward 1000: ${resolved.length} -> ${capped.length}`);
+
+  const newRecords = buildBatchRecords(staging, capped);
   const merged = [...staging, ...newRecords].sort((a, b) => a.internalId.localeCompare(b.internalId));
   writeFileSync(stagingPath, JSON.stringify(merged, null, 2) + '\n');
   console.log(`wrote ${merged.length} total dev1000 records (${newRecords.length} new, ${staging.length} -> ${merged.length}) to ${stagingPath}`);
