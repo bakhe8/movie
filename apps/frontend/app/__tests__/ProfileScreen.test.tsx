@@ -301,7 +301,7 @@ describe('ProfileScreen — account settings', () => {
 
   it('shows a dedicated message when the current password is wrong', async () => {
     const user = userEvent.setup();
-    mockApi.requestEmailChange.mockRejectedValue(new (await import('../lib/api')).ApiError(401, 'Incorrect password'));
+    mockApi.requestEmailChange.mockRejectedValue(new (await import('../lib/api')).ApiError('Incorrect password', 401));
     render(<ProfileScreen lang="ar" />);
     await user.click(await screen.findByRole('button', { name: /الحساب/ }));
 
