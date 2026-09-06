@@ -1,7 +1,11 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
 import type { FilmFingerprintV1 } from './title-fingerprint.type';
 
 @Entity('titles')
+// Expression indexes and the immutable-binding trigger are owned by CatalogIdentityGuards.
+@Index('UQ_titles_wikidata_identity', { synchronize: false })
+@Index('UQ_titles_imdb_identity', { synchronize: false })
+@Index('UQ_titles_tmdb_identity', { synchronize: false })
 export class Title {
   @PrimaryGeneratedColumn('uuid')
   id: string;

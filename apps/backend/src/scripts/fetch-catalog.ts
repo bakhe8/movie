@@ -3,7 +3,7 @@
  *
  *   npx tsx src/scripts/fetch-catalog.ts [--limit N] [--only DEMO0007] [--no-plot]
  *
- * Input : src/scripts/fixtures/catalog.demo.list.tsv  (hand-curated rows; row order fixes internalId)
+ * Input : src/scripts/fixtures/catalog.demo.list.tsv  (explicit, permanently reserved internalIds)
  * Output: src/scripts/fixtures/catalog.demo.json      (the fixture db:seed:demo reads; committed)
  *         src/scripts/fixtures/catalog.demo.report.md (balance report + every warning; committed)
  *
@@ -26,6 +26,7 @@ import { existsSync } from 'fs';
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
+import { assertCumulativeIdentities, assertReservedIdentities, assertSourceReservations, mergeCatalog, SourceReservation } from './catalog-identity';
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -37,6 +38,7 @@ const FIXTURES_DIR = existsSync(path.resolve(__dirname, 'fixtures'))
 const LIST_PATH = path.join(FIXTURES_DIR, 'catalog.demo.list.tsv');
 const OUTPUT_PATH = path.join(FIXTURES_DIR, 'catalog.demo.json');
 const REPORT_PATH = path.join(FIXTURES_DIR, 'catalog.demo.report.md');
+const IDENTITY_PATH = path.join(FIXTURES_DIR, 'catalog.demo.identity.json');
 const CACHE_DIR = process.env.CATALOG_CACHE_DIR ?? path.join(os.tmpdir(), 'movie-catalog-cache');
 // Wikimedia asks for an identifying agent; no personal data in it.
 const USER_AGENT = 'movie-taste-demo-catalog/0.1 (local development fixture builder; docs/DEMO_DATA_PLAN_2026-09-03.md)';
@@ -283,6 +285,7 @@ export interface CatalogEntry {
     sourceIds: string[];
     wikipedia: { en?: string; ar?: string };
     wikidataLabelEn?: string;
+    titleArSource?: string;
   };
   fingerprint: null;
 }
@@ -354,7 +357,6 @@ async function readList(): Promise<ListRow[]> {
   const text = await readFile(LIST_PATH, 'utf8');
   const rows: ListRow[] = [];
   let headerSeen = false;
-  let ordinal = 0;
   text.split(/\r?\n/).forEach((rawLine, index) => {
     const line = rawLine.trim();
     if (!line || line.startsWith('#')) {
@@ -365,7 +367,8 @@ async function readList(): Promise<ListRow[]> {
       return;
     }
     const cells = rawLine.split('\t').map((cell) => cell.trim());
-    const [slice, region, tier, year, titleEn, wiki, titleArOverride, genresOverride] = cells;
+    const [slice, region, tier, year, titleEn, wiki, titleArOverride, genresOverride, internalId] = cells;
+    if (!/^DEMO\d{4}$/.test(internalId ?? '')) throw new Error(`line ${index + 1}: explicit internalId required`);
     if (!slice || !region || !tier || !year || !titleEn || !wiki) {
       throw new Error(`catalog.demo.list.tsv line ${index + 1}: expected 6+ tab-separated cells, got ${cells.length}`);
     }
@@ -376,10 +379,9 @@ async function readList(): Promise<ListRow[]> {
     if (separator < 1) {
       throw new Error(`catalog.demo.list.tsv line ${index + 1}: wiki must look like en:Page_Title`);
     }
-    ordinal += 1;
     rows.push({
       line: index + 1,
-      internalId: `DEMO${String(ordinal).padStart(4, '0')}`,
+      internalId,
       slice: slice as Slice,
       region,
       tier: tier as Tier,
@@ -610,6 +612,19 @@ function parseArgs(argv: string[]): { limit: number | null; only: string | null;
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   let rows = await readList();
+  const reserved = JSON.parse(await readFile(IDENTITY_PATH, 'utf8')) as SourceReservation[];
+  assertSourceReservations(reserved, rows.map((row) => ({ ...row, wiki: `${row.wikiLang}:${row.wikiTitle}` })));
+  const reservationById = new Map(reserved.map((row) => [row.internalId, row]));
+  const previous = JSON.parse(await readFile(OUTPUT_PATH, 'utf8')) as CatalogEntry[];
+  assertCumulativeIdentities(previous, reserved, true);
+  for (const row of rows.filter((row) => row.titleArOverride && !previous.some((old) => old.internalId === row.internalId))) {
+    const reservation = reservationById.get(row.internalId)!;
+    const proof = reservation.titleArEvidence;
+    if (!proof || proof.title !== row.titleArOverride || !proof.url.startsWith('https://') ||
+        proof.imdb !== reservation.externalIds?.imdb || proof.wikidata !== reservation.externalIds?.wikidata) {
+      throw new Error(`unverified Arabic override: ${row.internalId}`);
+    }
+  }
   if (args.only) {
     rows = rows.filter((row) => row.internalId === args.only);
   }
@@ -648,6 +663,10 @@ async function main(): Promise<void> {
     }
     if (guessed) {
       warn(row, 'guessed-page', `${row.wikiLang}:${row.wikiTitle} not found; used search hit "${title}" → ${summary.wikibase_item}. Verify, then pin it in the list`);
+      continue; // A search suggestion is a blocker, never authority to bind a work.
+    }
+    if (summary.wikibase_item !== reservationById.get(row.internalId)?.externalIds?.wikidata) {
+      throw new Error(`resolved Wikidata rebind: ${row.internalId} -> ${summary.wikibase_item}`);
     }
     resolved.set(row.internalId, { qid: summary.wikibase_item, summary, lang: row.wikiLang, title: summary.title ?? title, guessed });
     process.stdout.write(`  ${row.internalId} ${row.titleEn} → ${summary.wikibase_item}\n`);
@@ -823,29 +842,29 @@ async function main(): Promise<void> {
         sourceIds,
         wikipedia: { ...(enSitelink ? { en: enSitelink } : {}), ...(arSitelink ? { ar: arSitelink } : {}) },
         ...(wikidataLabelEn && wikidataLabelEn !== titleEn ? { wikidataLabelEn } : {}),
+        ...(row.titleArOverride && reservationById.get(row.internalId)?.titleArEvidence
+          ? { titleArSource: reservationById.get(row.internalId)!.titleArEvidence!.url } : {}),
       },
       fingerprint: null,
     });
   }
 
-  // 4. Duplicate check (two rows resolving to one item is a curation error).
-  const byQid = new Map<string, string[]>();
-  entries.forEach((entry) => byQid.set(entry.externalIds.wikidata, [...(byQid.get(entry.externalIds.wikidata) ?? []), entry.internalId]));
-  for (const [qid, ids] of byQid) {
-    if (ids.length > 1) {
-      warnings.push({ internalId: ids.join('+'), titleEn: '', kind: 'duplicate-item', detail: `${qid} appears as ${ids.join(', ')}` });
-    }
-  }
+  // Check against every reserved/admitted work, including ones outside a partial run.
+  assertReservedIdentities(reserved, entries);
+  const merged = mergeCatalog(previous, entries);
 
   // 5. Write the fixture (only when running the full list, so a --limit/--only probe never truncates it).
   const partial = args.only !== null || args.limit !== null;
-  if (!partial) {
-    await writeFile(OUTPUT_PATH, `${JSON.stringify(entries, null, 2)}\n`, 'utf8');
+  const blocking = warnings.filter((warning) => ['unresolved', 'no-arabic-title', 'wikidata-missing', 'guessed-page', 'year-mismatch', 'not-a-film-class'].includes(warning.kind));
+  // Missing Arabic labels stay excluded; other verified additions may accumulate.
+  // Identity conflicts throw above, before either output is written.
+  const mayWrite = !partial && blocking.every((warning) => warning.kind === 'no-arabic-title');
+  if (mayWrite) {
+    await writeFile(OUTPUT_PATH, `${JSON.stringify(merged, null, 2)}\n`, 'utf8');
   }
   await writeFile(REPORT_PATH, buildReport(rows, entries, warnings, unknownGenres, droppedGenres, partial), 'utf8');
-  console.log(`\n${entries.length}/${rows.length} entries${partial ? ' (partial run, fixture not written)' : ` → ${path.relative(process.cwd(), OUTPUT_PATH)}`}`);
+  console.log(`\n${entries.length}/${rows.length} resolved entries; ${merged.length} cumulative entries${mayWrite ? ` → ${path.relative(process.cwd(), OUTPUT_PATH)}` : ' (fixture not written)'}`);
   console.log(`${warnings.length} warnings → ${path.relative(process.cwd(), REPORT_PATH)}`);
-  const blocking = warnings.filter((warning) => ['unresolved', 'no-arabic-title', 'wikidata-missing', 'duplicate-item'].includes(warning.kind));
   if (blocking.length > 0) {
     console.log(`${blocking.length} blocking warning(s): the list needs fixing before the fixture is complete`);
     process.exitCode = 1;
@@ -884,7 +903,7 @@ function buildReport(
     `# Demo catalog — build report`,
     ``,
     `Generated by \`src/scripts/fetch-catalog.ts\` on ${new Date().toISOString().slice(0, 10)}${partial ? ' (**partial run**; the fixture was not rewritten)' : ''}.`,
-    `Rows in list: ${rows.length} · entries written: ${total} · warnings: ${warnings.length}.`,
+    `Rows in list: ${rows.length} · entries resolved this run: ${total} · warnings: ${warnings.length}.`,
     ``,
     `## Balance`,
     ``,

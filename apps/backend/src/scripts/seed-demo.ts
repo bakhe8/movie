@@ -22,6 +22,7 @@
  * trainer's job (`python -m src.train_demo`).
  */
 import 'reflect-metadata';
+import { assertCumulativeIdentities, assertReservedIdentities, CatalogIdentity } from './catalog-identity';
 import * as bcrypt from 'bcryptjs';
 import { existsSync, readFileSync } from 'fs';
 import * as path from 'path';
@@ -168,6 +169,8 @@ export function resolveFixturesDir(): string {
 export function loadFixtures(fixturesDir: string): { catalog: CatalogEntry[]; personas: PersonasFixture } {
   const catalog = JSON.parse(readFileSync(path.join(fixturesDir, 'catalog.demo.json'), 'utf8')) as CatalogEntry[];
   const personas = JSON.parse(readFileSync(path.join(fixturesDir, 'personas.demo.json'), 'utf8')) as PersonasFixture;
+  const reserved = JSON.parse(readFileSync(path.join(fixturesDir, 'catalog.demo.identity.json'), 'utf8')) as CatalogIdentity[];
+  assertReservedIdentities(reserved, catalog);
   const problems = [
     ...catalog.flatMap((entry) => validateCatalogEntry(entry).map((problem) => `${entry.internalId}: ${problem}`)),
     ...personas.personas.flatMap(validatePersona),
@@ -196,6 +199,10 @@ export async function seedDemo(dataSource: DataSource, options: SeedDemoOptions 
   const seed = options.seed ?? personas.seed;
 
   return dataSource.transaction(async (manager) => {
+    // Serialize against other title writers and check all namespaces before any side effect.
+    await manager.query('LOCK TABLE titles IN SHARE ROW EXCLUSIVE MODE');
+    const previous = await manager.getRepository(Title).find({ select: { internalId: true, externalIds: true } });
+    assertCumulativeIdentities(previous, catalog);
     // 1. Catalog: entity fields only, upsert by internalId (the 15 FILM seeds are untouched).
     // `originalLanguage` is written only where the *database* has the column
     // (migration AddTrainingLanguageDiversity applied) and the entity maps it;

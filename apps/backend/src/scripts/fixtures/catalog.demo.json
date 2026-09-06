@@ -71571,6 +71571,47 @@
     }
   },
   {
+    "internalId": "DEMO0320",
+    "titleEn": "My Octopus Teacher",
+    "titleAr": "تعلّمتُ من الأخطبوط",
+    "description": "My Octopus Teacher is a 2020 Netflix Original documentary film directed by Pippa Ehrlich and James Reed. It documents a year spent by filmmaker Craig Foster forging a relationship with a wild common octopus in a South African kelp forest.",
+    "descriptionSource": "wikipedia:en",
+    "descriptionAr": null,
+    "releaseYear": 2020,
+    "genres": [
+      "Documentary"
+    ],
+    "externalIds": {
+      "wikidata": "Q99372651",
+      "imdb": "tt12888462",
+      "tmdb": "682110"
+    },
+    "originalLanguage": "en",
+    "languages": [
+      "en"
+    ],
+    "country": "ZA",
+    "countries": [
+      "ZA"
+    ],
+    "slice": "other",
+    "region": "ZA",
+    "tier": "niche",
+    "evidence": {
+      "plotSummary": "In 2018, Craig Foster began free-diving in a cold underwater kelp forest at a remote location in False Bay, near Cape Town, South Africa. The location was near Simon's Town on the Cape Peninsula, which is exposed to the cold Benguela current of the Atlantic Ocean.\nFoster started to document his experiences, and, in time, met a curious young octopus that captured his attention. The film shows Foster's growing intimate relationship with the octopus as he follows her around for nearly a year. They form an individual bond, and she plays with Foster and allows him into her world to see how she sleeps, lives, and eats. She frequently has to defend herself against pyjama sharks. In one attack, the octopus loses an arm, and she then retreats to her den to recover, slowly regenerating the arm over three months. In a later shark attack, she shows an incredibly improved creativity to survive, including sticking on the shark's back. After mating with a male octopus and producing numerous eggs, she dies naturally while tending to her eggs. Later, a shark scavenges her dead body and carries it off.\nFoster describes the effect of this mentorship-like relationship the octopus provided him, teaching him a lesson on the fragility of life and humanity's connection with nature. This transfers to Foster creating a deeper bond with his son, Tom, as the boy develops as a diver and marine biology student.",
+      "plotSource": "wikipedia:en:My Octopus Teacher",
+      "sourceIds": [
+        "wikidata:Q99372651",
+        "wikipedia:en:My Octopus Teacher"
+      ],
+      "wikipedia": {
+        "en": "My Octopus Teacher"
+      },
+      "titleArSource": "https://www.justwatch.com/eg/movie/my-octopus-teacher"
+    },
+    "fingerprint": null
+  },
+  {
     "internalId": "DEMO0321",
     "titleEn": "Sarafina!",
     "titleAr": "سارافينا!",
@@ -80754,6 +80795,51 @@
     }
   },
   {
+    "internalId": "DEMO0373",
+    "titleEn": "Come and See",
+    "titleAr": "تعال وانظر",
+    "description": "Come and See is a 1985 Soviet epic historical anti-war film directed by Elem Klimov and starring Aleksei Kravchenko and Olga Mironova. Its screenplay, written by Klimov and Ales Adamovich, is based on the 1971 novel Khatyn (Russian: Хатынь), and the 1977 collection of survivor testimonies I Am from the Fiery Village (Russian: Я из огненной деревни, romanized: Ya iz ognennoy derevni), of which Adam",
+    "descriptionSource": "wikipedia:en",
+    "descriptionAr": "فيلم أنتج عام 1985",
+    "releaseYear": 1985,
+    "genres": [
+      "Drama",
+      "War",
+      "Thriller"
+    ],
+    "externalIds": {
+      "wikidata": "Q1130395",
+      "imdb": "tt0091251",
+      "tmdb": "25237"
+    },
+    "originalLanguage": "de",
+    "languages": [
+      "de",
+      "be",
+      "ru"
+    ],
+    "country": "SU",
+    "countries": [
+      "SU"
+    ],
+    "slice": "other",
+    "region": "RU",
+    "tier": "mid",
+    "evidence": {
+      "plotSummary": "In 1943, Flyora and another Belarusian boy dig up a rifle from a trench to join the Soviet partisans. They do so in defiance of their village elder, who warns them that this would arouse the suspicions of the occupying Germans. The boys' activities are noticed by a reconnaissance aircraft.\nThe next day, partisans arrive at Flyora's house to conscript him against his mother's wishes. He is taken to a partisan camp in the forest, where he becomes a low-rank militiaman who performs menial tasks. When the trained partisans leave to fight, their commander, Kosach, orders Flyora and several other men to remain behind at the camp. Bitterly disappointed, Flyora walks into the forest weeping. He comes across Glasha, an emotionally unstable adolescent girl working as a partisan nurse. The forest is suddenly attacked by dive bombers and German paratroopers, forcing the duo to flee. They hide from German officers passing through the forest and sleep under a tree for the night.\nGlasha travels with Flyora to his village, only to find his home deserted. In denial that his family is dead, Flyora believes they are hiding on a nearby island across a bog and runs off. Glasha follows, by chance seeing a pile of executed villagers behind his house, before yelling at Flyora to leave quickly. They become hysterical after wading through the bog, where Glasha screams at Flyora that his family is dead. Rubezh, a partisan fighter, rescues them and takes them to meet the surviving villagers. The village elder, severely burned by gasoline, tells Flyora of his family's deaths and repeats his warning about digging up the rifle. Horrified, Flyora attempts suicide by submerging his head in the bog, but Glasha and the villagers stop him.\nRubezh takes Flyora and two other men to raid a warehouse for food. The group find the warehouse unexpectedly guarded by German troops and are forced to retreat, during which two of their comrades are killed by a land mine. Rubezh and Flyora coerce a Nazi-collaborating farmer to hand over his cow, but a German machine gunner kills Rubezh and the cow. Flyora attempts to steal a horse and cart from another man to transport the cow, but he convinces Flyora to hide his gun and Red Army jacket as SS troops appear. He takes Flyora to his house in Perekhody village.\nGerman troops and collaborators surround and occupy the village. Flyora runs outside and sees women, children, and the elderly being forcibly marched down the street and warns them that they are being herded to their deaths, but he is forced into a barn church with them. He and a young woman with a child manage to escape, but the woman's child is thrown back in while she is dragged off to be gang raped. The Germans barricade the doors and windows before incinerating the church, killing everyone inside. While celebrating the massacre, a German officer holds a pistol to Flyora's head to pose for a picture, then abandons him as the soldiers leave.",
+      "plotSource": "wikipedia:en:Come and See",
+      "sourceIds": [
+        "wikidata:Q1130395",
+        "wikipedia:en:Come and See"
+      ],
+      "wikipedia": {
+        "en": "Come and See"
+      },
+      "titleArSource": "https://www.justwatch.com/eg/movie/come-and-see"
+    },
+    "fingerprint": null
+  },
+  {
     "internalId": "DEMO0374",
     "titleEn": "Leviathan",
     "titleAr": "ليفياثان",
@@ -81018,7 +81104,7 @@
       "warmth": 0.4,
       "darkness": 0.25,
       "linearity": 0.85,
-      "dialogueDensity": 0.0,
+      "dialogueDensity": 0,
       "actionIntensity": 0.55,
       "plotComplexity": 0.6,
       "visualComplexity": 0.95,
@@ -82551,6 +82637,47 @@
       "licenseStatus": "commercial_allowed",
       "reviewStatus": "unreviewed"
     }
+  },
+  {
+    "internalId": "DEMO0382",
+    "titleEn": "Honeyland",
+    "titleAr": "ارض العسل",
+    "description": "Honeyland (Macedonian: Медена земја, romanized: Medena zemja) is a 2019 Macedonian documentary film that was directed by Tamara Kotevska and Ljubomir Stefanov. It portrays the life of Hatidže Muratova, a lonely beekeeper of wild bees who lives in the remote mountain village of Bekirlija and follows her lifestyle before and after neighbors move in nearby.",
+    "descriptionSource": "wikipedia:en",
+    "descriptionAr": null,
+    "releaseYear": 2019,
+    "genres": [
+      "Documentary"
+    ],
+    "externalIds": {
+      "wikidata": "Q61456310",
+      "imdb": "tt8991268",
+      "tmdb": "566213"
+    },
+    "originalLanguage": "tr",
+    "languages": [
+      "tr"
+    ],
+    "country": "MK",
+    "countries": [
+      "MK"
+    ],
+    "slice": "other",
+    "region": "MK",
+    "tier": "mid",
+    "evidence": {
+      "plotSummary": "Honeyland documents the life of Hatidže Muratova, a Macedonian beekeeper of Turkish descent, who lives in the village of Bekirlija in the municipality of Lozovo. She is one of the last keepers of wild bees in Europe. Due to its location in a secluded mountain, the village has no access to electricity and running water. Hatidže lives with her 85-year-old, partly blind and bedridden mother Nazife, who is completely dependent on her daughter. Hatidže earns a living by selling honey in the country's capital Skopje, which is four hours away from the village.\nThe atmosphere in the village changes when the nomadic rancher Hussein Sam arrives with his wife Ljutvie, their seven children, and their imported domestic animals. Initially, Hatidže maintains good relationships with the family and spends time playing with the children. In need of money, and inspired by Hatidže's way of earning money, Sam takes an interest in wild beekeeping himself. Hatidže instructs him on collecting honey and provides him with several bees so Sam can start his own colony. Despite his initial success, one of Sam's customers demands more honey than his bees can produce. Sam disregards Hatidže's advice to always leave half of the honey for his bees and proceeds to sell the entire stock of honey. This leads to Sam's colonies attacking Hatidže's during the resource-scarce winter. Hatidže scolds Sam for ignoring her advice and her bee colony collapses. Soon after, her mother dies. As the nomadic family decides to move to another village, Hatidže remains alone in Bekirlija.",
+      "plotSource": "wikipedia:en:Honeyland",
+      "sourceIds": [
+        "wikidata:Q61456310",
+        "wikipedia:en:Honeyland"
+      ],
+      "wikipedia": {
+        "en": "Honeyland"
+      },
+      "titleArSource": "https://www.justwatch.com/eg/movie/honeyland"
+    },
+    "fingerprint": null
   },
   {
     "internalId": "DEMO0384",
@@ -86242,6 +86369,48 @@
     }
   },
   {
+    "internalId": "DEMO0419",
+    "titleEn": "How to Make Millions Before Grandma Dies",
+    "titleAr": "كيف تكسب الملايين قبل أن تموت الجدة",
+    "description": "How to Make Millions Before Grandma Dies, known in Thai as Lahn Mah, is a 2024 Thai comedy drama film directed by Pat Boonnitipat (in his directorial debut) from a screenplay written by Pat and Thodsapon Thiptinnakorn. It stars Putthipong Assaratanakul and Usha Seamkhum in their debut feature film roles.",
+    "descriptionSource": "wikipedia:en",
+    "descriptionAr": null,
+    "releaseYear": 2024,
+    "genres": [
+      "Comedy",
+      "Drama"
+    ],
+    "externalIds": {
+      "wikidata": "Q125294821",
+      "imdb": "tt31392609",
+      "tmdb": "1103621"
+    },
+    "originalLanguage": "th",
+    "languages": [
+      "th"
+    ],
+    "country": "TH",
+    "countries": [
+      "TH"
+    ],
+    "slice": "other",
+    "region": "TH",
+    "tier": "niche",
+    "evidence": {
+      "plotSummary": "Mengju \"Amah\" Saejiu and her adult children Sew, Kiang, and Soei celebrate the Qingming Festival with Sew's son, M, a university dropout and aspiring video game streamer. She tells her family she wants to be buried on a big plot, which costs millions. Hospitalized after a fall, Mengju is diagnosed with late-stage colorectal cancer and is predicted to die in a year; her family decides to keep the diagnosis hidden from her. After M's wealthy paternal grandfather dies, most of his estate is left to his primary carer, Mui, M's cousin and online content creator. M then volunteers to become Mengju's carer, hoping to inherit her estate.\nBefore moving in, M lists Mengju's Talat Phlu house for sale. He initially struggles to curry favour with her, finding her demanding and unfiltered, and questions the morality of his decision but is convinced by Mui to continue. M tells Mengju of her diagnosis, who gradually accepts M's care, and he helps her sell congee. During a weekly family gathering, Mengju reveals that M informed her of her cancer. All of Mengju's children suddenly suggest methods to help care for her, which raises M's suspicions about their motive; thus, M increases his efforts as her primary carer.\nKiang, a wealthy stockbroker, arranges for Mengju to live with him and his family, offering to pay M to care for Mengju, but he declines the money. Mengju also declines to move in with Kiang, and she grows closer to M. Later, she finds out Soei stole ฿200,000 hidden in her kitchen to help cover his ฿1 million gambling debt. After confronting Soei, M gives him a silver belt from his grandfather to pay off his debt, then lies to Mengju, saying Soei is \"out of town on work\". One day, Mengju encounters a respondent to M's sale listing of her house, whom she turns away. She then gives M a reserved pomegranate and encourages him to develop more self-reliance.\nMengju takes M to meet her brother, who inherited millions upon the passing of their parents, and asks for money to purchase the plot. Her brother refuses and it is revealed that Mengju was their parents' carer until they died. She tells M she hopes a large burial plot would bring their family together by visiting her gravesite. After her doctors tell M that continuing treatment would be futile, he lies to her that she will instead receive treatment \"based on her symptoms\". Kiang asks Sew for the deed to Mengju's house, but she gives it to Soei, per Mengju's wishes. M angrily reacts to this and moves back home.\nM learns that Sew, unlike him or Sew's siblings, did not want anything in exchange for caring for Mengju. Mui offers M half of her expected inheritance if he helps care for her dying aunt, but he refuses. Soei sells Mengju's house, fully covering his debts, and moves her to a nursing home. He attempts to repay M, who refuses. M moves Mengju into his home. He also confronts Soei and Kiang about their inaction in caring for Mengju.",
+      "plotSource": "wikipedia:en:How to Make Millions Before Grandma Dies",
+      "sourceIds": [
+        "wikidata:Q125294821",
+        "wikipedia:en:How to Make Millions Before Grandma Dies"
+      ],
+      "wikipedia": {
+        "en": "How to Make Millions Before Grandma Dies"
+      },
+      "titleArSource": "https://www.justwatch.com/eg/movie/how-to-make-millions-before-grandma-dies"
+    },
+    "fingerprint": null
+  },
+  {
     "internalId": "DEMO0420",
     "titleEn": "Bad Genius",
     "titleAr": "عبقرية سيئة",
@@ -86455,6 +86624,55 @@
       "licenseStatus": "commercial_allowed",
       "reviewStatus": "unreviewed"
     }
+  },
+  {
+    "internalId": "DEMO0421",
+    "titleEn": "Memoria",
+    "titleAr": "ذاكرة",
+    "description": "Memoria (stylized as məmorᴉa) is a 2021 drama mystery film written, directed and co-produced by Apichatpong Weerasethakul, starring Tilda Swinton, Elkin Díaz, Jeanne Balibar, Juan Pablo Urrego and Daniel Giménez Cacho. It is a notable entry into the modern slow cinema genre.",
+    "descriptionSource": "wikipedia:en",
+    "descriptionAr": null,
+    "releaseYear": 2021,
+    "genres": [
+      "Drama"
+    ],
+    "externalIds": {
+      "wikidata": "Q67087116",
+      "imdb": "tt8399288",
+      "tmdb": "511819"
+    },
+    "originalLanguage": "es",
+    "languages": [
+      "es",
+      "en"
+    ],
+    "country": "CO",
+    "countries": [
+      "CO",
+      "TH",
+      "DE",
+      "CN",
+      "MX",
+      "QA",
+      "FR",
+      "CH"
+    ],
+    "slice": "other",
+    "region": "TH",
+    "tier": "niche",
+    "evidence": {
+      "plotSummary": "Jessica, a Scottish expatriate to Colombia, awakens one night to a single loud boom. She appears to be the only one who heard it. The next day, she goes to visit her sister, Karen, who is ill and in a hospital in Bogotá. Jessica operates a market-flower business in Medellín, and is curious to learn more about an excavation project being carried out in the same hospital where her sister is being treated.\nStill bothered by the sound, which she hears repeatedly and which prevents her from sleeping, Jessica seeks the help of a young sound engineer named Hernán to recreate the sound. Though unsuccessful at first, the two eventually approximate the sound, and begin a friendly relationship. Right before they are to take a trip together, Jessica looks for Hernán at his sound engineering studio, only to discover that he is not there and no one working there knows who he is.\nFinding herself growing increasingly uncomfortable while in the company of her now-healthy sister, Jessica ventures out into the countryside alone, where she encounters a middle-aged fish scaler, also named Hernán. This Hernán lives a secluded life, but he speaks frankly with Jessica. They discuss his connection to the earth, his sleep, and their memories. Inside his home, Jessica learns to connect with her memories in a similar fashion to Hernán, and at one point while holding hands, appears to have her memories intertwine with his.\nJessica then approaches an open window and hears the booming sound again, but seems to have grown to accept it and even appreciate it. Suddenly, a camouflaged alien spacecraft rises out of the jungle, leaving a loud sonic boom in its wake. A radio broadcast is heard reporting a mild earthquake that, unbeknownst to the general population, coincided with the take-off of the spacecraft. The broadcast goes on to say that the quake has unearthed previously inaccessible areas that the aforementioned excavation project was searching for.",
+      "plotSource": "wikipedia:en:Memoria (2021 film)",
+      "sourceIds": [
+        "wikidata:Q67087116",
+        "wikipedia:en:Memoria (2021 film)"
+      ],
+      "wikipedia": {
+        "en": "Memoria (2021 film)"
+      },
+      "titleArSource": "https://www.justwatch.com/eg/movie/memoria"
+    },
+    "fingerprint": null
   },
   {
     "internalId": "DEMO0422",

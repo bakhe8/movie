@@ -1,0 +1,950 @@
+{
+  "baseCommit": "378c152",
+  "checkedAt": "2026-09-06T00:27:05.517Z",
+  "wikidataResponseSha256": "d7c36c46684376061a955dd70dac1008280c6fd0e372f96dcd3b8b18c8efa708",
+  "rows": [
+    {
+      "internalId": "DEMO0312",
+      "titleEn": "Dahomey",
+      "externalIds": {
+        "wikidata": "Q124319816",
+        "imdb": "tt31015216",
+        "tmdb": "1101256"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q124319816",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/dahomey",
+        "httpStatus": 200,
+        "observedHeading": "Dahomey (2024)",
+        "matchedProviderIds": true,
+        "sha256": "93fc72a8808dc8d8c404ae4138fbff0f7e31b9b0492cd6422a1fef0d1e394fd9"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0320",
+      "titleEn": "My Octopus Teacher",
+      "externalIds": {
+        "wikidata": "Q99372651",
+        "imdb": "tt12888462",
+        "tmdb": "682110"
+      },
+      "status": "ACCEPTED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q99372651",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/my-octopus-teacher",
+        "httpStatus": 200,
+        "observedHeading": "تعلّمتُ من الأخطبوط (2020)",
+        "matchedProviderIds": true,
+        "sha256": "86181d57962c960e872ae2a84d02454bd24f95b53675c541134849781d56ae1a"
+      },
+      "titleAr": "تعلّمتُ من الأخطبوط"
+    },
+    {
+      "internalId": "DEMO0322",
+      "titleEn": "U-Carmen eKhayelitsha",
+      "externalIds": {
+        "wikidata": "Q2141815",
+        "imdb": "tt0445776",
+        "tmdb": "79706"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q2141815",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/ucarmen-ekhayelitsha",
+        "httpStatus": 404,
+        "observedHeading": null,
+        "matchedProviderIds": false,
+        "sha256": "b16e15764b8bc06c5c3f9f19bc8b99fa48e7894aa5a6ccdad65da49bbf564793"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0326",
+      "titleEn": "The Stranger",
+      "externalIds": {
+        "wikidata": "Q2067859",
+        "imdb": "tt0062310",
+        "tmdb": "31332"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q2067859",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/the-stranger",
+        "httpStatus": 200,
+        "observedHeading": "The Stranger (2014)",
+        "matchedProviderIds": false,
+        "sha256": "eaa459afb2ee62b21e0562cb247dc02a846453e12f96e820eb11dacc66f12f14"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0336",
+      "titleEn": "Raise the Red Lantern",
+      "externalIds": {
+        "wikidata": "Q665146",
+        "imdb": "tt0101640",
+        "tmdb": "10404"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q665146",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/raise-the-red-lantern",
+        "httpStatus": 200,
+        "observedHeading": "Raise the Red Lantern (1991)",
+        "matchedProviderIds": true,
+        "sha256": "721bd98380af805cbf7c1002301b06f6b60c138d02bb882fd84fb563ebc61a08"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0342",
+      "titleEn": "Suntan",
+      "externalIds": {
+        "wikidata": "Q30612427",
+        "imdb": "tt3954660",
+        "tmdb": "378483"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q30612427",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/suntan",
+        "httpStatus": 404,
+        "observedHeading": null,
+        "matchedProviderIds": false,
+        "sha256": "b16e15764b8bc06c5c3f9f19bc8b99fa48e7894aa5a6ccdad65da49bbf564793"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0344",
+      "titleEn": "A Brighter Summer Day",
+      "externalIds": {
+        "wikidata": "Q710745",
+        "imdb": "tt0101985",
+        "tmdb": "15804"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q710745",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/a-brighter-summer-day",
+        "httpStatus": 404,
+        "observedHeading": null,
+        "matchedProviderIds": false,
+        "sha256": "b16e15764b8bc06c5c3f9f19bc8b99fa48e7894aa5a6ccdad65da49bbf564793"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0349",
+      "titleEn": "Repentance",
+      "externalIds": {
+        "wikidata": "Q80227",
+        "imdb": "tt0093754",
+        "tmdb": "96920"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q80227",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movies",
+        "httpStatus": 200,
+        "observedHeading": "القائمة الكاملة لجميع الأفلام مع JustWatch",
+        "matchedProviderIds": false,
+        "sha256": "d2fa4c26540de45fd16934f9608332557866bfc073c9be0f080624155c1b755a"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0351",
+      "titleEn": "My Happy Family",
+      "externalIds": {
+        "wikidata": "Q28532723",
+        "imdb": "tt5791536",
+        "tmdb": "432226"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q28532723",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movies",
+        "httpStatus": 200,
+        "observedHeading": "القائمة الكاملة لجميع الأفلام مع JustWatch",
+        "matchedProviderIds": false,
+        "sha256": "d2fa4c26540de45fd16934f9608332557866bfc073c9be0f080624155c1b755a"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0353",
+      "titleEn": "Sátántangó",
+      "externalIds": {
+        "wikidata": "Q53481",
+        "imdb": "tt0111341",
+        "tmdb": "31414"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q53481",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/satantango",
+        "httpStatus": 404,
+        "observedHeading": null,
+        "matchedProviderIds": false,
+        "sha256": "b16e15764b8bc06c5c3f9f19bc8b99fa48e7894aa5a6ccdad65da49bbf564793"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0357",
+      "titleEn": "Harmony Lessons",
+      "externalIds": {
+        "wikidata": "Q5104640",
+        "imdb": "tt2385101",
+        "tmdb": "160156"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q5104640",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/harmony-lessons",
+        "httpStatus": 404,
+        "observedHeading": null,
+        "matchedProviderIds": false,
+        "sha256": "b16e15764b8bc06c5c3f9f19bc8b99fa48e7894aa5a6ccdad65da49bbf564793"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0359",
+      "titleEn": "Katyń",
+      "externalIds": {
+        "wikidata": "Q714713",
+        "imdb": "tt0879843",
+        "tmdb": "13614"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q714713",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movies",
+        "httpStatus": 200,
+        "observedHeading": "القائمة الكاملة لجميع الأفلام مع JustWatch",
+        "matchedProviderIds": false,
+        "sha256": "d2fa4c26540de45fd16934f9608332557866bfc073c9be0f080624155c1b755a"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0364",
+      "titleEn": "Ashes and Diamonds",
+      "externalIds": {
+        "wikidata": "Q722281",
+        "imdb": "tt0052080",
+        "tmdb": "5055"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q722281",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/ashes-and-diamonds",
+        "httpStatus": 404,
+        "observedHeading": null,
+        "matchedProviderIds": false,
+        "sha256": "b16e15764b8bc06c5c3f9f19bc8b99fa48e7894aa5a6ccdad65da49bbf564793"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0365",
+      "titleEn": "Man of Marble",
+      "externalIds": {
+        "wikidata": "Q1195506",
+        "imdb": "tt0075902",
+        "tmdb": "224"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q1195506",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/man-of-marble",
+        "httpStatus": 404,
+        "observedHeading": null,
+        "matchedProviderIds": false,
+        "sha256": "b16e15764b8bc06c5c3f9f19bc8b99fa48e7894aa5a6ccdad65da49bbf564793"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0373",
+      "titleEn": "Come and See",
+      "externalIds": {
+        "wikidata": "Q1130395",
+        "imdb": "tt0091251",
+        "tmdb": "25237"
+      },
+      "status": "ACCEPTED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q1130395",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/come-and-see",
+        "httpStatus": 200,
+        "observedHeading": "تعال وانظر (1985)",
+        "matchedProviderIds": true,
+        "sha256": "0070850cc5db47e83e605c120681fc12a887400b5371458bb362b1b0090d2f5c"
+      },
+      "titleAr": "تعال وانظر"
+    },
+    {
+      "internalId": "DEMO0382",
+      "titleEn": "Honeyland",
+      "externalIds": {
+        "wikidata": "Q61456310",
+        "imdb": "tt8991268",
+        "tmdb": "566213"
+      },
+      "status": "ACCEPTED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q61456310",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/honeyland",
+        "httpStatus": 200,
+        "observedHeading": "ارض العسل (2019)",
+        "matchedProviderIds": true,
+        "sha256": "f7201935b0dda410f41dedb5529a484f32a02776e6a49dc2f72896ac96b56cc7"
+      },
+      "titleAr": "ارض العسل"
+    },
+    {
+      "internalId": "DEMO0383",
+      "titleEn": "Man on Wire",
+      "externalIds": {
+        "wikidata": "Q1417721",
+        "imdb": "tt1155592",
+        "tmdb": "14048"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q1417721",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/man-on-wire",
+        "httpStatus": 200,
+        "observedHeading": "Man on Wire (2008)",
+        "matchedProviderIds": true,
+        "sha256": "a3b72c787efb8fe81251edd27618eb4a375459dbc98188baf53f8b5047096510"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0385",
+      "titleEn": "Hoop Dreams",
+      "externalIds": {
+        "wikidata": "Q511914",
+        "imdb": "tt0110057",
+        "tmdb": "14275"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q511914",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/hoop-dreams",
+        "httpStatus": 404,
+        "observedHeading": null,
+        "matchedProviderIds": false,
+        "sha256": "b16e15764b8bc06c5c3f9f19bc8b99fa48e7894aa5a6ccdad65da49bbf564793"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0388",
+      "titleEn": "The Holy Girl",
+      "externalIds": {
+        "wikidata": "Q1405016",
+        "imdb": "tt0300270",
+        "tmdb": "44413"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q1405016",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/the-holy-girl",
+        "httpStatus": 404,
+        "observedHeading": null,
+        "matchedProviderIds": false,
+        "sha256": "b16e15764b8bc06c5c3f9f19bc8b99fa48e7894aa5a6ccdad65da49bbf564793"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0389",
+      "titleEn": "La Ciénaga",
+      "externalIds": {
+        "wikidata": "Q3214034",
+        "imdb": "tt0240419",
+        "tmdb": "58429"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q3214034",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/la-cienaga",
+        "httpStatus": 200,
+        "observedHeading": "La Ciénaga (2001)",
+        "matchedProviderIds": true,
+        "sha256": "b6bbfcece491de9e8f12248c97f3ff22a75695c232ebfd993132aca8ec6188b0"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0395",
+      "titleEn": "Strawberry and Chocolate",
+      "externalIds": {
+        "wikidata": "Q925448",
+        "imdb": "tt0106966",
+        "tmdb": "12527"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q925448",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/strawberry-and-chocolate",
+        "httpStatus": 404,
+        "observedHeading": null,
+        "matchedProviderIds": false,
+        "sha256": "b16e15764b8bc06c5c3f9f19bc8b99fa48e7894aa5a6ccdad65da49bbf564793"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0396",
+      "titleEn": "Memories of Underdevelopment",
+      "externalIds": {
+        "wikidata": "Q2645467",
+        "imdb": "tt0063291",
+        "tmdb": "47576"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q2645467",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/memories-of-underdevelopment",
+        "httpStatus": 404,
+        "observedHeading": null,
+        "matchedProviderIds": false,
+        "sha256": "b16e15764b8bc06c5c3f9f19bc8b99fa48e7894aa5a6ccdad65da49bbf564793"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0399",
+      "titleEn": "Viridiana",
+      "externalIds": {
+        "wikidata": "Q852841",
+        "imdb": "tt0055601",
+        "tmdb": "4497"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q852841",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/viridiana",
+        "httpStatus": 200,
+        "observedHeading": "Viridiana (1962)",
+        "matchedProviderIds": true,
+        "sha256": "8145b097d59dc5016d7d14ed53ae30c6a91e663a01ba224a37b4715d9f2d53ed"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0404",
+      "titleEn": "Madeinusa",
+      "externalIds": {
+        "wikidata": "Q1507689",
+        "imdb": "tt0476298",
+        "tmdb": "46820"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q1507689",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/madeinusa",
+        "httpStatus": 200,
+        "observedHeading": "Madeinusa (2006)",
+        "matchedProviderIds": true,
+        "sha256": "35e0a608eca3cdea1ca6415667592ea899a3f6434322c10668dbaccd10f033e8"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0405",
+      "titleEn": "Matir Moina",
+      "externalIds": {
+        "wikidata": "Q3204464",
+        "imdb": "tt0319836",
+        "tmdb": "72958"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q3204464",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/matir-moina",
+        "httpStatus": 404,
+        "observedHeading": null,
+        "matchedProviderIds": false,
+        "sha256": "b16e15764b8bc06c5c3f9f19bc8b99fa48e7894aa5a6ccdad65da49bbf564793"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0407",
+      "titleEn": "Marlina the Murderer in Four Acts",
+      "externalIds": {
+        "wikidata": "Q29832008",
+        "imdb": "tt5923026",
+        "tmdb": "453276"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q29832008",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/marlina-the-murderer-in-four-acts",
+        "httpStatus": 404,
+        "observedHeading": null,
+        "matchedProviderIds": false,
+        "sha256": "b16e15764b8bc06c5c3f9f19bc8b99fa48e7894aa5a6ccdad65da49bbf564793"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0408",
+      "titleEn": "Tiger Stripes",
+      "externalIds": {
+        "wikidata": "Q118753835",
+        "imdb": "tt10803634",
+        "tmdb": "1077693"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q118753835",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/tiger-stripes",
+        "httpStatus": 200,
+        "observedHeading": "Tiger Stripes (2023)",
+        "matchedProviderIds": true,
+        "sha256": "7f107c81d329c53ec54c6b331369928210ab26f5227e9f6e778cd7f45494718f"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0409",
+      "titleEn": "Sepet",
+      "externalIds": {
+        "wikidata": "Q3472337",
+        "imdb": "tt0433692",
+        "tmdb": "41654"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q3472337",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/sepet",
+        "httpStatus": 404,
+        "observedHeading": null,
+        "matchedProviderIds": false,
+        "sha256": "b16e15764b8bc06c5c3f9f19bc8b99fa48e7894aa5a6ccdad65da49bbf564793"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0410",
+      "titleEn": "The Woman Who Left",
+      "externalIds": {
+        "wikidata": "Q26158148",
+        "imdb": "tt5843990",
+        "tmdb": "408542"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q26158148",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movies",
+        "httpStatus": 200,
+        "observedHeading": "القائمة الكاملة لجميع الأفلام مع JustWatch",
+        "matchedProviderIds": false,
+        "sha256": "d2fa4c26540de45fd16934f9608332557866bfc073c9be0f080624155c1b755a"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0411",
+      "titleEn": "Norte, the End of History",
+      "externalIds": {
+        "wikidata": "Q13099348",
+        "imdb": "tt2852432",
+        "tmdb": "186975"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q13099348",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/norte-the-end-of-history",
+        "httpStatus": 404,
+        "observedHeading": null,
+        "matchedProviderIds": false,
+        "sha256": "b16e15764b8bc06c5c3f9f19bc8b99fa48e7894aa5a6ccdad65da49bbf564793"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0412",
+      "titleEn": "Metro Manila",
+      "externalIds": {
+        "wikidata": "Q14640617",
+        "imdb": "tt1845838",
+        "tmdb": "158091"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q14640617",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/metro-manila",
+        "httpStatus": 404,
+        "observedHeading": null,
+        "matchedProviderIds": false,
+        "sha256": "b16e15764b8bc06c5c3f9f19bc8b99fa48e7894aa5a6ccdad65da49bbf564793"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0414",
+      "titleEn": "Jinnah",
+      "externalIds": {
+        "wikidata": "Q3234769",
+        "imdb": "tt0183306",
+        "tmdb": "41614"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q3234769",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/jinnah",
+        "httpStatus": 404,
+        "observedHeading": null,
+        "matchedProviderIds": false,
+        "sha256": "b16e15764b8bc06c5c3f9f19bc8b99fa48e7894aa5a6ccdad65da49bbf564793"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0415",
+      "titleEn": "Khamosh Pani",
+      "externalIds": {
+        "wikidata": "Q2574952",
+        "imdb": "tt0357283",
+        "tmdb": "100086"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q2574952",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/khamosh-pani",
+        "httpStatus": 404,
+        "observedHeading": null,
+        "matchedProviderIds": false,
+        "sha256": "b16e15764b8bc06c5c3f9f19bc8b99fa48e7894aa5a6ccdad65da49bbf564793"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0416",
+      "titleEn": "Zinda Bhaag",
+      "externalIds": {
+        "wikidata": "Q14912470",
+        "imdb": "tt2387627",
+        "tmdb": "220923"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q14912470",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/zinda-bhaag",
+        "httpStatus": 404,
+        "observedHeading": null,
+        "matchedProviderIds": false,
+        "sha256": "b16e15764b8bc06c5c3f9f19bc8b99fa48e7894aa5a6ccdad65da49bbf564793"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0417",
+      "titleEn": "Uncle Boonmee Who Can Recall His Past Lives",
+      "externalIds": {
+        "wikidata": "Q553901",
+        "imdb": "tt1588895",
+        "tmdb": "38368"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q553901",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/uncle-boonmee-who-can-recall-his-past-lives",
+        "httpStatus": 200,
+        "observedHeading": "Uncle Boonmee Who Can Recall His Past Lives (2010)",
+        "matchedProviderIds": true,
+        "sha256": "23614dc62fdf489b8dea025f9a1264c2445ef7fd4b9969e203a636a520a08636"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0418",
+      "titleEn": "Ong-Bak: Muay Thai Warrior",
+      "externalIds": {
+        "wikidata": "Q831437",
+        "imdb": "tt0368909",
+        "tmdb": "9316"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q831437",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/ongbak-muay-thai-warrior",
+        "httpStatus": 404,
+        "observedHeading": null,
+        "matchedProviderIds": false,
+        "sha256": "b16e15764b8bc06c5c3f9f19bc8b99fa48e7894aa5a6ccdad65da49bbf564793"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0419",
+      "titleEn": "How to Make Millions Before Grandma Dies",
+      "externalIds": {
+        "wikidata": "Q125294821",
+        "imdb": "tt31392609",
+        "tmdb": "1103621"
+      },
+      "status": "ACCEPTED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q125294821",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/how-to-make-millions-before-grandma-dies",
+        "httpStatus": 200,
+        "observedHeading": "كيف تكسب الملايين قبل أن تموت الجدة (2024)",
+        "matchedProviderIds": true,
+        "sha256": "dbc67989d1883966f8f7cadf2960b505943a0a8adca57132b45cb8f4f9f393a3"
+      },
+      "titleAr": "كيف تكسب الملايين قبل أن تموت الجدة"
+    },
+    {
+      "internalId": "DEMO0421",
+      "titleEn": "Memoria",
+      "externalIds": {
+        "wikidata": "Q67087116",
+        "imdb": "tt8399288",
+        "tmdb": "511819"
+      },
+      "status": "ACCEPTED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q67087116",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/memoria",
+        "httpStatus": 200,
+        "observedHeading": "ذاكرة (2021)",
+        "matchedProviderIds": true,
+        "sha256": "e4edae5d67d12f2f29624e343167dfd2c313105003d2676c48029cf982aad4ad"
+      },
+      "titleAr": "ذاكرة"
+    },
+    {
+      "internalId": "DEMO0423",
+      "titleEn": "Cemetery of Splendour",
+      "externalIds": {
+        "wikidata": "Q19892219",
+        "imdb": "tt2818654",
+        "tmdb": "298721"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q19892219",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/cemetery-of-splendour",
+        "httpStatus": 404,
+        "observedHeading": null,
+        "matchedProviderIds": false,
+        "sha256": "b16e15764b8bc06c5c3f9f19bc8b99fa48e7894aa5a6ccdad65da49bbf564793"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0424",
+      "titleEn": "Syndromes and a Century",
+      "externalIds": {
+        "wikidata": "Q3508807",
+        "imdb": "tt0477731",
+        "tmdb": "27904"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q3508807",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movie/syndromes-and-a-century",
+        "httpStatus": 404,
+        "observedHeading": null,
+        "matchedProviderIds": false,
+        "sha256": "b16e15764b8bc06c5c3f9f19bc8b99fa48e7894aa5a6ccdad65da49bbf564793"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    },
+    {
+      "internalId": "DEMO0425",
+      "titleEn": "The Scent of Green Papaya",
+      "externalIds": {
+        "wikidata": "Q1193051",
+        "imdb": "tt0107617",
+        "tmdb": "19552"
+      },
+      "status": "BLOCKED",
+      "wikidata": {
+        "url": "https://www.wikidata.org/wiki/Q1193051",
+        "arabicLabel": null,
+        "arabicSitelink": null
+      },
+      "checkedSource": {
+        "url": "https://www.justwatch.com/eg/movies",
+        "httpStatus": 200,
+        "observedHeading": "القائمة الكاملة لجميع الأفلام مع JustWatch",
+        "matchedProviderIds": false,
+        "sha256": "d2fa4c26540de45fd16934f9608332557866bfc073c9be0f080624155c1b755a"
+      },
+      "reason": "No verified Arabic title in the sources checked; do not translate or transliterate."
+    }
+  ]
+}

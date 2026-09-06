@@ -971,6 +971,8 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 | 112 | `system / light / dark` is the theme axis: visual atmosphere changes while layout and user experience stay identical; system dynamically resolves to light or dark | owner corrections 2026-09-05/06; ADR-111; `BP §4.3`, `§2.4 #7`, `§5.1` | the owner replaces either visual identity or explicitly requests theme-specific layout/behaviour |
 | 115 | `cinema / premiere / montage` is the appearance axis: permanent evolving tracks require materially distinct page distribution, composition and identity; theme remains independent | owner product decision and clarifications 2026-09-06; refines ADR-113 within the blueprint's shared-MVP constraints | a structural candidate and eligible human traffic can support controlled measurement; permanence changes only by owner decision |
 
+| 116 | Catalog identity is cumulative: explicit reserved internalIds, unique Wikidata/IMDb/TMDB IDs, and no automatic rebind; remakes are separate works and cuts/dubs use title_editions | CAT-1 2026-09-06, base `378c152`; BP §13.1 | a verified identity correction needs a separately reviewed migration |
+
 ## How to add a decision
 
 1. Check it does not contradict a `BP §2.4` principle or an open `BP App. C` question.
@@ -1049,3 +1051,13 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 - **Consequences, privacy and revisit.** The first candidates must establish real structural differences on a shared core journey, then cumulatively complete every required identity dimension above; palette-only work qualifies only for a colour/contrast/accessibility hypothesis. `appearance_exposed / selected / changed` remain definition-only until actual rendering plus matching versioned disclosure, consent and enforcement are guaranteed; activation must distinguish `selectionOrigin: default | explicit | restored`, locale, colour preference, resolved mode and rendered baseline/candidate. Reports cover consenting users only, never upload pre-consent history, never record accessibility/assistive-technology settings, and attribute a motion effect only when rendered or else evaluate its static fallback as part of the bundle. Allocation, power/sample rules, surveys, dashboards and a registry remain deferred until a frozen candidate and eligible traffic support a useful predeclared plan. Removing or merging a permanent track requires a new explicit owner decision that supersedes this ADR, never a low usage count.
 
 ---
+
+## ADR-116 — Cumulative catalog identity; no automatic rebind (CAT-1, 2026-09-06)
+
+**Context.** At `378c152`, ordinal source IDs and an internalId-only upsert could attach new works to existing user history (`BP §13.1`).
+**Decision.** `catalog.demo.identity.json` permanently reserves explicit internalIds and known Wikidata/IMDb/TMDB bindings, including excluded rows. Reordering the TSV is harmless; changing its reserved work is rejected. New reservations are additive and reviewed against the previous fixture.
+**Rationale.** Provider identity, not translated title spelling or release year alone, distinguishes works. A remake requires distinct provider IDs; a cut, dub or subtitle variant belongs to `title_editions` under the same work.
+**Enforcement.** Build/import reject collisions across all four identifiers; import checks the whole titles table under a write-conflicting transaction lock before any side effect. Database expression indexes reject provider collisions; a trigger forbids changes to existing UUID/internalId/provider bindings. Missing IDs may be added, never removed or replaced.
+**Curation.** New Arabic overrides require a cited title and matching IMDb/Wikidata identity. A missing Arabic title remains excluded and fails the completeness gate; verified additions accumulate while preserving admitted metadata, enrichment and artwork. Partial probes never rewrite the fixture.
+**Consequences.** `1788490000000-CatalogIdentityGuards` fails on legacy collisions or invalid identifiers without repairing data. Apply through the normal migration path only after reviewing legacy data; this task tests locally and does not deploy. Reservations are retained even for excluded works.
+**Revisit when.** A provider merge/correction or true work-identity correction is verified: use a separate reviewed migration, never an automatic rebind, dedup deletion or replacement title.
