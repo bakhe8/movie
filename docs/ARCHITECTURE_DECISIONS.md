@@ -1,7 +1,7 @@
-# Architecture Decision Records
+# Architecture Decision Records — ADR-1…117
 
 **Status**: Living log. Every decision cites the blueprint section it serves (`BP §x.y`) or states that it is this repository's own engineering choice within the blueprint's constraints. A decision that contradicts the blueprint is a bug in this file. Product-level open questions that must be settled by experiment are **not** decided here — they are listed in `BP App. C` and [SPECIFICATION.md §11](SPECIFICATION.md).
-**Version**: 4.1 — 2026-09-06 (living log through ADR-115; the summary table and each ADR carry their own provenance).
+**Version**: 4.2 — 2026-09-06 (living log through ADR-117; the summary table and each ADR carry their own provenance).
 
 Format: **Context · Decision · Rationale · Consequences · Revisit when**.
 
@@ -969,9 +969,11 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 | 106 | Catalogue search: both sides folded (Arabic marks stripped from the column too), `unaccent` for Latin, and alternate titles read from `localized_titles`; a 53-case golden set pins it | remediation brief P1-01/SEARCH-01 2026-09-05; ADR-2 | ~10k titles (indexes/FTS), or alternate-title ingestion lands |
 | 111 | One visual grammar shows the product's working logic instead of explaining it | UX-A mobile audit 2026-09-05; `BP §4` | the value model or navigation structure changes |
 | 112 | `system / light / dark` is the theme axis: visual atmosphere changes while layout and user experience stay identical; system dynamically resolves to light or dark | owner corrections 2026-09-05/06; ADR-111; `BP §4.3`, `§2.4 #7`, `§5.1` | the owner replaces either visual identity or explicitly requests theme-specific layout/behaviour |
+| 113 | Image-led scenes and profile-backed appearances share behavior independently of the theme preference | owner request 2026-09-05; refined by ADR-115 | subsequent appearance candidates follow ADR-115 |
+| 114 | People state intent; derived training, recomputation and technical recovery belong to the system | owner decision 2026-09-06; BP §2.4 #13, §4.6 | a new readiness action must represent an actual user decision |
 | 115 | `cinema / premiere / montage` is the appearance axis: permanent evolving tracks require materially distinct page distribution, composition and identity; theme remains independent | owner product decision and clarifications 2026-09-06; refines ADR-113 within the blueprint's shared-MVP constraints | a structural candidate and eligible human traffic can support controlled measurement; permanence changes only by owner decision |
-
 | 116 | Catalog identity is cumulative: explicit reserved internalIds, unique Wikidata/IMDb/TMDB IDs, and no automatic rebind; remakes are separate works and cuts/dubs use title_editions | CAT-1 2026-09-06, base `378c152`; BP §13.1 | a verified identity correction needs a separately reviewed migration |
+| 117 | Fixed local light admin theme; read-only monitoring separated from administration; capabilities enforced by the server with legacy-admin compatibility | ADMIN-W0 at `dee0cd3`, owner constraints 2026-09-06; engineering choice serving BP §5.1, §21.3 | changed owner constraints or a new capability requires a reviewed contract and preservation evidence |
 
 ## How to add a decision
 
@@ -1061,3 +1063,16 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 **Curation.** New Arabic overrides require a cited title and matching IMDb/Wikidata identity. A missing Arabic title remains excluded and fails the completeness gate; verified additions accumulate while builder metadata and evidence refresh from source. Only existing `fingerprint`, `posterPath`, `cultural` and downstream `evidence.plotSummaryAr`/`plotSourceAr` are retained; `titleArSource` and other builder evidence refresh. Partial probes never rewrite the fixture.
 **Consequences.** `1788490000000-CatalogIdentityGuards` fails on legacy collisions or invalid identifiers without repairing data. Apply through the normal migration path only after reviewing legacy data; this task tests locally and does not deploy. Reservations are retained even for excluded works.
 **Revisit when.** A provider merge/correction or true work-identity correction is verified: use a separate reviewed migration, never an automatic rebind, dedup deletion or replacement title.
+
+---
+
+## ADR-117 — Independent light admin shell, read-only monitoring and server-enforced capabilities (ADMIN-W0, 2026-09-06)
+
+**Context.** At `dee0cd371eb6be73eabba0f3f3e4728d3291e4cd`, AdminScreen mixes four sections and one visible write under a single admin role. The owner's [control-center constraints](ADMIN_CONTROL_CENTER_2026-09-06.md) §2 require preservation, a fixed light admin theme and separate monitoring/administration; this is an engineering choice serving `BP §5.1`, `§21.3`.
+**Decision — theme.** AdminShell uses locally scoped admin tokens, a local light marker and `color-scheme: light`, independent of consumer theme and appearance. It never rewrites root theme attributes or saved consumer preferences; returning to the consumer restores the same chosen experience. This is an admin-only exception to ADR-112/113/115, not a fourth consumer appearance.
+**Decision — separation.** Monitoring performs reads, analysis and navigation only, with no mutation imports or indirect mutation calls. It may show `sampled` status and link to administration with the same record and filters; the existing sample action executes only in administration. The compatibility wrapper must preserve access to all four old sections without embedding mutation-capable legacy UI in monitoring.
+**Decision — capabilities.** The target vocabulary is `admin.monitor`, `audit.read`, `catalog.manage`, `fingerprints.review`, `models.manage`, `users.manage`, `jobs.manage`, `settings.manage`. Roles compose explicit capabilities; authentication plus the server's per-operation capability and resource checks are the security boundary. Admin context controls UI availability only; cached roles, hidden controls and client checks never authorize a request. Unknown or absent grants deny access.
+**Compatibility.** Refine ADR-26 through a server-owned, explicit temporary mapping of legacy `admin` to owner capabilities, preserving existing access without granting normal users administrative rights. Bootstrap the first owner outside the board; prevent disabling or removing the last owner's critical capability. New high-impact operations require reason, confirmation, atomic audit and readback, including failed/rejected-attempt handling as specified in the staged plan.
+**Rationale.** Operators need stable, accessible information density and a trustworthy distinction between observation and change; least privilege must remain effective for direct API callers.
+**Consequences.** This ADR records the target, not implemented capabilities. [W0 preservation and gates](ADMIN_W0_PRESERVATION_CONTRACT_2026-09-06.md) bind W0 → W1 → W2; old AdminScreen cannot be removed before its complete preservation matrix passes and its compatibility wrapper is delivered. W2 adds no new backend mutations or migrations; jobs, settings and experiment controls retain their later gates, with W5 before W6.
+**Revisit when.** Owner constraints change, legacy-role migration can safely end, or a new operation needs a reviewed capability, owning API/schema contract and preservation evidence.
