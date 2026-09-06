@@ -167,8 +167,13 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
     ? (rec.watchability ?? (rec.watchabilityScore === null ? null : { available: rec.watchabilityScore > 0, providers: [] }))
     : null;
 
+  // The bar is Personal Fit and nothing else (owner decision 2026-09-06).
+  // It used to take the confidence band as a class too, which dimmed the fill
+  // -- and emptied it at `inconclusive` -- so a "high" card could draw a
+  // hollow bar next to a "medium" card with two solid segments and read as
+  // the weaker of the two. Confidence keeps its own word below.
   const meter = (
-    <div className={`${styles.meter} ${styles[confidenceBand]}`} aria-hidden="true">
+    <div className={styles.meter} aria-hidden="true">
       {[1, 2, 3].map((segment) => (
         <i key={segment} className={segment <= filled ? styles.on : undefined} />
       ))}
@@ -239,7 +244,7 @@ export function WorkCard(props: RecommendationProps | RankingProps) {
       )}
 
       {/* One value strip, not four labelled cells (ADR-111): the fit bar
-          carries the fit and, in its fill, the confidence; the rest is one
+          carries the fit alone, and confidence its own word; the rest is one
           quiet line. Unknown is a hollow chip, never a sentence repeated on
           every card (UX_AUDIT_MOBILE_2026-09-05 P0 #1 and #4). Each value
           keeps its own name for assistive tech. */}

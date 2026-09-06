@@ -199,8 +199,11 @@
 }
 
 /* 1) Personal fit: an unlabelled three-segment meter in the accent, then a
-   word, then the position in its track. Confidence is applied to the fill as
-   a limit on the claim (paper §3, owner decision 1): not a second value. */
+   word, then the position in its track. The bar carries Personal Fit alone
+   (owner decision 2026-09-06). Confidence used to dim this same fill -- and
+   empty it at `inconclusive` -- so a "high" card drew a hollow bar beside a
+   "medium" card with two solid segments, and read as the weaker of the two.
+   Confidence keeps its own word in the strip below. */
 
 .meter {
   display: flex;
@@ -216,19 +219,6 @@
 
 .meter i.on {
   background: var(--accent);
-}
-
-.likely i.on {
-  opacity: 0.75;
-}
-
-.initial i.on {
-  opacity: 0.5;
-}
-
-.inconclusive i.on {
-  background: transparent;
-  border: 1px dashed var(--accent);
 }
 
 .word {

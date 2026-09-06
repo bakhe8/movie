@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { WorkCard } from '../components/WorkCard';
-import type { Recommendation, Title } from '../lib/api';
+import type { ConfidenceBand, Recommendation, Title } from '../lib/api';
 import type { PublicQuality } from '../public-quality/types';
 
 // UX_AUDIT_MOBILE_2026-09-05: the card was measured at 357-411px with a 56px
@@ -208,5 +208,42 @@ describe('WorkCard', () => {
     expect(screen.getByRole('button', { name: 'أضف إلى قائمتي' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'شاهدته' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'ليس اقتراحًا مناسبًا' })).toBeInTheDocument();
+  });
+  // The bar used to take the confidence band as a class as well: `likely`
+  // dimmed the fill to 0.75, `initial` to 0.5, and `inconclusive` emptied it
+  // to a dashed outline. On one shelf a card reading "عالية" drew a hollow
+  // bar beside a "متوسطة" card with two solid segments, and read as the
+  // weaker of the two (owner report 2026-09-06). Fit alone draws the bar now,
+  // and confidence keeps its own word.
+  it('draws the same fit bar at every confidence band', () => {
+    const bands: ConfidenceBand[] = ['inconclusive', 'initial', 'likely', 'strong'];
+    const bars = bands.map((confidenceBand) => {
+      const { container, unmount } = render(
+        <WorkCard lang="ar" position={1} count={7} recommendation={{ ...recommendation, confidenceBand }} listed={false} busy={false} />,
+      );
+      const meter = container.querySelector('[class*="meter"]') as HTMLElement;
+      const bar = { className: meter.className, lit: meter.querySelectorAll('i[class]').length };
+      unmount();
+      return bar;
+    });
+
+    expect(bars.map((bar) => bar.lit)).toEqual([3, 3, 3, 3]);
+    expect(new Set(bars.map((bar) => bar.className)).size).toBe(1);
+    expect(bars[0].className).not.toMatch(/likely|initial|inconclusive|strong/);
+  });
+
+  it('keeps a better fit ahead of a weaker one whatever the confidence says', () => {
+    const lit = (position: number, confidenceBand: ConfidenceBand) => {
+      const { container, unmount } = render(
+        <WorkCard lang="ar" position={position} count={7} recommendation={{ ...recommendation, confidenceBand }} listed={false} busy={false} />,
+      );
+      const segments = container.querySelectorAll('[class*="meter"] i[class]').length;
+      unmount();
+      return segments;
+    };
+
+    // The pair from the report: high fit at the weakest band must still draw
+    // more of the bar than medium fit at the strongest.
+    expect(lit(1, 'inconclusive')).toBeGreaterThan(lit(4, 'strong'));
   });
 });
