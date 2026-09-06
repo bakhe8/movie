@@ -42,7 +42,7 @@ describe('FeatureReviewAdmin', () => {
     await userEvent.click(button);
 
     expect(mockApi.adminReviewFeature).toHaveBeenCalledWith('f1', { reviewStatus: 'sampled' });
-    await waitFor(() => expect(screen.getByRole('button')).toBeDisabled());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'تأكيد صحة التحليل' })).toBeDisabled());
     await waitFor(() => expect(screen.getByText(/تم الحفظ/)).toBeInTheDocument());
     // The raw status code is never shown -- REVIEW_STATUS_COPY translates it.
     expect(screen.getByText(/رُوجعت وصحيحة/)).toBeInTheDocument();
@@ -82,5 +82,42 @@ describe('FeatureReviewAdmin', () => {
     render(<FeatureReviewAdmin />);
     expect(screen.getByText('غير معروف')).toBeInTheDocument();
     expect(screen.queryByText(/0\.00/)).toBeNull();
+  });
+
+  // ADMIN-W4 (W0 case F4 extension, ADM-P0-02): entering a corrected value
+  // must never fire on load, must send exactly what was typed, and must
+  // report when the correction reached the published fingerprint.
+  describe('entering a correction', () => {
+    it('does not call the mutation just by opening the correction form', async () => {
+      render(<FeatureReviewAdmin />);
+      await userEvent.click(screen.getByRole('button', { name: 'التحليل غير صحيح — إدخال قيمة صحيحة' }));
+      expect(screen.getByLabelText('القيمة الصحيحة (بين 0 و1)')).toBeInTheDocument();
+      expect(mockApi.adminReviewFeature).not.toHaveBeenCalled();
+    });
+
+    it('submits the corrected value and note, and reports the fingerprint republish', async () => {
+      mockApi.adminReviewFeature.mockResolvedValue({
+        feature: { id: 'f1', reviewStatus: 'human_verified', supersededBy: 'c1' },
+        correction: { id: 'c1', reviewStatus: 'human_verified', value: 0.9 },
+        republish: { changes: [{ featureKey: 'pacing', before: 0.5, after: 0.9 }] },
+      });
+      render(<FeatureReviewAdmin />);
+      await userEvent.click(screen.getByRole('button', { name: 'التحليل غير صحيح — إدخال قيمة صحيحة' }));
+      await userEvent.type(screen.getByLabelText('القيمة الصحيحة (بين 0 و1)'), '0.9');
+      await userEvent.type(screen.getByLabelText('ملاحظة (اختياري)'), 'watched it again');
+      await userEvent.click(screen.getByRole('button', { name: 'حفظ التصحيح' }));
+
+      await waitFor(() => expect(mockApi.adminReviewFeature).toHaveBeenCalledWith('f1', {
+        reviewStatus: 'human_verified', correctedValue: 0.9, note: 'watched it again',
+      }));
+      expect(await screen.findByText(/انعكس فوراً على بصمة الفيلم المنشورة/)).toBeInTheDocument();
+    });
+
+    it('keeps the save button disabled for a value outside 0-1', async () => {
+      render(<FeatureReviewAdmin />);
+      await userEvent.click(screen.getByRole('button', { name: 'التحليل غير صحيح — إدخال قيمة صحيحة' }));
+      await userEvent.type(screen.getByLabelText('القيمة الصحيحة (بين 0 و1)'), '1.5');
+      expect(screen.getByRole('button', { name: 'حفظ التصحيح' })).toBeDisabled();
+    });
   });
 });

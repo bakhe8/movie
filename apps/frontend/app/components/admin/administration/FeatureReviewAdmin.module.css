@@ -46,6 +46,26 @@
   unicode-bidi: isolate;
 }
 
+.correctionForm {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--admin-sp-2);
+  margin-block-start: var(--admin-sp-3);
+}
+
+.correctionForm input,
+.correctionForm textarea {
+  font: inherit;
+  font-size: var(--admin-fs-14);
+  padding: var(--admin-sp-2) var(--admin-sp-3);
+  min-height: var(--admin-touch-min);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-r-control);
+  background: var(--admin-bg);
+  color: inherit;
+}
+
 .actions {
   display: flex;
   align-items: center;

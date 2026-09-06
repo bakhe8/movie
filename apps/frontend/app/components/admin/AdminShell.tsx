@@ -24,6 +24,9 @@ const MONITORING_SECTIONS = [
 
 const ADMINISTRATION_SECTIONS = [
   { href: '/admin/administration/review', label: ADMIN_SECTION_COPY.review.title },
+  { href: '/admin/administration/titles', label: ADMIN_SECTION_COPY.titleEdit.title },
+  { href: '/admin/administration/users', label: ADMIN_SECTION_COPY.users.title },
+  { href: '/admin/administration/models', label: ADMIN_SECTION_COPY.modelRegistration.title },
 ] as const;
 
 type Area = 'monitoring' | 'administration';

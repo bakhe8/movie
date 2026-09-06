@@ -1,0 +1,152 @@
+.formCard {
+  max-width: 640px;
+  padding: var(--admin-sp-4);
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-r-card);
+  margin-block-end: var(--admin-sp-4);
+}
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--admin-sp-3);
+}
+
+@media (min-width: 640px) {
+  .fieldGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .fieldGridWide {
+    grid-column: 1 / -1;
+  }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--admin-sp-1);
+}
+
+.field label {
+  font-size: var(--admin-fs-13);
+  color: var(--admin-muted);
+}
+
+.input,
+.select,
+.textarea {
+  font: inherit;
+  font-size: var(--admin-fs-14);
+  padding: var(--admin-sp-2) var(--admin-sp-3);
+  min-height: var(--admin-touch-min);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-r-control);
+  background: var(--admin-bg);
+  color: inherit;
+}
+
+.textarea {
+  min-height: 4.5rem;
+  resize: vertical;
+}
+
+.checkboxRow {
+  display: flex;
+  align-items: center;
+  gap: var(--admin-sp-2);
+  font-size: var(--admin-fs-13);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--admin-sp-3);
+  margin-block-start: var(--admin-sp-4);
+  flex-wrap: wrap;
+}
+
+.primaryBtn {
+  appearance: none;
+  border: none;
+  background: var(--admin-action);
+  color: var(--admin-action-ink);
+  font: inherit;
+  font-weight: var(--admin-w-medium);
+  min-height: var(--admin-touch-min);
+  padding-inline: var(--admin-sp-4);
+  border-radius: var(--admin-r-control);
+  cursor: pointer;
+}
+
+.primaryBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.secondaryBtn {
+  appearance: none;
+  border: 1px solid var(--admin-border);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  min-height: var(--admin-touch-min);
+  padding-inline: var(--admin-sp-4);
+  border-radius: var(--admin-r-control);
+  cursor: pointer;
+}
+
+.dangerBtn {
+  appearance: none;
+  border: 1px solid var(--admin-danger);
+  background: transparent;
+  color: var(--admin-danger);
+  font: inherit;
+  font-weight: var(--admin-w-medium);
+  min-height: var(--admin-touch-min);
+  padding-inline: var(--admin-sp-4);
+  border-radius: var(--admin-r-control);
+  cursor: pointer;
+}
+
+.primaryBtn:focus-visible,
+.secondaryBtn:focus-visible,
+.dangerBtn:focus-visible {
+  outline: 2px solid var(--admin-focus);
+  outline-offset: 2px;
+}
+
+.banner {
+  margin-block-start: var(--admin-sp-3);
+  padding: var(--admin-sp-2) var(--admin-sp-3);
+  border-radius: var(--admin-r-control);
+  font-size: var(--admin-fs-13);
+}
+
+.bannerSuccess {
+  background: var(--admin-success-soft);
+  color: var(--admin-success);
+}
+
+.bannerError {
+  background: var(--admin-danger-soft);
+  color: var(--admin-danger);
+}
+
+.auditLink {
+  color: var(--admin-action);
+  font-size: var(--admin-fs-13);
+}
+
+.recordCard {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--admin-sp-2);
+}
+
+.sectionHeading {
+  margin: var(--admin-sp-5) 0 var(--admin-sp-2);
+  font-size: var(--admin-fs-16);
+  font-weight: var(--admin-w-semibold);
+}

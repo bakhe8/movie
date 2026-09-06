@@ -1,10 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, IsNull, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, IsNull, Repository } from 'typeorm';
 import { ContentFeature } from '../../entities/content-feature.entity';
 import { SourceRecord } from '../../entities/source-record.entity';
 import { Title } from '../../entities/title.entity';
-import { FINGERPRINT_V2_DIMENSIONS } from '../../entities/title-fingerprint.type';
+import { FINGERPRINT_V2_DIMENSIONS, FINGERPRINT_V3_DIMENSIONS } from '../../entities/title-fingerprint.type';
+import { republishFingerprint } from '../../scripts/republish-fingerprint.lib';
 import { AuditService } from '../audit/audit.service';
 import {
   CreateSourceRecordDto,
@@ -121,86 +122,145 @@ export class AdminCatalogService {
     return { titleId, sourceRecords, features, byExtractor, licenseStatus: worstLicense(sourceRecords.map((r) => r.licenseStatus)) };
   }
 
+  // ADMIN-W4 (ADM-P0-03): the change and its audit row now commit or fail
+  // together -- a failed audit write must not leave a silent, untrailed edit.
   async updateTitle(titleId: string, dto: UpdateTitleDto, actor: Actor): Promise<Title> {
-    const title = await this.requireTitle(titleId);
-    const changed: string[] = [];
-    for (const key of ['titleEn', 'titleAr', 'description', 'releaseYear', 'genres', 'originalLanguage', 'externalIds'] as const) {
-      if (dto[key] !== undefined) {
-        (title as unknown as Record<string, unknown>)[key] = dto[key];
-        changed.push(key);
+    return this.dataSource.transaction(async (manager) => {
+      const title = await this.requireTitle(titleId, manager);
+      const changed: string[] = [];
+      for (const key of ['titleEn', 'titleAr', 'description', 'releaseYear', 'genres', 'originalLanguage', 'externalIds'] as const) {
+        if (dto[key] !== undefined) {
+          (title as unknown as Record<string, unknown>)[key] = dto[key];
+          changed.push(key);
+        }
       }
-    }
-    const saved = await this.titles.save(title);
-    await this.audit.record({
-      actorUserId: actor.id,
-      actorRole: actor.role,
-      action: 'admin.title.update',
-      resource: 'title',
-      resourceId: titleId,
-      status: 'ok',
-      reason: `fields: ${changed.join(', ') || 'none'}`,
-      ip: actor.ip,
+      const saved = await manager.save(title);
+      await this.audit.record(
+        {
+          actorUserId: actor.id,
+          actorRole: actor.role,
+          action: 'admin.title.update',
+          resource: 'title',
+          resourceId: titleId,
+          status: 'ok',
+          reason: `fields: ${changed.join(', ') || 'none'}`,
+          ip: actor.ip,
+        },
+        manager,
+      );
+      return saved;
     });
-    return saved;
   }
 
   async addSourceRecord(titleId: string, dto: CreateSourceRecordDto, actor: Actor): Promise<SourceRecord> {
-    await this.requireTitle(titleId);
-    const record = await this.sourceRecords.save(
-      this.sourceRecords.create({
-        titleId,
-        fieldName: dto.fieldName,
-        source: dto.source,
-        value: dto.value ?? null,
-        license: dto.license ?? null,
-        licenseStatus: dto.licenseStatus,
-        allowsStorage: dto.allowsStorage ?? null,
-        allowsDerivation: dto.allowsDerivation ?? null,
-        allowsTraining: dto.allowsTraining ?? null,
-        attributionRequired: dto.attributionRequired ?? null,
-        fallbackPlan: dto.fallbackPlan ?? null,
-        reviewStatus: dto.reviewStatus ?? 'human_verified',
-        retrievedAt: new Date(),
-        validFrom: new Date(),
-      }),
-    );
-    await this.audit.record({
-      actorUserId: actor.id,
-      actorRole: actor.role,
-      action: 'admin.source_record.create',
-      resource: 'source_record',
-      resourceId: record.id,
-      status: 'ok',
-      reason: `title ${titleId} ${dto.fieldName} ${dto.source} ${dto.licenseStatus}`,
-      ip: actor.ip,
+    return this.dataSource.transaction(async (manager) => {
+      await this.requireTitle(titleId, manager);
+      const record = await manager.save(
+        manager.create(SourceRecord, {
+          titleId,
+          fieldName: dto.fieldName,
+          source: dto.source,
+          value: dto.value ?? null,
+          license: dto.license ?? null,
+          licenseStatus: dto.licenseStatus,
+          allowsStorage: dto.allowsStorage ?? null,
+          allowsDerivation: dto.allowsDerivation ?? null,
+          allowsTraining: dto.allowsTraining ?? null,
+          attributionRequired: dto.attributionRequired ?? null,
+          fallbackPlan: dto.fallbackPlan ?? null,
+          reviewStatus: dto.reviewStatus ?? 'human_verified',
+          retrievedAt: new Date(),
+          validFrom: new Date(),
+        }),
+      );
+      await this.audit.record(
+        {
+          actorUserId: actor.id,
+          actorRole: actor.role,
+          action: 'admin.source_record.create',
+          resource: 'source_record',
+          resourceId: record.id,
+          status: 'ok',
+          reason: `title ${titleId} ${dto.fieldName} ${dto.source} ${dto.licenseStatus}`,
+          ip: actor.ip,
+        },
+        manager,
+      );
+      return record;
     });
-    return record;
   }
 
+  // ADMIN-W4 (ADM-P0-04): the entity's own contract says a source record is
+  // "never overwritten in place -- a correction creates a new row and points
+  // the old one's supersededBy at it" (source-record.entity.ts), same as
+  // content_features. This service used to mutate the row directly, quietly
+  // erasing exactly the history that contract promises. Fixed to match:
+  // supersede, never edit, so admin/titles/:id/provenance keeps showing the
+  // full history alongside the current row -- editing an already-superseded
+  // row is rejected (409) rather than forking history from the wrong point.
   async updateSourceRecord(recordId: string, dto: UpdateSourceRecordDto, actor: Actor): Promise<SourceRecord> {
-    const record = await this.sourceRecords.findOne({ where: { id: recordId } });
-    if (!record) {
-      throw new NotFoundException('Source record not found');
-    }
-    const changed: string[] = [];
-    for (const key of ['licenseStatus', 'reviewStatus', 'license', 'allowsStorage', 'allowsDerivation', 'allowsTraining', 'attributionRequired', 'fallbackPlan'] as const) {
-      if (dto[key] !== undefined) {
-        (record as unknown as Record<string, unknown>)[key] = dto[key];
-        changed.push(key);
+    return this.dataSource.transaction(async (manager) => {
+      const record = await manager.findOne(SourceRecord, { where: { id: recordId } });
+      if (!record) {
+        throw new NotFoundException('Source record not found');
       }
-    }
-    const saved = await this.sourceRecords.save(record);
-    await this.audit.record({
-      actorUserId: actor.id,
-      actorRole: actor.role,
-      action: 'admin.source_record.update',
-      resource: 'source_record',
-      resourceId: recordId,
-      status: 'ok',
-      reason: `fields: ${changed.join(', ') || 'none'}`,
-      ip: actor.ip,
+      if (record.supersededBy) {
+        throw new ConflictException({
+          statusCode: 409,
+          message: 'This source record has already been superseded; edit the current record instead',
+          error: 'Conflict',
+          reason: 'already_superseded',
+          currentRecordId: record.supersededBy,
+        });
+      }
+      const fields = ['licenseStatus', 'reviewStatus', 'license', 'allowsStorage', 'allowsDerivation', 'allowsTraining', 'attributionRequired', 'fallbackPlan'] as const;
+      const changed: string[] = [];
+      for (const key of fields) {
+        if (dto[key] !== undefined && dto[key] !== record[key]) {
+          changed.push(`${key}: ${record[key] ?? 'null'} -> ${dto[key]}`);
+        }
+      }
+      if (changed.length === 0) {
+        return record; // no-op: nothing to supersede
+      }
+      const successor = await manager.save(
+        manager.create(SourceRecord, {
+          titleId: record.titleId,
+          fieldName: record.fieldName,
+          value: record.value,
+          source: record.source,
+          confidence: record.confidence,
+          extractorVersion: record.extractorVersion,
+          retentionUntil: record.retentionUntil,
+          retrievedAt: record.retrievedAt,
+          licenseStatus: dto.licenseStatus ?? record.licenseStatus,
+          reviewStatus: dto.reviewStatus ?? record.reviewStatus,
+          license: dto.license ?? record.license,
+          allowsStorage: dto.allowsStorage ?? record.allowsStorage,
+          allowsDerivation: dto.allowsDerivation ?? record.allowsDerivation,
+          allowsTraining: dto.allowsTraining ?? record.allowsTraining,
+          attributionRequired: dto.attributionRequired ?? record.attributionRequired,
+          fallbackPlan: dto.fallbackPlan ?? record.fallbackPlan,
+          validFrom: new Date(),
+        }),
+      );
+      record.supersededBy = successor.id;
+      await manager.save(record);
+      await this.audit.record(
+        {
+          actorUserId: actor.id,
+          actorRole: actor.role,
+          action: 'admin.source_record.update',
+          resource: 'source_record',
+          resourceId: recordId,
+          status: 'ok',
+          reason: `${changed.join(', ')}; new row ${successor.id} supersedes ${recordId}`,
+          ip: actor.ip,
+        },
+        manager,
+      );
+      return successor;
     });
-    return saved;
   }
 
   // The review queue: current rows (not superseded) by review status.
@@ -273,6 +333,7 @@ export class AdminCatalogService {
       }
       feature.reviewStatus = dto.reviewStatus;
       const saved = await manager.save(feature);
+      const republish = correction ? await this.republishTitleFingerprint(manager, feature.titleId) : null;
       await this.audit.record(
         {
           actorUserId: actor.id,
@@ -284,6 +345,7 @@ export class AdminCatalogService {
           reason: [
             `${feature.featureKey} -> ${dto.reviewStatus}`,
             correction ? `corrected ${feature.value} -> ${correction.value} (${correction.id})` : null,
+            republish && republish.changes.length > 0 ? `fingerprint republished (${republish.changes.length} key(s))` : null,
             dto.note ?? null,
           ]
             .filter(Boolean)
@@ -292,7 +354,7 @@ export class AdminCatalogService {
         },
         manager,
       );
-      return { feature: saved, correction };
+      return { feature: saved, correction, republish };
     });
   }
 
@@ -301,12 +363,44 @@ export class AdminCatalogService {
     return { ...rest, title: title ? { id: title.id, internalId: title.internalId, titleEn: title.titleEn, titleAr: title.titleAr } : null };
   }
 
-  private async requireTitle(titleId: string): Promise<Title> {
-    const title = await this.titles.findOne({ where: { id: titleId } });
+  private async requireTitle(titleId: string, manager?: EntityManager): Promise<Title> {
+    const title = await (manager ? manager.findOne(Title, { where: { id: titleId } }) : this.titles.findOne({ where: { id: titleId } }));
     if (!title) {
       throw new NotFoundException('Title not found');
     }
     return title;
+  }
+
+  // ADMIN-W4 (ADM-P0-02, the plan's own highest operational risk): a
+  // correction in reviewContentFeature() used to write a new content_features
+  // row and stop -- titles.fingerprint (what recommendation code actually
+  // reads) never learned about it until someone remembered to run the
+  // standalone republish-fingerprint script. Folding this into the same
+  // transaction makes the correction's effect on the live fingerprint
+  // immediate and atomic with the correction itself, using the exact overlay
+  // rules already proven in republish-fingerprint.lib.ts/.ts (ADR-19: never
+  // invents or blanks a value; a key with no current row is left as
+  // published). Returns null when the title has no published fingerprint yet
+  // -- there is nothing to fold a correction onto.
+  private async republishTitleFingerprint(
+    manager: EntityManager,
+    titleId: string,
+  ): Promise<{ changes: { featureKey: string; before: number | null; after: number }[] } | null> {
+    const title = await manager.findOne(Title, { where: { id: titleId } });
+    if (!title || !title.fingerprint) {
+      return null;
+    }
+    const currentRows = await manager.find(ContentFeature, { where: { titleId, supersededBy: IsNull() } });
+    const { fingerprint, changes } = republishFingerprint(
+      title.fingerprint as unknown as Record<string, unknown>,
+      currentRows.map((row) => ({ featureKey: row.featureKey, value: row.value, uncertainty: row.uncertainty })),
+      FINGERPRINT_V2_DIMENSIONS,
+      FINGERPRINT_V3_DIMENSIONS,
+    );
+    if (changes.length > 0) {
+      await manager.update(Title, titleId, { fingerprint: fingerprint as unknown as Title['fingerprint'] });
+    }
+    return { changes };
   }
 
   private async decorate(rows: Title[]): Promise<AdminTitleRow[]> {

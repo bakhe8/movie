@@ -4,7 +4,7 @@ import { AdminOpsService } from './admin-ops.service';
 
 describe('AdminOpsService.updateUser', () => {
   const actor = { id: 'admin-1', role: 'admin', ip: null };
-  let users: { findOne: ReturnType<typeof vi.fn>; save: ReturnType<typeof vi.fn> };
+  let users: { findOne: ReturnType<typeof vi.fn>; save: ReturnType<typeof vi.fn>; count: ReturnType<typeof vi.fn> };
   let refreshTokens: { update: ReturnType<typeof vi.fn> };
   let profiles: { count: ReturnType<typeof vi.fn> };
   let audit: { record: ReturnType<typeof vi.fn> };
@@ -14,6 +14,7 @@ describe('AdminOpsService.updateUser', () => {
     users = {
       findOne: vi.fn(async () => ({ id: 'user-1', email: 'u@example.com', role: 'user', active: true, createdAt: new Date() })),
       save: vi.fn(async (user: unknown) => user),
+      count: vi.fn(async () => 1),
     };
     refreshTokens = { update: vi.fn(async () => ({ affected: 2 })) };
     profiles = { count: vi.fn(async () => 1) };
@@ -48,5 +49,24 @@ describe('AdminOpsService.updateUser', () => {
     await service.updateUser('user-1', { role: 'admin' }, actor);
     expect(refreshTokens.update).not.toHaveBeenCalled();
     expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ reason: 'role=admin' }));
+  });
+
+  // ADMIN-W4: self-change is blocked above; this is the other admin being the
+  // one making the change, targeting the last remaining active admin.
+  it('refuses to deactivate or demote the last other active admin', async () => {
+    users.findOne.mockResolvedValue({ id: 'admin-2', email: 'a2@example.com', role: 'admin', active: true, createdAt: new Date() });
+    users.count.mockResolvedValue(0);
+
+    await expect(service.updateUser('admin-2', { active: false }, actor)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.updateUser('admin-2', { role: 'user' }, actor)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(users.save).not.toHaveBeenCalled();
+  });
+
+  it('allows demoting an admin when another active admin remains', async () => {
+    users.findOne.mockResolvedValue({ id: 'admin-2', email: 'a2@example.com', role: 'admin', active: true, createdAt: new Date() });
+    users.count.mockResolvedValue(1);
+
+    const result = await service.updateUser('admin-2', { role: 'user' }, actor);
+    expect(result).toMatchObject({ id: 'admin-2', role: 'user' });
   });
 });

@@ -131,12 +131,19 @@ describe('Admin board API (role-gated)', () => {
   });
 
   it('edits source data, adds a rights row, and audits both', async () => {
+    // A fresh id per run, not a literal: CAT-1's identity guard rejects two
+    // titles claiming the same wikidata id (UQ_titles_wikidata_identity), and
+    // a literal here collided with a still-unreconciled row from an earlier
+    // local run against this shared moviedb_test database. The format itself
+    // is also enforced (CHK_titles_wikidata_identity: `^Q[1-9][0-9]*$`), so
+    // the id has to look like a real QID, not just be unique.
+    const wikidataId = `Q${Date.now()}`;
     const edited = await request(app.getHttpServer())
       .patch(`/admin/titles/${titleId}`)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ releaseYear: 1999, genres: ['Drama'], externalIds: { wikidata: 'Q1' } })
+      .send({ releaseYear: 1999, genres: ['Drama'], externalIds: { wikidata: wikidataId } })
       .expect(200);
-    expect(edited.body).toMatchObject({ releaseYear: 1999, genres: ['Drama'], externalIds: { wikidata: 'Q1' } });
+    expect(edited.body).toMatchObject({ releaseYear: 1999, genres: ['Drama'], externalIds: { wikidata: wikidataId } });
     await request(app.getHttpServer())
       .patch(`/admin/titles/${titleId}`)
       .set('Authorization', `Bearer ${adminToken}`)
@@ -150,16 +157,30 @@ describe('Admin board API (role-gated)', () => {
       .expect(201);
     expect(record.body).toMatchObject({ titleId, licenseStatus: 'commercial_allowed', reviewStatus: 'human_verified' });
 
+    // ADMIN-W4 (ADM-P0-04): a source-record edit now supersedes rather than
+    // overwrites, matching the entity's own "never edited in place" contract
+    // -- the response is a NEW row, and the original is left in place with
+    // supersededBy pointing at it.
     const updated = await request(app.getHttpServer())
       .patch(`/admin/source-records/${record.body.id}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ licenseStatus: 'non_commercial_only' })
       .expect(200);
     expect(updated.body.licenseStatus).toBe('non_commercial_only');
+    expect(updated.body.id).not.toBe(record.body.id);
+
+    // Editing the now-superseded original is rejected, not forked again.
+    await request(app.getHttpServer())
+      .patch(`/admin/source-records/${record.body.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ licenseStatus: 'commercial_allowed' })
+      .expect(409);
 
     const provenance = await admin()(`/admin/titles/${titleId}/provenance`).expect(200);
     expect(provenance.body.licenseStatus).toBe('non_commercial_only');
-    expect(provenance.body.sourceRecords).toHaveLength(1);
+    expect(provenance.body.sourceRecords).toHaveLength(2);
+    const original = provenance.body.sourceRecords.find((row: { id: string }) => row.id === record.body.id);
+    expect(original.supersededBy).toBe(updated.body.id);
     expect(provenance.body.byExtractor['e2e-extractor-v1']).toMatchObject({ rows: 1, unreviewed: 1 });
 
     const actions = (await audit.find({ where: { actorUserId: adminId } })).map((row) => row.action);
@@ -183,6 +204,12 @@ describe('Admin board API (role-gated)', () => {
     expect(reviewed.body.feature).toMatchObject({ id: feature.id, reviewStatus: 'human_verified', value: 0.5 });
     expect(reviewed.body.correction).toMatchObject({ value: 0.8, extractorVersion: HUMAN_REVIEW_EXTRACTOR, reviewStatus: 'human_verified' });
     expect(reviewed.body.feature.supersededBy).toBe(reviewed.body.correction.id);
+
+    // ADMIN-W4 (ADM-P0-02): a correction must reach the published fingerprint
+    // in the same request, not wait on a separately-run republish script.
+    expect(reviewed.body.republish.changes).toEqual(expect.arrayContaining([expect.objectContaining({ featureKey: 'pacing', before: 0.5, after: 0.8 })]));
+    const titleAfter = await admin()(`/admin/titles/${titleId}`).expect(200);
+    expect((titleAfter.body.fingerprint as { pacing: number }).pacing).toBe(0.8);
 
     const after = await admin()(`/admin/content-features?titleId=${titleId}`).expect(200);
     expect(after.body.items).toHaveLength(1);
@@ -269,5 +296,29 @@ describe('Admin board API (role-gated)', () => {
 
     const privacy = await admin()('/admin/privacy-requests?limit=5').expect(200);
     expect(privacy.body).toMatchObject({ page: 1, limit: 5 });
+  });
+
+  // ADMIN-W4: the last-active-admin guard (AdminOpsService.updateUser) counts
+  // active admins *excluding the target*. Since the acting admin is always
+  // excluded from their own self-change (blocked above) and always remains
+  // active for anyone else's change, that count can never legitimately reach
+  // zero through this endpoint -- it is defence-in-depth against a stale
+  // actor row (e.g. concurrently deactivated outside this request), covered
+  // directly at the unit level in admin-ops.service.spec.ts by mocking the
+  // count to 0. What an e2e run over real HTTP calls *can* prove is the
+  // opposite direction: that the guard does not falsely block a legitimate
+  // two-admin handover.
+  it('lets one admin demote another as long as an active admin remains', async () => {
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const auth = app.get(AuthService);
+    const account = await auth.register({ email: `admin2-${suffix}@example.com`, password: PASSWORD, firstName: 'Bo', lastName: 'Second' });
+    const secondAdminId = account.user.id as string;
+    await users.update({ id: secondAdminId }, { role: 'admin' });
+
+    await request(app.getHttpServer())
+      .patch(`/admin/users/${secondAdminId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ role: 'user' })
+      .expect(200);
   });
 });

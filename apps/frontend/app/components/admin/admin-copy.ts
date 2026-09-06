@@ -41,6 +41,18 @@ export const ADMIN_SECTION_COPY: Record<string, { title: string; blurb: string }
     title: 'سجل العمليات',
     blurb: 'كل إجراء إداري أو نظامي مؤثر، ومن نفّذه، ومتى — للمساءلة والتتبع، للقراءة فقط.',
   },
+  titleEdit: {
+    title: 'تعديل بيانات فيلم',
+    blurb: 'تصحيح بيانات الفيلم الأساسية، وإدارة سجلات حقوق العرض المرتبطة به.',
+  },
+  users: {
+    title: 'الحسابات',
+    blurb: 'حسابات المستخدمين: تفعيل أو إيقاف حساب، أو منح صلاحية مسؤول وسحبها.',
+  },
+  modelRegistration: {
+    title: 'تسجيل نماذج التوصية',
+    blurb: 'تسجيل إصدار جديد من نظام التوصية، واعتماد الإصدار الذي يُستخدم فعلياً حالياً.',
+  },
 };
 
 // hasFingerprint/hasV2 (docs/API.md `admin/titles`): whether -- and how
@@ -268,3 +280,42 @@ export const RECOMMENDATION_OUTCOME_LABELS: Record<string, string> = {
   watched: 'شاهده فعلاً',
   ranked_later: 'رتّبه لاحقاً في ثلاثية',
 };
+
+// users.role (ADMIN-W4 user-management screen).
+export const USER_ROLE_LABELS: Record<'user' | 'admin', string> = {
+  user: 'مستخدم',
+  admin: 'مسؤول',
+};
+
+// The server's own refusal reasons for admin/users writes and source-record
+// edits (ADMIN-W4) -- each one is a real guard the service enforces, not a
+// generic failure, so the operator sees exactly why the action was blocked
+// instead of a bare "فشل الحفظ".
+export const ADMIN_ERROR_REASON_LABELS: Record<string, string> = {
+  self_change: 'لا يمكن لأي مسؤول تعديل صلاحيته أو حالة حسابه الخاص.',
+  last_admin: 'هذا آخر حساب مسؤول نشط؛ لا يمكن إيقافه أو سحب صلاحيته قبل تعيين مسؤول آخر.',
+  already_superseded: 'هذا السجل استُبدل بتعديل لاحق؛ حدّث الصفحة للعمل على أحدث نسخة منه.',
+  exists: 'هذا الإصدار مسجَّل مسبقاً.',
+  admin_required: 'هذا الإجراء يتطلب صلاحية مسؤول.',
+};
+
+export function adminErrorReasonLabel(reason: string | undefined, fallback: string): string {
+  if (!reason) return fallback;
+  return ADMIN_ERROR_REASON_LABELS[reason] ?? fallback;
+}
+
+// source_records fields an admin can add or correct (BP §11.1 rights
+// registry) -- form labels, distinct from the raw column names.
+export const SOURCE_RECORD_FIELD_LABELS = {
+  fieldName: 'الحقل المصدر',
+  source: 'مصدر المعلومة',
+  value: 'القيمة المسجَّلة',
+  license: 'نص الترخيص',
+  licenseStatus: 'حالة الترخيص',
+  allowsStorage: 'يسمح بالتخزين',
+  allowsDerivation: 'يسمح بالاشتقاق (مثل استخراج الخصائص)',
+  allowsTraining: 'يسمح باستخدامه في تدريب النموذج',
+  attributionRequired: 'تتطلب نسب المصدر عند العرض',
+  fallbackPlan: 'خطة بديلة إن سُحب الإذن',
+  reviewStatus: 'حالة المراجعة',
+} as const;

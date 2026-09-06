@@ -643,6 +643,33 @@ export const api = {
     }>(`/admin/titles?${qs}`, { signal: params.signal });
   },
 
+  // ── ADMIN-W4: catalog/rights writes (plan §18 W4) ───────────────────────────
+
+  adminUpdateTitle: (
+    titleId: string,
+    dto: { titleEn?: string; titleAr?: string; description?: string; releaseYear?: number; genres?: string[]; originalLanguage?: string; externalIds?: { imdb?: string; tmdb?: string; wikidata?: string } },
+  ) => request<AdminTitleRecord>(`/admin/titles/${titleId}`, { method: 'PATCH', body: JSON.stringify(dto) }),
+
+  adminAddSourceRecord: (
+    titleId: string,
+    dto: {
+      fieldName: string; source: string; value?: string; license?: string; licenseStatus: string;
+      allowsStorage?: boolean; allowsDerivation?: boolean; allowsTraining?: boolean; attributionRequired?: boolean;
+      fallbackPlan?: string; reviewStatus?: string;
+    },
+  ) => request<AdminSourceRecord>(`/admin/titles/${titleId}/source-records`, { method: 'POST', body: JSON.stringify(dto) }),
+
+  // A 409 here means the record was already superseded by a later edit --
+  // the caller should re-fetch provenance and edit the current row instead.
+  adminUpdateSourceRecord: (
+    recordId: string,
+    dto: {
+      licenseStatus?: string; reviewStatus?: string; license?: string;
+      allowsStorage?: boolean; allowsDerivation?: boolean; allowsTraining?: boolean; attributionRequired?: boolean;
+      fallbackPlan?: string;
+    },
+  ) => request<AdminSourceRecord>(`/admin/source-records/${recordId}`, { method: 'PATCH', body: JSON.stringify(dto) }),
+
   adminGetContentFeatures: (params: { reviewStatus?: string; titleId?: string; featureKey?: string; page?: number; limit?: number; signal?: AbortSignal } = {}) => {
     const qs = new URLSearchParams();
     if (params.reviewStatus) qs.set('reviewStatus', params.reviewStatus);
@@ -659,8 +686,15 @@ export const api = {
   // ADMIN-W1 (ADR-117 W1 contract defect): the real response nests both rows
   // -- `correction` is null unless `correctedValue` produced a new one -- it
   // is not the flat `{id, reviewStatus}` this used to (wrongly) declare.
+  // ADMIN-W4 (ADM-P0-02): `republish` is present only alongside a
+  // correction -- non-null means the change was folded into
+  // `titles.fingerprint` in the same request; `changes` is empty when the
+  // corrected value already matched what was published.
   adminReviewFeature: (featureId: string, data: { reviewStatus: string; correctedValue?: number; note?: string }) =>
-    request<{ feature: AdminContentFeature; correction: AdminContentFeature | null }>(`/admin/content-features/${featureId}/review`, {
+    request<{
+      feature: AdminContentFeature; correction: AdminContentFeature | null;
+      republish: { changes: { featureKey: string; before: number | null; after: number }[] } | null;
+    }>(`/admin/content-features/${featureId}/review`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
@@ -670,6 +704,15 @@ export const api = {
       versions: { version: string; rankerType: string; active: boolean; fingerprintSchemaVersion: string; createdAt: string; stats: { snapshotCount: number; profileCount: number } | null }[];
       unregistered: { modelVersion: string; snapshotCount: number; profileCount: number }[];
     }>('/admin/models'),
+
+  // A 409 (reason 'exists') means the version string is already registered.
+  adminRegisterModel: (dto: { version: string; rankerType: string; fingerprintSchemaVersion: string; codeRef?: string }) =>
+    request<AdminModelVersion>('/admin/models', { method: 'POST', body: JSON.stringify(dto) }),
+
+  // Setting `active: true` deactivates every other version atomically on the
+  // server -- exactly one active version at a time, never client-computed.
+  adminUpdateModel: (version: string, dto: { active?: boolean }) =>
+    request<AdminModelVersion>(`/admin/models/${encodeURIComponent(version)}`, { method: 'PATCH', body: JSON.stringify(dto) }),
 
   // ADR-100: the durable training queue, mirroring the mail outbox's admin shape.
   adminGetTrainingJobs: (limit = 20) =>
@@ -691,6 +734,20 @@ export const api = {
       fingerprintCoverage: { published: number; total: number; percent: number; ok: boolean };
       modelService: { configured: boolean; reachable: boolean; ok: boolean };
     }>('/admin/readiness'),
+
+  adminGetUsers: (params: { query?: string; page?: number; limit?: number; signal?: AbortSignal } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.query) qs.set('query', params.query);
+    if (params.page) qs.set('page', String(params.page));
+    if (params.limit) qs.set('limit', String(params.limit));
+    return request<{ items: AdminUserRow[]; total: number; page: number; limit: number; totalPages: number }>(`/admin/users?${qs}`, { signal: params.signal });
+  },
+
+  // A 403 with reason 'self_change' means the acting admin targeted their
+  // own account; reason 'last_admin' means they targeted the only other
+  // active admin -- both are refused server-side, not just hidden in the UI.
+  adminUpdateUser: (userId: string, dto: { active?: boolean; role?: 'user' | 'admin'; reason?: string }) =>
+    request<AdminUserRow>(`/admin/users/${userId}`, { method: 'PATCH', body: JSON.stringify(dto) }),
 
   adminGetPrivacyRequests: (params: { type?: string; status?: string; page?: number; limit?: number; signal?: AbortSignal } = {}) => {
     const qs = new URLSearchParams();
@@ -777,6 +834,26 @@ export const api = {
   },
 };
 
+// The raw row PATCH /admin/titles/:id returns -- no `summary` (that is
+// AdminTitleDetail's own decoration, computed only by the GET route).
+export interface AdminTitleRecord {
+  id: string; internalId: string; titleEn: string; titleAr: string;
+  description: string | null; releaseYear: number | null; genres: string[] | null;
+  originalLanguage: string | null;
+  externalIds: { imdb?: string; tmdb?: string; wikidata?: string } | null;
+  createdAt: string; updatedAt: string;
+}
+
+export interface AdminModelVersion {
+  version: string; rankerType: string; fingerprintSchemaVersion: string;
+  codeRef: string | null; active: boolean; createdAt: string;
+}
+
+export interface AdminUserRow {
+  id: string; email: string; firstName: string | null; lastName: string | null;
+  role: 'user' | 'admin'; active: boolean; profiles: number; createdAt: string;
+}
+
 export interface AdminTitleDetail {
   id: string; internalId: string; titleEn: string; titleAr: string;
   description: string | null; releaseYear: number | null; genres: string[] | null;
@@ -790,9 +867,10 @@ export interface AdminTitleDetail {
 }
 
 export interface AdminSourceRecord {
-  id: string; fieldName: string; value: string | null; source: string;
+  id: string; titleId: string; fieldName: string; value: string | null; source: string;
   license: string | null; licenseStatus: string;
-  attributionRequired: boolean | null; reviewStatus: string | null;
+  allowsStorage: boolean | null; allowsDerivation: boolean | null; allowsTraining: boolean | null;
+  attributionRequired: boolean | null; fallbackPlan: string | null; reviewStatus: string | null;
   supersededBy: string | null; createdAt: string;
 }
 

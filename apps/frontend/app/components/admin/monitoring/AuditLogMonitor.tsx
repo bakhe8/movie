@@ -29,8 +29,11 @@ const COLUMNS: AdminRecordListColumn<AuditRow>[] = [
 
 // ADMIN-W3 (W0 case B5): read-only activity log, for accountability -- never
 // editable here, and no mutation client is imported by this file.
+// ADMIN-W4: `resource`/`resourceId` are also read from the URL so a write
+// screen (user/title/model edit) can link straight to "what happened to this
+// record" -- e.g. `?resource=user&resourceId=<id>` -- without a new endpoint.
 export function AuditLogMonitor() {
-  const [q, setQ] = useAdminQueryState(['page'] as const);
+  const [q, setQ] = useAdminQueryState(['page', 'resource', 'resourceId'] as const);
   const page = Number(q.page) || 1;
 
   const [result, setResult] = useState<{ items: AuditRow[]; total: number; totalPages: number } | null>(null);
@@ -45,7 +48,12 @@ export function AuditLogMonitor() {
       setBusy(true);
       setFailed(false);
       try {
-        const data = await api.adminGetAuditLog({ page, limit: 50, signal: controller.signal });
+        const data = await api.adminGetAuditLog({
+          page, limit: 50,
+          resource: q.resource || undefined,
+          resourceId: q.resourceId || undefined,
+          signal: controller.signal,
+        });
         setResult(data);
         setBusy(false);
       } catch (err) {
@@ -55,7 +63,7 @@ export function AuditLogMonitor() {
       }
     })();
     return () => controller.abort();
-  }, [page, retryTick]);
+  }, [page, q.resource, q.resourceId, retryTick]);
 
   return (
     <div>
@@ -63,6 +71,15 @@ export function AuditLogMonitor() {
         <h2 className={m.pageTitle}>{ADMIN_SECTION_COPY.audit.title}</h2>
         <p className={m.pageBlurb}>{ADMIN_SECTION_COPY.audit.blurb}</p>
       </div>
+
+      {q.resourceId && (
+        <p className={m.count}>
+          مُصفّى على سجل واحد ({auditResourceLabel(q.resource || '')} {q.resourceId}).{' '}
+          <button type="button" className={m.pageBtn} onClick={() => setQ({ resource: '', resourceId: '', page: '1' })}>
+            إزالة التصفية
+          </button>
+        </p>
+      )}
 
       {result && <p className={m.count}>{result.total} سطر{busy && ' — جارٍ التحديث…'}</p>}
 

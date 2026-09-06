@@ -31,11 +31,17 @@ export function FeatureReviewAdmin() {
 
   const [status, setStatus] = useState<Status>('idle');
   const [resultStatus, setResultStatus] = useState<string | null>(null);
+  const [republishCount, setRepublishCount] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [correcting, setCorrecting] = useState(false);
+  const [correctedValue, setCorrectedValue] = useState('');
+  const [note, setNote] = useState('');
 
   const backHref = `/admin/monitoring/reviews?${new URLSearchParams({ reviewStatus: returnReviewStatus, page: returnPage }).toString()}`;
   const numericValue = rawValue ? Number(rawValue) : null;
   const valuePhrase = numericValue !== null && Number.isFinite(numericValue) ? featureValuePhrase(featureKey, numericValue, FEATURE_REASON_COPY.ar) : null;
+  const correctedNumber = correctedValue ? Number(correctedValue) : null;
+  const canSubmitCorrection = correctedNumber !== null && Number.isFinite(correctedNumber) && correctedNumber >= 0 && correctedNumber <= 1;
 
   if (!featureId) {
     return (
@@ -65,6 +71,29 @@ export function FeatureReviewAdmin() {
     }
   };
 
+  // ADMIN-W4 (W0 case F4 extension, ADM-P0-02): when the analysis is wrong,
+  // not just unverified -- the corrected value supersedes the extracted row
+  // (never edits it in place) and the server folds it into the published
+  // fingerprint in the same request, reported back here as `republish`.
+  const saveCorrection = async () => {
+    if (correctedNumber === null) return;
+    setStatus('pending');
+    setError(null);
+    try {
+      const { feature, correction, republish } = await api.adminReviewFeature(featureId, {
+        reviewStatus: 'human_verified',
+        correctedValue: correctedNumber,
+        note: note.trim() || undefined,
+      });
+      setResultStatus(correction ? correction.reviewStatus : feature.reviewStatus);
+      setRepublishCount(republish ? republish.changes.length : null);
+      setStatus('success');
+    } catch {
+      setError('تعذّر حفظ التصحيح. حاول مرة أخرى.');
+      setStatus('error');
+    }
+  };
+
   return (
     <div>
       <div className={s.pageHeader}>
@@ -78,15 +107,45 @@ export function FeatureReviewAdmin() {
         <div className={s.row}><span className={s.label}>مصدر التحليل</span><span className={s.value}>{extractorVersion || '—'}</span></div>
 
         <div className={s.actions}>
-          <button type="button" className={s.confirmBtn} disabled={status === 'pending' || status === 'success'} onClick={confirmSample}>
-            {status === 'pending' ? '…' : CONFIRM_ANALYSIS_LABEL}
+          <button type="button" className={s.confirmBtn} disabled={status === 'pending' || status === 'success' || correcting} onClick={confirmSample}>
+            {status === 'pending' && !correcting ? '…' : CONFIRM_ANALYSIS_LABEL}
+          </button>
+          <button
+            type="button"
+            className={s.backLink}
+            onClick={() => setCorrecting((c) => !c)}
+            disabled={status === 'pending' || status === 'success'}
+          >
+            {correcting ? 'إلغاء التصحيح' : 'التحليل غير صحيح — إدخال قيمة صحيحة'}
           </button>
           <Link className={s.backLink} href={backHref}>رجوع إلى المراقبة</Link>
         </div>
 
+        {correcting && status !== 'success' && (
+          <div className={s.correctionForm}>
+            <label htmlFor="corrected-value" className={s.label}>القيمة الصحيحة (بين 0 و1)</label>
+            <input
+              id="corrected-value"
+              type="number"
+              min={0}
+              max={1}
+              step={0.01}
+              value={correctedValue}
+              onChange={(e) => setCorrectedValue(e.target.value)}
+              disabled={status === 'pending'}
+            />
+            <label htmlFor="correction-note" className={s.label}>ملاحظة (اختياري)</label>
+            <textarea id="correction-note" value={note} onChange={(e) => setNote(e.target.value)} disabled={status === 'pending'} />
+            <button type="button" className={s.confirmBtn} disabled={!canSubmitCorrection || status === 'pending'} onClick={saveCorrection}>
+              {status === 'pending' ? '…' : 'حفظ التصحيح'}
+            </button>
+          </div>
+        )}
+
         {status === 'success' && (
           <p className={`${s.status} ${s.statusSuccess}`} role="status" aria-live="polite">
             تم الحفظ. الحالة الآن: {resultStatus ? (REVIEW_STATUS_COPY[resultStatus] ?? resultStatus) : ''}.
+            {republishCount !== null && (republishCount > 0 ? ' تحديث التحليل انعكس فوراً على بصمة الفيلم المنشورة.' : '')}
           </p>
         )}
         {status === 'error' && (

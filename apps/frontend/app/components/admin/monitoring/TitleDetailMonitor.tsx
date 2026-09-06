@@ -63,6 +63,8 @@ export function TitleDetailMonitor({ titleId }: { titleId: string }) {
         <p className={m.pageBlurb}>{title.internalId} · {title.releaseYear ?? 'سنة غير معروفة'}</p>
       </div>
 
+      <Link className={s.backLink} href={`/admin/administration/titles?titleId=${titleId}`}>تعديل بيانات هذا الفيلم</Link>
+
       <div className={s.card}>
         <div className={s.row}><span className={s.label}>الحالة</span><span className={`${m.badge} ${status === 'full' ? m.green : status === 'basic' ? m.yellow : m.red}`}>{ANALYSIS_STATUS_COPY[status]}</span></div>
         <div className={s.row}><span className={s.label}>حقوق العرض</span><span>{LICENSE_STATUS_LABELS[provenance.licenseStatus] ?? provenance.licenseStatus}</span></div>

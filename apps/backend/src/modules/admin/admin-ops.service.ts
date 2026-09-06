@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ILike, IsNull, Repository } from 'typeorm';
+import { ILike, IsNull, Not, Repository } from 'typeorm';
 import { AuditLog } from '../../entities/audit-log.entity';
 import { PrivacyRequest } from '../../entities/privacy-request.entity';
 import { Profile } from '../../entities/profile.entity';
@@ -82,6 +82,22 @@ export class AdminOpsService {
     const user = await this.users.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException('User not found');
+    }
+    // ADMIN-W4: self-change is already blocked above, but nothing stopped one
+    // admin from deactivating or demoting the *other* last remaining admin,
+    // locking every admin out with no one left to reverse it. Block exactly
+    // that: demoting/deactivating an active admin when they are the only one.
+    const demoting = user.role === 'admin' && ((dto.active === false && user.active) || dto.role === 'user');
+    if (demoting) {
+      const otherActiveAdmins = await this.users.count({ where: { role: 'admin', active: true, id: Not(userId) } });
+      if (otherActiveAdmins === 0) {
+        throw new ForbiddenException({
+          statusCode: 403,
+          message: 'Cannot deactivate or demote the last active admin',
+          error: 'Forbidden',
+          reason: 'last_admin',
+        });
+      }
     }
     const changed: string[] = [];
     if (dto.active !== undefined && dto.active !== user.active) {
