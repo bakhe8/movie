@@ -10,7 +10,7 @@ import { AdminRecordList, type AdminRecordListColumn } from '../AdminRecordList'
 import m from './monitoring.module.css';
 
 type FeatureRow = {
-  id: string; titleId: string; featureKey: string; value: number;
+  id: string; titleId: string; featureKey: string; value: number | null;
   extractorVersion: string; reviewStatus: string;
   title: { id: string; internalId: string; titleEn: string; titleAr: string } | null;
 };
@@ -23,9 +23,68 @@ function statusBadge(status: string) {
 // ADMIN-W2 (owner feedback 2026-09-06): a bare 0-1 number told a reviewer
 // nothing about whether the AI got it right. Show what the number claims
 // about the film; keep the raw value alongside for anyone who wants it.
+// NULL means unknown (BP §11.3) -- never coerced to 0 or hidden silently.
 function valueDisplay(row: FeatureRow) {
+  if (row.value === null) return 'غير معروف';
   const phrase = featureValuePhrase(row.featureKey, row.value, FEATURE_REASON_COPY.ar);
   return phrase ? `${phrase} (${row.value.toFixed(2)})` : row.value.toFixed(3);
+}
+
+// ADMIN-W3 (W0 case B2): a random spot-check across ALL rows regardless of
+// review status -- distinct from the paginated queue above, and from F4's
+// write: drawing a sample never marks anything reviewed.
+function SampleInspection({ reviewStatus, page }: { reviewStatus: string; page: number }) {
+  const [items, setItems] = useState<FeatureRow[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  const draw = async () => {
+    setBusy(true);
+    setFailed(false);
+    try {
+      const { items: sample } = await api.adminSampleContentFeatures({ size: 10 });
+      setItems(sample);
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const returnTo = (row: FeatureRow) => {
+    const params = new URLSearchParams({
+      featureId: row.id,
+      titleLabel: row.title ? (row.title.titleAr || row.title.titleEn) : row.titleId.slice(0, 8),
+      featureKey: row.featureKey,
+      value: row.value === null ? '' : String(row.value),
+      extractorVersion: row.extractorVersion,
+      returnReviewStatus: reviewStatus,
+      returnPage: String(page),
+    });
+    return `/admin/administration/review?${params.toString()}`;
+  };
+
+  return (
+    <>
+      <h3 className={m.subhead}>معاينة عشوائية</h3>
+      <p className={m.pageBlurb}>عيّنة عشوائية من كل التحليلات، بصرف النظر عن حالة مراجعتها -- لفحص سريع لجودة التحليل عموماً، لا لإحصاء ما يحتاج مراجعة.</p>
+      <button type="button" className={m.pageBtn} onClick={draw} disabled={busy}>{busy ? '…' : 'اسحب عيّنة جديدة'}</button>
+      {failed && <p className={m.count} role="alert">تعذّر سحب العيّنة.</p>}
+      {items && (
+        <ul className={m.sampleList}>
+          {items.map((row) => (
+            <li key={row.id} className={m.cardRow}>
+              <span>{row.title ? (row.title.titleAr || row.title.titleEn) : row.titleId.slice(0, 8)}</span>
+              <span>{featureKeyLabel(row.featureKey)}</span>
+              <span>{valueDisplay(row)}</span>
+              {statusBadge(row.reviewStatus)}
+              {row.reviewStatus === 'unreviewed' && <Link className={m.link} href={returnTo(row)}>مراجعة</Link>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
 }
 
 // ADMIN-W2 (ADR-117 "Decision — separation"): read-only. The sample action
@@ -69,7 +128,10 @@ export function FeaturesMonitor() {
       featureId: row.id,
       titleLabel: row.title ? (row.title.titleAr || row.title.titleEn) : row.titleId.slice(0, 8),
       featureKey: row.featureKey,
-      value: String(row.value),
+      // Omitted (not the literal string "null") when unknown -- the review
+      // screen's own Number('') is NaN, correctly falling through to "no
+      // value carried" rather than a fabricated one.
+      value: row.value === null ? '' : String(row.value),
       extractorVersion: row.extractorVersion,
       returnReviewStatus: reviewStatus,
       returnPage: String(page),
@@ -146,6 +208,8 @@ export function FeaturesMonitor() {
           <button className={m.pageBtn} disabled={page >= result.totalPages} onClick={() => setQ({ page: String(page + 1) })}>التالي</button>
         </div>
       )}
+
+      <SampleInspection reviewStatus={reviewStatus} page={page} />
     </div>
   );
 }

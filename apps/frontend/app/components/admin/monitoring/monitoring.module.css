@@ -93,8 +93,11 @@
 .red { background: var(--admin-danger-soft); color: var(--admin-danger); }
 
 .cardTitle {
+  display: block;
   margin: 0 0 var(--admin-sp-1);
+  color: var(--admin-text);
   font-weight: var(--admin-w-semibold);
+  text-decoration: none;
 }
 
 .cardRow {
@@ -164,4 +167,63 @@
   background: var(--admin-surface);
   border: 1px solid var(--admin-border);
   border-radius: var(--admin-r-card);
+}
+
+.sampleList {
+  composes: plainList;
+  margin-block-start: var(--admin-sp-2);
+}
+
+.statGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--admin-sp-2);
+  margin-block-end: var(--admin-sp-4);
+}
+
+.statTile {
+  padding: var(--admin-sp-3);
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-r-card);
+}
+
+.statValue {
+  display: block;
+  font-size: var(--admin-fs-20);
+  font-weight: var(--admin-w-semibold);
+}
+
+.statLabel {
+  display: block;
+  color: var(--admin-muted);
+  font-size: var(--admin-fs-12);
+}
+
+.tableWrap {
+  overflow-x: auto;
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-r-card);
+  margin-block-end: var(--admin-sp-4);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--admin-fs-13);
+}
+
+.table th,
+.table td {
+  padding: var(--admin-sp-2) var(--admin-sp-3);
+  text-align: start;
+  border-block-end: 1px solid var(--admin-border);
+  white-space: nowrap;
+}
+
+.table th {
+  color: var(--admin-muted);
+  font-weight: var(--admin-w-semibold);
+  font-size: var(--admin-fs-12);
 }

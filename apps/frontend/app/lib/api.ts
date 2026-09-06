@@ -429,7 +429,10 @@ export interface AdminContentFeature {
   id: string;
   titleId: string;
   featureKey: string;
-  value: number;
+  // NULL means unknown, never 0 (BP §11.3) -- a fix from ADMIN-W3: this was
+  // wrongly typed non-nullable through W1/W2, which would have thrown on
+  // .toFixed() the first time a real null reached the UI.
+  value: number | null;
   extractorVersion: string;
   reviewStatus: string;
   supersededBy?: string | null;
@@ -694,4 +697,129 @@ export const api = {
       total: number; page: number; totalPages: number;
     }>(`/admin/privacy-requests?${qs}`, { signal: params.signal });
   },
+
+  // ── ADMIN-W3: completing the monitoring read surface (plan §18 W3) ──────────
+
+  // The single-title detail: full source row plus the same summary shape the
+  // catalog list uses, so a detail screen can share its badges/labels.
+  adminGetTitleDetail: (titleId: string, signal?: AbortSignal) =>
+    request<AdminTitleDetail>(`/admin/titles/${titleId}`, { signal }),
+
+  // Rights history and per-extractor feature grouping for one title (W0 case
+  // B1): current and superseded rows, never edited in place.
+  adminGetProvenance: (titleId: string, signal?: AbortSignal) =>
+    request<AdminProvenance>(`/admin/titles/${titleId}/provenance`, { signal }),
+
+  // A random spot-check sample of analyzed rows (W0 case B2) -- distinct from
+  // the paginated review queue and from F4's write: retrieval alone never
+  // marks anything reviewed.
+  adminSampleContentFeatures: (params: { size?: number; extractorVersion?: string; signal?: AbortSignal } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.size) qs.set('size', String(params.size));
+    if (params.extractorVersion) qs.set('extractorVersion', params.extractorVersion);
+    return request<{ items: AdminContentFeature[]; size: number }>(`/admin/content-features/sample?${qs}`, { signal: params.signal });
+  },
+
+  // Arm assignment counts per experiment (W0 case B3); no attribution claims
+  // or experiment controls before W7.
+  adminGetExperiments: (signal?: AbortSignal) =>
+    request<{ id: string; hypothesis: string; status: string; startedAt: string | null; endedAt: string | null; arms: Record<string, number> }[]>(
+      '/admin/experiments',
+      { signal },
+    ),
+
+  // The newest completed ranking rounds, pseudonymous profile ids only (W0
+  // case B3).
+  adminGetLatestTriads: (limit = 50, signal?: AbortSignal) =>
+    request<
+      { id: string; profileId: string; titleIds: string[]; ranking: string[] | null; modelVersion: string | null; shownAt: string | null; answeredAt: string | null; createdAt: string }[]
+    >(`/admin/triads/latest?limit=${limit}`, { signal }),
+
+  // Who did what, to what, and whether it succeeded (W0 case B5) -- read-only,
+  // the audit trail itself is never editable from here.
+  adminGetAuditLog: (params: { actorUserId?: string; action?: string; resource?: string; resourceId?: string; page?: number; limit?: number; signal?: AbortSignal } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.actorUserId) qs.set('actorUserId', params.actorUserId);
+    if (params.action) qs.set('action', params.action);
+    if (params.resource) qs.set('resource', params.resource);
+    if (params.resourceId) qs.set('resourceId', params.resourceId);
+    if (params.page) qs.set('page', String(params.page));
+    if (params.limit) qs.set('limit', String(params.limit));
+    return request<{
+      items: { id: string; actorUserId: string | null; actorRole: string | null; action: string; resource: string; resourceId: string | null; status: string; reason: string | null; createdAt: string }[];
+      total: number; page: number; totalPages: number;
+    }>(`/admin/audit-log?${qs}`, { signal: params.signal });
+  },
+
+  // Outgoing mail counts and recent rows (ADR-97, W0 case B6) -- never an
+  // address or a body.
+  adminGetMailOutbox: (signal?: AbortSignal) =>
+    request<{
+      counts: { pending: number; delivered: number; dead: number };
+      recent: { id: string; kind: string; status: 'pending' | 'delivered' | 'dead'; attempts: number; nextAttemptAt: string; lastError: string | null; deliveredAt: string | null; createdAt: string }[];
+    }>('/admin/mail-outbox', { signal }),
+
+  // The metrics board (BP §18.1, W0 case B6): read-only SQL over event rows.
+  // `days` is used only when `from`/`to` are both absent.
+  adminGetMetrics: (params: { days?: number; from?: string; to?: string; excludeDomains?: string[]; signal?: AbortSignal } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.days) qs.set('days', String(params.days));
+    if (params.from) qs.set('from', params.from);
+    if (params.to) qs.set('to', params.to);
+    if (params.excludeDomains?.length) qs.set('excludeDomains', params.excludeDomains.join(','));
+    return request<AdminMetricsReport>(`/admin/metrics?${qs}`, { signal: params.signal });
+  },
 };
+
+export interface AdminTitleDetail {
+  id: string; internalId: string; titleEn: string; titleAr: string;
+  description: string | null; releaseYear: number | null; genres: string[] | null;
+  originalLanguage: string | null;
+  externalIds: { imdb?: string; tmdb?: string; wikidata?: string } | null;
+  createdAt: string; updatedAt: string;
+  summary: {
+    hasFingerprint: boolean; hasV2: boolean; licenseStatus: string;
+    sourceRecords: number; unreviewedFeatures: number;
+  };
+}
+
+export interface AdminSourceRecord {
+  id: string; fieldName: string; value: string | null; source: string;
+  license: string | null; licenseStatus: string;
+  attributionRequired: boolean | null; reviewStatus: string | null;
+  supersededBy: string | null; createdAt: string;
+}
+
+export interface AdminProvenance {
+  titleId: string;
+  sourceRecords: AdminSourceRecord[];
+  features: AdminContentFeature[];
+  byExtractor: Record<string, { rows: number; unreviewed: number; superseded: number }>;
+  licenseStatus: string;
+}
+
+export interface AdminMetricsReport {
+  window: { from: string; to: string; days: number; excludeDomains: string[] };
+  accounts: { usersTotal: number; usersActive: number; registeredInWindow: number; profilesTotal: number };
+  funnel: { cohort: string; size: number; steps: { step: string; count: number; rate: number | null }[] };
+  triads: {
+    completed: number; skipped: number; active: number; replacements: number; replacementRate: number | null;
+    answerSeconds: { samples: number; median: number | null; p90: number | null; mean: number | null };
+    byPolicy: Record<string, number>;
+  };
+  recommendations: {
+    shown: number; requests: number; profiles: number;
+    byTrack: Record<string, number>; byBand: Record<string, number>;
+    outcomes: { clicked: number; saved: number; opened_provider: number; dismissed_not_relevant: number; watched: number; ranked_later: number };
+    rates: { clickThrough: number | null; watched: number | null; rankedLater: number | null; dismissed: number | null };
+    hoursToWatch: { samples: number; median: number | null };
+  };
+  model: {
+    snapshotsInWindow: number; profilesWithSnapshot: number;
+    byModelVersion: Record<string, number>; latestSnapshotByEvidence: Record<string, number>;
+    meanHeldOutPairwiseAccuracy: number | null;
+  };
+  catalog: { titles: number; withFingerprint: number; withV2: number; withKnownLicense: number; unreviewedFeatures: number };
+  privacy: { requestsByType: Record<string, number>; pendingDeletes: number; auditRowsInWindow: number };
+  daily: { day: string; registrations: number; triadsCompleted: number; recommendationsShown: number; watchedOutcomes: number }[];
+}

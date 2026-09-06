@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { api } from '../../../lib/api';
 import { useAdminQueryState } from '../../../lib/admin-query-state';
-import { ADMIN_SECTION_COPY, ANALYSIS_STATUS_COPY, analysisStatus } from '../admin-copy';
+import { ADMIN_SECTION_COPY, ANALYSIS_STATUS_COPY, LICENSE_STATUS_LABELS, analysisStatus } from '../admin-copy';
 import { AdminRecordList, type AdminRecordListColumn } from '../AdminRecordList';
 import m from './monitoring.module.css';
 
@@ -11,10 +12,6 @@ type TitleRow = {
   id: string; internalId: string; titleEn: string; titleAr: string;
   releaseYear: number | null; hasFingerprint: boolean; hasV2: boolean;
   licenseStatus: string; sourceRecords: number; unreviewedFeatures: number;
-};
-
-const LICENSE_LABEL: Record<string, string> = {
-  commercial_allowed: 'تجاري', non_commercial_only: 'غير تجاري', pending_review: 'قيد المراجعة',
 };
 
 // ADMIN-W2 (owner feedback 2026-09-06): "بصمة"/"V1"/"V2" named an internal
@@ -28,12 +25,12 @@ function analysisBadge(row: TitleRow, m2: typeof m) {
 
 function licenseBadge(row: TitleRow, m2: typeof m) {
   const cls = row.licenseStatus === 'commercial_allowed' ? m2.green : row.licenseStatus === 'non_commercial_only' ? m2.yellow : m2.red;
-  return <span className={`${m2.badge} ${cls}`}>{LICENSE_LABEL[row.licenseStatus] ?? 'غير معروف'}</span>;
+  return <span className={`${m2.badge} ${cls}`}>{LICENSE_STATUS_LABELS[row.licenseStatus] ?? 'غير معروف'}</span>;
 }
 
 const COLUMNS: AdminRecordListColumn<TitleRow>[] = [
   { key: 'internalId', header: 'المعرف', render: (r) => r.internalId, mono: true },
-  { key: 'title', header: 'العنوان', render: (r) => r.titleAr || r.titleEn },
+  { key: 'title', header: 'العنوان', render: (r) => <Link className={m.link} href={`/admin/monitoring/catalog/${r.id}`}>{r.titleAr || r.titleEn}</Link> },
   { key: 'year', header: 'سنة', render: (r) => r.releaseYear ?? '—' },
   { key: 'fp', header: 'حالة التحليل', render: (r) => analysisBadge(r, m) },
   { key: 'license', header: 'حقوق العرض', render: (r) => licenseBadge(r, m) },
@@ -135,7 +132,7 @@ export function CatalogMonitor() {
         emptyLabel="لا نتائج"
         renderCard={(r) => (
           <>
-            <p className={m.cardTitle}>{r.titleAr || r.titleEn}</p>
+            <Link className={m.cardTitle} href={`/admin/monitoring/catalog/${r.id}`}>{r.titleAr || r.titleEn}</Link>
             <div className={m.cardRow}>
               <span>{r.internalId}</span>
               <span>{r.releaseYear ?? '—'}</span>

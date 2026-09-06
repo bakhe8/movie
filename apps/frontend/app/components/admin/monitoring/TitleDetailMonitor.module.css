@@ -1,0 +1,44 @@
+.backLink {
+  display: inline-block;
+  margin-block-end: var(--admin-sp-3);
+  color: var(--admin-action);
+  font-size: var(--admin-fs-13);
+}
+
+.backLink:focus-visible {
+  outline: 2px solid var(--admin-focus);
+  outline-offset: 2px;
+}
+
+.card {
+  padding: var(--admin-sp-4);
+  margin-block-end: var(--admin-sp-4);
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-r-card);
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--admin-sp-3);
+  padding: var(--admin-sp-1) 0;
+  border-block-end: 1px solid var(--admin-border);
+  font-size: var(--admin-fs-13);
+}
+
+.row:last-child {
+  border-block-end: none;
+}
+
+.label {
+  color: var(--admin-muted);
+  flex-shrink: 0;
+}
+
+.value {
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  direction: ltr;
+  unicode-bidi: isolate;
+  text-align: end;
+}

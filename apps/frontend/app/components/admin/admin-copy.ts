@@ -29,6 +29,18 @@ export const ADMIN_SECTION_COPY: Record<string, { title: string; blurb: string }
     title: 'مراجعة المحتوى',
     blurb: 'تأكيد أن تحليلاً آلياً لفيلم مطابق للواقع.',
   },
+  overview: {
+    title: 'نظرة عامة',
+    blurb: 'أهم أرقام المنصّة خلال فترة زمنية: من يُسجّل، من يُكمل رحلة الذوق، وهل يعود المستخدمون بعد التوصية.',
+  },
+  operations: {
+    title: 'التشغيل',
+    blurb: 'العمليات الآلية التي تعمل في الخلفية: تحديث ملفات الذوق، والبريد الصادر للمستخدمين.',
+  },
+  audit: {
+    title: 'سجل العمليات',
+    blurb: 'كل إجراء إداري أو نظامي مؤثر، ومن نفّذه، ومتى — للمساءلة والتتبع، للقراءة فقط.',
+  },
 };
 
 // hasFingerprint/hasV2 (docs/API.md `admin/titles`): whether -- and how
@@ -45,11 +57,18 @@ export function analysisStatus(hasFingerprint: boolean, hasV2: boolean): keyof t
 }
 
 // content_features.reviewStatus (docs/SCHEMA.md §1): where one analyzed
-// value stands in the human-verification workflow.
+// value stands in the human-verification workflow. source_records shares
+// the same three-value enum for the same reason.
 export const REVIEW_STATUS_COPY: Record<string, string> = {
   unreviewed: 'بانتظار المراجعة',
   sampled: 'رُوجعت وصحيحة',
   human_verified: 'صُحِّحت يدوياً',
+};
+
+// source_records.licenseStatus / titles.licenseStatus (worst-of across a
+// title's rights rows).
+export const LICENSE_STATUS_LABELS: Record<string, string> = {
+  commercial_allowed: 'تجاري', non_commercial_only: 'غير تجاري', pending_review: 'قيد المراجعة', unknown: 'غير معروف',
 };
 
 // The extracted-value confirmation action (ADR-117 W0 case F4, formerly
@@ -92,6 +111,24 @@ export const FEATURE_KEY_LABELS: Record<string, string> = {
   'ending.twist': 'مفاجأة النهاية',
   'ending.justice': 'انتصار العدالة في النهاية',
   'ending.optimism': 'تفاؤل النهاية',
+  // V3-form/cultural/information/rhythm/style families (found live on real
+  // titles during ADMIN-W3 verification -- lib/copy.ts's FEATURE_REASON_COPY
+  // predates these, so only a neutral label exists here; no higher/lower
+  // phrase is claimed for them without an authoritative product meaning.
+  'cultural.originalLanguage': 'لغة الإنتاج الأصلية',
+  'cultural.productionCountry': 'بلد الإنتاج',
+  'information.expositionDirectness': 'مباشرة الشرح',
+  'information.knowledgeComplexity': 'تعقيد المعرفة المسبقة المطلوبة',
+  'information.subtext': 'عمق المعنى الضمني',
+  'narrative.scope': 'اتساع نطاق القصة',
+  'rhythm.deliberateness': 'تعمّد الإيقاع',
+  'rhythm.setupLength': 'طول التمهيد',
+  'rhythm.turningPointDensity': 'كثافة نقاط التحوّل',
+  'style.experimentation': 'التجريب الأسلوبي',
+  'style.scale': 'حجم الإنتاج',
+  'style.stylization': 'التنميط الأسلوبي',
+  'tone.playfulness': 'المرح',
+  'tone.sentimentality': 'العاطفية المفرطة',
 };
 
 export function featureKeyLabel(key: string): string {
@@ -115,7 +152,10 @@ const ENDING_VALUE_PHRASES: Record<string, { higher: string; lower: string }> = 
 // what the number means for this dimension -- above the pool's midpoint
 // reads as "higher", at or below as "lower". Falls back to the bare number
 // for a key this map does not know (never invents a claim it cannot back).
-export function featureValuePhrase(key: string, value: number, reasonCopyAr: Record<string, { higher: string; lower: string }>): string | null {
+// `value` is nullable because the column itself is: NULL means unknown,
+// never 0 (BP §11.3) -- always returns null for it rather than guessing.
+export function featureValuePhrase(key: string, value: number | null, reasonCopyAr: Record<string, { higher: string; lower: string }>): string | null {
+  if (value === null) return null;
   const phrases = ENDING_VALUE_PHRASES[key] ?? reasonCopyAr[key];
   if (!phrases) return null;
   const phrase = value > 0.5 ? phrases.higher : phrases.lower;
@@ -146,3 +186,85 @@ export function modelServiceStatus(configured: boolean, reachable: boolean): key
   if (!configured) return 'notConfigured';
   return reachable ? 'reachable' : 'unreachable';
 }
+
+// ADMIN-W3 (audit_log.action, W0 case B5): raw values are internal event
+// names ("admin.model_version.activate") written by many services, not a
+// closed enum -- an unmapped one still needs a readable fallback rather
+// than a blank cell or the untranslated dotted string alone.
+export const AUDIT_ACTION_LABELS: Record<string, string> = {
+  'admin.user.update': 'تعديل حساب مستخدم',
+  'admin.model_version.register': 'تسجيل إصدار نموذج جديد',
+  'admin.model_version.activate': 'تفعيل إصدار نموذج',
+  'admin.model_version.update': 'تعديل إصدار نموذج',
+  'admin.title.update': 'تعديل بيانات فيلم',
+  'admin.source_record.create': 'إضافة سجل حقوق',
+  'admin.source_record.update': 'تعديل سجل حقوق',
+  'admin.content_feature.review': 'مراجعة تحليل فيلم',
+  'auth.refresh.reuse_detected': 'رصد إعادة استخدام جلسة مسروقة',
+  'auth.logout_all': 'تسجيل خروج من كل الأجهزة',
+  'auth.password_reset.requested': 'طلب إعادة تعيين كلمة المرور',
+  'auth.password_reset.confirmed': 'تأكيد إعادة تعيين كلمة المرور',
+  'privacy.export': 'تصدير بيانات مستخدم',
+  'privacy.delete.scheduled': 'جدولة حذف حساب',
+  'privacy.delete.executed': 'تنفيذ حذف حساب',
+  'privacy.delete.cancelled': 'إلغاء طلب حذف حساب',
+  'privacy.pause_all': 'إيقاف مؤقت لكل الملفات',
+  'privacy.resume': 'استئناف المعالجة',
+  'privacy.reset': 'إعادة ضبط الذوق',
+};
+
+// A readable fallback for an action this map does not know yet: replace the
+// namespacing dots with a separator that reads as a path, never invent a
+// meaning the raw string does not carry.
+export function auditActionLabel(action: string): string {
+  return AUDIT_ACTION_LABELS[action] ?? action.split('.').join(' › ');
+}
+
+export const AUDIT_RESOURCE_LABELS: Record<string, string> = {
+  user: 'حساب مستخدم',
+  profile: 'ملف ذوق',
+  title: 'فيلم',
+  source_record: 'سجل حقوق',
+  content_feature: 'تحليل فيلم',
+  model_version: 'إصدار نموذج',
+};
+
+export function auditResourceLabel(resource: string): string {
+  return AUDIT_RESOURCE_LABELS[resource] ?? resource;
+}
+
+// mail_outbox.kind/status (ADR-97, W0 case B6).
+export const MAIL_KIND_LABELS: Record<string, string> = {
+  password_reset: 'رابط إعادة تعيين كلمة المرور',
+  probe: 'فحص تشغيلي',
+};
+
+export const MAIL_STATUS_LABELS: Record<string, string> = {
+  pending: 'بانتظار الإرسال',
+  delivered: 'أُرسلت',
+  dead: 'فشلت نهائياً',
+};
+
+// admin/metrics funnel step keys (BP §18.1) -> the plain question each step
+// answers, in order.
+export const FUNNEL_STEP_LABELS: Record<string, string> = {
+  registered: 'أنشأ حساباً',
+  onboarded: 'حدّد بلده',
+  watched_3: 'سجّل 3 أفلام شاهدها',
+  first_triad: 'رتّب أول ثلاثية',
+  three_triads: 'أكمل 3 ثلاثيات',
+  trained: 'بُني ملف ذوقه',
+  shown_result: 'شاهد أول توصية',
+  returned: 'عاد لاستخدام المنصّة',
+};
+
+// admin/metrics recommendations.outcomes keys -- what a user did after
+// seeing a recommendation.
+export const RECOMMENDATION_OUTCOME_LABELS: Record<string, string> = {
+  clicked: 'نقر على الفيلم',
+  saved: 'أضافه لقائمته',
+  opened_provider: 'فتح منصة المشاهدة',
+  dismissed_not_relevant: 'رفضه كغير مناسب',
+  watched: 'شاهده فعلاً',
+  ranked_later: 'رتّبه لاحقاً في ثلاثية',
+};

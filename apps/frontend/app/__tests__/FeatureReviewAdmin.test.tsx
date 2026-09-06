@@ -73,4 +73,14 @@ describe('FeatureReviewAdmin', () => {
     render(<FeatureReviewAdmin />);
     expect(screen.getByText(/لا يوجد سطر محدد/)).toBeInTheDocument();
   });
+
+  // ADMIN-W3: value is nullable (BP §11.3 "NULL means unknown, never 0").
+  // Number('') is 0, not NaN -- an absent value param must read as unknown,
+  // never as a fabricated zero.
+  it('shows "unknown" rather than a fabricated zero when no value was carried', () => {
+    currentParams = new URLSearchParams({ featureId: 'f1', titleLabel: 'A Film', featureKey: 'pacing' });
+    render(<FeatureReviewAdmin />);
+    expect(screen.getByText('غير معروف')).toBeInTheDocument();
+    expect(screen.queryByText(/0\.00/)).toBeNull();
+  });
 });

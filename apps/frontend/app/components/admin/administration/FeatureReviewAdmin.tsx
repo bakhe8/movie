@@ -21,7 +21,10 @@ export function FeatureReviewAdmin() {
   const featureId = params.get('featureId');
   const titleLabel = params.get('titleLabel') ?? '';
   const featureKey = params.get('featureKey') ?? '';
-  const value = params.get('value') ?? '';
+  // Absent and empty are both "unknown" (BP §11.3: NULL is never coerced to
+  // 0) -- Number('') is 0, not NaN, so the raw param must be checked before
+  // conversion or an unknown value would silently read as a real zero.
+  const rawValue = params.get('value');
   const extractorVersion = params.get('extractorVersion') ?? '';
   const returnReviewStatus = params.get('returnReviewStatus') ?? 'unreviewed';
   const returnPage = params.get('returnPage') ?? '1';
@@ -31,8 +34,8 @@ export function FeatureReviewAdmin() {
   const [error, setError] = useState<string | null>(null);
 
   const backHref = `/admin/monitoring/reviews?${new URLSearchParams({ reviewStatus: returnReviewStatus, page: returnPage }).toString()}`;
-  const numericValue = Number(value);
-  const valuePhrase = Number.isFinite(numericValue) ? featureValuePhrase(featureKey, numericValue, FEATURE_REASON_COPY.ar) : null;
+  const numericValue = rawValue ? Number(rawValue) : null;
+  const valuePhrase = numericValue !== null && Number.isFinite(numericValue) ? featureValuePhrase(featureKey, numericValue, FEATURE_REASON_COPY.ar) : null;
 
   if (!featureId) {
     return (
@@ -71,7 +74,7 @@ export function FeatureReviewAdmin() {
       <div className={s.card}>
         <div className={s.row}><span className={s.label}>الفيلم</span><span>{titleLabel || '—'}</span></div>
         <div className={s.row}><span className={s.label}>الخاصية</span><span>{featureKey ? featureKeyLabel(featureKey) : '—'}</span></div>
-        <div className={s.row}><span className={s.label}>ما يقوله التحليل</span><span>{valuePhrase ? `${valuePhrase} (${numericValue.toFixed(2)})` : value || '—'}</span></div>
+        <div className={s.row}><span className={s.label}>ما يقوله التحليل</span><span>{valuePhrase && numericValue !== null ? `${valuePhrase} (${numericValue.toFixed(2)})` : numericValue !== null ? numericValue.toFixed(3) : 'غير معروف'}</span></div>
         <div className={s.row}><span className={s.label}>مصدر التحليل</span><span className={s.value}>{extractorVersion || '—'}</span></div>
 
         <div className={s.actions}>

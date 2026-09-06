@@ -19,16 +19,6 @@ type Readiness = {
   modelService: { configured: boolean; reachable: boolean; ok: boolean };
 };
 
-type TrainingJobRow = {
-  id: string; profileId: string; status: 'queued' | 'running' | 'succeeded' | 'failed';
-  attempts: number; errorKind: 'invalid' | 'error' | null; lastError: string | null;
-  nextAttemptAt: string; finishedAt: string | null; createdAt: string; updatedAt: string;
-};
-
-const JOB_STATUS_LABEL: Record<TrainingJobRow['status'], string> = {
-  queued: 'قيد الانتظار', running: 'قيد التنفيذ', succeeded: 'نجح', failed: 'فشل',
-};
-
 function fmtDateTime(iso: string | null) {
   return iso ? formatDateTime(iso, 'ar') : '—';
 }
@@ -88,8 +78,10 @@ function ReadinessStrip() {
   );
 }
 
-function TrainingJobsTable() {
-  const [data, setData] = useState<{ counts: Record<TrainingJobRow['status'], number>; recent: TrainingJobRow[] } | null>(null);
+// ADMIN-W3 (W0 case B3): arm assignment counts per experiment. Read-only --
+// no attribution claims or experiment controls before W7.
+function ExperimentsList() {
+  const [data, setData] = useState<{ id: string; hypothesis: string; status: string; startedAt: string | null; endedAt: string | null; arms: Record<string, number> }[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
@@ -99,7 +91,7 @@ function TrainingJobsTable() {
       await Promise.resolve();
       setFailed(false);
       try {
-        const result = await api.adminGetTrainingJobs();
+        const result = await api.adminGetExperiments();
         if (!cancelled) setData(result);
       } catch {
         if (!cancelled) setFailed(true);
@@ -111,35 +103,71 @@ function TrainingJobsTable() {
   if (failed) {
     return (
       <p className={m.count} role="status" aria-live="polite">
-        تعذّر تحميل تحديثات ملفات الذوق. <button type="button" className={m.pageBtn} onClick={() => setAttempt((a) => a + 1)}>إعادة المحاولة</button>
+        تعذّر تحميل التجارب. <button type="button" className={m.pageBtn} onClick={() => setAttempt((a) => a + 1)}>إعادة المحاولة</button>
       </p>
     );
   }
   if (!data) return <p className={m.count}>جارٍ التحميل…</p>;
+  if (data.length === 0) return <p className={m.count}>لا تجارب مسجَّلة</p>;
 
   return (
-    <>
-      <h3 className={m.subhead}>
-        تحديث ملفات الذوق — قيد الانتظار {data.counts.queued} · قيد التنفيذ {data.counts.running} · نجح {data.counts.succeeded} · فشل {data.counts.failed}
-      </h3>
-      {data.recent.length === 0 ? (
-        <p className={m.count}>لا عمليات تحديث بعد</p>
-      ) : (
-        <ul className={m.plainList}>
-          {data.recent.map((row) => (
-            <li key={row.id} className={m.cardRow}>
-              <span className={m.mono}>{row.profileId.slice(0, 8)}</span>
-              <span className={`${m.badge} ${row.status === 'failed' ? m.red : row.status === 'succeeded' ? m.green : m.yellow}`}>
-                {JOB_STATUS_LABEL[row.status]}
-              </span>
-              <span>محاولات: {row.attempts}</span>
-              <span>{row.lastError ?? '—'}</span>
-              <span>{fmtDateTime(row.updatedAt)}</span>
-            </li>
+    <ul className={m.plainList}>
+      {data.map((exp) => (
+        <li key={exp.id} className={m.cardRow}>
+          <span>{exp.hypothesis}</span>
+          <span className={m.badge}>{exp.status}</span>
+          {Object.entries(exp.arms).map(([arm, count]) => (
+            <span key={arm} className={m.mono}>{arm}: {count}</span>
           ))}
-        </ul>
-      )}
-    </>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// ADMIN-W3 (W0 case B3): the newest completed ranking rounds, pseudonymous
+// profile ids only -- proof the ranking loop is actually running, not a way
+// to identify who ranked what.
+function LatestTriadsList() {
+  const [data, setData] = useState<{ id: string; profileId: string; titleIds: string[]; modelVersion: string | null; answeredAt: string | null; createdAt: string }[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      await Promise.resolve();
+      setFailed(false);
+      try {
+        const result = await api.adminGetLatestTriads(20);
+        if (!cancelled) setData(result);
+      } catch {
+        if (!cancelled) setFailed(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [attempt]);
+
+  if (failed) {
+    return (
+      <p className={m.count} role="status" aria-live="polite">
+        تعذّر تحميل الثلاثيات الأخيرة. <button type="button" className={m.pageBtn} onClick={() => setAttempt((a) => a + 1)}>إعادة المحاولة</button>
+      </p>
+    );
+  }
+  if (!data) return <p className={m.count}>جارٍ التحميل…</p>;
+  if (data.length === 0) return <p className={m.count}>لا ثلاثيات مكتملة بعد</p>;
+
+  return (
+    <ul className={m.plainList}>
+      {data.map((t) => (
+        <li key={t.id} className={m.cardRow}>
+          <span className={m.mono}>{t.profileId.slice(0, 8)}</span>
+          <span>{t.modelVersion ?? '—'}</span>
+          <span>{fmtDateTime(t.answeredAt ?? t.createdAt)}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -225,9 +253,12 @@ export function ModelsMonitor() {
 
       <h3 className={m.subhead}>الجاهزية العامة</h3>
       <ReadinessStrip />
-      <TrainingJobsTable />
       <h3 className={m.subhead}>إصدارات محرك التوصيات</h3>
       <ModelVersionsTable />
+      <h3 className={m.subhead}>التجارب النشطة</h3>
+      <ExperimentsList />
+      <h3 className={m.subhead}>آخر الثلاثيات المكتملة</h3>
+      <LatestTriadsList />
     </div>
   );
 }

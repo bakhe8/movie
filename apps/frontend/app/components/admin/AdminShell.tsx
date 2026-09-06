@@ -5,19 +5,21 @@ import { usePathname } from 'next/navigation';
 import { ADMIN_SECTION_COPY } from './admin-copy';
 import s from './AdminShell.module.css';
 
-// ADMIN-W2 (ADR-117 "Decision — separation"): the target IA (plan §11) split
-// into two areas. Monitoring is read-only; only Administration ever imports
-// a mutation client. W2 ships every section that already exists today --
-// later packages (W3-W6) add the remaining monitoring/administration rows
-// without moving these. Labels come from admin-copy.ts (owner feedback
-// 2026-09-06: nav must read as plain operator language, not engineering
-// terms) -- one title per destination, kept in sync with each page's own
-// heading and blurb.
+// ADMIN-W2/W3 (ADR-117 "Decision — separation"): the target IA (plan §11)
+// split into two areas. Monitoring is read-only; only Administration ever
+// imports a mutation client. W3 completes monitoring's read surface (every
+// admin GET route now has a destination -- plan §18 W3 closing gate).
+// Labels come from admin-copy.ts (owner feedback 2026-09-06: nav must read
+// as plain operator language, not engineering terms) -- one title per
+// destination, kept in sync with each page's own heading and blurb.
 const MONITORING_SECTIONS = [
+  { href: '/admin/monitoring/overview', label: ADMIN_SECTION_COPY.overview.title },
   { href: '/admin/monitoring/catalog', label: ADMIN_SECTION_COPY.catalog.title },
   { href: '/admin/monitoring/reviews', label: ADMIN_SECTION_COPY.reviews.title },
   { href: '/admin/monitoring/models', label: ADMIN_SECTION_COPY.models.title },
+  { href: '/admin/monitoring/operations', label: ADMIN_SECTION_COPY.operations.title },
   { href: '/admin/monitoring/privacy', label: ADMIN_SECTION_COPY.privacy.title },
+  { href: '/admin/monitoring/audit', label: ADMIN_SECTION_COPY.audit.title },
 ] as const;
 
 const ADMINISTRATION_SECTIONS = [

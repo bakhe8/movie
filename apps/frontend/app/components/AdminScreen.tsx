@@ -145,7 +145,7 @@ function CatalogTab() {
 // ── Features (review queue) tab ──────────────────────────────────────────────
 
 type FeatureRow = {
-  id: string; titleId: string; featureKey: string; value: number;
+  id: string; titleId: string; featureKey: string; value: number | null;
   extractorVersion: string; reviewStatus: string;
   title: { id: string; internalId: string; titleEn: string; titleAr: string } | null;
 };
@@ -247,7 +247,7 @@ function FeaturesTab() {
               <tr key={row.id}>
                 <td>{row.title ? (row.title.titleAr || row.title.titleEn) : row.titleId.slice(0, 8)}</td>
                 <td className={s.mono}>{row.featureKey}</td>
-                <td className={s.mono}>{row.value.toFixed(3)}</td>
+                <td className={s.mono}>{row.value?.toFixed(3) ?? '—'}</td>
                 <td className={s.mono}>{row.extractorVersion}</td>
                 <td>
                   <span className={`${s.badge} ${row.reviewStatus === 'human_verified' ? s.green : row.reviewStatus === 'sampled' ? s.yellow : ''}`}>
