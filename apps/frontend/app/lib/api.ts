@@ -487,10 +487,12 @@ export const api = {
 
   getCompletedTriads: (profileId: string) => request<Triad[]>(`/profiles/${profileId}/triads`),
 
-  listTitles: (query: string, page = 1, limit = 20) =>
-    request<PaginatedTitles>(
-      `/titles?${new URLSearchParams({ query, page: String(page), limit: String(limit) })}`,
-    ),
+  listTitles: (query: string, page = 1, limit = 20, filters?: { genre?: string | null; year?: number | null }) => {
+    const params = new URLSearchParams({ query, page: String(page), limit: String(limit) });
+    if (filters?.genre) params.set('genre', filters.genre);
+    if (filters?.year) params.set('year', String(filters.year));
+    return request<PaginatedTitles>(`/titles?${params}`);
+  },
 
   getTitle: (titleId: string) => request<Title>(`/titles/${titleId}`),
 

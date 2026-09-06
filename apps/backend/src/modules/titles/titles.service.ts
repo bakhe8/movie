@@ -53,6 +53,13 @@ export interface FingerprintSummaryEntry {
   level: 'low' | 'mid' | 'high';
 }
 
+// Postgres' default LIKE escape character is backslash; without this a genre
+// name containing %/_ (none do today, but the value is client-supplied)
+// could otherwise be read as a wildcard.
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
 const REVIEWED = 'human_reviewed';
 // Thirds of the 0-1 scale every published dimension uses.
 function levelOf(value: number): FingerprintSummaryEntry['level'] {
@@ -156,6 +163,20 @@ export class TitlesService {
           );
         }),
       );
+    }
+
+    if (query.genre) {
+      // `genres` is a TypeORM `simple-array` column: one comma-joined text
+      // value, not a Postgres array. Bracket the stored value and the needle
+      // in commas so "Sci-Fi" can't match a genre like "Sci-Fi 2" and an
+      // empty column (NULL) never matches. `%`/`_`/`\` in the needle are
+      // escaped so a genre name can never be read as a LIKE wildcard.
+      queryBuilder.andWhere(`(',' || title.genres || ',') LIKE :genrePattern`, {
+        genrePattern: `%,${escapeLike(query.genre)},%`,
+      });
+    }
+    if (query.year) {
+      queryBuilder.andWhere('title.releaseYear = :year', { year: query.year });
     }
 
     const [items, total] = await queryBuilder.getManyAndCount();

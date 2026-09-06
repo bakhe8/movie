@@ -140,6 +140,10 @@ export function DiscoverScreen({
   const [notice, setNotice] = useState<string | null>(null);
   const [noticeTone, setNoticeTone] = useState<'success' | 'error'>('success');
   const [genre, setGenre] = useState<string | null>(initialViewState?.genre ?? null);
+  // The chip bar keeps offering every genre seen, even once one is picked and
+  // the loaded results narrow to it -- so it is only refreshed from an
+  // unfiltered fetch, never from a genre-filtered one.
+  const [availableGenres, setAvailableGenres] = useState<string[]>([]);
   const searchRevision = useRef(0);
   const pendingPage = useRef<number | null>(null);
 
@@ -170,11 +174,14 @@ export function DiscoverScreen({
     loadStates();
   }, [loadStates]);
 
-  // Debounced search. An empty query shows the genre-diverse starter list
-  // from the server (blueprint §4.2 "اختيار سريع من عناوين معروفة ومتنوعة"),
-  // or the whole paginated catalogue when the user asks for it. Page 1 on
-  // every new query. Returning from a film re-reads every previously loaded
-  // page so a restored genre can still find films beyond the first page.
+  // Debounced search. An empty query and no genre shows the genre-diverse
+  // starter list from the server (blueprint §4.2 "اختيار سريع من عناوين
+  // معروفة ومتنوعة"); a search, "browse all", or a picked genre reads the
+  // whole paginated catalogue instead, with the genre filter applied on the
+  // server so it reaches every matching title, not just the loaded page.
+  // Page 1 on every new query. Returning from a film re-reads every
+  // previously loaded page so a restored genre can still find films beyond
+  // the first page.
   useEffect(() => {
     let cancelled = false;
     const revision = ++searchRevision.current;
@@ -182,10 +189,12 @@ export function DiscoverScreen({
     setSearching(true);
     const trimmed = query.trim();
     const timer = window.setTimeout(() => {
+      const filterArgs: [{ genre: string }] | [] = genre ? [{ genre }] : [];
       const load =
-        trimmed || browseAll
-          ? Promise.all(Array.from({ length: pagesToRestore }, (_, index) => api.listTitles(trimmed, index + 1, PAGE_SIZE)))
-            .then((pages) => ({ items: pages.flatMap((result) => result.items), total: pages[0].total, page: pages.length }))
+        trimmed || browseAll || genre
+          ? Promise.all(
+              Array.from({ length: pagesToRestore }, (_, index) => api.listTitles(trimmed, index + 1, PAGE_SIZE, ...filterArgs)),
+            ).then((pages) => ({ items: pages.flatMap((result) => result.items), total: pages[0].total, page: pages.length }))
           : api.getStarterTitles(STARTER_SIZE).then((items) => ({ items, total: items.length, page: 1 }));
       load
         .then((result) => {
@@ -193,6 +202,17 @@ export function DiscoverScreen({
           setResults(result.items);
           setTotal(result.total);
           setPage(result.page);
+          if (!genre) {
+            // Not narrowed to unwatched titles (unlike the rendered grid):
+            // the chip bar's purpose is showing what genres exist at all, so
+            // it should not depend on `states` and refetch on every mark.
+            setAvailableGenres([...new Set(result.items.flatMap((title) => title.genres ?? []))].slice(0, 8));
+          } else {
+            // A genre restored from a saved view (e.g. after opening a film)
+            // has no other chips yet; at least its own chip must render, and
+            // pressed, so the filter is visibly active and can be cleared.
+            setAvailableGenres((current) => (current.includes(genre) ? current : [...current, genre]));
+          }
         })
         .catch(() => {
           if (!cancelled) { setNoticeTone('error'); setNotice(t.loadFailed); }
@@ -206,7 +226,7 @@ export function DiscoverScreen({
       searchRevision.current = revision + 1;
       window.clearTimeout(timer);
     };
-  }, [query, browseAll, pagesToRestore, t.loadFailed]);
+  }, [query, browseAll, genre, pagesToRestore, t.loadFailed]);
 
   useEffect(() => {
     if (!notice) return;
@@ -221,12 +241,15 @@ export function DiscoverScreen({
     const nextPage = page + 1;
     setSearching(true);
     try {
-      const result = await api.listTitles(query.trim(), nextPage, PAGE_SIZE);
+      const result = await api.listTitles(query.trim(), nextPage, PAGE_SIZE, ...(genre ? [{ genre }] as const : []));
       // Changing the search invalidates pagination as well as its first read.
       if (revision !== searchRevision.current) return;
       setResults((current) => [...current, ...result.items]);
       setTotal(result.total);
       setPage(nextPage);
+      if (!genre) {
+        setAvailableGenres((current) => [...new Set([...current, ...result.items.flatMap((title) => title.genres ?? [])])].slice(0, 8));
+      }
     } catch {
       if (revision !== searchRevision.current) return;
       setNoticeTone('error');
@@ -266,9 +289,10 @@ export function DiscoverScreen({
   const watchedCount = [...states.values()].filter((state) => state === 'watched').length;
   const remaining = Math.max(0, UNLOCK_COUNT - watchedCount);
   const isSearch = query.trim().length > 0;
-  const unwatchedResults = results.filter((title) => states.get(title.id) !== 'watched');
-  const genres = [...new Set(unwatchedResults.flatMap((title) => title.genres ?? []))].slice(0, 8);
-  const visibleResults = genre ? unwatchedResults.filter((title) => title.genres?.includes(genre)) : unwatchedResults;
+  // The server already applied the genre filter (across the whole catalogue,
+  // not just this loaded page) when `genre` is set, so no local re-filtering
+  // is needed here.
+  const visibleResults = results.filter((title) => states.get(title.id) !== 'watched');
   const watchedCountLabel = t.progressUnit(watchedCount);
 
   const header = (
@@ -279,7 +303,7 @@ export function DiscoverScreen({
         <p className={styles.hint}>{recommendationsReady ? t.hintReady : t.hint}</p>
       </div>
       <div className={styles.filmFan} aria-hidden="true">
-        {unwatchedResults.slice(0, 4).map((title) => <Poster key={title.id} title={title} name={title.titleEn} className={styles.fanPoster} />)}
+        {visibleResults.slice(0, 4).map((title) => <Poster key={title.id} title={title} name={title.titleEn} className={styles.fanPoster} />)}
       </div>
     </div>
   );
@@ -355,13 +379,19 @@ export function DiscoverScreen({
         />
       </div>
 
-      {(genres.length > 1 || genre) && <div className={styles.filters} role="group" aria-label={lang === 'ar' ? 'تصفية العناوين المعروضة' : 'Filter the titles shown'}>
-        <button type="button" aria-pressed={!genre} onClick={() => setGenre(null)}>{lang === 'ar' ? 'الكل' : 'All'}</button>
-        {genres.map((item) => <button key={item} type="button" aria-pressed={genre === item} onClick={() => setGenre(genre === item ? null : item)}><span className={styles.genreDot} aria-hidden="true" />{genreLabel(item, lang)}</button>)}
+      {(availableGenres.length > 1 || genre) && <div className={styles.filters} role="group" aria-label={lang === 'ar' ? 'تصفية العناوين المعروضة' : 'Filter the titles shown'}>
+        <button type="button" aria-pressed={!genre} onClick={() => { setGenre(null); setPagesToRestore(1); }}>{lang === 'ar' ? 'الكل' : 'All'}</button>
+        {availableGenres.map((item) => (
+          <button key={item} type="button" aria-pressed={genre === item} onClick={() => { setGenre(genre === item ? null : item); setPagesToRestore(1); }}>
+            <span className={styles.genreDot} aria-hidden="true" />{genreLabel(item, lang)}
+          </button>
+        ))}
       </div>}
 
       <h3 className={styles.sectionTitle}>
-        {genre ? `${genreLabel(genre, lang)} · ${formatNumber(visibleResults.length, lang)} ${lang === 'ar' ? 'من المعروض' : 'shown'}` : isSearch ? t.results(formatNumber(total, lang)) : browseAll ? t.catalogue(formatNumber(total, lang)) : recommendationsReady ? t.continueDiscovering : t.starter}
+        {/* `total` comes from the server, so once a genre is picked this
+            counts every match in the whole catalogue, not just this page. */}
+        {genre ? `${genreLabel(genre, lang)} · ${formatNumber(total, lang)} ${lang === 'ar' ? 'في الكتالوج' : 'in the catalogue'}` : isSearch ? t.results(formatNumber(total, lang)) : browseAll ? t.catalogue(formatNumber(total, lang)) : recommendationsReady ? t.continueDiscovering : t.starter}
       </h3>
       {!isSearch && !browseAll && !recommendationsReady && <p className={styles.progressNote}>{t.starterHint}</p>}
 

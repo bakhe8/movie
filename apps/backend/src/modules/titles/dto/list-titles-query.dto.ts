@@ -19,4 +19,16 @@ export class ListTitlesQueryDto {
   @Transform(({ value }) => String(value).trim())
   @MaxLength(200)
   query?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => String(value).trim())
+  @MaxLength(100)
+  genre?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1870)
+  @Max(2100)
+  year?: number;
 }

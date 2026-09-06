@@ -16,6 +16,7 @@ function queryBuilderMock(items: Partial<Title>[], total: number) {
     skip: vi.fn().mockReturnThis(),
     take: vi.fn().mockReturnThis(),
     where: vi.fn().mockReturnThis(),
+    andWhere: vi.fn().mockReturnThis(),
     getManyAndCount: vi.fn().mockResolvedValue([items, total]),
   };
 }
@@ -78,6 +79,49 @@ describe('TitlesService', () => {
       expect(builder.take).toHaveBeenCalledWith(10);
       expect(result).toMatchObject({ page: 2, limit: 10, total: 45, totalPages: 5 });
       expect(result.items).toHaveLength(2);
+    });
+
+    // The coordinator's ask: filter the whole catalogue server-side, not
+    // just the loaded page (moved out of DiscoverScreen's client-side
+    // Array.filter over `results`).
+    it('filters by genre with a comma-bracketed LIKE over the simple-array column, never a bare substring match', async () => {
+      const builder = queryBuilderMock([{ id: 't-1' }], 1);
+      titlesRepository.createQueryBuilder.mockReturnValue(builder);
+
+      await service.findAll(listQuery({ genre: 'Sci-Fi' }));
+
+      expect(builder.andWhere).toHaveBeenCalledWith(`(',' || title.genres || ',') LIKE :genrePattern`, {
+        genrePattern: '%,Sci-Fi,%',
+      });
+    });
+
+    it('escapes LIKE wildcards in the genre so a client-supplied value cannot be read as one', async () => {
+      const builder = queryBuilderMock([], 0);
+      titlesRepository.createQueryBuilder.mockReturnValue(builder);
+
+      await service.findAll(listQuery({ genre: '50%_off\\' }));
+
+      expect(builder.andWhere).toHaveBeenCalledWith(`(',' || title.genres || ',') LIKE :genrePattern`, {
+        genrePattern: '%,50\\%\\_off\\\\,%',
+      });
+    });
+
+    it('filters by exact release year', async () => {
+      const builder = queryBuilderMock([{ id: 't-1' }], 1);
+      titlesRepository.createQueryBuilder.mockReturnValue(builder);
+
+      await service.findAll(listQuery({ year: 1994 }));
+
+      expect(builder.andWhere).toHaveBeenCalledWith('title.releaseYear = :year', { year: 1994 });
+    });
+
+    it('does not filter by genre or year when neither is given', async () => {
+      const builder = queryBuilderMock([{ id: 't-1' }], 1);
+      titlesRepository.createQueryBuilder.mockReturnValue(builder);
+
+      await service.findAll(listQuery());
+
+      expect(builder.andWhere).not.toHaveBeenCalled();
     });
   });
 

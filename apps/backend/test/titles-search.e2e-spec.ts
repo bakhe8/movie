@@ -33,9 +33,13 @@ describe('Catalogue search and starter list (real HTTP, real DB)', () => {
 
     const titlesRepository = app.get<Repository<Title>>(getRepositoryToken(Title));
     await titlesRepository.save([
-      { internalId: `E2E-SEARCH-HAMZA-${suffix}`, titleEn: `Dreams ${suffix}`, titleAr: `أحلام ${suffix}`, genres: ['Drama'] },
-      { internalId: `E2E-SEARCH-TAA-${suffix}`, titleEn: `School ${suffix}`, titleAr: `مدرسة ${suffix}`, genres: ['Comedy'] },
-      { internalId: `E2E-SEARCH-MAQSURA-${suffix}`, titleEn: `Mustafa ${suffix}`, titleAr: `مصطفى ${suffix}`, genres: ['Drama'] },
+      { internalId: `E2E-SEARCH-HAMZA-${suffix}`, titleEn: `Dreams ${suffix}`, titleAr: `أحلام ${suffix}`, genres: ['Drama'], releaseYear: 2001 },
+      { internalId: `E2E-SEARCH-TAA-${suffix}`, titleEn: `School ${suffix}`, titleAr: `مدرسة ${suffix}`, genres: ['Comedy'], releaseYear: 2002 },
+      { internalId: `E2E-SEARCH-MAQSURA-${suffix}`, titleEn: `Mustafa ${suffix}`, titleAr: `مصطفى ${suffix}`, genres: ['Drama'], releaseYear: 2001 },
+      // A genre that starts with the same letters as another one of this
+      // suffix's titles, to prove the LIKE is bracketed rather than a bare
+      // substring match (DiscoverScreen's genre filter, moved server-side).
+      { internalId: `E2E-SEARCH-GENRE-PREFIX-${suffix}`, titleEn: `Drama Plus ${suffix}`, titleAr: `دراما بلس ${suffix}`, genres: ['Drama Plus'], releaseYear: 2001 },
     ]);
   }, 20_000);
 
@@ -81,6 +85,55 @@ describe('Catalogue search and starter list (real HTTP, real DB)', () => {
     await request(app.getHttpServer())
       .get('/titles/starter')
       .query({ limit: 31 })
+      .set('Authorization', `Bearer ${token}`)
+      .expect(400);
+  });
+
+  // Coordinator ask: move DiscoverScreen's genre filter from an
+  // Array.filter over the client's loaded page to a server-side filter over
+  // the whole catalogue.
+  it('filters by genre across the whole catalogue, never matching a genre that only shares a prefix', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/titles')
+      .query({ query: `${suffix}`, genre: 'Drama' })
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    const names = (response.body.items as { titleAr: string }[]).map((item) => item.titleAr);
+
+    expect(names).toEqual(expect.arrayContaining([`أحلام ${suffix}`, `مصطفى ${suffix}`]));
+    expect(names).not.toContain(`مدرسة ${suffix}`);
+    // "Drama Plus" starts with "Drama" -- the LIKE must be comma-bracketed
+    // so it never matches as a substring.
+    expect(names).not.toContain(`دراما بلس ${suffix}`);
+  });
+
+  it('filters by exact release year', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/titles')
+      .query({ query: `${suffix}`, year: 2002 })
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    const names = (response.body.items as { titleAr: string }[]).map((item) => item.titleAr);
+
+    expect(names).toEqual([`مدرسة ${suffix}`]);
+  });
+
+  it('combines genre and year with AND', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/titles')
+      .query({ query: `${suffix}`, genre: 'Drama', year: 2001 })
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    const names = (response.body.items as { titleAr: string }[]).map((item) => item.titleAr);
+
+    expect(names).toEqual(expect.arrayContaining([`أحلام ${suffix}`, `مصطفى ${suffix}`]));
+    expect(names).toHaveLength(2);
+  });
+
+  it('rejects a release year outside the accepted range', async () => {
+    await request(app.getHttpServer())
+      .get('/titles')
+      .query({ year: 1500 })
       .set('Authorization', `Bearer ${token}`)
       .expect(400);
   });

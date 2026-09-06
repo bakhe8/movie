@@ -49,7 +49,13 @@ describe('DiscoverScreen', () => {
   it('restores the search and genre after opening a film and mounting the catalogue again', async () => {
     const user = userEvent.setup();
     const open = vi.fn();
-    mockApi.listTitles.mockResolvedValue({ items: [{ ...title('a', 'العراب'), genres: ['Crime'] }, { ...title('b', 'أنورا'), genres: ['Drama'] }], total: 2 });
+    const items = [{ ...title('a', 'العراب'), genres: ['Crime'] }, { ...title('b', 'أنورا'), genres: ['Drama'] }];
+    // The server owns the genre filter now (whole catalogue, not just this
+    // loaded page), so the fake server here must actually apply it.
+    mockApi.listTitles.mockImplementation((_query: string, _page: number, _limit: number, filters?: { genre?: string | null }) => {
+      const filtered = filters?.genre ? items.filter((entry) => entry.genres.includes(filters.genre as string)) : items;
+      return Promise.resolve({ items: filtered, total: filtered.length });
+    });
     const initialViewState: DiscoverViewState = { query: 'Dune', browseAll: false, genre: null };
     const first = render(<DiscoverScreen lang="ar" profileId="p1" onOpenTitle={open} initialViewState={initialViewState} />);
     await user.click(await screen.findByRole('button', { name: 'جريمة' }));
@@ -63,38 +69,25 @@ describe('DiscoverScreen', () => {
     expect(screen.queryByRole('button', { name: 'شاهدت «أنورا»' })).toBeNull();
   });
 
-  it('re-reads all loaded pages before restoring a genre that only appears on page two', async () => {
+  it('picking a genre re-queries the server for the whole catalogue, not just the loaded page', async () => {
     const user = userEvent.setup();
-    const open = vi.fn();
     const crime = { ...title('a', 'العراب'), genres: ['Crime'] };
     const drama = { ...title('b', 'أنورا'), genres: ['Drama'] };
-    mockApi.listTitles.mockImplementation((_query: string, page: number) => Promise.resolve({ items: [page === 1 ? crime : drama], total: 60 }));
-    const first = render(<DiscoverScreen lang="ar" profileId="p1" onOpenTitle={open} initialViewState={{ query: '', browseAll: true, genre: null }} />);
+    // Page one never contains a drama title -- only a genre-aware server
+    // query (not a filter over what happens to be loaded) can find it.
+    mockApi.listTitles.mockImplementation((_query: string, page: number, _limit: number, filters?: { genre?: string | null }) =>
+      filters?.genre === 'Drama'
+        ? Promise.resolve({ items: [drama], total: 1 })
+        : Promise.resolve({ items: [page === 1 ? crime : drama], total: 60 }),
+    );
+    render(<DiscoverScreen lang="ar" profileId="p1" initialViewState={{ query: '', browseAll: true, genre: null }} />);
     await user.click(await screen.findByRole('button', { name: 'عرض المزيد' }));
     await user.click(await screen.findByRole('button', { name: 'دراما' }));
-    await user.click(screen.getByRole('button', { name: 'أنورا' }));
-    const saved = open.mock.calls[0][2] as DiscoverViewState;
-    expect(saved).toEqual({ query: '', browseAll: true, genre: 'Drama', pagesLoaded: 2 });
-    first.unmount();
 
-    let finishSecondPage!: (result: { items: Title[]; total: number }) => void;
-    const secondPage = new Promise<{ items: Title[]; total: number }>((resolve) => { finishSecondPage = resolve; });
-    mockApi.listTitles.mockReset().mockImplementation((_query: string, page: number) => page === 2
-      ? secondPage
-      : Promise.resolve({ items: [page === 1 ? crime : { ...drama, id: 'c', titleAr: 'فيلم إضافي' }], total: 60 }));
-    render(<DiscoverScreen lang="ar" profileId="p1" initialViewState={saved} />);
-    await waitFor(() => expect(mockApi.listTitles).toHaveBeenCalledWith('', 2, 20));
-    expect(mockApi.listTitles).toHaveBeenCalledWith('', 1, 20);
-    expect(screen.getByRole('list')).toHaveAttribute('aria-busy', 'true');
-    expect(screen.queryByText('لا نتائج. جرّب اسمًا آخر أو الاسم بلغة أخرى.')).toBeNull();
-    await act(async () => finishSecondPage({ items: [{ ...drama, titleAr: 'أنورا المحدث' }], total: 60 }));
-    expect(await screen.findByRole('button', { name: 'شاهدت «أنورا المحدث»' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'دراما' })).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() => expect(mockApi.listTitles).toHaveBeenLastCalledWith('', 1, 20, { genre: 'Drama' }));
+    expect(await screen.findByRole('button', { name: 'شاهدت «أنورا»' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'شاهدت «العراب»' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'شاهدت «أنورا»' })).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'عرض المزيد' }));
-    expect(mockApi.listTitles).toHaveBeenLastCalledWith('', 3, 20);
-    expect(await screen.findByRole('button', { name: 'شاهدت «فيلم إضافي»' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'دراما' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('invalidates a pending multi-page restoration when starting a new search', async () => {
@@ -105,7 +98,7 @@ describe('DiscoverScreen', () => {
       ? restore
       : Promise.resolve({ items: [title('new', 'الكثيب')], total: 1 }));
     render(<DiscoverScreen lang="ar" profileId="p1" initialViewState={{ query: 'old', browseAll: false, genre: 'Drama', pagesLoaded: 2 }} />);
-    await waitFor(() => expect(mockApi.listTitles).toHaveBeenCalledWith('old', 2, 20));
+    await waitFor(() => expect(mockApi.listTitles).toHaveBeenCalledWith('old', 2, 20, { genre: 'Drama' }));
     await user.clear(screen.getByRole('searchbox'));
     await user.type(screen.getByRole('searchbox'), 'Dune');
     expect(await screen.findByRole('button', { name: 'شاهدت «الكثيب»' })).toBeInTheDocument();
@@ -152,7 +145,10 @@ describe('DiscoverScreen', () => {
     mockApi.listTitles.mockResolvedValue({ items: [{ ...title('c', 'الكثيب'), genres: ['Science Fiction'] }], total: 1 });
     render(<DiscoverScreen lang="ar" profileId="p1" />);
     await user.click(await screen.findByRole('button', { name: 'جريمة' }));
-    expect(screen.queryByRole('button', { name: 'شاهدت «أنورا»' })).toBeNull();
+    // Picking a genre now re-queries the server (debounced), so the previous
+    // starter-list tile takes a beat to disappear -- it is not a synchronous
+    // local filter over what is already on screen.
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'شاهدت «أنورا»' })).toBeNull());
     await user.click(screen.getByRole('button', { name: 'تصفّح الكتالوج كاملًا' }));
     expect(await screen.findByRole('button', { name: 'شاهدت «الكثيب»' })).toBeInTheDocument();
     expect(mockApi.setTitleState).not.toHaveBeenCalled();
