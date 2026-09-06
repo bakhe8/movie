@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Readex+Pro:wght@500;600;700&display=swap">
+  <style>
+    body { margin: 0; background: #06070f; color: #eef0ff; font-family: 'IBM Plex Sans Arabic','Segoe UI','Noto Sans Arabic',sans-serif; font-size: 16px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+    a { color: #8b7cff; } a:hover { color: #a99dff; }
+    .disp { font-family: 'Readex Pro','IBM Plex Sans Arabic',sans-serif; line-height: 1.3; }
+    .num { font-variant-numeric: tabular-nums; }
+    .tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 12px; line-height: 1.4; color: #9aa0c8; }
+    .tab.on { color: #8b7cff; }
+    .chip { padding: 3px 8px; border: 1px solid rgba(255,255,255,.22); border-radius: 24px; background: rgba(255,255,255,.07); font-size: 10px; line-height: 1.5; color: #ffffff; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 44px; padding: 8px 14px; border-radius: 14px; font-size: 14px; font-weight: 600; }
+    .primary { border: 1px solid #8b7cff; background: #8b7cff; color: #12093d; box-shadow: 0 8px 23px rgba(139,124,255,.35); }
+    .ghost { border: 1px solid rgba(255,255,255,.32); background: rgba(255,255,255,.08); color: #ffffff; }
+    .cover { position: absolute; inset: 0; z-index: -3; width: 100%; height: 100%; object-fit: cover; object-position: center 22%; transform: scale(1.025); }
+    .scrim { position: absolute; inset: 0; z-index: -2; background: linear-gradient(0deg, rgba(5,8,20,.78) 4%, rgba(5,8,20,.64) 48%, rgba(5,8,20,.08) 100%); }
+    .fade { transition: opacity 240ms ease; }
+    .layer { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .thumb { display: block; width: 44px; height: 66px; padding: 0; border: 1px solid rgba(255,255,255,.2); border-radius: 8px; background: #171b38; overflow: hidden; cursor: pointer; transition: opacity 160ms ease, outline-color 160ms ease; }
+    .thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+    .rowb { display: flex; align-items: center; justify-content: space-between; min-height: 44px; font-size: 14px; color: #ffffff; }
+    .lbl { font-size: 12px; line-height: 1.4; color: #9aa0c8; }
+    .cap { font-size: 12.5px; color: #9aa0c8; line-height: 1.6; }
+    .h { font-family: 'Readex Pro','IBM Plex Sans Arabic',sans-serif; font-size: 14px; font-weight: 600; color: #eef0ff; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { text-align: start; padding: 8px 10px; border-bottom: 1px solid #232853; vertical-align: top; font-size: 12.5px; line-height: 1.55; }
+    th { color: #9aa0c8; font-weight: 500; font-size: 11px; }
+    .no { color: #f0a050; } .yes { color: #5fd0e6; }
+    @media (prefers-reduced-motion: reduce) { .fade, .thumb { transition: none; } }
+  </style>
+</helmet>
+<div style="width: 1200px; height: 640px; box-sizing: border-box; padding: 24px; background: #06070f; color: #eef0ff; direction: rtl; display: flex; flex-direction: column; gap: 14px;"><h1 class="disp" style="margin: 0; font-size: 22px; font-weight: 600;">عقد التفاعل · مجموعة البوسترات — يسري على الاتجاهات الثلاثة</h1><div style="display: flex; gap: 20px; flex: 1; min-height: 0;"><div style="flex: 2.2; min-width: 0;"><table><tr><th style="width: 20%">الإيماءة</th><th style="width: 22%">ماذا تفعل</th><th style="width: 26%">البديل الظاهر</th><th style="width: 32%">القاعدة</th></tr><tr><td class="yes">لمسة على مصغّرة</td><td class="yes">تصبح غلاف الصفحة والبوستر الصغير معًا</td><td>المصغّرات نفسها أزرار مسمّاة: «البوستر 2 من 4»، الحلقة تسمّي المختار، وتعمل بلوحة المفاتيح وقارئ الشاشة</td><td>لا وظيفة خفية: كل ما يمكن فعله ظاهر على الشاشة قبل لمسه.</td></tr><tr><td>لمسة على الغلاف أو البوستر الكبير</td><td>لا شيء (كما اليوم)</td><td>—</td><td>إيماءة واحدة بمعنى واحد؛ البوستر في البطاقات معناه «افتح صفحة الفيلم» (ADR-111) فلا يُعطى معنى ثانيًا هنا.</td></tr><tr><td class="no">سحب أفقي على المصغّرات أو الغلاف</td><td class="no">ممنوع</td><td>الأربع تظهر معًا بلا تمرير (الحد الأقصى 4 بوسترات لكل فيلم في P2)</td><td>السحب الأفقي محجوز للتنقل بين المسارات ذات التبويبات المرئية فقط.</td></tr><tr><td class="no">تدوير تلقائي للبوسترات</td><td class="no">ممنوع</td><td>—</td><td>حركة زخرفية بلا معنى، وتقتل ثبات الغلاف الذي يميّز الصفحة.</td></tr><tr><td class="yes">الحركة عند التبديل</td><td class="yes">تلاشٍ متقاطع 240ms للغلاف والبوستر الصغير معًا</td><td>Reduced Motion: تبديل فوري بالنتيجة نفسها</td><td>الحركة تشرح «الصورة تغيّرت»؛ لا تأخير مصطنع ولا مؤشر تحميل مزيّف.</td></tr><tr><td>الحفظ</td><td>لا يُحفظ الاختيار</td><td>يبدأ دائمًا من البوستر الأول (ترتيب P2)</td><td>لا API ولا تفضيل جديد في P5؛ إن أراد المالك «غلافي المفضّل» فذاك تكليف منفصل بعقد خاص.</td></tr><tr><td>فيلم ببوستر واحد</td><td>لا شريط ولا نقاط</td><td>الصفحة كما اليوم حرفيًا</td><td>حالة 7 عناوين اليوم، وكل فيلم جديد قبل اكتمال سحب صوره.</td></tr><tr><td>الإسناد</td><td>مرة واحدة في ذيل المصادر كما اليوم</td><td>—</td><td>الصور كلها من TMDB عبر posterUrl الجاهز من الخادم؛ الواجهة لا تركّب روابط صور.</td></tr></table></div><div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; padding: 14px; border-radius: 20px; background: #10132a;"><span class="h">ما لا يتغير في P5 (الاتجاهات الثلاثة)</span><ul class="cap" style="margin: 0; padding: 0 18px 0 0; display: flex; flex-direction: column; gap: 8px; color: #eef0ff;"><li>بطاقات الاكتشاف والاقتراحات والثلاثيات والقوائم: البوستر الأول فقط، بالحجم والتخطيط نفسه، ولمسته تفتح صفحة الفيلم.</li><li>لا شارة عدد على البطاقات: 366 من 380 فيلمًا لديها 4 بوسترات بالضبط، فالشارة تكاد تكون ثابتة ولا تحمل معلومة.</li><li>الترتيب: البوستر الأول هو نفسه posterUrl الحالي (ADR-120)، فلا يتغير أي غلاف رآه المستخدم حتى الآن.</li><li>لا صور مولّدة أو مخزّنة محليًا؛ لا تغيير في بوابة الترخيص؛ لا تغيير في عقد API (الحقل posters موجود منذ P3/P4).</li><li>ما بعد الموافقة: مكوّن واحد جديد + hunk صغير في صفحة الفيلم + اختبارات؛ ثم نموذج تفاعلي على 360/390/430px قبل الدمج.</li></ul></div></div></div>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Readex+Pro:wght@500;600;700&display=swap">
+  <style>
+    body { margin: 0; background: #06070f; color: #eef0ff; font-family: 'IBM Plex Sans Arabic','Segoe UI','Noto Sans Arabic',sans-serif; font-size: 16px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+    a { color: #8b7cff; } a:hover { color: #a99dff; }
+    .disp { font-family: 'Readex Pro','IBM Plex Sans Arabic',sans-serif; line-height: 1.3; }
+    .num { font-variant-numeric: tabular-nums; }
+    .tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 12px; line-height: 1.4; color: #9aa0c8; }
+    .tab.on { color: #8b7cff; }
+    .chip { padding: 3px 8px; border: 1px solid rgba(255,255,255,.22); border-radius: 24px; background: rgba(255,255,255,.07); font-size: 10px; line-height: 1.5; color: #ffffff; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 44px; padding: 8px 14px; border-radius: 14px; font-size: 14px; font-weight: 600; }
+    .primary { border: 1px solid #8b7cff; background: #8b7cff; color: #12093d; box-shadow: 0 8px 23px rgba(139,124,255,.35); }
+    .ghost { border: 1px solid rgba(255,255,255,.32); background: rgba(255,255,255,.08); color: #ffffff; }
+    .cover { position: absolute; inset: 0; z-index: -3; width: 100%; height: 100%; object-fit: cover; object-position: center 22%; transform: scale(1.025); }
+    .scrim { position: absolute; inset: 0; z-index: -2; background: linear-gradient(0deg, rgba(5,8,20,.78) 4%, rgba(5,8,20,.64) 48%, rgba(5,8,20,.08) 100%); }
+    .fade { transition: opacity 240ms ease; }
+    .layer { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .thumb { display: block; width: 44px; height: 66px; padding: 0; border: 1px solid rgba(255,255,255,.2); border-radius: 8px; background: #171b38; overflow: hidden; cursor: pointer; transition: opacity 160ms ease, outline-color 160ms ease; }
+    .thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+    .rowb { display: flex; align-items: center; justify-content: space-between; min-height: 44px; font-size: 14px; color: #ffffff; }
+    .lbl { font-size: 12px; line-height: 1.4; color: #9aa0c8; }
+    .cap { font-size: 12.5px; color: #9aa0c8; line-height: 1.6; }
+    .h { font-family: 'Readex Pro','IBM Plex Sans Arabic',sans-serif; font-size: 14px; font-weight: 600; color: #eef0ff; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { text-align: start; padding: 8px 10px; border-bottom: 1px solid #232853; vertical-align: top; font-size: 12.5px; line-height: 1.55; }
+    th { color: #9aa0c8; font-weight: 500; font-size: 11px; }
+    .no { color: #f0a050; } .yes { color: #5fd0e6; }
+    @media (prefers-reduced-motion: reduce) { .fade, .thumb { transition: none; } }
+  </style>
+</helmet>
+<div style="width: 390px; height: 700px; box-sizing: border-box; padding: 18px 16px; background: #06070f; color: #eef0ff; direction: rtl; display: flex; flex-direction: column; gap: 16px;"><h1 class="disp" style="margin: 0; font-size: 18px; font-weight: 600;">خارج صفحة الفيلم: لا تغيير</h1><p class="cap" style="margin: 0;">البوستر الأول فقط، بالحجم نفسه، ولمسته تفتح صفحة الفيلم. مثال من الكتالوج: «كفرناحوم» وله 4 بوسترات.</p><div style="display: flex; gap: 14px; align-items: flex-start;"><div style="position: relative; width: 173px; height: 260px; border-radius: 14px; overflow: hidden; background: #171b38; box-shadow: 0 4px 14px rgba(10,15,40,.12); flex: none;"><img src="cap-1.jpg" alt="" style="display: block; width: 100%; height: 100%; object-fit: cover;"><div style="position: absolute; inset-inline: 0; inset-block-end: 0; display: grid; align-content: end; gap: 5px; min-height: 104px; padding: 40px 11px 10px; color: #ffffff; background: linear-gradient(to top, rgba(5,8,20,.78) 0%, rgba(5,8,20,.78) 55%, rgba(5,8,20,.5) 78%, transparent 100%);"><span class="disp" style="font-size: 15px; font-weight: 700; line-height: 1.3;">كفرناحوم</span><span class="num" style="font-size: 12px; opacity: .8;">2018</span></div></div><div style="display: flex; flex-direction: column; gap: 6px; padding-top: 6px;"><span class="h">شبكة الاكتشاف</span><span class="cap">173×260 على 390px، كما هي.</span></div></div><div style="display: flex; flex-direction: column; gap: 8px;"><span class="h">بطاقة الاقتراح</span><div style="display: flex; gap: 12px; align-items: flex-start; padding: 12px; border-radius: 20px; background: #10132a;"><span class="num disp" style="display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: #8b7cff; color: #12093d; font-size: 14px; font-weight: 700; flex: none;">1</span><img src="cap-1.jpg" alt="" style="display: block; width: 96px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 14px; background: #171b38; flex: none;"><div style="display: flex; flex-direction: column; gap: 4px; min-width: 0;"><span class="disp" style="font-size: 18px; font-weight: 700;">كفرناحوم</span><span class="disp" style="font-size: 13px; color: #9aa0c8;"><bdi>Capernaum</bdi><span class="num"> · 2018</span></span><span class="cap">البوستر الأول فقط · اللمس يفتح صفحة الفيلم</span></div></div></div><div style="display: flex; flex-direction: column; gap: 8px;"><span class="h">بطاقة الثلاثية</span><div style="display: flex; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 20px; background: #10132a;"><svg width="20" height="20" viewBox="0 0 24 24" fill="#9aa0c8" aria-hidden="true"><circle cx="9" cy="6" r="1.6"></circle><circle cx="15" cy="6" r="1.6"></circle><circle cx="9" cy="12" r="1.6"></circle><circle cx="15" cy="12" r="1.6"></circle><circle cx="9" cy="18" r="1.6"></circle><circle cx="15" cy="18" r="1.6"></circle></svg><img src="cap-1.jpg" alt="" style="display: block; width: 64px; height: 96px; object-fit: cover; border-radius: 10px; background: #171b38; flex: none;"><div style="display: flex; flex-direction: column; gap: 2px; min-width: 0;"><span class="disp" style="font-size: 16px; font-weight: 700;">كفرناحوم</span><span class="num" style="font-size: 13px; color: #9aa0c8;">2018</span><span class="cap">السحب العمودي للترتيب كما هو؛ لا تفاعل مع البوستر هنا</span></div></div></div></div>
+</x-dc>
+</body>
+</html>

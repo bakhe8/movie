@@ -133,6 +133,20 @@
       ],
       "cwd": "apps/frontend",
       "port": 3130
+    },
+    {
+      "name": "canvas-3230-P5",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "3230",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "C:/Users/Bakheet/AppData/Local/Temp/claude/C--Users-Bakheet-Projects-movie/fccdb463-af22-425f-ac8f-4081eda31d46/scratchpad"
+      ],
+      "port": 3230
     }
   ]
 }
