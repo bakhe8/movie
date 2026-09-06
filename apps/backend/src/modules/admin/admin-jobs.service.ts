@@ -44,6 +44,35 @@ export interface AdminJobTypeDef {
   validateParams?: (params: Record<string, unknown>) => string | null;
 }
 
+// `params` is a caller-controlled bag (CreateAdminJobDto.params has no key
+// allowlist -- each type's own validateParams checks shape, not names), and
+// it is echoed into the audit log's free-text `reason` for a human to read
+// what a job was asked to do. A key that merely *looks* like a credential is
+// blanked before that -- same defence-in-depth spirit as sanitizeError()
+// (training-jobs.service.ts), applied to keys instead of a message string,
+// since job params are a structured object, not free text.
+const SENSITIVE_PARAM_KEY = /pass(word)?|secret|token|api[-_]?key|authorization|connection[-_]?string/i;
+
+function redactSensitiveParams(params: Record<string, unknown>): Record<string, unknown> {
+  const redacted: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(params)) {
+    redacted[key] = SENSITIVE_PARAM_KEY.test(key) ? '[redacted]' : value;
+  }
+  return redacted;
+}
+
+// The same redaction, applied to what list()/get()/create() hand back over
+// HTTP (W8 secrets audit: "no secrets in the response", not just the log).
+// The row stored in the database, and what dispatch() passes to the
+// handler, are never touched here -- a handler that legitimately needs a
+// credential-shaped param still gets the real value.
+function toPublicView(row: AdminJob): AdminJob {
+  if (!row.params) {
+    return row;
+  }
+  return { ...row, params: redactSensitiveParams(row.params) };
+}
+
 const BACKOFF_MS = [5_000, 30_000, 120_000];
 export const MAX_ATTEMPTS = BACKOFF_MS.length + 1;
 const DEFAULT_SWEEP_INTERVAL_MS = 15_000;
@@ -231,14 +260,14 @@ export class AdminJobsService implements OnModuleInit, OnModuleDestroy {
       resource: 'admin_job',
       resourceId: row.id,
       status: 'ok',
-      reason: `${dto.type}${dto.dryRun ? ' (dry run)' : ''}${dto.params ? ` params=${JSON.stringify(dto.params)}` : ''}`,
+      reason: `${dto.type}${dto.dryRun ? ' (dry run)' : ''}${dto.params ? ` params=${JSON.stringify(redactSensitiveParams(dto.params))}` : ''}`,
       ip: actor?.ip ?? null,
     });
     void this.dispatch(row).catch((error: unknown) => {
       this.logger.error(`admin-jobs dispatch ${row.id} failed: ${this.describe(error)}`);
       captureException(error, { stage: 'admin-jobs.dispatch', adminJobId: row.id });
     });
-    return { job: row, created: true };
+    return { job: toPublicView(row), created: true };
   }
 
   async list(query: ListAdminJobsQueryDto) {
@@ -252,7 +281,7 @@ export class AdminJobsService implements OnModuleInit, OnModuleDestroy {
       skip: (query.page - 1) * query.limit,
       take: query.limit,
     });
-    return { items, page: query.page, limit: query.limit, total, totalPages: Math.ceil(total / query.limit) };
+    return { items: items.map(toPublicView), page: query.page, limit: query.limit, total, totalPages: Math.ceil(total / query.limit) };
   }
 
   async get(id: string): Promise<AdminJob> {
@@ -260,7 +289,7 @@ export class AdminJobsService implements OnModuleInit, OnModuleDestroy {
     if (!row) {
       throw new NotFoundException('Job not found');
     }
-    return row;
+    return toPublicView(row);
   }
 
   // Cancelling a queued row ends it at once (it never ran); cancelling a

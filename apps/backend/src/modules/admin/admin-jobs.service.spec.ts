@@ -121,6 +121,38 @@ describe('AdminJobsService.create', () => {
     );
   });
 
+  // W8 secrets audit: `params` is a caller-controlled bag with no key
+  // allowlist, echoed into the audit log's free-text reason for a human to
+  // read -- a key that merely looks like a credential must never reach it.
+  it('redacts a credential-shaped param key before writing it to the audit log', async () => {
+    const { service, audit } = serviceOf();
+    await service.create({ type: 'republish_fingerprints', params: { titleId: 'abc', password: 'hunter2', apiKey: 'sk-live-xyz' } }, actor);
+    const call = audit.record.mock.calls[0][0] as { reason: string };
+    expect(call.reason).toContain('"titleId":"abc"');
+    expect(call.reason).not.toContain('hunter2');
+    expect(call.reason).not.toContain('sk-live-xyz');
+    expect(call.reason).toContain('"password":"[redacted]"');
+    expect(call.reason).toContain('"apiKey":"[redacted]"');
+  });
+
+  it('redacts a credential-shaped param key in the create() response too, not only the audit log', async () => {
+    const { service } = serviceOf();
+    const { job } = await service.create({ type: 'republish_fingerprints', params: { titleId: 'abc', password: 'hunter2' } }, actor);
+    expect(job.params).toEqual({ titleId: 'abc', password: '[redacted]' });
+  });
+
+  it('redacts in list() and get() as well', async () => {
+    const { service, rows } = serviceOf();
+    const { job } = await service.create({ type: 'republish_fingerprints', params: { secret: 'x' } }, actor);
+    expect((await service.get(job.id)).params).toEqual({ secret: '[redacted]' });
+    const list = await service.list({ page: 1, limit: 10 } as never);
+    expect(list.items[0].params).toEqual({ secret: '[redacted]' });
+    // The stored row itself keeps the real value -- a handler dispatched
+    // against it must still see the real secret, only the HTTP-facing view
+    // is redacted.
+    expect(rows.rows.get(job.id)!.params).toEqual({ secret: 'x' });
+  });
+
   // Item 5: one non-terminal job per type at a time.
   it('refuses a second job of a type that already has a non-terminal one', async () => {
     const { service } = serviceOf();
