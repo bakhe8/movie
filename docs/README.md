@@ -39,6 +39,7 @@ Languages: product/vision in Arabic; engineering contracts in English; UI copy i
 | [ALPHA_PLAN_2026-09-04.md](ALPHA_PLAN_2026-09-04.md) | AR | execution map | the ordered path from the code at `1a62cb3` to the Alpha gate (`BP §17.2`, `§18.1`): nine phases with day estimates, the owner decisions that unblock them, the parallel non-code track, and what is deliberately left for Beta |
 | [WAVE1_AUDIT_AND_DECISION_2026-09-05.md](WAVE1_AUDIT_AND_DECISION_2026-09-05.md) | AR | audit, non-normative | reviews four strategy/measurement reports and proposes a conditional decision, research metrics, positioning limits, and entry/exit gates for the first 15-person Phase 0 research wave before Alpha |
 | [UI_MOCKUP_REVIEW_2026-09-03.md](UI_MOCKUP_REVIEW_2026-09-03.md) | EN | review | review of the external «بصمة الذوق» mobile mockup against the blueprint: rendered and touch-tested, keep/drop list, the display-rule clarifications that became ADR-33 |
+| [PRODUCTION_DATA_RUNBOOK.md](PRODUCTION_DATA_RUNBOOK.md) | EN | runbook | what a Railway deploy does by itself (migrations, catalog reseed) versus the per-database steps that stay manual (publish, multi-poster backfill), each with its in-container command and `psql` readback; the 2026-09-06 empty-catalogue outage in one table |
 | [QUICKSTART.md](QUICKSTART.md) | EN | how-to | local setup and the full loop (migrate, seed, run, train, test) |
 | [../README.md](../README.md) | EN | entry | repository overview and pointers |
 
