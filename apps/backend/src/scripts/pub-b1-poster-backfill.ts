@@ -72,19 +72,25 @@ async function main(): Promise<void> {
     const candidates = before.titles.filter((t) => t.blockerCodes.includes('POSTER_MISSING'));
     console.log(`pub-b1 poster backfill: ${candidates.length} titles flagged POSTER_MISSING (of ${before.totalTitles})${dryRun ? ' [--dry-run]' : ''}`);
 
-    // The fixture is the repo's copy of the catalog and gets the same path so
-    // a later reseed cannot undo this run -- but it only exists in a source
-    // checkout. Inside the deployed image (dist/, no fixtures/) it is absent,
-    // and the database + source_records writes are what matter there; so a
-    // missing fixture is reported and skipped, never a reason to stop.
-    let rawParsed: FixtureEntry[] | { entries: FixtureEntry[] } | null = null;
+    // The fixture is the catalog's source of truth (ADR-90): the release
+    // step reseeds `titles.posterPath` from it on every deploy, so a poster
+    // written to the database alone is undone by the next deploy. This
+    // script therefore only runs where the fixture exists (a source
+    // checkout) and refuses anywhere else -- inside the deployed image
+    // (dist/, no fixtures/) the answer is "run it from a checkout, commit
+    // the fixture, deploy", not a database-only write.
+    let rawParsed: FixtureEntry[] | { entries: FixtureEntry[] };
     try {
       rawParsed = JSON.parse(await readFile(FIXTURE, 'utf8')) as FixtureEntry[] | { entries: FixtureEntry[] };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-      console.log(`fixture not present at ${FIXTURE} -- writing the database only (deployed image)`);
+      console.error(
+        `refusing: fixture not found at ${FIXTURE}. Run this from a source checkout and commit catalog.demo.json -- ` +
+          'a database-only poster is overwritten by the next deploy (release reseeds titles.posterPath from the fixture, ADR-90).',
+      );
+      process.exit(2);
     }
-    const fixtureEntries: FixtureEntry[] = rawParsed === null ? [] : Array.isArray(rawParsed) ? rawParsed : rawParsed.entries;
+    const fixtureEntries: FixtureEntry[] = Array.isArray(rawParsed) ? rawParsed : rawParsed.entries;
     const fixtureByInternalId = new Map(fixtureEntries.map((entry) => [entry.internalId, entry]));
 
     const results: { internalId: string; outcome: Outcome }[] = [];
