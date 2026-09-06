@@ -59,8 +59,19 @@ vi.mock('../lib/api', () => ({
     requestEmailChange: vi.fn().mockResolvedValue({ accepted: true }),
   },
   getRefreshToken: vi.fn(() => 'current-refresh-token'),
+  // Matches the real ApiError's (message, status, details) constructor --
+  // a mock with a different argument order than the class it stands in for
+  // silently breaks any test whose call order was fixed to the real
+  // contract, since the mismatch never surfaces as a type error at the
+  // mocked call site (module-level `vi.mock` erases the real class's type).
   ApiError: class ApiError extends Error {
-    constructor(public status: number, message: string) { super(message); }
+    constructor(
+      message: string,
+      public status: number,
+      public details: Record<string, unknown> = {},
+    ) {
+      super(message);
+    }
   },
 }));
 
