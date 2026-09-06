@@ -1,0 +1,174 @@
+/* ADMIN-W2. Every colour/spacing/type value here comes from admin-tokens.css
+   (.adminShell custom properties) -- never from styles/tokens.css. */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  overflow-x: hidden; /* plan §18 W2 gate: no page-level horizontal overflow at 360px */
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: var(--admin-sp-3);
+  height: var(--admin-topbar-h);
+  padding-inline: var(--admin-sp-4);
+  background: var(--admin-surface);
+  border-block-end: 1px solid var(--admin-border);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--admin-fs-16);
+  font-weight: var(--admin-w-semibold);
+  white-space: nowrap;
+}
+
+.areaSwitch {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--admin-surface-sunken);
+  border-radius: var(--admin-r-control);
+  margin-inline-start: auto;
+}
+
+.areaBtn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--admin-muted);
+  font: inherit;
+  font-size: var(--admin-fs-13);
+  font-weight: var(--admin-w-medium);
+  padding: var(--admin-sp-2) var(--admin-sp-3);
+  min-height: var(--admin-touch-min);
+  border-radius: calc(var(--admin-r-control) - 2px);
+  cursor: pointer;
+}
+
+.areaBtnActive {
+  background: var(--admin-surface);
+  color: var(--admin-text);
+  box-shadow: var(--admin-shadow);
+}
+
+.areaBtn:focus-visible,
+.sectionLink:focus-visible,
+.sidebarLink:focus-visible {
+  outline: 2px solid var(--admin-focus);
+  outline-offset: 2px;
+}
+
+.body {
+  display: flex;
+  flex-direction: column; /* stacked below 1024px: section nav, then main */
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar {
+  display: none;
+}
+
+.sectionNav {
+  display: flex;
+  gap: var(--admin-sp-2);
+  padding: var(--admin-sp-2) var(--admin-sp-4);
+  overflow-x: auto;
+  background: var(--admin-surface);
+  border-block-end: 1px solid var(--admin-border);
+}
+
+.sectionLink {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--admin-touch-min);
+  padding-inline: var(--admin-sp-3);
+  border-radius: var(--admin-r-control);
+  color: var(--admin-muted);
+  font-size: var(--admin-fs-13);
+  font-weight: var(--admin-w-medium);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.sectionLinkActive {
+  background: var(--admin-action-soft);
+  color: var(--admin-action);
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  padding: var(--admin-sp-4);
+}
+
+@media (min-width: 1024px) {
+  .body {
+    flex-direction: row; /* sidebar beside main content */
+  }
+
+  .sectionNav {
+    display: none;
+  }
+
+  .areaSwitch {
+    display: none; /* the sidebar groups both areas explicitly at desktop */
+  }
+
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: var(--admin-sp-5);
+    width: var(--admin-sidebar-w);
+    flex-shrink: 0;
+    padding: var(--admin-sp-4);
+    background: var(--admin-surface);
+    border-inline-end: 1px solid var(--admin-border);
+    align-self: stretch;
+  }
+
+  .sidebarGroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--admin-sp-1);
+  }
+
+  .sidebarGroupLabel {
+    font-size: var(--admin-fs-12);
+    font-weight: var(--admin-w-semibold);
+    color: var(--admin-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding-inline: var(--admin-sp-2);
+    margin-block-end: var(--admin-sp-1);
+  }
+
+  .sidebarLink {
+    display: flex;
+    align-items: center;
+    min-height: var(--admin-touch-min);
+    padding-inline: var(--admin-sp-2);
+    border-radius: var(--admin-r-control);
+    color: var(--admin-text);
+    font-size: var(--admin-fs-14);
+    text-decoration: none;
+  }
+
+  .sidebarLinkActive {
+    background: var(--admin-action-soft);
+    color: var(--admin-action);
+    font-weight: var(--admin-w-medium);
+  }
+
+  .main {
+    padding: var(--admin-sp-6);
+    max-width: 1200px;
+  }
+}

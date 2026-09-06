@@ -1,0 +1,110 @@
+/* ADMIN-W2: one data source, two presentations (plan §12.4) -- cards below
+   768px, a table at and above it. Both trees render from the same rows; no
+   business logic differs per breakpoint, only these rules. */
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: var(--admin-sp-2);
+  padding: var(--admin-sp-2) 0;
+  color: var(--admin-muted);
+  font-size: var(--admin-fs-13);
+}
+
+.statusError {
+  color: var(--admin-danger);
+}
+
+.retryBtn {
+  appearance: none;
+  border: 1px solid var(--admin-border-strong);
+  background: var(--admin-surface);
+  color: var(--admin-text);
+  font: inherit;
+  font-size: var(--admin-fs-13);
+  min-height: 32px;
+  padding-inline: var(--admin-sp-3);
+  border-radius: var(--admin-r-control);
+  cursor: pointer;
+}
+
+.retryBtn:focus-visible {
+  outline: 2px solid var(--admin-focus);
+  outline-offset: 2px;
+}
+
+.empty {
+  padding: var(--admin-sp-5);
+  text-align: center;
+  color: var(--admin-muted);
+  font-size: var(--admin-fs-13);
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-r-card);
+}
+
+/* ── Phone: cards ─────────────────────────────────────────────────────── */
+
+.cardList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--admin-sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-r-card);
+  padding: var(--admin-sp-3);
+}
+
+/* ── Desktop/tablet: table ────────────────────────────────────────────── */
+
+.tableWrap {
+  display: none;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--admin-fs-13);
+}
+
+.table th,
+.table td {
+  padding: var(--admin-sp-2) var(--admin-sp-3);
+  text-align: start;
+  border-block-end: 1px solid var(--admin-border);
+}
+
+.table th {
+  color: var(--admin-muted);
+  font-weight: var(--admin-w-semibold);
+  font-size: var(--admin-fs-12);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.mono {
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  direction: ltr;
+  unicode-bidi: isolate;
+  text-align: end;
+}
+
+@media (min-width: 768px) {
+  .cardList {
+    display: none;
+  }
+
+  .tableWrap {
+    display: block;
+    overflow-x: auto;
+    background: var(--admin-surface);
+    border: 1px solid var(--admin-border);
+    border-radius: var(--admin-r-card);
+  }
+}

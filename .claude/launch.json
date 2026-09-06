@@ -113,6 +113,26 @@
         "docs/design/prototype-2026-09-05"
       ],
       "port": 3210
+    },
+    {
+      "name": "backend-3131-2b",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set API_PORT=3131&& set FRONTEND_URL=http://localhost:3130&& npm run dev"
+      ],
+      "cwd": "apps/backend",
+      "port": 3131
+    },
+    {
+      "name": "frontend-3130-2b",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set NEXT_PUBLIC_API_URL=http://localhost:3131/api&& npx next dev --webpack -p 3130"
+      ],
+      "cwd": "apps/frontend",
+      "port": 3130
     }
   ]
 }

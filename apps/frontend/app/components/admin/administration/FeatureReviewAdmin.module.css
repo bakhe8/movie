@@ -1,0 +1,74 @@
+.card {
+  max-width: 480px;
+  padding: var(--admin-sp-4);
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-r-card);
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--admin-sp-3);
+  padding: var(--admin-sp-1) 0;
+  border-block-end: 1px solid var(--admin-border);
+  font-size: var(--admin-fs-13);
+}
+
+.row:last-of-type {
+  border-block-end: none;
+}
+
+.label {
+  color: var(--admin-muted);
+}
+
+.value {
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--admin-sp-3);
+  margin-block-start: var(--admin-sp-4);
+}
+
+.confirmBtn {
+  appearance: none;
+  border: none;
+  background: var(--admin-action);
+  color: var(--admin-action-ink);
+  font: inherit;
+  font-weight: var(--admin-w-medium);
+  min-height: var(--admin-touch-min);
+  padding-inline: var(--admin-sp-4);
+  border-radius: var(--admin-r-control);
+  cursor: pointer;
+}
+
+.confirmBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.confirmBtn:focus-visible,
+.backLink:focus-visible {
+  outline: 2px solid var(--admin-focus);
+  outline-offset: 2px;
+}
+
+.backLink {
+  color: var(--admin-action);
+  font-size: var(--admin-fs-13);
+}
+
+.status {
+  margin-block-start: var(--admin-sp-3);
+  font-size: var(--admin-fs-13);
+}
+
+.statusSuccess { color: var(--admin-success); }
+.statusError { color: var(--admin-danger); }

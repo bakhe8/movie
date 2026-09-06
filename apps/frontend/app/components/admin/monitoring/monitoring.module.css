@@ -1,0 +1,137 @@
+/* Shared toolbar/badge styles for every monitoring destination (ADMIN-W2).
+   Read from admin-tokens.css; no consumer theme/appearance token is used. */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--admin-sp-2);
+  margin-block-end: var(--admin-sp-3);
+}
+
+.search {
+  flex: 1 1 220px;
+  min-width: 0;
+  min-height: var(--admin-touch-min);
+  padding-inline: var(--admin-sp-3);
+  border: 1px solid var(--admin-border-strong);
+  border-radius: var(--admin-r-control);
+  background: var(--admin-surface);
+  color: var(--admin-text);
+  font: inherit;
+  font-size: var(--admin-fs-14);
+}
+
+.select {
+  min-height: var(--admin-touch-min);
+  padding-inline: var(--admin-sp-2);
+  border: 1px solid var(--admin-border-strong);
+  border-radius: var(--admin-r-control);
+  background: var(--admin-surface);
+  color: var(--admin-text);
+  font: inherit;
+  font-size: var(--admin-fs-13);
+}
+
+.search:focus-visible,
+.select:focus-visible,
+.link:focus-visible,
+.pageBtn:focus-visible {
+  outline: 2px solid var(--admin-focus);
+  outline-offset: 2px;
+}
+
+.count {
+  margin: 0 0 var(--admin-sp-2);
+  color: var(--admin-muted);
+  font-size: var(--admin-fs-13);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px var(--admin-sp-2);
+  border-radius: var(--admin-r-chip);
+  font-size: var(--admin-fs-12);
+  font-weight: var(--admin-w-medium);
+  background: var(--admin-surface-sunken);
+  color: var(--admin-text);
+}
+
+.green { background: var(--admin-success-soft); color: var(--admin-success); }
+.yellow { background: var(--admin-warning-soft); color: var(--admin-warning); }
+.red { background: var(--admin-danger-soft); color: var(--admin-danger); }
+
+.cardTitle {
+  margin: 0 0 var(--admin-sp-1);
+  font-weight: var(--admin-w-semibold);
+}
+
+.cardRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--admin-sp-1) var(--admin-sp-3);
+  color: var(--admin-muted);
+  font-size: var(--admin-fs-13);
+}
+
+.mono {
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.link {
+  color: var(--admin-action);
+  font-size: var(--admin-fs-13);
+  font-weight: var(--admin-w-medium);
+}
+
+.pages {
+  display: flex;
+  align-items: center;
+  gap: var(--admin-sp-2);
+  margin-block-start: var(--admin-sp-3);
+  font-size: var(--admin-fs-13);
+}
+
+.pageBtn {
+  appearance: none;
+  border: 1px solid var(--admin-border-strong);
+  background: var(--admin-surface);
+  color: var(--admin-text);
+  font: inherit;
+  font-size: var(--admin-fs-13);
+  min-height: var(--admin-touch-min);
+  min-width: var(--admin-touch-min);
+  padding-inline: var(--admin-sp-3);
+  border-radius: var(--admin-r-control);
+  cursor: pointer;
+}
+
+.pageBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.subhead {
+  margin: var(--admin-sp-4) 0 var(--admin-sp-2);
+  font-size: var(--admin-fs-14);
+  font-weight: var(--admin-w-semibold);
+}
+
+.plainList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--admin-sp-2);
+}
+
+.plainList > li {
+  padding: var(--admin-sp-2) var(--admin-sp-3);
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-r-card);
+}

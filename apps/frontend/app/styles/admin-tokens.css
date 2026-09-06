@@ -1,0 +1,72 @@
+/* Admin design tokens (ADMIN-W2, ADR-117 "Decision — theme"). Independent of
+   styles/tokens.css and every consumer appearance: fixed light values only,
+   scoped under .adminShell so nothing here ever reaches a consumer screen,
+   and nothing a consumer screen defines (theme, appearance, RTL icon flips)
+   ever reaches here. Do not import styles/tokens.css or styles/cinematic.css
+   from any admin component.
+
+   Palette per plan §13: neutral light ground, white surfaces, thin borders,
+   one action colour, high-contrast status colours carried by text/icon too
+   (never colour alone), limited shadow, dense information, no cinematic
+   decoration. */
+
+.adminShell {
+  color-scheme: light;
+
+  --admin-bg: #f4f5f7;
+  --admin-surface: #ffffff;
+  --admin-surface-sunken: #eceef2;
+  --admin-border: #d3d7e0;
+  --admin-border-strong: #aab0c0;
+  --admin-text: #1a1d29;
+  --admin-muted: #565c6e;
+
+  --admin-action: #1d4ed8;
+  --admin-action-ink: #ffffff;
+  --admin-action-soft: #e3e9fd;
+
+  --admin-success: #0f7a3d;
+  --admin-success-soft: #e3f6ea;
+  --admin-warning: #8a5b00;
+  --admin-warning-soft: #fbeecb;
+  --admin-danger: #b3261e;
+  --admin-danger-soft: #fbe4e2;
+
+  --admin-focus: #1d4ed8;
+  --admin-shadow: 0 4px 16px rgba(26, 29, 41, 0.10);
+
+  --admin-font-ui: "Segoe UI", "Noto Sans Arabic", system-ui, sans-serif;
+  --admin-fs-12: 12px;
+  --admin-fs-13: 13px;
+  --admin-fs-14: 14px;
+  --admin-fs-16: 16px;
+  --admin-fs-20: 20px;
+  --admin-lh-body: 1.5;
+  --admin-w-regular: 400;
+  --admin-w-medium: 500;
+  --admin-w-semibold: 600;
+
+  --admin-r-card: 8px;
+  --admin-r-control: 6px;
+  --admin-r-chip: 4px;
+
+  --admin-sp-1: 4px;
+  --admin-sp-2: 8px;
+  --admin-sp-3: 12px;
+  --admin-sp-4: 16px;
+  --admin-sp-5: 20px;
+  --admin-sp-6: 24px;
+
+  /* Fixed layout metrics both AdminShell and its screens read (§12). */
+  --admin-topbar-h: 56px;
+  --admin-sidebar-w: 248px;
+  --admin-touch-min: 44px;
+
+  background: var(--admin-bg);
+  color: var(--admin-text);
+  font-family: var(--admin-font-ui);
+  font-size: var(--admin-fs-14);
+  line-height: var(--admin-lh-body);
+  min-height: 100dvh;
+  isolation: isolate;
+}

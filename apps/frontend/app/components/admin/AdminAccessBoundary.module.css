@@ -1,0 +1,39 @@
+/* ADMIN-W2: styled from admin-tokens.css custom properties (the parent
+   AdminShellRoot applies the .adminShell scope), independent of the
+   consumer's active theme/appearance. */
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--admin-sp-3);
+  min-height: 100dvh;
+  padding: var(--admin-sp-6);
+  text-align: center;
+}
+
+.message {
+  margin: 0;
+  color: var(--admin-muted);
+  font-size: var(--admin-fs-14);
+}
+
+.retryBtn {
+  appearance: none;
+  border: 1px solid var(--admin-border-strong);
+  background: var(--admin-surface);
+  color: var(--admin-text);
+  font: inherit;
+  font-size: var(--admin-fs-13);
+  font-weight: var(--admin-w-medium);
+  min-height: var(--admin-touch-min);
+  padding-inline: var(--admin-sp-4);
+  border-radius: var(--admin-r-control);
+  cursor: pointer;
+}
+
+.retryBtn:focus-visible {
+  outline: 2px solid var(--admin-focus);
+  outline-offset: 2px;
+}

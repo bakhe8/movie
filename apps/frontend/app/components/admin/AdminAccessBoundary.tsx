@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
 import { useSession } from '../../lib/session';
-import s from '../AdminScreen.module.css';
+import s from './AdminAccessBoundary.module.css';
 
 // ADMIN-W1 (ADR-117, AUDIT_2026-09-05 C1/M5 follow-up): the access boundary
 // every admin destination mounts behind. Replaces AdminScreen's old
@@ -100,11 +100,11 @@ export function AdminAccessBoundary({ children }: { children: React.ReactNode })
 
   return (
     <div className={s.screen}>
-      <p className={s.forbidden} role="status" aria-live="polite">
+      <p className={s.message} role="status" aria-live="polite">
         {MESSAGE[state.status]}
       </p>
       {RETRYABLE.has(state.status) && (
-        <button type="button" className={s.pageBtn} onClick={retry}>
+        <button type="button" className={s.retryBtn} onClick={retry}>
           إعادة المحاولة
         </button>
       )}
