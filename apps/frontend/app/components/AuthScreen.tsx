@@ -32,7 +32,6 @@ const labels = {
     submitLogin: 'دخول',
     submitRegister: 'إنشاء الحساب',
     loading: 'جارٍ التحميل…',
-    adults: 'الخدمة للبالغين. بعد إنشاء الحساب نسألك عن لغتك وسوقك ومنصاتك، ثم نوضح ما نجمعه ولماذا.',
     // Password reset (ADR-85): the same neutral reply for any address, so the
     // door never says which emails are registered.
     forgot: 'نسيت كلمة المرور؟',
@@ -61,7 +60,6 @@ const labels = {
     submitLogin: 'Log in',
     submitRegister: 'Create account',
     loading: 'Loading…',
-    adults: 'For adults. After creating the account we ask for your language, market and platforms, then explain what we collect and why.',
     forgot: 'Forgot your password?',
     resetTitle: 'Reset your password',
     resetHint: 'Enter your email and we will send a link to set a new password, valid for 30 minutes.',
@@ -261,7 +259,6 @@ export function AuthScreen({
         <button className={styles.switch} type="button" onClick={() => switchMode(mode === 'login' ? 'register' : 'login')}>
           {mode === 'login' ? t.switchToRegister : mode === 'register' ? t.switchToLogin : t.backToLogin}
         </button>
-        {mode === 'register' && <p className={styles.adults}>{t.adults}</p>}
       </section>
     </main>
   );
