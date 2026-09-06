@@ -6,10 +6,11 @@ import { Title } from './title.entity';
 // pointed at by `titles.publishedRevisionId`. Never updated in place -- a
 // correction is a new row, same discipline as `source_records` (BP §11.3).
 //
-// Not yet registered in `DatabaseConfig`'s entity list: nothing writes a row
-// here in the shadow-mode evaluator (PUB-S1 previews readiness against a
-// title's current columns, not against a snapshot). PUB-B1 registers this
-// entity when it starts actually inserting revisions.
+// Registered in `DatabaseConfig`, but nothing writes a row here yet: the
+// shadow evaluator (PUB-S1) previews readiness against a title's current
+// columns, not a snapshot. Board 1D-9 (manual publish) is the first writer,
+// by owner decision 2026-09-06 -- no bootstrap or other mechanism may set
+// `titles.publishedRevisionId` before that gate opens.
 @Entity('title_revisions')
 export class TitleRevision {
   @PrimaryGeneratedColumn('uuid')

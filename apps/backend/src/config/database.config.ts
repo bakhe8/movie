@@ -29,6 +29,7 @@ import { SourceRecord } from '../entities/source-record.entity';
 import { Title } from '../entities/title.entity';
 import { TitleEdition } from '../entities/title-edition.entity';
 import { TitlePoster } from '../entities/title-poster.entity';
+import { TitleRevision } from '../entities/title-revision.entity';
 import { Triad } from '../entities/triad.entity';
 import { TrainingJob } from '../entities/training-job.entity';
 import { TriadReplacement } from '../entities/triad-replacement.entity';
@@ -67,6 +68,7 @@ const ENTITIES: DataSourceOptions['entities'] = [
   LocalizedTitle,
   TitleEdition,
   TitlePoster,
+  TitleRevision,
   Credit,
   ContentFeature,
   ModelVersion,

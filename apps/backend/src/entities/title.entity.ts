@@ -1,5 +1,6 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, Index, JoinColumn, ManyToOne } from 'typeorm';
 import type { FilmFingerprintV1 } from './title-fingerprint.type';
+import { TitleRevision } from './title-revision.entity';
 
 @Entity('titles')
 // Expression indexes and the immutable-binding trigger are owned by CatalogIdentityGuards.
@@ -50,6 +51,17 @@ export class Title {
 
   @Column({ type: 'json', nullable: true })
   fingerprint: FilmFingerprintV1 | null;
+
+  // PUB-G1 (ADR-118): the only pointer any public read path may follow.
+  // NULL = invisible everywhere public; only PUB-G1's bootstrap or a later
+  // manual publish (board 1D-9) may set it, and only to a revision whose
+  // blockerCodes was empty under the policy version that produced it.
+  @ManyToOne(() => TitleRevision, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'publishedRevisionId' })
+  publishedRevision: TitleRevision | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  publishedRevisionId: string | null;
 
   @CreateDateColumn()
   createdAt: Date;
