@@ -28,6 +28,7 @@ import { SharedLatentSpaceVersion } from '../entities/shared-latent-space-versio
 import { SourceRecord } from '../entities/source-record.entity';
 import { Title } from '../entities/title.entity';
 import { TitleEdition } from '../entities/title-edition.entity';
+import { TitlePoster } from '../entities/title-poster.entity';
 import { Triad } from '../entities/triad.entity';
 import { TrainingJob } from '../entities/training-job.entity';
 import { TriadReplacement } from '../entities/triad-replacement.entity';
@@ -65,6 +66,7 @@ const ENTITIES: DataSourceOptions['entities'] = [
   SourceRecord,
   LocalizedTitle,
   TitleEdition,
+  TitlePoster,
   Credit,
   ContentFeature,
   ModelVersion,
