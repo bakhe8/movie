@@ -68,7 +68,7 @@ export interface LoadCatalogRightsOptions {
   log?: (line: string) => void;
 }
 
-type RowSpec = Pick<
+export type RowSpec = Pick<
   SourceRecord,
   | 'fieldName'
   | 'value'
@@ -106,9 +106,12 @@ function wikidataRow(fieldName: string, qid: string): RowSpec {
 // TMDB's required attribution notice (their API terms), stored as this claim's
 // license text since SourceRecord has no separate attribution-text column
 // (the same pattern `license` already carries free-text terms in above).
-const TMDB_ATTRIBUTION = 'TMDB Terms of Use: image non-commercial without a paid licence; attribution required — "This product uses the TMDB API but is not endorsed or certified by TMDB."';
+// Exported so POSTERS-MULTI P2's backfill (`fetch-tmdb-posters.ts`) records
+// the extra poster images it finds under the exact same rights shape,
+// instead of a second copy of TMDB's licence terms drifting out of sync.
+export const TMDB_ATTRIBUTION = 'TMDB Terms of Use: image non-commercial without a paid licence; attribution required — "This product uses the TMDB API but is not endorsed or certified by TMDB."';
 
-function tmdbPosterRow(posterPath: string): RowSpec {
+export function tmdbPosterRow(posterPath: string): RowSpec {
   return {
     fieldName: 'posterPath',
     value: `https://image.tmdb.org/t/p/original${posterPath}`,
