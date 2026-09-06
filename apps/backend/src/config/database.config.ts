@@ -7,6 +7,7 @@ import { AdminJob } from '../entities/admin-job.entity';
 import { AnalyticsEvent } from '../entities/analytics-event.entity';
 import { AuditLog } from '../entities/audit-log.entity';
 import { AvailabilitySnapshot } from '../entities/availability-snapshot.entity';
+import { CatalogIntake } from '../entities/catalog-intake.entity';
 import { Consent } from '../entities/consent.entity';
 import { ContentFeature } from '../entities/content-feature.entity';
 import { Credit } from '../entities/credit.entity';
@@ -85,6 +86,7 @@ const ENTITIES: DataSourceOptions['entities'] = [
   AvailabilitySnapshot,
   SharedLatentSpaceVersion,
   AdminJob,
+  CatalogIntake,
 ];
 
 interface ConnectionOptions {

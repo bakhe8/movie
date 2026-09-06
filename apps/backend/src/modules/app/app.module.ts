@@ -23,6 +23,7 @@ import { PrivacyModule } from '../privacy/privacy.module';
 import { AdminModule } from '../admin/admin.module';
 import { AnalyticsModule } from '../analytics/analytics.module';
 import { PublicationModule } from '../publication/publication.module';
+import { CatalogIntakeModule } from '../catalog-intake/catalog-intake.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { PublicationModule } from '../publication/publication.module';
     AdminModule,
     AnalyticsModule,
     PublicationModule,
+    CatalogIntakeModule,
   ],
   controllers: [AppController],
   providers: [

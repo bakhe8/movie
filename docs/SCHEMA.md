@@ -233,6 +233,23 @@ title_posters (                                                  -- POSTERS-MULT
   UNIQUE ("titleId", "posterPath")                               -- makes P2's backfill idempotent and leads with "titleId", so P3's batched read needs no second index
 )
 
+catalog_intake (                                                 -- CAT-J1, ADR-121; candidates discovered by a source adapter, held outside titles until a human admits them
+  id uuid PK,
+  "wikidataId" varchar, "imdbId" varchar, "tmdbId" varchar,      -- provider ids ARE the identity; no internalId (reservation is the human step, ADR-116); CHECK formats as titles; partial UNIQUE on each WHERE NOT NULL; CHECK at least one present
+  source varchar(40) NOT NULL,                                   -- the adapter key that discovered it ('wikidata'); never free text
+  status varchar(16) NOT NULL DEFAULT 'discovered',              -- CHECK IN ('discovered','verified','blocked','duplicate','admitted'); INDEX
+  "titleEn" varchar, "titleAr" varchar, description text, "descriptionAr" text, "releaseYear" integer,
+  genres text[] NOT NULL DEFAULT '{}', "originalLanguage" varchar, countries text[] NOT NULL DEFAULT '{}',
+  "posterPath" varchar,                                          -- TMDB path only (same CHECK as title_posters); NULL until a TMDB adapter exists
+  provenance json NOT NULL DEFAULT '{}',                         -- per field: {source, license, licenseStatus, url, retrievedAt}; becomes source_records rows at admission
+  criteria json,                                                 -- the discovery criteria snapshot (slice, country, reason, sitelinks) for the reviewer
+  "evaluatorVersion" varchar, "blockerCodes" text[] NOT NULL DEFAULT '{}', "evaluatedAt" timestamp,  -- intake-v1; empty codes = admissible
+  "duplicateOf" varchar,                                         -- titles.internalId or 'intake:<id>' the evaluator flagged; a human resolves, never a job
+  "admittedTitleId" uuid FK titles ON DELETE SET NULL,           -- the only link to titles; set by catalog_admit (refuses until PUB-G1 admission is authorised)
+  attempts integer NOT NULL DEFAULT 0, "lastAttemptAt" timestamp, "lastError" varchar(500),
+  "createdAt" timestamp NOT NULL DEFAULT now(), "updatedAt" timestamp NOT NULL DEFAULT now()
+)
+
 credits (
   id uuid PK, "titleId" uuid NOT NULL FK titles ON DELETE CASCADE, "personId" uuid NOT NULL FK people,
   role varchar NOT NULL, "creditOrder" integer, "sourceRecordId" uuid FK source_records,
@@ -366,6 +383,7 @@ What is **not** in the database today (see §2 for the target): nothing — ever
 | (shared latent space, `§7.5`) | `shared_latent_space_versions` | present since M7, empty — `user_model_snapshots.calibratedAgainst`'s FK now points here (added by M7) but no version has ever been created |
 | (audit, `§21.3`) | `audit_log` | present since M2 — nothing writes to it yet |
 | (publication readiness, `§11`/`§6`) | `title_revisions`, `titles."publishedRevisionId"` | target only — [ADR-118](ARCHITECTURE_DECISIONS.md#adr-118--publication-is-a-policy-gated-pointer-to-a-reviewed-revision-not-a-title-flag-pub-w0-2026-09-06), no migration yet; blocks `PUB-S1`/`D1000-4` |
+| (catalog intake, ADR-121) | `catalog_intake` | present since 2026-09-06 (CAT-J1); written only by the `catalog_pull` admin job, read by `GET /admin/catalog-intake`; no row has been admitted -- `catalog_admit` refuses until PUB-G1 admission is authorised |
 
 ### 2.2 Target DDL
 
@@ -581,6 +599,7 @@ Each step is one TypeORM migration; none require data backfill beyond defaults b
 
 **Changelog**
 
+- 2.36 (2026-09-06): migration `1788502000000-AddCatalogIntake` (ADR-121, CAT-J1) -- `catalog_intake`, one row per discovered candidate keyed by provider ids (partial unique indexes on `wikidataId`/`imdbId`/`tmdbId`, format checks, at-least-one-id check), with `intake-v1` blocker codes and a nullable `admittedTitleId` FK (`ON DELETE SET NULL`). Additive; nothing public reads it; `titles` is untouched. `up()`/`down()` verified against `moviedb_test` in `catalog-intake.e2e-spec.ts`.
 - 2.35 (2026-09-06): fortieth migration `AddTitlePosters` — `title_posters`, one row per poster image (ADR-120, POSTERS-MULTI P1). Schema only: nothing writes to it, `titles.posterPath` is untouched, and no read path changes until P3/P4. Verified with a real `up()`/`down()`/`up()` round trip against `moviedb_test` plus a constraint probe — duplicate `(titleId, posterPath)`, a composed URL, a path with no leading slash, an empty path, a negative `sortOrder`, an unknown `titleId` and deleting a cited `source_records` row are each rejected by name; deleting the title cascades its poster rows away.
 - 2.34 (2026-09-06): migration `1788492000000-AddTriadRankedWatchEvents` (ADR-119) applied to `movie-postgres` and `moviedb_test` -- nullable `watch_events."triadId"` (`FK` to `triads`, `ON DELETE SET NULL`) and a partial unique index on `("triadId", "titleId")`; `WatchEventSource` gains `'triad_ranked'`. §1's `watch_events` DDL updated to match.
 - 2.33 (2026-09-05): ADR-113 adds the nullable `preferredAppearance` column and enum check in `1788488000000-AddProfileAppearance`; migration written and compiled on `codex/cinematic-redesign`, pending database application.
