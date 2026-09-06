@@ -23,7 +23,7 @@ export function Poster({
   className,
   name,
 }: {
-  title?: Pick<Title, 'posterUrl'> | null;
+  title?: Pick<Title, 'posterUrl' | 'posters'> | null;
   size?: Size;
   className?: string;
   // Shown as its first letter when there is no licensed image, so two films
@@ -33,6 +33,10 @@ export function Poster({
 }) {
   const classes = [styles.poster, styles[size], className].filter(Boolean).join(' ');
   const url = title?.posterUrl ?? null;
+  // POSTERS-MULTI P4 (ADR-120): plumbed through, not rendered yet. The
+  // carousel itself is P5, gated on an approved visual direction -- this
+  // exists only so the data reaches here; it changes no markup or layout.
+  const posterCount = title?.posters?.length ?? 0;
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   if (url && failedUrl !== url) {
     // The browser fetches this from the image host itself (TMDB today), so
@@ -42,8 +46,19 @@ export function Poster({
     // next.config.ts covers the CSS backdrop the work page paints from the
     // same URL; this attribute keeps the guarantee on the element itself,
     // wherever the markup is served from.
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img className={classes} src={url} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailedUrl(url)} />;
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        className={classes}
+        src={url}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        referrerPolicy="no-referrer"
+        onError={() => setFailedUrl(url)}
+        data-poster-count={posterCount}
+      />
+    );
   }
   // The empty slot is drawn, not left blank (remediation brief P1-05 /
   // L10N-01): a dashed 2:3 frame with a neutral film mark, so a title with no

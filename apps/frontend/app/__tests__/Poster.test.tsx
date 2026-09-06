@@ -36,4 +36,36 @@ describe('Poster', () => {
     expect(container.textContent).toBe('');
     expect(container.querySelector('svg')).not.toBeNull();
   });
+
+  // POSTERS-MULTI P4 (ADR-120): plumbing only -- the field reaches the
+  // component without changing what is rendered. P5 (pending an approved
+  // visual direction) is what actually shows more than one image.
+  describe('posters (plumbing, not yet rendered)', () => {
+    const posters = [
+      { posterUrl: 'https://image.tmdb.org/t/p/w342/a.jpg', posterSource: { name: 'tmdb', attribution: 'TMDB' } },
+      { posterUrl: 'https://image.tmdb.org/t/p/w342/b.jpg', posterSource: { name: 'tmdb', attribution: 'TMDB' } },
+    ];
+
+    it('still renders exactly one image, at posterUrl, when posters carries more', () => {
+      const { container } = render(<Poster title={{ posterUrl: 'https://image.tmdb.org/t/p/w342/x.jpg', posters }} />);
+
+      const images = container.querySelectorAll('img');
+      expect(images).toHaveLength(1);
+      expect(images[0].getAttribute('src')).toBe('https://image.tmdb.org/t/p/w342/x.jpg');
+    });
+
+    it('accepts posters without needing it -- an absent or empty array behaves exactly like today', () => {
+      const withoutField = render(<Poster title={{ posterUrl: 'https://image.tmdb.org/t/p/w342/x.jpg' }} />).container.querySelector('img');
+      const withEmptyArray = render(<Poster title={{ posterUrl: 'https://image.tmdb.org/t/p/w342/x.jpg', posters: [] }} />).container.querySelector('img');
+
+      expect(withoutField?.outerHTML.replace(/data-poster-count="0"\s*/, '')).toBe(withEmptyArray?.outerHTML.replace(/data-poster-count="0"\s*/, ''));
+    });
+
+    it('the hollow placeholder is unaffected by posters (no poster still means no poster)', () => {
+      const { container } = render(<Poster title={{ posterUrl: null, posters }} />);
+
+      expect(container.querySelector('img')).toBeNull();
+      expect(container.querySelector('svg')).not.toBeNull();
+    });
+  });
 });

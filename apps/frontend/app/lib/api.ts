@@ -89,6 +89,12 @@ export interface Title {
   // The attribution the image's source requires (e.g. TMDB), shown where the
   // image is shown (DATA_LICENSING §5).
   posterSource?: { name: string; attribution: string } | null;
+  // POSTERS-MULTI P3/ADR-120: the full poster set for this title, index 0 the
+  // same image as posterUrl, [] when none. Additive and optional -- absent on
+  // a response that predates this field, never required by an existing
+  // caller. Plumbing only for now (P4): nothing renders more than one image
+  // yet (P5, pending an approved visual direction).
+  posters?: { posterUrl: string; posterSource: { name: string; attribution: string } | null }[] | null;
   // Public Quality as GET /titles/:id returns it since 2026-09-04 (ALPHA_PLAN
   // 5.3): sources listed separately, never merged; null = no source yet.
   publicQuality?: PublicQuality | null;
