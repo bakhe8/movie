@@ -9,8 +9,12 @@ import { PUBLICATION_POLICY_VERSION, PublicationPolicyService } from './publicat
 // Not imported from admin-catalog.service.ts: that file is under active
 // edit by another session as this is written, and this module must not
 // depend on it changing shape underneath.
+//
+// `id: null` is the audit log's own "the system itself, not a person"
+// (AuditEntry.actorUserId) -- used by the one-time operator script, which
+// must not attribute its writes to an admin who never clicked anything.
 export interface PublishActor {
-  id: string;
+  id: string | null;
   role: string;
   ip: string | null;
 }
