@@ -14,6 +14,7 @@ import { Title } from '../../entities/title.entity';
 import { Triad } from '../../entities/triad.entity';
 import { ReplacementReason, TriadReplacement } from '../../entities/triad-replacement.entity';
 import { UserTitleState } from '../../entities/user-title-state.entity';
+import { WatchEvent } from '../../entities/watch-event.entity';
 import { RankTriadDto } from './dto/rank-triad.dto';
 import { ReplaceTriadItemDto } from './dto/replace-triad-item.dto';
 import { triadSetHash, type TriadPurpose } from './triad-set';
@@ -282,14 +283,32 @@ export class TriadsService {
 
     this.assertRankingMatchesTriad(rankTriadDto.ranking, triad.titleIds);
 
-    triad.ranking = rankTriadDto.ranking;
-    triad.answeredAt = new Date();
-    triad.sessionId = rankTriadDto.sessionId ?? triad.sessionId;
-    triad.idempotencyKey = idempotencyKey ?? null;
-    triad.status = 'completed';
-
     try {
-      const saved = await this.triadsRepository.save(triad);
+      // One transaction: completing the triad and confirming its three
+      // titles as watched (ADR-119) land together or not at all -- the same
+      // row lock replace() takes, so two concurrent submissions for this
+      // triad serialize instead of racing on a stale read (AUDIT_2026-09-05
+      // H3's pattern, not previously applied to rank() itself).
+      const saved = await this.triadsRepository.manager.transaction(async (manager) => {
+        const locked = await manager.findOne(Triad, { where: { id: triadId }, lock: { mode: 'pessimistic_write' } });
+        if (!locked) {
+          throw new NotFoundException('Triad not found');
+        }
+        if (locked.status !== 'active') {
+          throw new BadRequestException('This triad has already been submitted');
+        }
+        this.assertRankingMatchesTriad(rankTriadDto.ranking, locked.titleIds);
+
+        locked.ranking = rankTriadDto.ranking;
+        locked.answeredAt = new Date();
+        locked.sessionId = rankTriadDto.sessionId ?? locked.sessionId;
+        locked.idempotencyKey = idempotencyKey ?? null;
+        locked.status = 'completed';
+
+        const savedTriad = await manager.save(locked);
+        await this.confirmWatchedFromRanking(manager, savedTriad);
+        return savedTriad;
+      });
       await this.recordRankedOutcomes(saved);
       // ALPHA_PLAN 7.5's triad timing, measured server-side from the two
       // stamps the row already carries rather than trusted from a client.
@@ -365,6 +384,43 @@ export class TriadsService {
           triadId: triad.id,
           rankPosition,
           occurredAt: triad.answeredAt ?? new Date(),
+        }),
+      );
+    }
+  }
+
+  // ADR-119: comparing three films is stronger evidence of exposure than the
+  // watch list ever was, so completing a triad confirms all three as watched
+  // -- and records why through the same watch_events log WatchEventsService
+  // already writes to (BP §6.2, §13.1), not a parallel table. Only reached
+  // from inside rank()'s locked transaction on a fresh completion: an
+  // idempotent replay or a lost-race retry both return before this runs, so
+  // UQ_watch_events_triadId_titleId is a backstop, not the primary guard.
+  // A ranking is definitive even over an explicit `not_watched` set through
+  // another tab moments earlier -- it outranks the exposure list precisely
+  // because the user just compared the film to two others. watchedOn/notes/
+  // importedRating are never touched: the ranking says nothing about which
+  // calendar day this was, or a rating (BP §2.4 principle #2, §4.2, §4.5) --
+  // and watchedAt on the new watch_events row stays NULL for the same reason
+  // WatchEventsService.create() never guesses a day from a server clock
+  // (DATE-01): unlike that path, a ranking carries no client-supplied one.
+  private async confirmWatchedFromRanking(manager: EntityManager, triad: Triad): Promise<void> {
+    for (const titleId of triad.titleIds) {
+      const existing = await manager.findOne(UserTitleState, { where: { profileId: triad.profileId, titleId } });
+      const state = existing ?? manager.create(UserTitleState, { profileId: triad.profileId, titleId });
+      if (state.state !== 'watched') {
+        state.state = 'watched';
+        state.watchedAt = state.watchedAt ?? new Date();
+      }
+      await manager.save(state);
+
+      await manager.save(
+        manager.create(WatchEvent, {
+          profileId: triad.profileId,
+          titleId,
+          watchedAt: null,
+          source: 'triad_ranked',
+          triadId: triad.id,
         }),
       );
     }

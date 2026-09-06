@@ -9,6 +9,8 @@ import { AppModule } from '../src/modules/app/app.module';
 import { Outcome } from '../src/entities/outcome.entity';
 import { Recommendation } from '../src/entities/recommendation.entity';
 import { Title } from '../src/entities/title.entity';
+import { UserTitleState } from '../src/entities/user-title-state.entity';
+import { WatchEvent } from '../src/entities/watch-event.entity';
 
 async function registerUser(app: INestApplication, label: string) {
   const email = `${label}-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
@@ -100,6 +102,19 @@ describe('Triad ranking (real HTTP, real DB)', () => {
     expect(ranked.body.status).toBe('completed');
     expect(ranked.body.ranking).toEqual([third, first, second]);
     expect(ranked.body.answeredAt).not.toBeNull();
+
+    // ADR-119: completing the triad confirms all three titles watched and
+    // records why -- against the real DB, so the migration and the partial
+    // unique index actually run, not just the mocked unit tests.
+    const watchEventsRepository = app.get<Repository<WatchEvent>>(getRepositoryToken(WatchEvent));
+    const events = await watchEventsRepository.find({ where: { profileId, source: 'triad_ranked' } });
+    expect(events).toHaveLength(3);
+    expect(events.every((event) => event.triadId === current.body.id && event.watchedAt === null)).toBe(true);
+    expect(new Set(events.map((event) => event.titleId))).toEqual(new Set([first, second, third]));
+
+    const statesRepository = app.get<Repository<UserTitleState>>(getRepositoryToken(UserTitleState));
+    const states = await statesRepository.find({ where: { profileId } });
+    expect(states.every((state) => state.state === 'watched')).toBe(true);
   });
 
   it('rejects a ranking that uses a title id outside the triad', async () => {
@@ -124,6 +139,17 @@ describe('Triad ranking (real HTTP, real DB)', () => {
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
     const ranking = [...(current.body.titleIds as string[])];
+    // ADR-119, real-DB edge case the unit tests can only mock: the first of
+    // the three is explicitly marked not_watched (a different tab, a change
+    // of mind) after entering this active triad but before it is ranked. A
+    // ranking is stronger evidence than the exposure list, so it must win --
+    // this title comes back as watched rather than rank() trusting a stale
+    // titleIds array against a state row that has since moved on.
+    await request(app.getHttpServer())
+      .patch(`/profiles/${profileId}/titles/${ranking[0]}/state`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ state: 'not_watched' })
+      .expect(200);
     // A fresh key per run: postgres-test's tmpfs volume survives a
     // stop/start cycle of the same container (only a true recreate wipes
     // it), so a hard-coded key here would collide with a leftover row from
@@ -147,6 +173,16 @@ describe('Triad ranking (real HTTP, real DB)', () => {
 
     expect(retry.body.id).toBe(first.body.id);
     expect(retry.body.answeredAt).toBe(first.body.answeredAt);
+
+    const statesRepository = app.get<Repository<UserTitleState>>(getRepositoryToken(UserTitleState));
+    const revertedState = await statesRepository.findOne({ where: { profileId, titleId: ranking[0] } });
+    expect(revertedState?.state).toBe('watched');
+
+    // The replay must not have written a second round of provenance events --
+    // still exactly one triad_ranked watch_event per title, not two.
+    const watchEventsRepository = app.get<Repository<WatchEvent>>(getRepositoryToken(WatchEvent));
+    const events = await watchEventsRepository.find({ where: { profileId, source: 'triad_ranked' } });
+    expect(events).toHaveLength(3);
   });
 
   // H1: getCurrent() used to exclude every title that had ever appeared in
