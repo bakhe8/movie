@@ -1,4 +1,4 @@
-# Architecture Decision Records — ADR-1…117
+# Architecture Decision Records — ADR-1…119
 
 **Status**: Living log. Every decision cites the blueprint section it serves (`BP §x.y`) or states that it is this repository's own engineering choice within the blueprint's constraints. A decision that contradicts the blueprint is a bug in this file. Product-level open questions that must be settled by experiment are **not** decided here — they are listed in `BP App. C` and [SPECIFICATION.md §11](SPECIFICATION.md).
 **Version**: 4.2 — 2026-09-06 (living log through ADR-117; the summary table and each ADR carry their own provenance).
@@ -974,6 +974,8 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 | 115 | `cinema / premiere / montage` is the appearance axis: permanent evolving tracks require materially distinct page distribution, composition and identity; theme remains independent | owner product decision and clarifications 2026-09-06; refines ADR-113 within the blueprint's shared-MVP constraints | a structural candidate and eligible human traffic can support controlled measurement; permanence changes only by owner decision |
 | 116 | Catalog identity is cumulative: explicit reserved internalIds, unique Wikidata/IMDb/TMDB IDs, and no automatic rebind; remakes are separate works and cuts/dubs use title_editions | CAT-1 2026-09-06, base `378c152`; BP §13.1 | a verified identity correction needs a separately reviewed migration |
 | 117 | Fixed local light admin theme; read-only monitoring separated from administration; capabilities enforced by the server with legacy-admin compatibility | ADMIN-W0 at `dee0cd3`, owner constraints 2026-09-06; engineering choice serving BP §5.1, §21.3 | changed owner constraints or a new capability requires a reviewed contract and preservation evidence |
+| 118 | Publication is a policy-gated pointer to a reviewed revision (`title_revisions`, `titles.publishedRevisionId`), not a title flag; readiness computed by versioned policy `public-v1`, never set by the writer | PUB-W0 2026-09-06; owner catalog-scale decision 2026-09-06; BP §11, §6 | a licensed availability partner, human review step, or a second catalog needs another policy version |
+| 119 | Ranking a triad confirms its titles watched via `watch_events.source = 'triad_ranked'`, not a parallel table | TRIAD-WATCH 2026-09-06; BP §2.4 #2, §6.2/§13.1 | a second derivation path for `watched` needs its own source value |
 
 ## How to add a decision
 
@@ -1076,6 +1078,17 @@ Recorded after the fact (`42830a3`; flagged as undocumented by AUDIT_2026-09-05 
 **Rationale.** Operators need stable, accessible information density and a trustworthy distinction between observation and change; least privilege must remain effective for direct API callers.
 **Consequences.** This ADR records the target, not implemented capabilities. [W0 preservation and gates](ADMIN_W0_PRESERVATION_CONTRACT_2026-09-06.md) bind W0 → W1 → W2; old AdminScreen cannot be removed before its complete preservation matrix passes and its compatibility wrapper is delivered. W2 adds no new backend mutations or migrations; jobs, settings and experiment controls retain their later gates, with W5 before W6.
 **Revisit when.** Owner constraints change, legacy-role migration can safely end, or a new operation needs a reviewed capability, owning API/schema contract and preservation evidence.
+
+---
+
+## ADR-118 — Publication is a policy-gated pointer to a reviewed revision, not a title flag (PUB-W0, 2026-09-06)
+
+**Context.** The owner's 2026-09-06 catalog-scale decision lets CAT-1B/CAT-2 accumulate up to 1000 internally reserved identities (`IDENTITY_VERIFIED_PENDING_PUBLICATION`, `INCOMPLETE`) while the public release fixture stays at 389 (`BP §11`, `§6`); nothing in `titles` today tells "the identity exists" apart from "this exact content passed a publishability check and may be shown", and `posterPath`/`genres`/`description` are mutated in place with no history to review or roll back.
+**Decision.** `title_revisions` holds one immutable content snapshot per accepted change (`titleEn`/`titleAr`/`description`/`posterPath`/`genres`/`releaseYear` plus the `source_records` ids it was built from); `titles."publishedRevisionId"` (nullable, `ON DELETE SET NULL`) is the only pointer every public read path may follow. Readiness is never a column the writer sets — a versioned policy evaluator computes it from a snapshot's own fields and its cited `source_records.licenseStatus`, the same append-only, never-overwritten-in-place discipline `source_records` already uses for per-field rights, scoped here to whole-snapshot publish gating instead.
+**Policy `public-v1`.** A snapshot is ready only with a non-empty `titleAr`/`titleEn`/`posterPath`/`genres`, a resolved catalog identity (not `INCOMPLETE`/`UNRESOLVED`, `ADR-116`), and no cited `source_records` row whose `licenseStatus` forbids public display; failure returns explicit `blockerCodes` (`POSTER_MISSING`, `DESCRIPTION_MISSING`, `IDENTITY_UNRESOLVED`, `LICENSE_BLOCKED`), never a silent default.
+**Enforcement.** `publishedRevisionId IS NULL` hides the title from every public surface — search, starter/detail, recommendations, counts, triads, direct UUID access, state and watch-events (owner rule 2026-09-06: no `UNKNOWN` standing in for missing content) — until `PUB-G1`'s guard is built; `PUB-S1` only computes and previews `blockerCodes` read-only, and only `PUB-B1`/manual publish may ever write the pointer.
+**Consequences.** The 389-title fixture is the only baseline with a non-null `publishedRevisionId` until `PUB-B1`/`PUB-G1` land; every CAT-1B (16+20) and future CAT-2 record starts `publishedRevisionId = NULL` by construction, not by a later filter. This ADR is documentation only — no migration yet; its migration number is chosen after `1788492000000` (`ADR-119`) once `PUB-S1` opens.
+**Revisit when.** A licensed availability partner, human review step, or a second differentiated catalog needs its own policy version alongside `public-v1`.
 
 ---
 

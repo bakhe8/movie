@@ -354,6 +354,7 @@ What is **not** in the database today (see §2 for the target): nothing — ever
 | (Public Quality / Watchability, `§10.3`, `§6`) | `public_quality_sources`, `availability_snapshots` | present since M6; `public_quality_sources` populated by `scripts/load-imdb-ratings.ts` from IMDb's non-commercial dump (owner 2026-09-04, ADR-77) and read by `RecommendationsService`/`TitlesService` (ADR-78); `availability_snapshots` still empty, no licensed availability partner exists |
 | (shared latent space, `§7.5`) | `shared_latent_space_versions` | present since M7, empty — `user_model_snapshots.calibratedAgainst`'s FK now points here (added by M7) but no version has ever been created |
 | (audit, `§21.3`) | `audit_log` | present since M2 — nothing writes to it yet |
+| (publication readiness, `§11`/`§6`) | `title_revisions`, `titles."publishedRevisionId"` | target only — [ADR-118](ARCHITECTURE_DECISIONS.md#adr-118--publication-is-a-policy-gated-pointer-to-a-reviewed-revision-not-a-title-flag-pub-w0-2026-09-06), no migration yet; blocks `PUB-S1`/`D1000-4` |
 
 ### 2.2 Target DDL
 
@@ -431,6 +432,21 @@ content_features (                                                              
   UNIQUE ("titleId", "featureKey", "extractorVersion")
 )
 -- titles.fingerprint stays as the published, versioned snapshot the model reads; content_features is its provenance.
+
+-- Publication readiness (PUB-W0, ADR-118) ----------------------------------------
+title_revisions (                                                               -- BP §11.3 versioning; one immutable accepted snapshot per publish-eligible change
+  id uuid PK, "titleId" uuid NOT NULL FK titles ON DELETE CASCADE,
+  "titleEn" varchar NOT NULL, "titleAr" varchar NOT NULL, description varchar,
+  "posterPath" varchar, genres text, "releaseYear" integer,
+  "sourceRecordIds" uuid[] NOT NULL DEFAULT '{}',        -- source_records rows this snapshot is built from
+  "policyVersion" varchar NOT NULL,                      -- e.g. 'public-v1' -- the readiness policy evaluated against this snapshot
+  "blockerCodes" text[] NOT NULL DEFAULT '{}',           -- 'POSTER_MISSING' | 'DESCRIPTION_MISSING' | 'IDENTITY_UNRESOLVED' | 'LICENSE_BLOCKED' | … ; empty only when the policy accepted the snapshot
+  "evaluatedAt" timestamp NOT NULL, "createdAt" timestamp NOT NULL DEFAULT now(),
+  INDEX ("titleId")
+)
+ALTER TABLE titles ADD COLUMN "publishedRevisionId" uuid FK title_revisions(id) ON DELETE SET NULL;
+-- NULL = invisible on every public surface (search/starter/detail/recommendations/counts/triads/direct UUID/state/watch-events, ADR-118);
+-- only PUB-G1's guard may set it, and only to a revision whose blockerCodes is empty under the active policyVersion.
 
 public_quality_sources (                                                        -- BP §10.3: per-source, never averaged into one number
   id uuid PK, "titleId" uuid NOT NULL FK titles ON DELETE CASCADE,
