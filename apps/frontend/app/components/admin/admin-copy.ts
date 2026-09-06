@@ -53,6 +53,14 @@ export const ADMIN_SECTION_COPY: Record<string, { title: string; blurb: string }
     title: 'تسجيل نماذج التوصية',
     blurb: 'تسجيل إصدار جديد من نظام التوصية، واعتماد الإصدار الذي يُستخدم فعلياً حالياً.',
   },
+  jobs: {
+    title: 'المهام الآلية',
+    blurb: 'المهام الخلفية التي تعمل أو عملت مؤخراً على الكتالوج، وحالتها وتقدّمها.',
+  },
+  jobsAdmin: {
+    title: 'تشغيل مهمة',
+    blurb: 'تشغيل مهمة من قائمة محدودة ومعروفة فقط؛ يمكن تجربتها أولاً دون كتابة فعلية (تنفيذ تجريبي).',
+  },
 };
 
 // hasFingerprint/hasV2 (docs/API.md `admin/titles`): whether -- and how
@@ -303,6 +311,15 @@ export function adminErrorReasonLabel(reason: string | undefined, fallback: stri
   if (!reason) return fallback;
   return ADMIN_ERROR_REASON_LABELS[reason] ?? fallback;
 }
+
+// admin_jobs.status (ADMIN-W5, plan §17.2).
+export const JOB_STATUS_LABELS: Record<string, string> = {
+  queued: 'بانتظار التنفيذ',
+  running: 'قيد التنفيذ',
+  succeeded: 'انتهت بنجاح',
+  failed: 'فشلت',
+  cancelled: 'أُلغيت',
+};
 
 // source_records fields an admin can add or correct (BP §11.1 rights
 // registry) -- form labels, distinct from the raw column names.

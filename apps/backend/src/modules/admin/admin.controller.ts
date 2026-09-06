@@ -5,13 +5,16 @@ import type { SafeUser } from '../auth/auth.service';
 import { MailOutboxService } from '../mail/mail-outbox.service';
 import { capabilitiesForRole } from './admin-capabilities';
 import { Actor, AdminCatalogService } from './admin-catalog.service';
+import { AdminJobsService } from './admin-jobs.service';
 import { AdminMetricsService } from './admin-metrics.service';
 import { AdminModelsService } from './admin-models.service';
 import { AdminOpsService } from './admin-ops.service';
 import {
+  CreateAdminJobDto,
   CreateModelVersionDto,
   CreateSourceRecordDto,
   LatestTriadsQueryDto,
+  ListAdminJobsQueryDto,
   ListAuditLogQueryDto,
   ListContentFeaturesQueryDto,
   ListPrivacyRequestsQueryDto,
@@ -45,6 +48,7 @@ export class AdminController {
     private readonly ops: AdminOpsService,
     private readonly metrics: AdminMetricsService,
     private readonly outbox: MailOutboxService,
+    private readonly jobs: AdminJobsService,
   ) {}
 
   // ADMIN-W1 (ADR-117): the access-boundary probe. AuthGuard/AdminGuard
@@ -195,6 +199,33 @@ export class AdminController {
   @Get('mail-outbox')
   mailOutbox() {
     return this.outbox.summary();
+  }
+
+  // ---- job center (ADMIN-W5, plan §17.2) ---------------------------------
+
+  @Get('jobs/types')
+  listJobTypes() {
+    return this.jobs.listTypes();
+  }
+
+  @Get('jobs')
+  listJobs(@Query() query: ListAdminJobsQueryDto) {
+    return this.jobs.list(query);
+  }
+
+  @Post('jobs')
+  createJob(@Request() request: AdminRequest, @Body() dto: CreateAdminJobDto) {
+    return this.jobs.create(dto, actorOf(request));
+  }
+
+  @Get('jobs/:jobId')
+  getJob(@Param('jobId', ParseUUIDPipe) jobId: string) {
+    return this.jobs.get(jobId);
+  }
+
+  @Post('jobs/:jobId/cancel')
+  cancelJob(@Request() request: AdminRequest, @Param('jobId', ParseUUIDPipe) jobId: string) {
+    return this.jobs.cancel(jobId, actorOf(request));
   }
 
   // ---- metrics board (BP §18.1) -----------------------------------------

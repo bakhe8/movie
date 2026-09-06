@@ -356,6 +356,39 @@ export class LatestTriadsQueryDto {
 // The metrics window. `days` back from now is the common case; explicit
 // `from`/`to` (ISO-8601) override it. `excludeDomains` keeps demo and judge
 // accounts out of the numbers.
+// ADMIN-W5: `type` is checked against the allowlist in AdminJobsService, not
+// here -- an unknown type is a 400 with the actual allowlist, more useful to
+// an operator than a DTO-level enum that has to be edited for every new type.
+export class CreateAdminJobDto {
+  @IsString()
+  @MaxLength(100)
+  type: string;
+
+  @IsOptional()
+  @IsObject()
+  params?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsBoolean()
+  dryRun?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  idempotencyKey?: string;
+}
+
+export class ListAdminJobsQueryDto extends PageQueryDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  type?: string;
+
+  @IsOptional()
+  @IsIn(['queued', 'running', 'succeeded', 'failed', 'cancelled'])
+  status?: string;
+}
+
 export class MetricsQueryDto {
   @IsOptional()
   @Type(() => Number)

@@ -717,6 +717,32 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  // ── ADMIN-W5: the job center (plan §17.2) ───────────────────────────────────
+
+  // The allowlist itself -- the administration screen builds its type picker
+  // from this, never a free-text field.
+  adminGetJobTypes: (signal?: AbortSignal) => request<AdminJobType[]>('/admin/jobs/types', { signal }),
+
+  adminGetJobs: (params: { type?: string; status?: string; page?: number; limit?: number; signal?: AbortSignal } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.type) qs.set('type', params.type);
+    if (params.status) qs.set('status', params.status);
+    if (params.page) qs.set('page', String(params.page));
+    if (params.limit) qs.set('limit', String(params.limit));
+    return request<{ items: AdminJobRecord[]; total: number; page: number; limit: number; totalPages: number }>(`/admin/jobs?${qs}`, { signal: params.signal });
+  },
+
+  adminGetJob: (jobId: string, signal?: AbortSignal) => request<AdminJobRecord>(`/admin/jobs/${jobId}`, { signal }),
+
+  // A 409 (reason 'unknown_type') carries the current allowlist in
+  // `details.allowlist` -- surface it rather than a generic failure.
+  adminCreateJob: (dto: { type: string; params?: Record<string, unknown>; dryRun?: boolean; idempotencyKey?: string }) =>
+    request<{ job: AdminJobRecord; created: boolean }>('/admin/jobs', { method: 'POST', body: JSON.stringify(dto) }),
+
+  // A 409 (reason 'already_terminal') means the job already finished --
+  // refresh instead of retrying the cancel.
+  adminCancelJob: (jobId: string) => request<AdminJobRecord>(`/admin/jobs/${jobId}/cancel`, { method: 'POST' }),
+
   adminGetModels: () =>
     request<{
       versions: { version: string; rankerType: string; active: boolean; fingerprintSchemaVersion: string; createdAt: string; stats: { snapshotCount: number; profileCount: number } | null }[];
@@ -870,6 +896,22 @@ export interface AdminModelVersion {
 export interface AdminUserRow {
   id: string; email: string; firstName: string | null; lastName: string | null;
   role: 'user' | 'admin'; active: boolean; profiles: number; createdAt: string;
+}
+
+export type AdminJobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+
+export interface AdminJobType {
+  type: string;
+  description: string;
+}
+
+export interface AdminJobRecord {
+  id: string; type: string; status: AdminJobStatus;
+  params: Record<string, unknown> | null; dryRun: boolean;
+  progress: Record<string, unknown> | null; result: Record<string, unknown> | null;
+  attempts: number; lastError: string | null; nextAttemptAt: string;
+  cancelRequested: boolean; requestedBy: string; idempotencyKey: string | null;
+  startedAt: string | null; finishedAt: string | null; createdAt: string; updatedAt: string;
 }
 
 export interface AdminTitleDetail {

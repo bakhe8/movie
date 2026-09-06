@@ -3,6 +3,7 @@ import { DataSourceOptions, NamingStrategyInterface } from 'typeorm';
 import { config } from 'dotenv';
 import { resolve } from 'node:path';
 import { ConventionNamingStrategy } from './naming-strategy';
+import { AdminJob } from '../entities/admin-job.entity';
 import { AnalyticsEvent } from '../entities/analytics-event.entity';
 import { AuditLog } from '../entities/audit-log.entity';
 import { AvailabilitySnapshot } from '../entities/availability-snapshot.entity';
@@ -83,6 +84,7 @@ const ENTITIES: DataSourceOptions['entities'] = [
   PublicQualitySource,
   AvailabilitySnapshot,
   SharedLatentSpaceVersion,
+  AdminJob,
 ];
 
 interface ConnectionOptions {
