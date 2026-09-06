@@ -4,7 +4,7 @@ import { Brackets, Repository } from 'typeorm';
 import { ContentFeature } from '../../entities/content-feature.entity';
 import { Title } from '../../entities/title.entity';
 import { AttributionService, TextSource } from '../public-quality/attribution.service';
-import { PosterService, PosterSource } from '../public-quality/poster.service';
+import { Poster, PosterService, PosterSource } from '../public-quality/poster.service';
 import { PublicQuality, PublicQualityService } from '../public-quality/public-quality.service';
 import { ListTitlesQueryDto } from './dto/list-titles-query.dto';
 import { ARABIC_FOLD_FROM, ARABIC_FOLD_TO, ARABIC_STRIP, diversify, foldArabic } from './starter';
@@ -20,10 +20,15 @@ const STARTER_POOL_SIZE = 300;
 // (see the `select` lists below), not just omitted from the response.
 // posterUrl/posterSource are composed per read and only for an image whose
 // rights row allows display in this environment (ADR-82); both null
-// otherwise, which the client renders as the hollow slot.
+// otherwise, which the client renders as the hollow slot. `posters` (P3,
+// ADR-120) is additive: the full `title_posters` set for a carousel, index 0
+// the same image as `posterUrl`; `[]` when the title has none. Neither field
+// is derived from the other, so an existing reader of `posterUrl` is
+// unaffected.
 export type PublicTitle = Omit<Title, 'fingerprint' | 'externalIds'> & {
   posterUrl: string | null;
   posterSource: PosterSource | null;
+  posters: Poster[];
 };
 
 // The work page (`GET /titles/:id`, BP §5.3): Public Quality travels as its
