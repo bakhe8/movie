@@ -1,0 +1,93 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Readex+Pro:wght@500;600;700&display=swap">
+  <style>
+    body { margin: 0; background: #06070f; color: #eef0ff; font-family: 'IBM Plex Sans Arabic','Segoe UI','Noto Sans Arabic',sans-serif; font-size: 16px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+    a { color: #8b7cff; } a:hover { color: #a99dff; }
+    .disp { font-family: 'Readex Pro','IBM Plex Sans Arabic',sans-serif; line-height: 1.3; }
+    .num { font-variant-numeric: tabular-nums; }
+    .tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 12px; line-height: 1.4; color: #9aa0c8; }
+    .tab.on { color: #8b7cff; }
+    .chip { padding: 3px 8px; border: 1px solid rgba(255,255,255,.22); border-radius: 24px; background: rgba(255,255,255,.07); font-size: 10px; line-height: 1.5; color: #ffffff; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 44px; padding: 8px 14px; border-radius: 14px; font-size: 14px; font-weight: 600; }
+    .primary { border: 1px solid #8b7cff; background: #8b7cff; color: #12093d; box-shadow: 0 8px 23px rgba(139,124,255,.35); }
+    .ghost { border: 1px solid rgba(255,255,255,.32); background: rgba(255,255,255,.08); color: #ffffff; }
+    .cover { position: absolute; inset: 0; z-index: -3; width: 100%; height: 100%; object-fit: cover; object-position: center 22%; transform: scale(1.025); }
+    .scrim { position: absolute; inset: 0; z-index: -2; background: linear-gradient(0deg, rgba(5,8,20,.78) 4%, rgba(5,8,20,.64) 48%, rgba(5,8,20,.08) 100%); }
+    .fade { transition: opacity 240ms ease; }
+    .layer { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .thumb { display: block; width: 44px; height: 66px; padding: 0; border: 1px solid rgba(255,255,255,.2); border-radius: 8px; background: #171b38; overflow: hidden; cursor: pointer; transition: opacity 160ms ease, outline-color 160ms ease; }
+    .thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+    .rowb { display: flex; align-items: center; justify-content: space-between; min-height: 44px; font-size: 14px; color: #ffffff; }
+    .lbl { font-size: 12px; line-height: 1.4; color: #9aa0c8; }
+    .cap { font-size: 12.5px; color: #9aa0c8; line-height: 1.6; }
+    .h { font-family: 'Readex Pro','IBM Plex Sans Arabic',sans-serif; font-size: 14px; font-weight: 600; color: #eef0ff; }
+    .tile { position: relative; overflow: hidden; border-radius: 14px; background: #171b38; box-shadow: 0 4px 14px rgba(10,15,40,.12); }
+    .meta { position: absolute; inset-inline: 0; inset-block-end: 0; display: grid; align-content: end; gap: 5px; min-height: 104px; padding: 40px 11px 10px; color: #ffffff; background: linear-gradient(to top, rgba(5,8,20,.78) 0%, rgba(5,8,20,.78) 55%, rgba(5,8,20,.5) 78%, transparent 100%); }
+    .dots { display: flex; margin: 0 -11px; height: 44px; transition: opacity 160ms ease; }
+    .dotbtn { flex: 1; height: 44px; display: grid; place-items: center; padding: 0; border: 0; background: transparent; cursor: pointer; }
+    .dotbtn:focus-visible { outline: 2px solid #8b7cff; outline-offset: -4px; border-radius: 8px; }
+    .band { position: absolute; inset-inline: 0; inset-block-end: 0; height: 44px; display: flex; align-items: flex-end; justify-content: center; gap: 5px; padding: 0 0 7px; border: 0; background: linear-gradient(to top, rgba(5,8,20,.72), transparent); cursor: pointer; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { text-align: start; padding: 7px 9px; border-bottom: 1px solid #232853; vertical-align: top; font-size: 12px; line-height: 1.5; }
+    th { color: #9aa0c8; font-weight: 500; font-size: 11px; }
+    .no { color: #f0a050; } .yes { color: #5fd0e6; } .both { color: #9aa0c8; }
+    @media (prefers-reduced-motion: reduce) { .fade, .thumb, .dots { transition: none; } }
+
+    .fade400 { transition: opacity 400ms ease; }
+    .status { height: 36px; display: flex; align-items: center; justify-content: center; padding: 0 12px; color: #9aa0c8; font-size: 12px; background: #06070f; border-top: 1px dashed #232853; }
+    @media (prefers-reduced-motion: reduce) { .fade400 { transition: none; } }
+  </style>
+</helmet>
+<div style="width: 390px; height: 880px; overflow: hidden; background: #06070f; color: #eef0ff; direction: rtl; display: flex; flex-direction: column;"><div style="position: relative; width: 390px; height: 844px; overflow: hidden; display: flex; flex-direction: column; flex: none;"><div style="display: flex; align-items: center; justify-content: space-between; height: 62px; padding: 0 8px; flex: none;"><div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #eef0ff;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg></div><span class="disp" style="font-size: 18px; font-weight: 600;">Kolme</span><div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #eef0ff;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.2-4.2"></path></svg></div></div><div style="flex: 1; min-height: 0; overflow: hidden; padding: 0 16px; display: flex; flex-direction: column; gap: 14px;"><div style="display: flex; align-items: center; gap: 6px; min-height: 44px; color: #9aa0c8; font-size: 14px; flex: none;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg><span>رجوع</span></div><div style="position: relative; isolation: isolate; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1fr) 72px; grid-template-areas: 'text poster' 'actions actions' 'below below'; gap: 12px 14px; align-content: end; align-items: end; min-height: 370px; padding: 90px 18px 14px; border-radius: 30px; background: #0b0d1e; color: #ffffff; box-shadow: 0 24px 65px rgba(10,15,40,.22); flex: none;"><img class="cover fade400" src="inter-1.jpg" alt="" style="opacity: {{a1}}; filter: brightness(.87);"><img class="cover fade400" src="inter-2.jpg" alt="" style="opacity: {{a2}}; filter: brightness(.87);"><img class="cover fade400" src="inter-3.jpg" alt="" style="opacity: {{a3}}; filter: brightness(.87);"><img class="cover fade400" src="inter-4.jpg" alt="" style="opacity: {{a4}}; filter: brightness(.87);"><div class="scrim"></div><div style="grid-area: text; display: grid; gap: 7px; min-width: 0;"><h2 class="disp" style="margin: 0; font-size: 29px; font-weight: 700; line-height: 1.3; letter-spacing: -.035em; text-wrap: balance; color: #ffffff;">بين النجوم</h2><p class="disp" style="margin: 0; font-size: 13px; font-weight: 500; line-height: 1.45; opacity: .8; color: #ffffff;"><bdi>Interstellar</bdi><span class="num"> · 2014</span></p><ul style="display: flex; flex-wrap: wrap; gap: 5px; margin: 2px 0 0; padding: 0; list-style: none;"><li class="chip">خيال علمي</li><li class="chip">مغامرة</li><li class="chip">دراما</li><li class="chip">إثارة</li></ul></div><div style="grid-area: poster; align-self: center;"><div style="position: relative; width: 72px; aspect-ratio: 2 / 3; border-radius: 14px; border: 1px solid rgba(255,255,255,.2); box-shadow: 0 26px 40px rgba(10,15,40,.22); transform: rotate(3deg); overflow: hidden; background: #171b38;"><img class="layer fade400" src="inter-1.jpg" alt="" style="opacity: {{a1}};"><img class="layer fade400" src="inter-2.jpg" alt="" style="opacity: {{a2}};"><img class="layer fade400" src="inter-3.jpg" alt="" style="opacity: {{a3}};"><img class="layer fade400" src="inter-4.jpg" alt="" style="opacity: {{a4}};"></div></div><div style="grid-area: actions; display: flex; flex-wrap: wrap; gap: 8px;"><div class="btn primary"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg><span>شاهدته</span></div><div class="btn ghost"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" aria-hidden="true"><path d="M7 4h10v16l-5-3.5L7 20z"></path></svg><span>لاحقًا</span></div></div><div style="grid-area: below; min-width: 0; border-top: 1px solid rgba(255,255,255,.18); padding-top: 10px; display: flex; flex-direction: column; gap: 8px;"><div class="rowb"><span>الملخص (بالإنجليزية)</span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9aa0c8" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div></div></div><div style="display: flex; flex-direction: column; gap: 12px; padding: 4px 2px 0;"><div style="display: flex; align-items: center; gap: 11px;"><i style="display: block; width: 5px; height: 20px; border-radius: 4px; background: #8b7cff;"></i><span class="disp" style="font-size: 21px; font-weight: 700; letter-spacing: -.025em;">ملاءمته لك</span></div><div style="height: 110px; border-radius: 20px; background: #10132a;"></div></div></div><nav style="height: 64px; flex: none; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-top: 1px solid #232853; background: #06070f;"><div class="tab"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9H4z"></path><path d="M10 20v-6h4v6"></path></svg><span>الرئيسية</span></div><div class="tab"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M7 12h10M10 17h4"></path></svg><span>رتّب</span></div><div class="tab on"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M15 9l-2 5-4 1 2-5z"></path></svg><span>اكتشف</span></div><div class="tab"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4h10v16l-5-3.5L7 20z"></path></svg><span>قائمتي</span></div><div class="tab"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8.5" r="3.5"></circle><path d="M5 20a7 7 0 0114 0"></path></svg><span>ملفي</span></div></nav></div><div class="status"><span class="num">{{status}}</span></div></div>
+</x-dc>
+<script data-dc-script data-props='{"dwell": {"editor": "int", "default": 5, "min": 2, "max": 10, "unit": "s", "section": "الدوران"}, "loop": {"editor": "boolean", "default": true, "section": "الدوران"}, "scrolling": {"editor": "boolean", "default": false, "section": "محاكاة"}, "reducedMotion": {"editor": "boolean", "default": false, "section": "محاكاة"}, "$preview": {"width": 390, "height": 880}}'>
+class Component extends DCLogic {
+  componentDidMount() {
+    this.elapsed = 0;
+    this.timer = setInterval(() => {
+      const p = this.props || {};
+      const reduced = !!p.reducedMotion || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+      if (!reduced && !p.scrolling) this.elapsed += 100;
+      this.forceUpdate();
+    }, 100);
+  }
+  componentWillUnmount() { if (this.timer) clearInterval(this.timer); }
+  renderVals() {
+    const p = this.props || {};
+    const dwell = Math.max(2, Math.min(10, Number(p.dwell) || 5)) * 1000;
+    const stagger = 1200;
+    const reduced = !!p.reducedMotion || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    const elapsed = reduced ? 0 : (this.elapsed || 0);
+    const counts = [4];
+    const prefixes = ["a"];
+    const vals = {};
+    let resting = 0;
+    counts.forEach((n, i) => {
+      let idx = 0;
+      if (n > 1) {
+        const start = dwell + i * stagger;
+        const flips = elapsed < start ? 0 : 1 + Math.floor((elapsed - start) / dwell);
+        if (p.loop !== false) idx = flips % n;
+        else if (flips >= n) { idx = 0; resting += 1; }
+        else idx = flips % n;
+      }
+      for (let j = 0; j < 4; j += 1) vals[prefixes[i] + (j + 1)] = j === idx ? 1 : 0;
+    });
+    const s = (elapsed / 1000).toFixed(1);
+    vals.status = reduced ? 'Reduced Motion: لا دوران، صورة واحدة ثابتة'
+      : (p.scrolling ? 'تمرير نشط: الدوران متوقف مؤقتًا عند الثانية ' + s
+      : 'الثانية ' + s + ' · كل بطاقة تبدّل كل ' + (dwell / 1000) + ' ث، بتفاوت 1.2 ث بينها' + (resting ? ' · ' + resting + ' استراحت بعد جولة كاملة' : ''));
+    return vals;
+  }
+}
+</script>
+</body>
+</html>

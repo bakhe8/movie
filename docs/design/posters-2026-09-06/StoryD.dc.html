@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Readex+Pro:wght@500;600;700&display=swap">
+  <style>
+    body { margin: 0; background: #06070f; color: #eef0ff; font-family: 'IBM Plex Sans Arabic','Segoe UI','Noto Sans Arabic',sans-serif; font-size: 16px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+    a { color: #8b7cff; } a:hover { color: #a99dff; }
+    .disp { font-family: 'Readex Pro','IBM Plex Sans Arabic',sans-serif; line-height: 1.3; }
+    .num { font-variant-numeric: tabular-nums; }
+    .tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 12px; line-height: 1.4; color: #9aa0c8; }
+    .tab.on { color: #8b7cff; }
+    .chip { padding: 3px 8px; border: 1px solid rgba(255,255,255,.22); border-radius: 24px; background: rgba(255,255,255,.07); font-size: 10px; line-height: 1.5; color: #ffffff; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 44px; padding: 8px 14px; border-radius: 14px; font-size: 14px; font-weight: 600; }
+    .primary { border: 1px solid #8b7cff; background: #8b7cff; color: #12093d; box-shadow: 0 8px 23px rgba(139,124,255,.35); }
+    .ghost { border: 1px solid rgba(255,255,255,.32); background: rgba(255,255,255,.08); color: #ffffff; }
+    .cover { position: absolute; inset: 0; z-index: -3; width: 100%; height: 100%; object-fit: cover; object-position: center 22%; transform: scale(1.025); }
+    .scrim { position: absolute; inset: 0; z-index: -2; background: linear-gradient(0deg, rgba(5,8,20,.78) 4%, rgba(5,8,20,.64) 48%, rgba(5,8,20,.08) 100%); }
+    .fade { transition: opacity 240ms ease; }
+    .layer { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .thumb { display: block; width: 44px; height: 66px; padding: 0; border: 1px solid rgba(255,255,255,.2); border-radius: 8px; background: #171b38; overflow: hidden; cursor: pointer; transition: opacity 160ms ease, outline-color 160ms ease; }
+    .thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+    .rowb { display: flex; align-items: center; justify-content: space-between; min-height: 44px; font-size: 14px; color: #ffffff; }
+    .lbl { font-size: 12px; line-height: 1.4; color: #9aa0c8; }
+    .cap { font-size: 12.5px; color: #9aa0c8; line-height: 1.6; }
+    .h { font-family: 'Readex Pro','IBM Plex Sans Arabic',sans-serif; font-size: 14px; font-weight: 600; color: #eef0ff; }
+    .tile { position: relative; overflow: hidden; border-radius: 14px; background: #171b38; box-shadow: 0 4px 14px rgba(10,15,40,.12); }
+    .meta { position: absolute; inset-inline: 0; inset-block-end: 0; display: grid; align-content: end; gap: 5px; min-height: 104px; padding: 40px 11px 10px; color: #ffffff; background: linear-gradient(to top, rgba(5,8,20,.78) 0%, rgba(5,8,20,.78) 55%, rgba(5,8,20,.5) 78%, transparent 100%); }
+    .dots { display: flex; margin: 0 -11px; height: 44px; transition: opacity 160ms ease; }
+    .dotbtn { flex: 1; height: 44px; display: grid; place-items: center; padding: 0; border: 0; background: transparent; cursor: pointer; }
+    .dotbtn:focus-visible { outline: 2px solid #8b7cff; outline-offset: -4px; border-radius: 8px; }
+    .band { position: absolute; inset-inline: 0; inset-block-end: 0; height: 44px; display: flex; align-items: flex-end; justify-content: center; gap: 5px; padding: 0 0 7px; border: 0; background: linear-gradient(to top, rgba(5,8,20,.72), transparent); cursor: pointer; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { text-align: start; padding: 7px 9px; border-bottom: 1px solid #232853; vertical-align: top; font-size: 12px; line-height: 1.5; }
+    th { color: #9aa0c8; font-weight: 500; font-size: 11px; }
+    .no { color: #f0a050; } .yes { color: #5fd0e6; } .both { color: #9aa0c8; }
+    @media (prefers-reduced-motion: reduce) { .fade, .thumb, .dots { transition: none; } }
+
+    .fade400 { transition: opacity 400ms ease; }
+    .status { height: 36px; display: flex; align-items: center; justify-content: center; padding: 0 12px; color: #9aa0c8; font-size: 12px; background: #06070f; border-top: 1px dashed #232853; }
+    @media (prefers-reduced-motion: reduce) { .fade400 { transition: none; } }
+  </style>
+</helmet>
+<div style="width: 1060px; height: 500px; box-sizing: border-box; padding: 18px 10px; background: #06070f; color: #eef0ff; direction: rtl; display: flex; flex-direction: column; gap: 12px;"><h1 class="disp" style="margin: 0; font-size: 18px; font-weight: 600;">Storyboard · الاتجاه د · دوران تلقائي على اللمس</h1><div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 18px; flex: 1; min-height: 0;"><div style="display: flex; flex-direction: column; gap: 8px; min-width: 0;"><span class="h">1 · دخول البطاقة</span><div class="tile" style="width: 150px; height: 225px; margin: 0 auto;"><img class="layer" src="inter-1.jpg" alt="" style="opacity: 1;"><img class="layer" src="inter-2.jpg" alt="" style="opacity: 0;"><img class="layer" src="inter-3.jpg" alt="" style="opacity: 0;"><img class="layer" src="inter-4.jpg" alt="" style="opacity: 0;"><div class="meta" style="padding: 30px 9px 8px; min-height: 80px;"><span class="disp" style="font-size: 13px; font-weight: 700;">بين النجوم</span><span class="num" style="font-size: 11px; opacity: .8;">2014</span></div></div><p class="cap" style="margin: 0;">البطاقة تظهر ببوسترها الأول. لا شيء يتحرك في أول 5 ثوانٍ، فالتمرير السريع لا يرى تبديلًا ولا يحمّل صورًا إضافية.</p></div><div style="display: flex; flex-direction: column; gap: 8px; min-width: 0;"><span class="h">2 · بعد 5 ث</span><div class="tile" style="width: 150px; height: 225px; margin: 0 auto;"><img class="layer" src="inter-1.jpg" alt="" style="opacity: .5;"><img class="layer" src="inter-2.jpg" alt="" style="opacity: .5;"><img class="layer" src="inter-3.jpg" alt="" style="opacity: 0;"><img class="layer" src="inter-4.jpg" alt="" style="opacity: 0;"><div class="meta" style="padding: 30px 9px 8px; min-height: 80px;"><span class="disp" style="font-size: 13px; font-weight: 700;">بين النجوم</span><span class="num" style="font-size: 11px; opacity: .8;">2014</span></div></div><p class="cap" style="margin: 0;">تلاشٍ متقاطع 400ms إلى البوستر 2. بطاقة واحدة فقط تتبدّل في اللحظة نفسها (تفاوت 1.2 ث بين البطاقات)، فالشبكة هادئة.</p></div><div style="display: flex; flex-direction: column; gap: 8px; min-width: 0;"><span class="h">3 · أثناء التمرير</span><div class="tile" style="width: 150px; height: 225px; margin: 0 auto;"><img class="layer" src="inter-1.jpg" alt="" style="opacity: 0;"><img class="layer" src="inter-2.jpg" alt="" style="opacity: 1;"><img class="layer" src="inter-3.jpg" alt="" style="opacity: 0;"><img class="layer" src="inter-4.jpg" alt="" style="opacity: 0;"><svg width="34" height="34" viewBox="0 0 24 24" aria-hidden="true" style="position: absolute; z-index: 5; left: 50%; top: 42%; transform: translate(-50%, -50%); filter: drop-shadow(0 2px 3px rgba(0,0,0,.7));" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M7 8l5-5 5 5M7 16l5 5 5-5"></path></svg><div class="meta" style="padding: 30px 9px 8px; min-height: 80px;"><span class="disp" style="font-size: 13px; font-weight: 700;">بين النجوم</span><span class="num" style="font-size: 11px; opacity: .8;">2014</span></div></div><p class="cap" style="margin: 0;">أي تمرير نشط أو إصبع على الشاشة يوقف الساعة؛ تستأنف بعد 200ms من السكون. لا تبديل تحت الإصبع أبدًا.</p></div><div style="display: flex; flex-direction: column; gap: 8px; min-width: 0;"><span class="h">4 · الدورة</span><div class="tile" style="width: 150px; height: 225px; margin: 0 auto; opacity: .6;"><img class="layer" src="inter-1.jpg" alt="" style="opacity: 0;"><img class="layer" src="inter-2.jpg" alt="" style="opacity: 0;"><img class="layer" src="inter-3.jpg" alt="" style="opacity: 1;"><img class="layer" src="inter-4.jpg" alt="" style="opacity: 0;"><div class="meta" style="padding: 30px 9px 8px; min-height: 80px;"><span class="disp" style="font-size: 13px; font-weight: 700;">بين النجوم</span><span class="num" style="font-size: 11px; opacity: .8;">2014</span></div></div><p class="cap" style="margin: 0;">تستمر البطاقة دوريًا ما دامت على الشاشة (قرار بديل: جولة واحدة ثم استراحة على الأول). خارج الشاشة: لا مؤقّتات.</p></div><div style="display: flex; flex-direction: column; gap: 8px; min-width: 0;"><span class="h">5 · Reduced Motion</span><div class="tile" style="width: 150px; height: 225px; margin: 0 auto;"><img class="layer" src="inter-1.jpg" alt="" style="opacity: 1;"><img class="layer" src="inter-2.jpg" alt="" style="opacity: 0;"><img class="layer" src="inter-3.jpg" alt="" style="opacity: 0;"><img class="layer" src="inter-4.jpg" alt="" style="opacity: 0;"><div class="meta" style="padding: 30px 9px 8px; min-height: 80px;"><span class="disp" style="font-size: 13px; font-weight: 700;">بين النجوم</span><span class="num" style="font-size: 11px; opacity: .8;">2014</span></div></div><p class="cap" style="margin: 0;">لا دوران إطلاقًا ولا تلاشٍ ولا استثناء: البوستر الأول ثابت، ولا تُحمَّل بقية الصور. الحال نفسه لفيلم ببوستر واحد.</p></div></div><p class="cap" style="margin: 0;">سطح المكتب (مؤشر دقيق): لا دوران تلقائي؛ التحويم يبدّل كل 1.2 ث ويعود للأصل عند المغادرة كما في الاتجاه أ. اللمس على البوستر يحتفظ بمعناه الحالي في كل سطح، ولا يُضاف أي هدف لمس.</p></div>
+</x-dc>
+</body>
+</html>

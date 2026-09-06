@@ -65,3 +65,31 @@
     width: 160px;
   }
 }
+
+/* The poster set (POSTERS-MULTI P5, direction د): the slot holds one layer per
+   image and the shown one fades in over the last. The slot's own size, edge
+   and radius apply to the stack, so nothing around it moves. */
+.stack {
+  position: relative;
+  overflow: hidden;
+}
+
+.layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 240ms ease;
+}
+
+.layer[data-active] {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .layer {
+    transition: none;
+  }
+}

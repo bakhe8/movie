@@ -96,19 +96,6 @@
   border-color: color-mix(in srgb, var(--cinema-ink, var(--accent-ink)) 20%, transparent);
 }
 
-/* One layer per poster of the set; the chosen one fades in over the last.
-   Every layer stays mounted, so a swap is a crossfade, never a reload. */
-.posterLayer {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  transition: opacity 240ms ease;
-}
-
-.posterLayer[data-active] {
-  opacity: 1;
-}
-
 /* The cover, one layer per poster, painted where ::before paints the
    single-poster cover: the same crop and the same veil. */
 .coverLayer {
@@ -125,12 +112,6 @@
   opacity: .87;
 }
 
-/* The strip of thumbnails under the actions; its edge takes the header's
-   ink like the small poster does. */
-.posterSet {
-  --poster-set-edge: color-mix(in srgb, var(--cinema-ink, var(--accent-ink)) 20%, transparent);
-  padding-block: 10px 4px;
-}
 
 .headerText {
   grid-area: text;
@@ -488,30 +469,6 @@
     align-self: end;
   }
 
-  /* Under the poster on a wide screen: the below row mirrors the header's two
-     columns, the synopsis in the text column and the strip in the poster's,
-     sized so four thumbnails fit inside 180px (4 x 40 + 3 x 6). */
-  .headerBelow {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 180px;
-    gap: 0 36px;
-    align-items: start;
-  }
-
-  .headerBelow > .posterSet {
-    --poster-set-thumb: 40px;
-    --poster-set-gap: 6px;
-    grid-column: 2;
-    grid-row: 1;
-    justify-self: center;
-    padding-block: 12px 0;
-  }
-
-  .headerBelow > .synopsis {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
   .headerText {
     gap: 12px;
   }
@@ -586,21 +543,10 @@
   .headerPoster {
     width: 220px;
   }
-
-  .headerBelow {
-    grid-template-columns: minmax(0, 1fr) 220px;
-    gap: 0 50px;
-  }
-
-  .headerBelow > .posterSet {
-    --poster-set-thumb: 48px;
-    --poster-set-gap: 8px;
-  }
 }
 
 /* The swap is instant and the end state identical when motion is reduced. */
 @media (prefers-reduced-motion: reduce) {
-  .posterLayer,
   .coverLayer {
     transition: none;
   }

@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Readex+Pro:wght@500;600;700&display=swap">
+  <style>
+    body { margin: 0; background: #06070f; color: #eef0ff; font-family: 'IBM Plex Sans Arabic','Segoe UI','Noto Sans Arabic',sans-serif; font-size: 16px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+    a { color: #8b7cff; } a:hover { color: #a99dff; }
+    .disp { font-family: 'Readex Pro','IBM Plex Sans Arabic',sans-serif; line-height: 1.3; }
+    .num { font-variant-numeric: tabular-nums; }
+    .tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 12px; line-height: 1.4; color: #9aa0c8; }
+    .tab.on { color: #8b7cff; }
+    .chip { padding: 3px 8px; border: 1px solid rgba(255,255,255,.22); border-radius: 24px; background: rgba(255,255,255,.07); font-size: 10px; line-height: 1.5; color: #ffffff; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 44px; padding: 8px 14px; border-radius: 14px; font-size: 14px; font-weight: 600; }
+    .primary { border: 1px solid #8b7cff; background: #8b7cff; color: #12093d; box-shadow: 0 8px 23px rgba(139,124,255,.35); }
+    .ghost { border: 1px solid rgba(255,255,255,.32); background: rgba(255,255,255,.08); color: #ffffff; }
+    .cover { position: absolute; inset: 0; z-index: -3; width: 100%; height: 100%; object-fit: cover; object-position: center 22%; transform: scale(1.025); }
+    .scrim { position: absolute; inset: 0; z-index: -2; background: linear-gradient(0deg, rgba(5,8,20,.78) 4%, rgba(5,8,20,.64) 48%, rgba(5,8,20,.08) 100%); }
+    .fade { transition: opacity 240ms ease; }
+    .layer { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .thumb { display: block; width: 44px; height: 66px; padding: 0; border: 1px solid rgba(255,255,255,.2); border-radius: 8px; background: #171b38; overflow: hidden; cursor: pointer; transition: opacity 160ms ease, outline-color 160ms ease; }
+    .thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+    .rowb { display: flex; align-items: center; justify-content: space-between; min-height: 44px; font-size: 14px; color: #ffffff; }
+    .lbl { font-size: 12px; line-height: 1.4; color: #9aa0c8; }
+    .cap { font-size: 12.5px; color: #9aa0c8; line-height: 1.6; }
+    .h { font-family: 'Readex Pro','IBM Plex Sans Arabic',sans-serif; font-size: 14px; font-weight: 600; color: #eef0ff; }
+    .tile { position: relative; overflow: hidden; border-radius: 14px; background: #171b38; box-shadow: 0 4px 14px rgba(10,15,40,.12); }
+    .meta { position: absolute; inset-inline: 0; inset-block-end: 0; display: grid; align-content: end; gap: 5px; min-height: 104px; padding: 40px 11px 10px; color: #ffffff; background: linear-gradient(to top, rgba(5,8,20,.78) 0%, rgba(5,8,20,.78) 55%, rgba(5,8,20,.5) 78%, transparent 100%); }
+    .dots { display: flex; margin: 0 -11px; height: 44px; transition: opacity 160ms ease; }
+    .dotbtn { flex: 1; height: 44px; display: grid; place-items: center; padding: 0; border: 0; background: transparent; cursor: pointer; }
+    .dotbtn:focus-visible { outline: 2px solid #8b7cff; outline-offset: -4px; border-radius: 8px; }
+    .band { position: absolute; inset-inline: 0; inset-block-end: 0; height: 44px; display: flex; align-items: flex-end; justify-content: center; gap: 5px; padding: 0 0 7px; border: 0; background: linear-gradient(to top, rgba(5,8,20,.72), transparent); cursor: pointer; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { text-align: start; padding: 7px 9px; border-bottom: 1px solid #232853; vertical-align: top; font-size: 12px; line-height: 1.5; }
+    th { color: #9aa0c8; font-weight: 500; font-size: 11px; }
+    .no { color: #f0a050; } .yes { color: #5fd0e6; } .both { color: #9aa0c8; }
+    @media (prefers-reduced-motion: reduce) { .fade, .thumb, .dots { transition: none; } }
+
+    .fade400 { transition: opacity 400ms ease; }
+    .status { height: 36px; display: flex; align-items: center; justify-content: center; padding: 0 12px; color: #9aa0c8; font-size: 12px; background: #06070f; border-top: 1px dashed #232853; }
+    @media (prefers-reduced-motion: reduce) { .fade400 { transition: none; } }
+  </style>
+</helmet>
+<div style="width: 1200px; height: 900px; box-sizing: border-box; padding: 22px 24px; background: #06070f; color: #eef0ff; direction: rtl; display: flex; flex-direction: column; gap: 12px;"><h1 class="disp" style="margin: 0; font-size: 22px; font-weight: 600;">الاتجاه د · دوران تلقائي على اللمس، تحويم على سطح المكتب — المعلمات والقرارات</h1><div style="display: flex; gap: 18px; flex: 1; min-height: 0;"><div style="flex: 2.3; min-width: 0;"><table><tr><th style="width: 20%">المعلمة</th><th style="width: 40%">القيمة</th><th style="width: 40%">لماذا</th></tr><tr><td>متى يبدأ</td><td>بعد مدة صورة واحدة من دخول البطاقة إلى الشاشة (≥60% ظاهرة)</td><td class="both">التمرير السريع لا يرى تبديلًا ولا يكلّف شبكة؛ الصور الأخرى تُحمَّل عند أول تبديل فقط</td></tr><tr><td>مدة كل صورة</td><td>الكود: 2.8 ث (طلب المنسّق 2.5–3)؛ اللوحة: مقبض 2–10 ث للمقارنة</td><td class="both">أطول من دورة التحويم (1.2 ث) لأن لا نيّة خلفها</td></tr><tr><td>التلاشي</td><td>الكود: 240ms (إعادة استخدام الطبقات الحالية)؛ اللوحة تعرض 400ms للمقارنة</td><td class="both">قرار صغير: الأنعم للحركة غير المطلوبة أم توحيد 240ms</td></tr><tr><td>التزامن بين البطاقات</td><td>تفاوت ≥1.2 ث؛ لا تتبدّل بطاقتان في اللحظة نفسها</td><td class="both">الشبكة تبقى هادئة: حركة واحدة صغيرة في كل مرة</td></tr><tr><td>أثناء التمرير أو اللمس</td><td>الساعة تتوقف؛ تستأنف بعد 200ms من السكون</td><td class="both">scroll/pointerdown + IntersectionObserver؛ لا تبديل تحت الإصبع</td></tr><tr><td>خارج الشاشة</td><td>لا دوران ولا مؤقّتات</td><td class="both">IntersectionObserver يوقف كل بطاقة تخرج؛ توفير بطارية</td></tr><tr><td>الدورة</td><td>دورية بلا نهاية ما دامت البطاقة ظاهرة (توجيه المالك: «دوريًا»)</td><td class="both">بديل مطروح: جولة واحدة ثم استراحة (يحدّ الحركة الدائمة، WCAG 2.2.2)</td></tr><tr><td>Reduced Motion</td><td>لا دوران إطلاقًا؛ البوستر الأول ثابت؛ لا مؤقّتات ولا تحميل لبقية الصور</td><td class="both">توجيه المالك: بلا استثناء — اختبار آلي يثبته</td></tr><tr><td>اللمس على البوستر</td><td>معناه الحالي فقط (الاكتشاف: شاهدته؛ البطاقات: افتح الفيلم؛ صفحة الفيلم: لا شيء)</td><td class="both">لا هدف لمس جديد، فلا مشكلة 44px ولا تعارض مع «شاهدته»</td></tr><tr><td>سطح المكتب</td><td>التحويم يبدّل كل 1.2 ث ويعود للأصل؛ التركيز بلوحة المفاتيح يعمل كالتحويم</td><td class="both">كما في الاتجاه أ؛ لا دوران تلقائي مع مؤشر دقيق</td></tr><tr><td>الصور والإسناد</td><td>روابط posterUrl الجاهزة من الخادم؛ الإسناد مرة في ذيل المصادر</td><td class="both">لا تركيب روابط، لا تخزين محلي، لا تغيير في بوابة الترخيص</td></tr></table></div><div style="flex: 1.2; min-width: 0; display: flex; flex-direction: column; gap: 12px;"><div style="padding: 12px 14px; border-radius: 20px; background: #10132a;"><span class="h">الأسطح</span><table style="margin-top: 6px;"><tr><th>السطح</th><th>الحكم</th><th>لماذا</th></tr><tr><td>شبكة الاكتشاف (158–193px)</td><td class="yes">يدور</td><td class="both">السطح الأول للتصفح؛ لا نقطة فوق هدف «شاهدته»</td></tr><tr><td>بطاقة الاقتراح (96px) وصفوف المكتبة</td><td class="yes">يدور</td><td class="both">الغرض نفسه: التعرّف على الفيلم بصورة قد لا تكون الأولى</td></tr><tr><td>صفحة الفيلم (الغلاف + البوستر الصغير)</td><td class="yes">يدور معًا</td><td class="both">صورة واحدة للهوية في اللحظة نفسها</td></tr><tr><td>قوائم 56px</td><td class="yes">يدور (قابل للنقاش)</td><td class="both">التبديل مرئي لكن أثره ضئيل؛ يمكن استثناؤها لتوفير الشبكة</td></tr><tr><td>بطاقات الثلاثية (64px)</td><td class="no">لا يدور (توصية)</td><td class="both">سطح قرار وسحب عمودي: هوية البطاقة يجب أن تثبت أثناء الترتيب</td></tr></table></div><div style="padding: 12px 14px; border-radius: 20px; background: #10132a;"><span class="h">قرارات مطلوبة</span><ol class="cap" style="margin: 6px 0 0; padding: 0 18px 0 0; display: flex; flex-direction: column; gap: 6px; color: #eef0ff;"><li>الثلاثيات مستثناة كما أوصي، أم «كل الأحجام» حرفيًا؟</li><li>مدة الصورة 2.8 ث (طلب المنسّق) أم 5 ث (اللوحة الافتراضية)؟ جرّب المقبض.</li><li>WCAG 2.2.2 (حركة تلقائية تتجاوز 5 ث): يلزم مفتاح «إيقاف تبديل البوسترات» في إعدادات المظهر إلى جانب Reduced Motion — يُبنى ضمن P5 أم يُؤجَّل؟</li><li>شريط المصغّرات المُلتزم في 3492a00 يُستبدل بالكامل (طبقات الغلاف/البوستر تبقى، الأزرار تُحذف، ولا شريط على سطح المكتب أيضًا).</li></ol></div></div></div></div>
+</x-dc>
+</body>
+</html>

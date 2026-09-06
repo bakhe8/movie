@@ -1,89 +1,167 @@
 'use client';
 
-import { useRef, type KeyboardEvent } from 'react';
-import type { Title } from '../lib/api';
-import styles from './PosterSet.module.css';
-
-type Lang = 'ar' | 'en';
-export type PosterEntry = NonNullable<Title['posters']>[number];
-
-const copy = {
-  ar: { group: 'بوسترات الفيلم', item: (n: number, of: number) => `البوستر ${n} من ${of}` },
-  en: { group: 'Film posters', item: (n: number, of: number) => `Poster ${n} of ${of}` },
-};
+import { useEffect, useState, type RefObject } from 'react';
 
 /**
- * The film's own posters as a strip of thumbnails (POSTERS-MULTI P5,
- * direction ب, approved 2026-09-06). Each thumbnail is a labelled button;
- * the chosen one wears the accent ring, and the caller swaps its cover and
- * header poster to that image. Nothing here is gesture-only -- no swipe, no
- * rotation on its own -- and nothing is persisted: a film always opens on
- * its first poster, the same image as `posterUrl` (ADR-120).
+ * Which of a film's posters to show (POSTERS-MULTI P5, direction د -- the
+ * owner's directive of 2026-09-06, relayed by the coordinator).
  *
- * Renders nothing for fewer than two posters, so a single-poster film and
- * any response from before P3 look exactly as they did.
+ * On a touch screen the posters rotate on their own: no dots, no strip,
+ * nothing new to tap, so no tap target competes with "watched" on a Discover
+ * tile and no 44px problem exists on a 56px poster. The clock only runs while
+ * the poster is mostly on screen, never flips under a finger or during a
+ * scroll, and staggers neighbours so two cards never change together.
+ *
+ * With a fine pointer nothing moves on its own: hovering (or focusing) the
+ * poster cycles it, leaving restores the first image, so a grid stays still
+ * and a card keeps its identity.
+ *
+ * Under `prefers-reduced-motion: reduce` there is no rotation of any kind --
+ * one still image, no clock, and (see Poster) no other image is even loaded.
+ * `active` tells the caller whether more than the first image is wanted at
+ * all, so the next image is fetched only when it is about to be shown.
  */
-export function PosterSet({
-  lang,
-  posters,
-  selected,
-  onSelect,
-  className,
-}: {
-  lang: Lang;
-  posters: PosterEntry[];
-  selected: number;
-  onSelect: (index: number) => void;
-  className?: string;
-}) {
-  const buttons = useRef<(HTMLButtonElement | null)[]>([]);
-  const count = posters.length;
-  if (count < 2) {
-    return null;
-  }
-  const t = copy[lang];
-  // Arrow keys walk the strip like a toolbar (focus only; Enter or Space on
-  // a button chooses it, as on any button). The screen's direction decides
-  // which arrow means "next": in Arabic the first poster sits at the right.
-  const towardEnd = lang === 'ar' ? 'ArrowLeft' : 'ArrowRight';
-  const towardStart = lang === 'ar' ? 'ArrowRight' : 'ArrowLeft';
+export const POSTER_DWELL_MS = 2800;
+export const POSTER_HOVER_MS = 1200;
+export const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+export const HOVER_QUERY = '(hover: hover) and (pointer: fine)';
+const STAGGER_MS = 900;
+const SCROLL_SETTLE_MS = 200;
+const VISIBLE_RATIO = 0.6;
 
-  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    const current = buttons.current.findIndex((button) => button === document.activeElement);
-    if (current < 0) return;
-    let next = current;
-    if (event.key === towardEnd) next = Math.min(count - 1, current + 1);
-    else if (event.key === towardStart) next = Math.max(0, current - 1);
-    else if (event.key === 'Home') next = 0;
-    else if (event.key === 'End') next = count - 1;
-    else return;
-    event.preventDefault();
-    buttons.current[next]?.focus();
-  }
+let mounted = 0;
 
-  return (
-    <div className={[styles.set, className].filter(Boolean).join(' ')} role="group" aria-label={t.group} onKeyDown={onKeyDown}>
-      {posters.map((poster, index) => {
-        const active = index === selected;
-        return (
-          <button
-            key={poster.posterUrl}
-            type="button"
-            className={active ? `${styles.thumb} ${styles.selected}` : styles.thumb}
-            aria-label={t.item(index + 1, count)}
-            aria-pressed={active}
-            onClick={() => onSelect(index)}
-            ref={(element) => {
-              buttons.current[index] = element;
-            }}
-          >
-            {/* The same URL the header shows, so the browser fetches each image
-                once; `no-referrer` for the reason given in Poster.tsx. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img className={styles.image} src={poster.posterUrl} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" />
-          </button>
+// Tests only: start the stagger from the first phase again.
+export function resetPosterRotationStagger() {
+  mounted = 0;
+}
+
+function media(query: string): MediaQueryList | null {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia(query) : null;
+}
+
+export interface PosterRotation {
+  index: number;
+  active: boolean;
+}
+
+export function usePosterRotation(
+  count: number,
+  ref: RefObject<HTMLElement | null>,
+  dwellMs = POSTER_DWELL_MS,
+  hoverMs = POSTER_HOVER_MS,
+): PosterRotation {
+  const [index, setIndex] = useState(0);
+  const [active, setActive] = useState(false);
+
+  useEffect(() => {
+    if (count < 2) return;
+    const reduced = media(REDUCED_MOTION_QUERY);
+    const hover = media(HOVER_QUERY);
+    const element = ref.current;
+    let cleanup: (() => void) | null = null;
+
+    const startHover = () => {
+      if (!element) return null;
+      let timer: ReturnType<typeof setInterval> | null = null;
+      const enter = () => {
+        if (timer) return;
+        setActive(true);
+        timer = setInterval(() => setIndex((i) => (i + 1) % count), hoverMs);
+      };
+      const leave = () => {
+        if (timer) clearInterval(timer);
+        timer = null;
+        setActive(false);
+        setIndex(0);
+      };
+      element.addEventListener('pointerenter', enter);
+      element.addEventListener('pointerleave', leave);
+      element.addEventListener('focusin', enter);
+      element.addEventListener('focusout', leave);
+      return () => {
+        if (timer) clearInterval(timer);
+        element.removeEventListener('pointerenter', enter);
+        element.removeEventListener('pointerleave', leave);
+        element.removeEventListener('focusin', enter);
+        element.removeEventListener('focusout', leave);
+      };
+    };
+
+    const startRotation = () => {
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      let visible = true;
+      let scrollingUntil = 0;
+      let pressed = false;
+      // Neighbours mounted together get different phases, so a grid never
+      // flips several cards in the same instant.
+      const phase = (mounted++ * STAGGER_MS) % dwellMs;
+      const tick = () => {
+        if (visible && !pressed && Date.now() >= scrollingUntil) {
+          setIndex((i) => (i + 1) % count);
+        }
+        timer = setTimeout(tick, dwellMs);
+      };
+      const onScroll = () => {
+        scrollingUntil = Date.now() + SCROLL_SETTLE_MS;
+      };
+      const onDown = () => {
+        pressed = true;
+      };
+      const onUp = () => {
+        pressed = false;
+      };
+      window.addEventListener('scroll', onScroll, { passive: true, capture: true });
+      window.addEventListener('pointerdown', onDown, { passive: true });
+      window.addEventListener('pointerup', onUp, { passive: true });
+      window.addEventListener('pointercancel', onUp, { passive: true });
+      let observer: IntersectionObserver | null = null;
+      if (element && typeof IntersectionObserver !== 'undefined') {
+        observer = new IntersectionObserver(
+          ([entry]) => {
+            visible = entry.isIntersecting && entry.intersectionRatio >= VISIBLE_RATIO;
+          },
+          { threshold: [0, VISIBLE_RATIO] },
         );
-      })}
-    </div>
-  );
+        observer.observe(element);
+      }
+      setActive(true);
+      timer = setTimeout(tick, dwellMs + phase);
+      return () => {
+        if (timer) clearTimeout(timer);
+        window.removeEventListener('scroll', onScroll, { capture: true });
+        window.removeEventListener('pointerdown', onDown);
+        window.removeEventListener('pointerup', onUp);
+        window.removeEventListener('pointercancel', onUp);
+        observer?.disconnect();
+      };
+    };
+
+    const start = () => {
+      cleanup?.();
+      cleanup = null;
+      if (reduced?.matches) return; // one still image; no clock at all
+      cleanup = hover?.matches ? startHover() : startRotation();
+    };
+    // A preference can change while the page is open: settle to the first
+    // image and start over under the new rule.
+    const onMedia = () => {
+      setIndex(0);
+      setActive(false);
+      start();
+    };
+    start();
+    reduced?.addEventListener?.('change', onMedia);
+    hover?.addEventListener?.('change', onMedia);
+    return () => {
+      cleanup?.();
+      reduced?.removeEventListener?.('change', onMedia);
+      hover?.removeEventListener?.('change', onMedia);
+    };
+  }, [count, ref, dwellMs, hoverMs]);
+
+  if (count < 2) {
+    return { index: 0, active: false };
+  }
+  return { index: index % count, active };
 }
