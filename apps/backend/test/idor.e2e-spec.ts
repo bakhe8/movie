@@ -5,6 +5,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { Repository } from 'typeorm';
 import { AppModule } from '../src/modules/app/app.module';
+import { publishForTest } from './publish-for-test';
 import { User } from '../src/entities/user.entity';
 import { Title } from '../src/entities/title.entity';
 
@@ -67,6 +68,8 @@ describe('Cross-user access (IDOR) and auth guards', () => {
         themes: ['test fixture'], confidence: {},
       },
     });
+    // PUB-G1: the catalogue read paths only serve published titles.
+    await publishForTest(app, [catalogTitle.id]);
   }, 20_000);
 
   afterAll(async () => {

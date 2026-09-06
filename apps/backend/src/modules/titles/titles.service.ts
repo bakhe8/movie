@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
 import { ContentFeature } from '../../entities/content-feature.entity';
 import { Title } from '../../entities/title.entity';
+import { PUBLISHED_TITLE_WHERE, wherePublished } from '../publication/publication-guard';
 import { AttributionService, TextSource } from '../public-quality/attribution.service';
 import { Poster, PosterService, PosterSource } from '../public-quality/poster.service';
 import { PublicQuality, PublicQualityService } from '../public-quality/public-quality.service';
@@ -111,6 +112,7 @@ export class TitlesService {
       .orderBy('title.titleEn', 'ASC')
       .skip((page - 1) * limit)
       .take(limit);
+    wherePublished(queryBuilder, 'title'); // PUB-G1: staged titles are never listed or searchable
 
     if (query.query) {
       const searchTerm = `%${query.query}%`;
@@ -131,7 +133,11 @@ export class TitlesService {
       // counterpart -- before the letter map is applied. foldArabic() does
       // both to the query.
       const folded = (column: string) => `translate(translate(${column}, :strip, ''), :foldFrom, :foldTo)`;
-      queryBuilder.where(
+      // andWhere, never where: `.where()` *replaces* everything accumulated
+      // so far, which silently dropped the publication guard above and made
+      // staged titles searchable (caught by publication-guard.e2e-spec.ts).
+      // Every condition in this method composes; none of them resets.
+      queryBuilder.andWhere(
         new Brackets((where) => {
           where
             .where('title.titleEn ILIKE :searchTerm', parameters)
@@ -193,18 +199,20 @@ export class TitlesService {
   // yet (blueprint §4.2, SPECIFICATION §5.1 step 3). No taste input: there
   // is none at this point.
   async starter(limit: number): Promise<PublicTitle[]> {
-    const pool = await this.titlesRepository
+    const starterQuery = this.titlesRepository
       .createQueryBuilder('title')
       .select([...PUBLIC_TITLE_COLUMNS])
       .orderBy('title.titleEn', 'ASC')
-      .take(STARTER_POOL_SIZE)
-      .getMany();
+      .take(STARTER_POOL_SIZE);
+    wherePublished(starterQuery, 'title'); // PUB-G1: the onboarding pool is published titles only
+    const pool = await starterQuery.getMany();
     return (await this.posterService.attach(diversify(pool as unknown as PublicTitle[], limit))) as PublicTitle[];
   }
 
   async findOne(titleId: string): Promise<WorkPageTitle> {
     const title = await this.titlesRepository.findOne({
-      where: { id: titleId },
+      // PUB-G1: a staged title is a 404 even when its UUID is known.
+      where: { id: titleId, ...PUBLISHED_TITLE_WHERE },
       select: {
         id: true,
         internalId: true,

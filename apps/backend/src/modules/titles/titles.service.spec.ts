@@ -4,6 +4,7 @@ import type { Repository } from 'typeorm';
 import type { PosterService } from '../public-quality/poster.service';
 import { ContentFeature } from '../../entities/content-feature.entity';
 import { Title } from '../../entities/title.entity';
+import { PUBLISHED_TITLE_WHERE } from '../publication/publication-guard';
 import { ListTitlesQueryDto } from './dto/list-titles-query.dto';
 import { AttributionService } from '../public-quality/attribution.service';
 import { PublicQualityService } from '../public-quality/public-quality.service';
@@ -18,6 +19,7 @@ function queryBuilderMock(items: Partial<Title>[], total: number) {
     where: vi.fn().mockReturnThis(),
     andWhere: vi.fn().mockReturnThis(),
     getManyAndCount: vi.fn().mockResolvedValue([items, total]),
+    getMany: vi.fn().mockResolvedValue(items),
   };
 }
 
@@ -121,7 +123,34 @@ describe('TitlesService', () => {
 
       await service.findAll(listQuery());
 
-      expect(builder.andWhere).not.toHaveBeenCalled();
+      // The publication guard (PUB-G1) always adds one andWhere of its own,
+      // so this asserts the absence of a genre/year filter specifically
+      // rather than the absence of any condition at all.
+      const conditions = builder.andWhere.mock.calls.map((call: unknown[]) => String(call[0]));
+      expect(conditions.some((condition) => /genre/i.test(condition))).toBe(false);
+      expect(conditions.some((condition) => /releaseYear/i.test(condition))).toBe(false);
+    });
+
+    // PUB-G1 (ADR-118): search and listing never surface a staged title.
+    it('excludes titles with no publishedRevisionId', async () => {
+      const builder = queryBuilderMock([], 0);
+      titlesRepository.createQueryBuilder.mockReturnValue(builder);
+
+      await service.findAll(listQuery());
+
+      expect(builder.andWhere.mock.calls.some((call: unknown[]) => String(call[0]).includes('publishedRevisionId'))).toBe(true);
+    });
+  });
+
+  describe('starter', () => {
+    // PUB-G1: the onboarding starter pool is published titles only.
+    it('excludes titles with no publishedRevisionId', async () => {
+      const builder = queryBuilderMock([{ id: 't-1', titleEn: 'Arrival', genres: ['drama'] }], 1);
+      titlesRepository.createQueryBuilder.mockReturnValue(builder);
+
+      await service.starter(5);
+
+      expect(builder.andWhere.mock.calls.some((call: unknown[]) => String(call[0]).includes('publishedRevisionId'))).toBe(true);
     });
   });
 
@@ -132,7 +161,9 @@ describe('TitlesService', () => {
       await service.findOne('t-1');
 
       const call = titlesRepository.findOne.mock.calls[0][0];
-      expect(call.where).toEqual({ id: 't-1' });
+      // PUB-G1: the detail read is scoped to published titles, so a known
+      // UUID for a staged title is a 404 like any unknown id.
+      expect(call.where).toEqual({ id: 't-1', ...PUBLISHED_TITLE_WHERE });
       expect(call.select.fingerprint).toBeUndefined();
       expect(call.select.externalIds).toBeUndefined();
       expect(call.select.titleEn).toBe(true);

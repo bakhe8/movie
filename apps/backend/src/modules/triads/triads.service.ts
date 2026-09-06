@@ -7,6 +7,7 @@ import { UserModelSnapshot } from '../../entities/user-model-snapshot.entity';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { ExperimentsService, TRIAD_POLICY_EXPERIMENT } from '../experiments/experiments.service';
 import { PosterService } from '../public-quality/poster.service';
+import { PUBLISHED_TITLE_WHERE } from '../publication/publication-guard';
 import { ADAPTIVE_POLICY_VERSION, AdaptiveSelection, TriadPolicyService } from './triad-policy.service';
 import { Profile } from '../../entities/profile.entity';
 import { Recommendation } from '../../entities/recommendation.entity';
@@ -213,6 +214,10 @@ export class TriadsService {
 
   // Attach the three titles in displayOrder (falling back to titleIds for
   // legacy rows), selecting only the catalog's public columns.
+  // PUB-G1: deliberately unguarded. This renders a triad already committed
+  // with these exact three ids; dropping one mid-ranking would break the
+  // ranking flow's own "exactly 3 ids" contract for no protective gain. A
+  // new triad cannot draw an unpublished title in the first place.
   private async withItems(triad: Triad): Promise<TriadWithItems> {
     const order = triad.displayOrder ?? triad.titleIds ?? [];
     if (order.length === 0) {
@@ -649,7 +654,10 @@ export class TriadsService {
     if (restedTitleIds.length < 3) {
       return null;
     }
-    const pool = await this.titlesRepository.find({ where: { id: In(restedTitleIds) } });
+    // PUB-G1: a title newly entering a triad must be published. `withItems()`
+    // (an already-committed triad's own display) stays unguarded on purpose --
+    // see its comment.
+    const pool = await this.titlesRepository.find({ where: { id: In(restedTitleIds), ...PUBLISHED_TITLE_WHERE } });
     const snapshot = await this.snapshotsRepository.findOne({ where: { profileId }, order: { createdAt: 'DESC' } });
     return this.triadPolicyService.select(pool, snapshot, new Set(recentlyUsedTitleIds), Math.random, usedSetHashes);
   }

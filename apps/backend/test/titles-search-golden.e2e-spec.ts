@@ -5,6 +5,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { DataSource, type Repository } from 'typeorm';
 import { AppModule } from '../src/modules/app/app.module';
+import { publishForTest } from './publish-for-test';
 import { LocalizedTitle } from '../src/entities/localized-title.entity';
 import { Title } from '../src/entities/title.entity';
 
@@ -185,6 +186,8 @@ describe('Catalogue search: the golden set (real HTTP, real DB)', () => {
       })),
     );
     await localized.save(alternates);
+    // PUB-G1: search only returns published titles.
+    await publishForTest(app, saved.map((title) => title.id));
   }, 30_000);
 
   afterAll(async () => {

@@ -5,6 +5,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { Repository } from 'typeorm';
 import { AppModule } from '../src/modules/app/app.module';
+import { publishForTest } from './publish-for-test';
 import { Title } from '../src/entities/title.entity';
 
 // ALPHA_PLAN 8.3, the row IMPLEMENTATION_STATUS marked ❌: the *contract* of
@@ -42,6 +43,8 @@ describe('Read-path API contract (real HTTP, real DB)', () => {
       })),
     );
     titleId = saved[0].id;
+    // PUB-G1: the public read paths only serve published titles.
+    await publishForTest(app, saved.map((title) => title.id));
 
     const email = `contract-${suffix}-${Math.random().toString(36).slice(2)}@example.com`;
     const registered = await request(app.getHttpServer())

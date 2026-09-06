@@ -6,6 +6,7 @@ import request from 'supertest';
 import type { Repository } from 'typeorm';
 import { AppModule } from '../src/modules/app/app.module';
 import { Title } from '../src/entities/title.entity';
+import { publishForTest } from './publish-for-test';
 
 async function registerUser(app: INestApplication, label: string) {
   const email = `${label}-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
@@ -32,7 +33,7 @@ describe('Catalogue search and starter list (real HTTP, real DB)', () => {
     token = await registerUser(app, 'search-check');
 
     const titlesRepository = app.get<Repository<Title>>(getRepositoryToken(Title));
-    await titlesRepository.save([
+    const saved = await titlesRepository.save([
       { internalId: `E2E-SEARCH-HAMZA-${suffix}`, titleEn: `Dreams ${suffix}`, titleAr: `أحلام ${suffix}`, genres: ['Drama'], releaseYear: 2001 },
       { internalId: `E2E-SEARCH-TAA-${suffix}`, titleEn: `School ${suffix}`, titleAr: `مدرسة ${suffix}`, genres: ['Comedy'], releaseYear: 2002 },
       { internalId: `E2E-SEARCH-MAQSURA-${suffix}`, titleEn: `Mustafa ${suffix}`, titleAr: `مصطفى ${suffix}`, genres: ['Drama'], releaseYear: 2001 },
@@ -41,6 +42,8 @@ describe('Catalogue search and starter list (real HTTP, real DB)', () => {
       // substring match (DiscoverScreen's genre filter, moved server-side).
       { internalId: `E2E-SEARCH-GENRE-PREFIX-${suffix}`, titleEn: `Drama Plus ${suffix}`, titleAr: `دراما بلس ${suffix}`, genres: ['Drama Plus'], releaseYear: 2001 },
     ]);
+    // PUB-G1: search and the starter list only return published titles.
+    await publishForTest(app, saved.map((title) => title.id));
   }, 20_000);
 
   afterAll(async () => {

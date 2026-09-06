@@ -8,6 +8,7 @@ import { Recommendation } from '../../entities/recommendation.entity';
 import { Title } from '../../entities/title.entity';
 import { Triad } from '../../entities/triad.entity';
 import { EXPLORATION_SHARE_EXPERIMENT, ExperimentsService } from '../experiments/experiments.service';
+import { wherePublished } from '../publication/publication-guard';
 import { PosterService } from '../public-quality/poster.service';
 import { PublicQuality, PublicQualityService } from '../public-quality/public-quality.service';
 import { TrainingService, type TrainingSummary } from '../training/training.service';
@@ -265,6 +266,7 @@ export class RecommendationsService {
     // titles are exactly the recommendation candidates (blueprint §2.4 principle #3).
     const excludedTitleIds = await this.watchedTitleIds(profileId);
     const queryBuilder = this.titlesRepository.createQueryBuilder('title').where('title.fingerprint IS NOT NULL');
+    wherePublished(queryBuilder, 'title'); // PUB-G1: a candidate must be publicly published, never staged
     if (excludedTitleIds.length > 0) {
       queryBuilder.andWhere('title.id NOT IN (:...excludedTitleIds)', { excludedTitleIds });
     }
@@ -318,6 +320,11 @@ export class RecommendationsService {
   // What this profile already watches: the genres and original languages of
   // its watched titles. "Usual" is descriptive, never a filter -- it only
   // decides which track a recommendation is shown under.
+  // PUB-G1: deliberately unguarded. These are titles the profile has
+  // *already* watched, read only to describe its own history -- never shown
+  // and never offered as a candidate. Guarding it would silently drop a
+  // watched title's genre/language from the profile's own "usual" signal if
+  // that title were ever unpublished, protecting nothing.
   private async usualRegion(watchedTitleIds: string[]): Promise<{ genres: Set<string>; languages: Set<string> }> {
     if (watchedTitleIds.length === 0) {
       return { genres: new Set(), languages: new Set() };
@@ -498,6 +505,9 @@ export class RecommendationsService {
   // The profile's own library ordered by the same model that ranks
   // recommendations (blueprint §5.3 "ترتيب شخصي"). Only watched titles with a
   // fingerprint can be placed; the rest of the library is simply absent here.
+  // PUB-G1: deliberately unguarded, same reasoning as `usualRegion` -- this
+  // re-displays a profile's own watched library to that same profile, not a
+  // discovery surface for unwatched content.
   async rankLibrary(userId: string, profileId: string): Promise<LibraryRankingItem[]> {
     const snapshot = await this.loadSnapshot(userId, profileId);
 
@@ -584,6 +594,7 @@ export class RecommendationsService {
   async candidatePoolSize(profileId: string): Promise<number> {
     const excludedTitleIds = await this.watchedTitleIds(profileId);
     const queryBuilder = this.titlesRepository.createQueryBuilder('title').where('title.fingerprint IS NOT NULL');
+    wherePublished(queryBuilder, 'title'); // PUB-G1: counts the same pool findForProfile() would serve
     if (excludedTitleIds.length > 0) {
       queryBuilder.andWhere('title.id NOT IN (:...excludedTitleIds)', { excludedTitleIds });
     }

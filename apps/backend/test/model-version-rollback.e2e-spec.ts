@@ -5,6 +5,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { Repository } from 'typeorm';
 import { AppModule } from '../src/modules/app/app.module';
+import { publishForTest } from './publish-for-test';
 import { Title } from '../src/entities/title.entity';
 import { User } from '../src/entities/user.entity';
 import { UserModelSnapshot } from '../src/entities/user-model-snapshot.entity';
@@ -135,6 +136,8 @@ describe('Recommendation serving honors the model_versions.active pin (F10, BP Â
       fingerprint: fullFingerprint({ warmth: 0.9 }) as never,
     });
     titleId = title.id;
+    // PUB-G1: the recommendation candidate pool only draws published titles.
+    await publishForTest(app, [titleId]);
 
     // findForProfile() candidates are every fingerprinted title in the whole
     // database minus this profile's watched ones -- postgres-test is shared

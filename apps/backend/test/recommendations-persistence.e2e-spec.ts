@@ -5,6 +5,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { Repository } from 'typeorm';
 import { AppModule } from '../src/modules/app/app.module';
+import { publishForTest } from './publish-for-test';
 import { Recommendation } from '../src/entities/recommendation.entity';
 import { Title } from '../src/entities/title.entity';
 import { UserModelSnapshot } from '../src/entities/user-model-snapshot.entity';
@@ -123,6 +124,8 @@ describe('Recommendation persistence (real HTTP, real DB, blueprint gap 4)', () 
       { internalId: `E2E-REC-B-${suffix}`, titleEn: 'Rec Check B', titleAr: 'ب', fingerprint: fullFingerprint({ warmth: 0.1 }) },
     ]);
     titleIds = titles.map((title) => title.id);
+    // PUB-G1: the recommendation candidate pool only draws published titles.
+    await publishForTest(app, titleIds);
   }, 20_000);
 
   afterAll(async () => {
