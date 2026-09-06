@@ -75,6 +75,14 @@ export class Recommendation {
   @Column({ type: 'varchar', nullable: true })
   experimentId: string | null;
 
+  // The arm `experimentId` assigned this profile to at creation time (ADR-122).
+  // 'control' is written explicitly when no experiment was running, so NULL
+  // means "not recorded" (a row from before this column existed), never
+  // "control". No historical backfill: earlier rows stay NULL rather than a
+  // guessed attribution.
+  @Column({ type: 'varchar', nullable: true })
+  arm: string | null;
+
   @Column({ type: 'real', nullable: true })
   selectionPropensity: number | null;
 

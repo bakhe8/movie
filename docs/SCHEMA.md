@@ -76,7 +76,7 @@ triads (                                                         -- one listwise
   "answeredAt" timestamp,                                        -- set once, at POST .../rank; NULL for triads completed before this column existed (ADR-32)
   "modelVersion" varchar,                                        -- which snapshot selected this triad; NULL under the random policy, which uses no model
   "idempotencyKey" uuid UNIQUE,                                  -- optional; a repeated key for the same triad replays the prior result (BP §14)
-  "policyVersion" varchar, "selectionPropensity" real, "experimentId" varchar,
+  "policyVersion" varchar, "selectionPropensity" real, "experimentId" varchar, arm varchar, -- arm: ADR-122, no historical backfill
   "sessionId" varchar, metadata json,                            -- { replacements?, reasonForSelection? } — the replacements key is superseded by triad_replacements below and never written
   status varchar NOT NULL DEFAULT 'active',                      -- 'active' | 'completed' | 'skipped' (skipped: abandoned by a replacement with nothing left to swap in)
   "correctsTriadId" uuid FK triads(id),                          -- append-only correction (BP §13.2); NULL for every triad today -- no correction flow built yet
@@ -296,7 +296,7 @@ recommendations (                                                -- BP §13.1, �
   "confidenceBand" varchar NOT NULL, "confidenceRaw" real,        -- raw is internal until calibrated (BP §7.2)
   reason json NOT NULL,                                          -- { text, features[], evidenceSource }
   "evidenceSource" varchar NOT NULL DEFAULT 'individual',
-  "candidateSource" varchar, "modelVersion" varchar NOT NULL, "policyVersion" varchar NOT NULL, "experimentId" varchar,
+  "candidateSource" varchar, "modelVersion" varchar NOT NULL, "policyVersion" varchar NOT NULL, "experimentId" varchar, arm varchar, -- arm: ADR-122, no historical backfill
   "selectionPropensity" real, "shownAt" timestamp, "createdAt" timestamp NOT NULL DEFAULT now(),
   INDEX ("profileId", "createdAt" DESC), INDEX ("titleId")       -- "titleId": AUDIT_2026-09-05 H7
 )

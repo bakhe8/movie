@@ -499,6 +499,14 @@ Still open: implementation (UX-B) — no code changed in this audit.
 
 Decided 2026-09-06 (coordinator, under the owner's delegation): triad cards never rotate — `Poster still` shows the first poster only on that decision surface (test in `RankScreen.test.tsx`); the dwell stays 2.8 s; a settings switch to stop rotation beyond the OS preference (WCAG 2.2.2) is a separate settings initiative, not P5. Still open: TMDB returns posters in every language when fetched without a language filter (a Russian second poster on «بين النجوم»), so P2's order may want a language preference.
 
+## Schema-only on 2026-09-06 (ADMIN-W7 attribution gap, ADR-122)
+
+| Gap | What changed | Proof |
+|---|---|---|
+| `TriadsService`/`RecommendationsService` call `ExperimentsService.armFor()` and steer behaviour with the result, but the created row never records which arm — `experimentId` existed on both but was always `null`, no `arm` column existed at all, and `Outcome` had neither | Migration `1788508000000-AddExperimentArm` adds a nullable `arm` column to `triads` and `recommendations`. Owner decisions (options panel): `arm:'control'` written explicitly when no experiment runs, never `NULL` for that case; no historical backfill | `up()`→`down()`→`up()` verified against `moviedb_test`; `column-types.spec.ts` guard passes with the new explicit-typed columns |
+
+Schema only — `TriadsService`/`RecommendationsService` still write nothing into `arm` (both reserved by a live production-incident fix at the time of this migration); the actual writes, plus W7's read-only admin screen, are the next step once those files are free.
+
 ---
 
 ## Project setup
