@@ -600,7 +600,10 @@ export function RankScreen({
               </span>
 
               {/* The poster slot is always present (owner decision 2026-09-04); hollow until licensed. */}
-              <Poster title={title} size="md" className={styles.poster} name={name} />
+              {/* A decision surface: the poster never changes on its own or
+                  under the pointer while three films are being compared
+                  (POSTERS-MULTI P5, coordinator decision 2026-09-06). */}
+              <Poster title={title} size="md" className={styles.poster} name={name} still />
 
               <div className={styles.body}>
                 {index === 0 && <span className={styles.favourite}>{lang === 'ar' ? 'الأقرب لك' : 'Your favourite'}</span>}

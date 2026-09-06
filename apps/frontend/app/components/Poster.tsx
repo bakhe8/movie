@@ -34,6 +34,7 @@ export function Poster({
   name,
   posterIndex,
   posterActive,
+  still = false,
 }: {
   title?: Pick<Title, 'posterUrl' | 'posters'> | null;
   size?: Size;
@@ -47,14 +48,18 @@ export function Poster({
   // fetched, exactly as under the slot's own reduced-motion rule.
   posterIndex?: number;
   posterActive?: boolean;
+  // A surface where the image must never change on its own or under the
+  // pointer -- the triad, a decision made by comparing three films
+  // (coordinator decision, 2026-09-06): the first poster, and only it.
+  still?: boolean;
 }) {
   const classes = [styles.poster, styles[size], className].filter(Boolean).join(' ');
   const url = title?.posterUrl ?? null;
   const posters = title?.posters ?? [];
   const stackRef = useRef<HTMLSpanElement>(null);
-  const own = usePosterRotation(posterIndex === undefined && url ? posters.length : 0, stackRef);
+  const own = usePosterRotation(posterIndex === undefined && url && !still ? posters.length : 0, stackRef);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
-  if (url && posters.length > 1 && failedUrl !== url) {
+  if (url && posters.length > 1 && !still && failedUrl !== url) {
     const index = posterIndex === undefined ? own.index : posterIndex;
     // The shown image and the one after it; the rest wait until their turn.
     // While nothing rotates (reduced motion, or a fine pointer not hovering)

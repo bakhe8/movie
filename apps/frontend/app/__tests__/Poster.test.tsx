@@ -168,6 +168,20 @@ describe('Poster', () => {
       expect(withoutField?.outerHTML).toBe(withEmptyArray?.outerHTML);
     });
 
+    it('stays one still image where the surface asks for it, with no clock at all', () => {
+      stubMedia({ reduced: false, hover: false });
+      const { container } = render(<Poster title={{ posterUrl: a, posters }} still />);
+
+      expect(vi.getTimerCount()).toBe(0);
+      expect(container.querySelector('[data-poster-stack]')).toBeNull();
+      act(() => {
+        vi.advanceTimersByTime(20 * POSTER_DWELL_MS);
+      });
+      const images = container.querySelectorAll('img');
+      expect(images).toHaveLength(1);
+      expect(images[0].getAttribute('src')).toBe(a);
+    });
+
     it('the hollow placeholder is unaffected by posters (no poster still means no poster)', () => {
       stubMedia({ reduced: false, hover: false });
       const { container } = render(<Poster title={{ posterUrl: null, posters }} />);

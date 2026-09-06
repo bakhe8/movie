@@ -8,10 +8,11 @@ import '../../jest-dom-vitest';
  * 3. Replacement flow: notWatched button → confirm → API called
  * 4. Blocked state when need_more_watched
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RankScreen } from '../components/RankScreen';
+import { POSTER_DWELL_MS } from '../components/PosterSet';
 
 // ── mock api ──────────────────────────────────────────────────────────────────
 
@@ -299,5 +300,46 @@ describe('RankScreen — rounds are the server count', () => {
 
     await waitFor(() => expect(screen.getByText(/جولاتك المكتملة: 1/)).toBeInTheDocument());
     expect(screen.queryByText(/سجّل فيلمين آخرين/)).toBeNull();
+  });
+});
+
+// POSTERS-MULTI P5 (coordinator decision, 2026-09-06): the triad is a decision
+// surface, so its posters never rotate -- not on touch, not under a pointer --
+// even when the film has several.
+describe('RankScreen posters', () => {
+  const source = { name: 'TMDB', attribution: 'This product uses the TMDB API but is not endorsed or certified by TMDB.' };
+  const withPosters = (id: string) => ({
+    posterUrl: `https://image.tmdb.org/t/p/w342/${id}-1.jpg`,
+    posterSource: source,
+    posters: [1, 2, 3, 4].map((n) => ({ posterUrl: `https://image.tmdb.org/t/p/w342/${id}-${n}.jpg`, posterSource: source })),
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('shows one still poster per film and never a rotating stack', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      media: query,
+      matches: false, // a touch screen without reduced motion: rotation would run anywhere else
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockApi.getCurrentTriad.mockResolvedValue({
+      ...TRIAD_READY,
+      items: TRIAD_READY.items.map((item) => ({ ...item, ...withPosters(item.id) })),
+    });
+    render(<RankScreen lang="ar" profileId="p1" />);
+    await screen.findByText('رأس ممحاة');
+
+    expect(document.querySelector('[data-poster-stack]')).toBeNull();
+    const before = [...document.querySelectorAll('img')].map((img) => img.getAttribute('src'));
+    expect(before).toEqual(['t1', 't2', 't3'].map((id) => `https://image.tmdb.org/t/p/w342/${id}-1.jpg`));
+    await act(async () => {
+      vi.advanceTimersByTime(4 * POSTER_DWELL_MS);
+    });
+    expect([...document.querySelectorAll('img')].map((img) => img.getAttribute('src'))).toEqual(before);
   });
 });
