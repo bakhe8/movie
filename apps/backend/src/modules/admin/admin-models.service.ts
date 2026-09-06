@@ -14,10 +14,13 @@ import { TrainingJobsService, TrainingJobsSummary } from '../training/training-j
 import type { Actor } from './admin-catalog.service';
 import { CreateModelVersionDto, UpdateModelVersionDto } from './dto/admin.dto';
 
+// ADMIN-W1 (ADR-117 ADM-P0-01 fix): wire field names match the frontend's
+// long-standing `stats`/`unregistered` types (docs/API.md `admin/models`).
+// This is the source of truth other consumers must follow, not the reverse.
 export interface SnapshotStats {
   modelVersion: string;
-  snapshots: number;
-  profiles: number;
+  snapshotCount: number;
+  profileCount: number;
   latestAt: Date | null;
   meanHeldOutPairwiseAccuracy: number | null;
   meanHeldOutNll: number | null;
@@ -243,8 +246,8 @@ export class AdminModelsService {
       .getRawMany<{ modelVersion: string; snapshots: string; profiles: string; latestAt: Date | null; acc: string | null; nll: string | null }>();
     return raw.map((row) => ({
       modelVersion: row.modelVersion,
-      snapshots: Number(row.snapshots),
-      profiles: Number(row.profiles),
+      snapshotCount: Number(row.snapshots),
+      profileCount: Number(row.profiles),
       latestAt: row.latestAt,
       meanHeldOutPairwiseAccuracy: row.acc === null ? null : Number(row.acc),
       meanHeldOutNll: row.nll === null ? null : Number(row.nll),

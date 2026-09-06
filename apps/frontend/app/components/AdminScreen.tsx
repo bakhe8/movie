@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
+import { formatDate, formatDateTime } from '../lib/format';
+import { AdminAccessBoundary } from './admin/AdminAccessBoundary';
 import s from './AdminScreen.module.css';
 
 type Tab = 'catalog' | 'features' | 'models' | 'privacy';
@@ -14,37 +16,53 @@ type TitleRow = {
   licenseStatus: string; sourceRecords: number; unreviewedFeatures: number;
 };
 
+// ADMIN-W1 (ADM-P1-03/04): debounce settles the *filter*, not the fetch, so
+// a filter change and a page change never race each other into two
+// concurrent identical requests. The one fetch effect below aborts its
+// predecessor -- an in-flight request from a superseded filter/page can
+// never overwrite a newer result (out-of-order responses, ADM-P1-04).
 function CatalogTab() {
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [missing, setMissing] = useState<'' | 'fingerprint' | 'v2' | 'license'>('');
   const [page, setPage] = useState(1);
   const [result, setResult] = useState<{ items: TitleRow[]; total: number; totalPages: number } | null>(null);
   const [busy, setBusy] = useState(false);
-  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const load = useCallback(async (q: string, miss: '' | 'fingerprint' | 'v2' | 'license', pg: number) => {
-    await Promise.resolve(); // defer setBusy out of synchronous effect context
-    setBusy(true);
-    try {
-      const data = await api.adminGetTitles({ query: q || undefined, missing: miss || undefined, page: pg, limit: 50 });
-      setResult(data);
-    } catch {
-      setResult(null);
-    } finally {
-      setBusy(false);
-    }
-  }, []);
+  const [failed, setFailed] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
 
   useEffect(() => {
-    if (debounce.current) clearTimeout(debounce.current);
-    debounce.current = setTimeout(() => { setPage(1); load(query, missing, 1); }, 300);
-    return () => { if (debounce.current) clearTimeout(debounce.current); };
-  }, [query, missing, load]);
-
-  useEffect(() => {
-    const id = setTimeout(() => { void load(query, missing, page); }, 0);
+    const id = setTimeout(() => setDebouncedQuery(query), 300);
     return () => clearTimeout(id);
-  }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [query]);
+
+  // A filter change always returns to page 1; this runs before the fetch
+  // effect below observes the new debouncedQuery/missing.
+  useEffect(() => {
+    void (async () => {
+      await Promise.resolve(); // defer setState out of synchronous effect context
+      setPage(1);
+    })();
+  }, [debouncedQuery, missing]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void (async () => {
+      await Promise.resolve(); // defer setState out of synchronous effect context
+      setBusy(true);
+      setFailed(false);
+      try {
+        const data = await api.adminGetTitles({ query: debouncedQuery || undefined, missing: missing || undefined, page, limit: 50, signal: controller.signal });
+        setResult(data);
+        setBusy(false);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return; // superseded, not a failure
+        setFailed(true);
+        setBusy(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [debouncedQuery, missing, page, retryTick]);
 
   return (
     <div className={s.tabBody}>
@@ -64,7 +82,13 @@ function CatalogTab() {
         </select>
       </div>
 
-      {result && <p className={s.count}>{result.total} عنوان</p>}
+      {result && <p className={s.count}>{result.total} عنوان{busy && ' — جارٍ التحديث…'}</p>}
+      {failed && (
+        <p className={s.forbidden} role="status" aria-live="polite">
+          تعذّر تحميل الكتالوج.{' '}
+          <button type="button" className={s.smallBtn} onClick={() => setRetryTick(t => t + 1)}>إعادة المحاولة</button>
+        </p>
+      )}
 
       <div className={s.tableWrap}>
         <table className={s.table}>
@@ -131,34 +155,51 @@ function FeaturesTab() {
   const [page, setPage] = useState(1);
   const [result, setResult] = useState<{ items: FeatureRow[]; total: number; totalPages: number } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
   const [reviewing, setReviewing] = useState<string | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
 
-  const load = useCallback(async (rs: string, pg: number) => {
-    await Promise.resolve(); // defer setBusy out of synchronous effect context
-    setBusy(true);
-    try {
-      const data = await api.adminGetContentFeatures({ reviewStatus: rs || undefined, page: pg, limit: 50 });
-      setResult(data);
-    } catch {
-      setResult(null);
-    } finally {
-      setBusy(false);
-    }
-  }, []);
-
+  // ADM-P1-03/04: an in-flight request from a superseded filter/page is
+  // aborted, so it can never land after (and overwrite) a newer one.
   useEffect(() => {
-    const id = setTimeout(() => { void load(reviewStatus, page); }, 0);
-    return () => clearTimeout(id);
-  }, [reviewStatus, page, load]);
+    const controller = new AbortController();
+    void (async () => {
+      await Promise.resolve();
+      setBusy(true);
+      setFailed(false);
+      try {
+        const data = await api.adminGetContentFeatures({ reviewStatus: reviewStatus || undefined, page, limit: 50, signal: controller.signal });
+        setResult(data);
+        setBusy(false);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setFailed(true);
+        setBusy(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [reviewStatus, page, retryTick]);
 
+  // ADM-P1-05: apply the server's real reviewStatus (not an assumed
+  // 'sampled'), and drop the row from view when it no longer matches the
+  // active filter -- a corrected value also supersedes the row entirely.
   const markSampled = async (featureId: string) => {
     setReviewing(featureId);
+    setReviewError(null);
     try {
-      await api.adminReviewFeature(featureId, { reviewStatus: 'sampled' });
-      setResult(prev => prev ? {
-        ...prev,
-        items: prev.items.map(f => f.id === featureId ? { ...f, reviewStatus: 'sampled' } : f),
-      } : prev);
+      const { feature, correction } = await api.adminReviewFeature(featureId, { reviewStatus: 'sampled' });
+      const newStatus = correction ? correction.reviewStatus : feature.reviewStatus;
+      const stillMatchesFilter = !reviewStatus || newStatus === reviewStatus;
+      setResult(prev => {
+        if (!prev) return prev;
+        if (stillMatchesFilter) {
+          return { ...prev, items: prev.items.map(f => (f.id === featureId ? { ...f, reviewStatus: newStatus } : f)) };
+        }
+        return { ...prev, items: prev.items.filter(f => f.id !== featureId), total: Math.max(0, prev.total - 1) };
+      });
+    } catch {
+      setReviewError('تعذّر حفظ المراجعة. حاول مرة أخرى.');
     } finally {
       setReviewing(null);
     }
@@ -175,7 +216,16 @@ function FeaturesTab() {
         </select>
       </div>
 
-      {result && <p className={s.count}>{result.total} صف</p>}
+      {result && <p className={s.count}>{result.total} صف{busy && ' — جارٍ التحديث…'}</p>}
+      {failed && (
+        <p className={s.forbidden} role="status" aria-live="polite">
+          تعذّر تحميل قائمة المراجعة.{' '}
+          <button type="button" className={s.smallBtn} onClick={() => setRetryTick(t => t + 1)}>إعادة المحاولة</button>
+        </p>
+      )}
+      {reviewError && (
+        <p className={s.forbidden} role="alert">{reviewError}</p>
+      )}
 
       <div className={s.tableWrap}>
         <table className={s.table}>
@@ -253,7 +303,7 @@ type Readiness = {
 type TrainingJobRow = {
   id: string; profileId: string; status: 'queued' | 'running' | 'succeeded' | 'failed';
   attempts: number; errorKind: 'invalid' | 'error' | null; lastError: string | null;
-  nextAttemptAt: string; finishedAt: string | null; createdAt: string;
+  nextAttemptAt: string; finishedAt: string | null; createdAt: string; updatedAt: string;
 };
 
 const JOB_STATUS_LABEL: Record<TrainingJobRow['status'], string> = {
@@ -261,13 +311,37 @@ const JOB_STATUS_LABEL: Record<TrainingJobRow['status'], string> = {
 };
 
 // GET admin/readiness (ADR-100): can training plausibly succeed right now --
-// answered once per load, never on a hot path.
+// answered once per load, never on a hot path. Owns its own loading/error/
+// retry (ADM-P1-06): a failure here must never hide the training table.
 function ReadinessStrip() {
   const [readiness, setReadiness] = useState<Readiness | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+
   useEffect(() => {
-    api.adminGetReadiness().then(setReadiness).catch(() => setReadiness(null));
-  }, []);
-  if (!readiness) return null;
+    let cancelled = false;
+    void (async () => {
+      await Promise.resolve();
+      setFailed(false);
+      try {
+        const result = await api.adminGetReadiness();
+        if (!cancelled) setReadiness(result);
+      } catch {
+        if (!cancelled) setFailed(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [attempt]);
+
+  if (failed) {
+    return (
+      <div className={s.loading} role="status" aria-live="polite">
+        تعذّر تحميل الجاهزية.{' '}
+        <button type="button" className={s.smallBtn} onClick={() => setAttempt(a => a + 1)}>إعادة المحاولة</button>
+      </div>
+    );
+  }
+  if (!readiness) return <div className={s.loading}>جارٍ التحميل…</div>;
   const items: { label: string; ok: boolean; detail: string }[] = [
     { label: 'القاعدة', ok: readiness.database.ok, detail: readiness.database.ok ? 'متصلة' : 'غير متصلة' },
     { label: 'الكتالوج', ok: readiness.catalog.ok, detail: `${readiness.catalog.titles} / ${readiness.catalog.threshold}` },
@@ -298,13 +372,37 @@ function ReadinessStrip() {
 
 // GET admin/training-jobs (ADR-100): the same shape as the mail outbox's
 // admin view -- counts by status and the recent rows, never an address, a
-// body, or (here) the unsanitized error.
+// body, or (here) the unsanitized error. Independent loading/error/retry
+// (ADM-P1-06), same as ReadinessStrip.
 function TrainingJobsTable() {
   const [data, setData] = useState<{ counts: Record<TrainingJobRow['status'], number>; recent: TrainingJobRow[] } | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+
   useEffect(() => {
-    api.adminGetTrainingJobs().then(setData).catch(() => setData(null));
-  }, []);
-  if (!data) return null;
+    let cancelled = false;
+    void (async () => {
+      await Promise.resolve();
+      setFailed(false);
+      try {
+        const result = await api.adminGetTrainingJobs();
+        if (!cancelled) setData(result);
+      } catch {
+        if (!cancelled) setFailed(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [attempt]);
+
+  if (failed) {
+    return (
+      <div className={s.loading} role="status" aria-live="polite">
+        تعذّر تحميل طابور التدريب.{' '}
+        <button type="button" className={s.smallBtn} onClick={() => setAttempt(a => a + 1)}>إعادة المحاولة</button>
+      </div>
+    );
+  }
+  if (!data) return <div className={s.loading}>جارٍ التحميل…</div>;
   return (
     <>
       <h3 className={s.subhead}>
@@ -326,7 +424,11 @@ function TrainingJobsTable() {
                 </td>
                 <td>{row.attempts}</td>
                 <td>{row.lastError ?? '—'}</td>
-                <td>{fmt(row.finishedAt ?? row.createdAt)}</td>
+                {/* ADMIN-W1 (ADM-P1-07): the server's own updatedAt, not
+                    finishedAt ?? createdAt -- a running/queued/failed row
+                    was never "finished", so that fallback silently showed
+                    the wrong moment. Date + time + zone, not day-only. */}
+                <td>{fmtDateTime(row.updatedAt)}</td>
               </tr>
             ))}
             {data.recent.length === 0 && (
@@ -339,21 +441,45 @@ function TrainingJobsTable() {
   );
 }
 
-function ModelsTab() {
+// ADMIN-W1 (ADM-P1-06): readiness and the training queue do not depend on
+// the model-version list succeeding -- each Widget below owns its own
+// loading/error/retry so one resource's failure never hides the other two.
+function ModelVersionsTable() {
   const [data, setData] = useState<{ versions: ModelVersion[]; unregistered: { modelVersion: string; snapshotCount: number; profileCount: number }[] } | null>(null);
   const [busy, setBusy] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    api.adminGetModels().then(setData).catch(() => setData(null)).finally(() => setBusy(false));
-  }, []);
+    let cancelled = false;
+    void (async () => {
+      await Promise.resolve();
+      setBusy(true);
+      setFailed(false);
+      try {
+        const result = await api.adminGetModels();
+        if (!cancelled) setData(result);
+      } catch {
+        if (!cancelled) setFailed(true);
+      } finally {
+        if (!cancelled) setBusy(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [attempt]);
 
   if (busy) return <div className={s.loading}>جارٍ التحميل…</div>;
-  if (!data) return <div className={s.loading}>تعذّر التحميل.</div>;
+  if (failed || !data) {
+    return (
+      <div className={s.loading} role="status" aria-live="polite">
+        تعذّر تحميل إصدارات النماذج.{' '}
+        <button type="button" className={s.smallBtn} onClick={() => setAttempt(a => a + 1)}>إعادة المحاولة</button>
+      </div>
+    );
+  }
 
   return (
-    <div className={s.tabBody}>
-      <ReadinessStrip />
-      <TrainingJobsTable />
+    <>
       <div className={s.tableWrap}>
         <table className={s.table}>
           <thead>
@@ -405,6 +531,16 @@ function ModelsTab() {
           </div>
         </>
       )}
+    </>
+  );
+}
+
+function ModelsTab() {
+  return (
+    <div className={s.tabBody}>
+      <ReadinessStrip />
+      <TrainingJobsTable />
+      <ModelVersionsTable />
     </div>
   );
 }
@@ -419,9 +555,19 @@ const PR_STATUS_LABEL: Record<string, string> = {
   running: 'قيد التنفيذ', done: 'منجز', cancelled: 'ملغى',
 };
 
+// ADMIN-W1: routed through lib/format's Gregorian + Latin-digit contract
+// (identity decision Q12) -- plain `ar-SA` defaults to the Umm al-Qura
+// calendar and Arabic-Indic digits, which silently misdated every admin
+// timestamp built that way (this file included, until now).
 function fmt(iso: string | null) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('ar-SA', { year: 'numeric', month: 'short', day: 'numeric' });
+  return iso ? formatDate(iso, 'ar') : '—';
+}
+
+// ADMIN-W1 (ADM-P1-07): operational rows (training jobs) need a time and an
+// explicit zone, unlike the day-only `fmt` used for the coarser privacy
+// request dates above.
+function fmtDateTime(iso: string | null) {
+  return iso ? formatDateTime(iso, 'ar') : '—';
 }
 
 function PrivacyTab() {
@@ -430,24 +576,29 @@ function PrivacyTab() {
   const [page, setPage] = useState(1);
   const [result, setResult] = useState<{ items: PrivacyRow[]; total: number; totalPages: number } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
 
-  const load = useCallback(async (t: string, st: string, pg: number) => {
-    await Promise.resolve(); // defer setBusy out of synchronous effect context
-    setBusy(true);
-    try {
-      const data = await api.adminGetPrivacyRequests({ type: t || undefined, status: st || undefined, page: pg, limit: 50 });
-      setResult(data);
-    } catch {
-      setResult(null);
-    } finally {
-      setBusy(false);
-    }
-  }, []);
-
+  // ADM-P1-03/04: abort a superseded filter/page request instead of letting
+  // it race a newer one to the screen.
   useEffect(() => {
-    const id = setTimeout(() => { void load(type, status, page); }, 0);
-    return () => clearTimeout(id);
-  }, [type, status, page, load]);
+    const controller = new AbortController();
+    void (async () => {
+      await Promise.resolve();
+      setBusy(true);
+      setFailed(false);
+      try {
+        const data = await api.adminGetPrivacyRequests({ type: type || undefined, status: status || undefined, page, limit: 50, signal: controller.signal });
+        setResult(data);
+        setBusy(false);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setFailed(true);
+        setBusy(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [type, status, page, retryTick]);
 
   return (
     <div className={s.tabBody}>
@@ -469,7 +620,13 @@ function PrivacyTab() {
         </select>
       </div>
 
-      {result && <p className={s.count}>{result.total} طلب</p>}
+      {result && <p className={s.count}>{result.total} طلب{busy && ' — جارٍ التحديث…'}</p>}
+      {failed && (
+        <p className={s.forbidden} role="status" aria-live="polite">
+          تعذّر تحميل طلبات الخصوصية.{' '}
+          <button type="button" className={s.smallBtn} onClick={() => setRetryTick(t => t + 1)}>إعادة المحاولة</button>
+        </p>
+      )}
 
       <div className={s.tableWrap}>
         <table className={s.table}>
@@ -528,59 +685,39 @@ const TAB_LABELS: Record<Tab, string> = {
   privacy: 'الخصوصية',
 };
 
-type Access = 'checking' | 'allowed' | 'forbidden';
-
 export function AdminScreen() {
   const [tab, setTab] = useState<Tab>('catalog');
-  const [access, setAccess] = useState<Access>('checking');
 
-  // Gate the whole screen on a real admin check (AUDIT_2026-09-05 C1/M5):
-  // the tab UI below must not mount before this resolves, and ANY non-2xx
-  // response (401 for an anonymous visitor included, not just 403) must
-  // deny access -- checking `err.status === 403` only let an anonymous
-  // visitor's 401 fall through and leave the admin shell visible.
-  useEffect(() => {
-    let cancelled = false;
-    api.adminGetTitles({ limit: 1 })
-      .then(() => { if (!cancelled) setAccess('allowed'); })
-      .catch(() => { if (!cancelled) setAccess('forbidden'); });
-    return () => { cancelled = true; };
-  }, []);
-
-  if (access !== 'allowed') {
-    return (
-      <div className={s.screen}>
-        <p className={s.forbidden}>
-          {access === 'checking' ? 'جارٍ التحقق من الصلاحية...' : 'ليس لديك صلاحية الوصول إلى لوحة الإدارة.'}
-        </p>
-      </div>
-    );
-  }
-
+  // Access boundary (ADMIN-W1, ADR-117): waits for session.ready, then a
+  // real /admin/context probe distinguishing unauthenticated/forbidden/
+  // network/timeout/server-error instead of collapsing every failure into
+  // "no access" (AUDIT_2026-09-05 C1/M5's original fix, now made precise).
   return (
-    <div className={s.screen}>
-      <header className={s.header}>
-        <h1 className={s.title}>لوحة الإدارة</h1>
-      </header>
+    <AdminAccessBoundary>
+      <div className={s.screen}>
+        <header className={s.header}>
+          <h1 className={s.title}>لوحة الإدارة</h1>
+        </header>
 
-      <div className={s.tabs} role="tablist">
-        {(Object.keys(TAB_LABELS) as Tab[]).map(t => (
-          <button
-            key={t}
-            role="tab"
-            aria-selected={tab === t}
-            className={`${s.tab} ${tab === t ? s.tabActive : ''}`}
-            onClick={() => setTab(t)}
-          >
-            {TAB_LABELS[t]}
-          </button>
-        ))}
+        <div className={s.tabs} role="tablist">
+          {(Object.keys(TAB_LABELS) as Tab[]).map(t => (
+            <button
+              key={t}
+              role="tab"
+              aria-selected={tab === t}
+              className={`${s.tab} ${tab === t ? s.tabActive : ''}`}
+              onClick={() => setTab(t)}
+            >
+              {TAB_LABELS[t]}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'catalog' && <CatalogTab />}
+        {tab === 'features' && <FeaturesTab />}
+        {tab === 'models' && <ModelsTab />}
+        {tab === 'privacy' && <PrivacyTab />}
       </div>
-
-      {tab === 'catalog' && <CatalogTab />}
-      {tab === 'features' && <FeaturesTab />}
-      {tab === 'models' && <ModelsTab />}
-      {tab === 'privacy' && <PrivacyTab />}
-    </div>
+    </AdminAccessBoundary>
   );
 }

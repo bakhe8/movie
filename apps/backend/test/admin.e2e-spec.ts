@@ -8,10 +8,13 @@ import { AppModule } from '../src/modules/app/app.module';
 import { AuditLog } from '../src/entities/audit-log.entity';
 import { ContentFeature } from '../src/entities/content-feature.entity';
 import { ModelVersion } from '../src/entities/model-version.entity';
+import { Profile } from '../src/entities/profile.entity';
 import { RefreshToken } from '../src/entities/refresh-token.entity';
 import { Title } from '../src/entities/title.entity';
 import { User } from '../src/entities/user.entity';
+import { UserModelSnapshot } from '../src/entities/user-model-snapshot.entity';
 import { AuthService } from '../src/modules/auth/auth.service';
+import { ADMIN_CAPABILITIES } from '../src/modules/admin/admin-capabilities';
 import { HUMAN_REVIEW_EXTRACTOR } from '../src/modules/admin/admin-catalog.service';
 
 const PASSWORD = 'CorrectHorseBattery1';
@@ -32,6 +35,8 @@ describe('Admin board API (role-gated)', () => {
   let features: Repository<ContentFeature>;
   let models: Repository<ModelVersion>;
   let refreshTokens: Repository<RefreshToken>;
+  let profiles: Repository<Profile>;
+  let snapshots: Repository<UserModelSnapshot>;
 
   const admin = () => (path: string) => request(app.getHttpServer()).get(path).set('Authorization', `Bearer ${adminToken}`);
 
@@ -46,6 +51,8 @@ describe('Admin board API (role-gated)', () => {
     features = app.get<Repository<ContentFeature>>(getRepositoryToken(ContentFeature));
     models = app.get<Repository<ModelVersion>>(getRepositoryToken(ModelVersion));
     refreshTokens = app.get<Repository<RefreshToken>>(getRepositoryToken(RefreshToken));
+    profiles = app.get<Repository<Profile>>(getRepositoryToken(Profile));
+    snapshots = app.get<Repository<UserModelSnapshot>>(getRepositoryToken(UserModelSnapshot));
 
     const auth = app.get(AuthService);
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -96,6 +103,20 @@ describe('Admin board API (role-gated)', () => {
     const forbidden = await request(app.getHttpServer()).get('/admin/titles').set('Authorization', `Bearer ${userToken}`).expect(403);
     expect(forbidden.body).toMatchObject({ reason: 'admin_required' });
     await request(app.getHttpServer()).get('/admin/users').set('Authorization', `Bearer ${userToken}`).expect(403);
+  });
+
+  // ADMIN-W1 (ADR-117): the access-boundary probe the frontend gates on
+  // instead of a throwaway `titles?limit=1` read. Same guard order as every
+  // other admin route -- 401 anonymous, 403 non-admin, capabilities only for
+  // a real admin.
+  it('reports admin context and capabilities distinctly from a plain 403', async () => {
+    await request(app.getHttpServer()).get('/admin/context').expect(401);
+    const forbidden = await request(app.getHttpServer()).get('/admin/context').set('Authorization', `Bearer ${userToken}`).expect(403);
+    expect(forbidden.body).toMatchObject({ reason: 'admin_required' });
+
+    const context = await admin()('/admin/context').expect(200);
+    expect(context.body).toMatchObject({ user: { id: adminId, role: 'admin' } });
+    expect(context.body.capabilities.sort()).toEqual([...ADMIN_CAPABILITIES].sort());
   });
 
   it('lists the catalog with fingerprint/license summaries and the missing-fingerprints view', async () => {
@@ -174,6 +195,7 @@ describe('Admin board API (role-gated)', () => {
     const suffix = Date.now();
     const v1 = `e2e-model-${suffix}-a`;
     const v2 = `e2e-model-${suffix}-b`;
+    const v3 = `e2e-model-${suffix}-unregistered`;
     for (const version of [v1, v2]) {
       await request(app.getHttpServer())
         .post('/admin/models')
@@ -192,9 +214,29 @@ describe('Admin board API (role-gated)', () => {
     const active = await models.find({ where: { active: true } });
     expect(active.map((row) => row.version)).toEqual([v2]);
 
+    // ADMIN-W1 (ADR-117 ADM-P0-01): the wire shape is snapshotCount/
+    // profileCount end to end, not the query builder's internal aliases.
+    // v1 gets two snapshots across two profiles (registered, with stats);
+    // v3 gets one snapshot but is never registered.
+    const profileRows = await profiles.save([
+      profiles.create({ userId: adminId, name: 'e2e admin profile' }),
+      profiles.create({ userId: userId, name: 'e2e plain profile' }),
+    ]);
+    await snapshots.save([
+      snapshots.create({ profileId: profileRows[0].id, weights: [0.1], modelVersion: v1, trainingTriadCount: 5 }),
+      snapshots.create({ profileId: profileRows[1].id, weights: [0.2], modelVersion: v1, trainingTriadCount: 8 }),
+      snapshots.create({ profileId: profileRows[0].id, weights: [0.3], modelVersion: v3, trainingTriadCount: 3 }),
+    ]);
+
     const list = await admin()('/admin/models').expect(200);
+    const registeredV1 = list.body.versions.find((row: { version: string }) => row.version === v1);
+    expect(registeredV1.stats).toMatchObject({ modelVersion: v1, snapshotCount: 2, profileCount: 2 });
+    expect(registeredV1.stats.snapshots).toBeUndefined();
+    expect(registeredV1.stats.profiles).toBeUndefined();
     expect(list.body.versions.some((row: { version: string; active: boolean }) => row.version === v2 && row.active)).toBe(true);
-    expect(Array.isArray(list.body.unregistered)).toBe(true);
+    const unregisteredV3 = list.body.unregistered.find((row: { modelVersion: string }) => row.modelVersion === v3);
+    expect(unregisteredV3).toMatchObject({ modelVersion: v3, snapshotCount: 1, profileCount: 1 });
+
     await admin()('/admin/experiments').expect(200);
     const triads = await admin()('/admin/triads/latest?limit=5').expect(200);
     expect(Array.isArray(triads.body)).toBe(true);

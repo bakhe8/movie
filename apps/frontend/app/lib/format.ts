@@ -89,6 +89,16 @@ export function formatDate(iso: string, lang: Lang): string {
   );
 }
 
+// Gregorian + Latin digits like formatDate, plus a time and an explicit zone
+// (ADMIN-W1 ADM-P1-07) -- for operational rows where the day alone cannot
+// tell two same-day updates apart. `dateStyle`/`timeStyle` cannot combine
+// with `timeZoneName` per Intl.DateTimeFormat, hence the explicit fields.
+export function formatDateTime(iso: string, lang: Lang): string {
+  return new Intl.DateTimeFormat(lang === 'ar' ? 'ar-SA-u-ca-gregory-nu-latn' : 'en-US', {
+    year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
+  }).format(new Date(iso));
+}
+
 // The day the user watched a title, as the plain 'YYYY-MM-DD' the backend
 // stores (ADR-104, remediation brief P1-03/DATE-01) -- deliberately never a
 // timestamp. Pinned to UTC while formatting: a bare date string has no

@@ -3,6 +3,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { AdminGuard } from '../auth/admin.guard';
 import type { SafeUser } from '../auth/auth.service';
 import { MailOutboxService } from '../mail/mail-outbox.service';
+import { capabilitiesForRole } from './admin-capabilities';
 import { Actor, AdminCatalogService } from './admin-catalog.service';
 import { AdminMetricsService } from './admin-metrics.service';
 import { AdminModelsService } from './admin-models.service';
@@ -45,6 +46,18 @@ export class AdminController {
     private readonly metrics: AdminMetricsService,
     private readonly outbox: MailOutboxService,
   ) {}
+
+  // ADMIN-W1 (ADR-117): the access-boundary probe. AuthGuard/AdminGuard
+  // already answer 401/403 before this body ever runs; a 200 here means
+  // "signed in, role=admin, respond with what you may see" -- capabilities
+  // are UI hints, never an authorization decision the client makes itself.
+  @Get('context')
+  context(@Request() request: AdminRequest) {
+    return {
+      user: { id: request.user.id, email: request.user.email, role: request.user.role },
+      capabilities: capabilitiesForRole(request.user.role),
+    };
+  }
 
   // ---- catalog and rights ------------------------------------------------
 

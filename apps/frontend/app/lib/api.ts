@@ -422,6 +422,20 @@ async function request<T>(path: string, options: RequestInit = {}, flags: Reques
   return response.json() as Promise<T>;
 }
 
+// One row of the fingerprint review queue (docs/API.md `admin/content-features`),
+// shared between the list and the review response's `feature`/`correction`
+// (ADMIN-W1): a correction is a new row, not an edit, so both carry this shape.
+export interface AdminContentFeature {
+  id: string;
+  titleId: string;
+  featureKey: string;
+  value: number;
+  extractorVersion: string;
+  reviewStatus: string;
+  supersededBy?: string | null;
+  title: { id: string; internalId: string; titleEn: string; titleAr: string } | null;
+}
+
 export const api = {
   // A name is optional at the door since 2026-09-05: it appears on no screen
   // but the profile's account card and enters no model.
@@ -602,7 +616,13 @@ export const api = {
 
   // ── Admin (role:admin required; 403 { reason:'admin_required' } otherwise) ──
 
-  adminGetTitles: (params: { query?: string; missing?: 'fingerprint' | 'v2' | 'license'; page?: number; limit?: number } = {}) => {
+  // ADMIN-W1 (ADR-117): the access-boundary probe -- 401/403 distinguish
+  // "not signed in" from "signed in, not admin" before any tab mounts.
+  // `capabilities` are UI hints only; the server enforces access either way.
+  adminGetContext: (signal?: AbortSignal) =>
+    request<{ user: { id: string; email: string; role: string }; capabilities: string[] }>('/admin/context', { signal }),
+
+  adminGetTitles: (params: { query?: string; missing?: 'fingerprint' | 'v2' | 'license'; page?: number; limit?: number; signal?: AbortSignal } = {}) => {
     const qs = new URLSearchParams();
     if (params.query) qs.set('query', params.query);
     if (params.missing) qs.set('missing', params.missing);
@@ -611,10 +631,10 @@ export const api = {
     return request<{
       items: { id: string; internalId: string; titleEn: string; titleAr: string; releaseYear: number | null; hasFingerprint: boolean; hasV2: boolean; licenseStatus: string; sourceRecords: number; unreviewedFeatures: number }[];
       total: number; page: number; limit: number; totalPages: number;
-    }>(`/admin/titles?${qs}`);
+    }>(`/admin/titles?${qs}`, { signal: params.signal });
   },
 
-  adminGetContentFeatures: (params: { reviewStatus?: string; titleId?: string; featureKey?: string; page?: number; limit?: number } = {}) => {
+  adminGetContentFeatures: (params: { reviewStatus?: string; titleId?: string; featureKey?: string; page?: number; limit?: number; signal?: AbortSignal } = {}) => {
     const qs = new URLSearchParams();
     if (params.reviewStatus) qs.set('reviewStatus', params.reviewStatus);
     if (params.titleId) qs.set('titleId', params.titleId);
@@ -622,13 +642,16 @@ export const api = {
     if (params.page) qs.set('page', String(params.page));
     if (params.limit) qs.set('limit', String(params.limit));
     return request<{
-      items: { id: string; titleId: string; featureKey: string; value: number; extractorVersion: string; reviewStatus: string; title: { id: string; internalId: string; titleEn: string; titleAr: string } | null }[];
+      items: AdminContentFeature[];
       total: number; page: number; totalPages: number;
-    }>(`/admin/content-features?${qs}`);
+    }>(`/admin/content-features?${qs}`, { signal: params.signal });
   },
 
+  // ADMIN-W1 (ADR-117 W1 contract defect): the real response nests both rows
+  // -- `correction` is null unless `correctedValue` produced a new one -- it
+  // is not the flat `{id, reviewStatus}` this used to (wrongly) declare.
   adminReviewFeature: (featureId: string, data: { reviewStatus: string; correctedValue?: number; note?: string }) =>
-    request<{ id: string; reviewStatus: string }>(`/admin/content-features/${featureId}/review`, {
+    request<{ feature: AdminContentFeature; correction: AdminContentFeature | null }>(`/admin/content-features/${featureId}/review`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
@@ -660,7 +683,7 @@ export const api = {
       modelService: { configured: boolean; reachable: boolean; ok: boolean };
     }>('/admin/readiness'),
 
-  adminGetPrivacyRequests: (params: { type?: string; status?: string; page?: number; limit?: number } = {}) => {
+  adminGetPrivacyRequests: (params: { type?: string; status?: string; page?: number; limit?: number; signal?: AbortSignal } = {}) => {
     const qs = new URLSearchParams();
     if (params.type) qs.set('type', params.type);
     if (params.status) qs.set('status', params.status);
@@ -669,6 +692,6 @@ export const api = {
     return request<{
       items: { id: string; type: string; status: string; requestedAt: string; executeAfter: string | null; completedAt: string | null }[];
       total: number; page: number; totalPages: number;
-    }>(`/admin/privacy-requests?${qs}`);
+    }>(`/admin/privacy-requests?${qs}`, { signal: params.signal });
   },
 };
