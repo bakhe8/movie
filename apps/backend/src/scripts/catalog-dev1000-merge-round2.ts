@@ -1,10 +1,11 @@
 /**
- * D1000-2 batch 1: merge `catalog.dev1000.sourced-round2.tsv` (151 SPARQL-sourced, real-cinema
- * filtered candidates) into the dev1000 staging file. Drops anything already reserved, resolves each
- * survivor's enwiki sitelink title for the `wiki` field, assigns contiguous internalIds from DEMO0426,
- * and writes STAGED_NEW records. Read-only Wikidata calls only; no writes to catalog.demo.json/seed/ADMIN.
+ * D1000-2: merge a `catalog.dev1000.sourced-roundN.tsv` review file (SPARQL-sourced, real-cinema
+ * filtered candidates, produced by catalog-dev1000-source-round{2,3,...}.ts) into the dev1000 staging
+ * file. Drops anything already reserved, resolves each survivor's enwiki sitelink title for the `wiki`
+ * field, assigns contiguous internalIds, and writes STAGED_NEW records. Read-only Wikidata calls only;
+ * no writes to catalog.demo.json/seed/ADMIN.
  *
- *   npx tsx src/scripts/catalog-dev1000-merge-round2.ts
+ *   npx tsx src/scripts/catalog-dev1000-merge-round2.ts [sourced-file.tsv]   # default: round2
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -56,12 +57,13 @@ async function main() {
   const staging: Dev1000Record[] = JSON.parse(readFileSync(stagingPath, 'utf8'));
   assertUniqueIdentities(staging);
 
-  const rows = parseRound2Tsv(readFileSync(join(FIXTURES_DIR, 'catalog.dev1000.sourced-round2.tsv'), 'utf8'));
+  const sourceFile = process.argv[2] ?? 'catalog.dev1000.sourced-round2.tsv';
+  const rows = parseRound2Tsv(readFileSync(join(FIXTURES_DIR, sourceFile), 'utf8'));
   const existingByWikidata = new Set(staging.map((r) => r.externalIds?.wikidata).filter(Boolean));
   const existingByImdb = new Set(staging.map((r) => r.externalIds?.imdb).filter(Boolean));
 
   const fresh = rows.filter((r) => !existingByWikidata.has(r.qid) && !existingByImdb.has(r.imdb));
-  console.log(`round2 rows: ${rows.length}, already reserved: ${rows.length - fresh.length}, fresh: ${fresh.length}`);
+  console.log(`${sourceFile}: ${rows.length} rows, already reserved: ${rows.length - fresh.length}, fresh: ${fresh.length}`);
 
   const resolved: ResolvedCandidate[] = [];
   const skipped: { row: Round2Row; reason: string }[] = [];
