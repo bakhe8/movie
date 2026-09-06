@@ -72,8 +72,19 @@ async function main(): Promise<void> {
     const candidates = before.titles.filter((t) => t.blockerCodes.includes('POSTER_MISSING'));
     console.log(`pub-b1 poster backfill: ${candidates.length} titles flagged POSTER_MISSING (of ${before.totalTitles})${dryRun ? ' [--dry-run]' : ''}`);
 
-    const rawParsed = JSON.parse(await readFile(FIXTURE, 'utf8')) as FixtureEntry[] | { entries: FixtureEntry[] };
-    const fixtureEntries = Array.isArray(rawParsed) ? rawParsed : rawParsed.entries;
+    // The fixture is the repo's copy of the catalog and gets the same path so
+    // a later reseed cannot undo this run -- but it only exists in a source
+    // checkout. Inside the deployed image (dist/, no fixtures/) it is absent,
+    // and the database + source_records writes are what matter there; so a
+    // missing fixture is reported and skipped, never a reason to stop.
+    let rawParsed: FixtureEntry[] | { entries: FixtureEntry[] } | null = null;
+    try {
+      rawParsed = JSON.parse(await readFile(FIXTURE, 'utf8')) as FixtureEntry[] | { entries: FixtureEntry[] };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      console.log(`fixture not present at ${FIXTURE} -- writing the database only (deployed image)`);
+    }
+    const fixtureEntries: FixtureEntry[] = rawParsed === null ? [] : Array.isArray(rawParsed) ? rawParsed : rawParsed.entries;
     const fixtureByInternalId = new Map(fixtureEntries.map((entry) => [entry.internalId, entry]));
 
     const results: { internalId: string; outcome: Outcome }[] = [];
@@ -139,7 +150,7 @@ async function main(): Promise<void> {
       results.push({ internalId: title.internalId, outcome: 'resolved' });
     }
 
-    if (fixtureChanged && !dryRun) {
+    if (fixtureChanged && !dryRun && rawParsed !== null) {
       const output = Array.isArray(rawParsed) ? fixtureEntries : { ...rawParsed, entries: fixtureEntries };
       await writeFile(FIXTURE, `${JSON.stringify(output, null, 2)}\n`, 'utf8');
     }
