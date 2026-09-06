@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import type { PosterService } from '../public-quality/poster.service';
-import type { ExperimentsService } from '../experiments/experiments.service';
+import { TRIAD_POLICY_EXPERIMENT, type ExperimentsService } from '../experiments/experiments.service';
 import { UserModelSnapshot } from '../../entities/user-model-snapshot.entity';
 import type { TriadPolicyService } from './triad-policy.service';
 import type { Repository } from 'typeorm';
@@ -646,6 +646,19 @@ describe('TriadsService', () => {
       const result = await service.getCurrent('user-1', 'profile-1');
 
       expect(result.shownAt).toBeInstanceOf(Date);
+    });
+
+    // ADR-122: armFor() is stubbed to 'control' by default (see beforeEach);
+    // the row must say so explicitly rather than leaving experimentId/arm null.
+    it('records which experiment surface and arm produced the triad', async () => {
+      profilesRepository.findOne.mockResolvedValue({ id: 'profile-1', userId: 'user-1' });
+      triadsRepository.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+      statesRepository.find.mockResolvedValue([{ titleId: 't1' }, { titleId: 't2' }, { titleId: 't3' }]);
+
+      await service.getCurrent('user-1', 'profile-1');
+
+      const [created] = triadsRepository.create.mock.calls[0];
+      expect(created).toMatchObject({ experimentId: TRIAD_POLICY_EXPERIMENT, arm: 'control' });
     });
 
     it('draws only from watched titles that are still triad-eligible (ADR-17)', async () => {

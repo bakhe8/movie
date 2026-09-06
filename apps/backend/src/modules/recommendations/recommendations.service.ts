@@ -278,7 +278,7 @@ export class RecommendationsService {
     // nothing risky to explore with.
     const ranked = this.scoreTitles(titles, snapshot);
     const usual = await this.usualRegion(excludedTitleIds);
-    const explorationShare = await this.explorationShare(profileId);
+    const { share: explorationShare, arm } = await this.explorationShare(profileId);
     const scored = this.assignTracks(ranked, usual, limit, explorationShare);
     // Batched over just the titles actually being returned, not the whole
     // candidate pool -- a title absent from the map has no displayable
@@ -301,7 +301,7 @@ export class RecommendationsService {
       };
     });
 
-    const recommendationIds = await this.persistCreated(profileId, snapshot.modelVersion, results);
+    const recommendationIds = await this.persistCreated(profileId, snapshot.modelVersion, results, arm);
     // The poster travels with every title the client renders (ADR-82).
     const posters = await this.posterService.forTitles(results.map((result) => result.title));
     return {
@@ -341,10 +341,12 @@ export class RecommendationsService {
 
   // ALPHA_PLAN 6.5's second flag. Default unless the `exploration-share`
   // experiment is running and puts this profile in a named arm; an unknown
-  // arm falls back to the default rather than inventing a share.
-  private async explorationShare(profileId: string): Promise<number> {
+  // arm falls back to the default rather than inventing a share. Returns the
+  // arm too (ADR-122): persistCreated() writes it onto every row this
+  // request produces, alongside the share it already decided.
+  private async explorationShare(profileId: string): Promise<{ share: number; arm: string }> {
     const arm = await this.experimentsService.armFor(EXPLORATION_SHARE_EXPERIMENT, profileId);
-    return EXPLORATION_SHARES[arm] ?? DEFAULT_EXPLORATION_SHARE;
+    return { share: EXPLORATION_SHARES[arm] ?? DEFAULT_EXPLORATION_SHARE, arm };
   }
 
   // Deterministic, in rank order (ADR-8): `safe` is the best fit inside the
@@ -421,14 +423,17 @@ export class RecommendationsService {
   // without this log the post-watch loop (§4.5) can't close and §16 has
   // nothing to read (blueprint gap 4). All rows from one call share a
   // requestId. Left honestly null rather than fabricated: confidenceRaw (no
-  // continuous score backs confidenceBand yet, ADR-21), candidateSource
+  // continuous score backs confidenceBand yet, ADR-21), and candidateSource
   // (today's full-catalog scan-and-sort matches none of the specified
   // sources -- 'content_similarity' means real similarity retrieval, which
-  // this isn't), and experimentId (no experiments exist, blueprint gap 1
-  // M4). selectionPropensity is 1: the ranking is deterministic given the
-  // snapshot and candidate pool, so every shown item was certain under this
-  // policy (the same convention TriadsService uses for its own uniform-random
-  // policy, just evaluated for a greedy one).
+  // this isn't). experimentId/arm (ADR-122) are real now: every row from one
+  // call shares the one arm `explorationShare()` already resolved for this
+  // profile -- 'control' written explicitly, same as any named arm, never
+  // left null for "no experiment running". selectionPropensity is 1: the
+  // ranking is deterministic given the snapshot and candidate pool, so every
+  // shown item was certain under this policy (the same convention
+  // TriadsService uses for its own uniform-random policy, just evaluated for
+  // a greedy one).
   //
   // ADR-110: creating the row and recording that it was seen are two events,
   // not one. This writes the row with `shownAt: null` -- "this is what the
@@ -441,6 +446,7 @@ export class RecommendationsService {
     profileId: string,
     modelVersion: string,
     results: Omit<RecommendationResult, 'recommendationId'>[],
+    arm: string,
   ): Promise<string[]> {
     if (results.length === 0) {
       return [];
@@ -462,7 +468,8 @@ export class RecommendationsService {
         candidateSource: null,
         modelVersion,
         policyVersion: RECOMMENDATION_POLICY_VERSION,
-        experimentId: null,
+        experimentId: EXPLORATION_SHARE_EXPERIMENT,
+        arm,
         selectionPropensity: 1,
         shownAt: null,
       })) as unknown as QueryDeepPartialEntity<Recommendation>[],

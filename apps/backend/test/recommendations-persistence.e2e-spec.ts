@@ -7,6 +7,7 @@ import type { Repository } from 'typeorm';
 import { AppModule } from '../src/modules/app/app.module';
 import { publishForTest } from './publish-for-test';
 import { Recommendation } from '../src/entities/recommendation.entity';
+import { EXPLORATION_SHARE_EXPERIMENT } from '../src/modules/experiments/experiments.service';
 import { Title } from '../src/entities/title.entity';
 import { UserModelSnapshot } from '../src/entities/user-model-snapshot.entity';
 import { UserTitleState } from '../src/entities/user-title-state.entity';
@@ -222,11 +223,14 @@ describe('Recommendation persistence (real HTTP, real DB, blueprint gap 4)', () 
     const reread = await recommendationsRepository.find({ where: { profileId } });
     expect(reread.map((row) => row.shownAt?.toISOString())).toEqual(firstStamps);
     // Honest nulls, not fabricated values -- no continuous confidence score,
-    // no experiment, and today's full-catalog scan matches none of the
-    // specified candidateSource values.
+    // and today's full-catalog scan matches none of the specified
+    // candidateSource values.
     expect(rows.every((row) => row.confidenceRaw === null)).toBe(true);
-    expect(rows.every((row) => row.experimentId === null)).toBe(true);
     expect(rows.every((row) => row.candidateSource === null)).toBe(true);
+    // ADR-122: no `experiments` row exists for this e2e run, so armFor()
+    // falls back to control -- written explicitly, never left null.
+    expect(rows.every((row) => row.experimentId === EXPLORATION_SHARE_EXPERIMENT)).toBe(true);
+    expect(rows.every((row) => row.arm === 'control')).toBe(true);
     // Reason carries the same features/evidenceSource the API response does.
     const warmTitleRow = rows.find((row) => row.titleId === titleIds[0]);
     expect(warmTitleRow?.reason).toMatchObject({ evidenceSource: 'individual' });

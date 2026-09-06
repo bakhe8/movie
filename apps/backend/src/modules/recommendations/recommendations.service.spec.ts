@@ -9,7 +9,7 @@ import { Triad } from '../../entities/triad.entity';
 import { UserModelSnapshot } from '../../entities/user-model-snapshot.entity';
 import { UserTitleState } from '../../entities/user-title-state.entity';
 import type { PublicQuality, PublicQualityService } from '../public-quality/public-quality.service';
-import type { ExperimentsService } from '../experiments/experiments.service';
+import { EXPLORATION_SHARE_EXPERIMENT, type ExperimentsService } from '../experiments/experiments.service';
 import type { PosterService } from '../public-quality/poster.service';
 import type { TrainingService } from '../training/training.service';
 import { RecommendationsService } from './recommendations.service';
@@ -560,12 +560,15 @@ describe('RecommendationsService', () => {
       // Both rows from the same call share one requestId.
       expect(new Set(rows.map((row) => row.requestId)).size).toBe(1);
       // Honest nulls, not fabricated values (ADR-52/53/56's "flag, don't
-      // invent" pattern): no continuous confidence score, no experiment,
-      // and today's full-catalog scan matches none of the specified
-      // candidateSource values.
+      // invent" pattern): no continuous confidence score, and today's
+      // full-catalog scan matches none of the specified candidateSource
+      // values.
       expect(rows.every((row) => row.confidenceRaw === null)).toBe(true);
-      expect(rows.every((row) => row.experimentId === null)).toBe(true);
       expect(rows.every((row) => row.candidateSource === null)).toBe(true);
+      // ADR-122: the arm the default mock's armFor() resolves is written
+      // explicitly, under the one experiment surface this path checks.
+      expect(rows.every((row) => row.experimentId === EXPLORATION_SHARE_EXPERIMENT)).toBe(true);
+      expect(rows.every((row) => row.arm === 'control')).toBe(true);
       // Deterministic top-K given the snapshot and pool: every shown item
       // was certain under this policy.
       expect(rows.every((row) => row.selectionPropensity === 1)).toBe(true);
@@ -1293,6 +1296,10 @@ describe('RecommendationsService', () => {
 
       // 35% of 10 = 3 slots.
       expect(items.filter((item) => item.track === 'outside_usual')).toHaveLength(3);
+      // ADR-122: the arm that decided the share is the same one written onto
+      // every row this call persisted, not just used to size the track.
+      const rows = recommendationsRepository.insert.mock.calls[0][0] as Array<Record<string, unknown>>;
+      expect(rows.every((row) => row.arm === 'exploration-high')).toBe(true);
     });
   });
 

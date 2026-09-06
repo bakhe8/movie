@@ -148,7 +148,11 @@ export class TriadsService {
     // ALPHA_PLAN 6.2/6.5: the adaptive policy runs only for profiles the
     // `triad-policy` experiment put in that arm; everyone else keeps the
     // random policy as the control, and both record which policy chose them.
-    const adaptive = await this.adaptiveSelection(profileId, pool, recentlyUsedTitleIds, usedSetHashes);
+    // Called once here (armFor's own assignment write is write-once anyway)
+    // so the arm is available below for the row itself, not just the branch
+    // it took (ADR-122).
+    const arm = await this.experimentsService.armFor(TRIAD_POLICY_EXPERIMENT, profileId);
+    const adaptive = await this.adaptiveSelection(arm, profileId, pool, recentlyUsedTitleIds, usedSetHashes);
     let selection: TriadSelection;
     if (adaptive) {
       selection = { ...adaptive, purpose: 'learn', reasonForSelection: 'adaptive-uncertainty' };
@@ -190,6 +194,11 @@ export class TriadsService {
           displayOrder: this.shuffle([...selection.titleIds]),
           policyVersion,
           selectionPropensity: selection.selectionPropensity,
+          // ADR-122: which experiment surface decided this row and the arm it
+          // returned -- 'control' is written explicitly, same as any other
+          // named arm, never left null for "no experiment running".
+          experimentId: TRIAD_POLICY_EXPERIMENT,
+          arm,
           status: 'active',
           shownAt: new Date(),
           metadata: { reasonForSelection: selection.reasonForSelection },
@@ -649,14 +658,16 @@ export class TriadsService {
 
   // Null unless this profile is in the adaptive arm and a full pool could be
   // scored -- every failure path falls back to the control policy rather
-  // than blocking a round.
+  // than blocking a round. Takes the arm already resolved by the caller
+  // (getCurrent()) rather than resolving its own, so there is exactly one
+  // armFor() call -- and therefore one value -- per triad created.
   private async adaptiveSelection(
+    arm: string,
     profileId: string,
     restedTitleIds: string[],
     recentlyUsedTitleIds: string[],
     usedSetHashes: Set<string>,
   ): Promise<AdaptiveSelection | null> {
-    const arm = await this.experimentsService.armFor(TRIAD_POLICY_EXPERIMENT, profileId);
     if (arm !== ADAPTIVE_POLICY_VERSION) {
       return null;
     }
