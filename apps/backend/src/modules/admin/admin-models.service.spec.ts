@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ConfigService } from '@nestjs/config';
 import type { Repository } from 'typeorm';
 import { Title } from '../../entities/title.entity';
 import type { AuditService } from '../audit/audit.service';
 import type { ModelServiceClient } from '../training/model-service.client';
 import type { TrainingJobsService } from '../training/training-jobs.service';
+import type { AdminSettingsService } from './admin-settings.service';
 import { AdminModelsService } from './admin-models.service';
 
 // Only the two additions from ADR-100 (remediation brief P0-02) --
@@ -14,8 +14,16 @@ function repoMock() {
   return { count: vi.fn(async () => 0) };
 }
 
-function configOf(values: Record<string, string> = {}): ConfigService {
-  return { get: (key: string) => values[key] } as unknown as ConfigService;
+// ADMIN-W6: the two readiness thresholds are registered settings now
+// (admin-settings.service.ts), read live via getValue() -- this fake
+// answers with whatever the test configures, same as the real service would
+// once a control-plane override (or its env-var/default fallback) resolves.
+function settingsOf(values: { 'catalog.min_titles'?: number; 'catalog.min_fingerprint_coverage'?: number } = {}): AdminSettingsService {
+  const resolved: Record<string, number> = {
+    'catalog.min_titles': values['catalog.min_titles'] ?? 200,
+    'catalog.min_fingerprint_coverage': values['catalog.min_fingerprint_coverage'] ?? 0.5,
+  };
+  return { getValue: async (key: string) => resolved[key] } as unknown as AdminSettingsService;
 }
 
 describe('AdminModelsService', () => {
@@ -23,7 +31,7 @@ describe('AdminModelsService', () => {
   let trainingJobs: { summary: ReturnType<typeof vi.fn> };
   let modelService: { enabled: boolean; reachable: ReturnType<typeof vi.fn> };
 
-  function build(config: ConfigService = configOf()) {
+  function build(settings: AdminSettingsService = settingsOf()) {
     return new AdminModelsService(
       {} as never,
       {} as never,
@@ -35,7 +43,7 @@ describe('AdminModelsService', () => {
       {} as unknown as AuditService,
       trainingJobs as unknown as TrainingJobsService,
       modelService as unknown as ModelServiceClient,
-      config,
+      settings,
     );
   }
 
@@ -68,7 +76,7 @@ describe('AdminModelsService', () => {
 
     it('flags a catalog under the configured floor', async () => {
       titles.count.mockResolvedValueOnce(12).mockResolvedValueOnce(12);
-      const report = await build(configOf({ CATALOG_MIN_TITLES: '200' })).readiness();
+      const report = await build(settingsOf({ 'catalog.min_titles': 200 })).readiness();
       expect(report.catalog).toEqual({ titles: 12, threshold: 200, ok: false });
     });
 

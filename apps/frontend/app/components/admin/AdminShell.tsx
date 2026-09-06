@@ -19,6 +19,7 @@ const MONITORING_SECTIONS = [
   { href: '/admin/monitoring/models', label: ADMIN_SECTION_COPY.models.title },
   { href: '/admin/monitoring/operations', label: ADMIN_SECTION_COPY.operations.title },
   { href: '/admin/monitoring/jobs', label: ADMIN_SECTION_COPY.jobs.title },
+  { href: '/admin/monitoring/settings', label: ADMIN_SECTION_COPY.settings.title },
   { href: '/admin/monitoring/privacy', label: ADMIN_SECTION_COPY.privacy.title },
   { href: '/admin/monitoring/audit', label: ADMIN_SECTION_COPY.audit.title },
 ] as const;
@@ -29,6 +30,7 @@ const ADMINISTRATION_SECTIONS = [
   { href: '/admin/administration/users', label: ADMIN_SECTION_COPY.users.title },
   { href: '/admin/administration/models', label: ADMIN_SECTION_COPY.modelRegistration.title },
   { href: '/admin/administration/jobs', label: ADMIN_SECTION_COPY.jobsAdmin.title },
+  { href: '/admin/administration/settings', label: ADMIN_SECTION_COPY.settingsAdmin.title },
 ] as const;
 
 type Area = 'monitoring' | 'administration';

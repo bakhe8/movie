@@ -9,6 +9,7 @@ import { AdminJobsService } from './admin-jobs.service';
 import { AdminMetricsService } from './admin-metrics.service';
 import { AdminModelsService } from './admin-models.service';
 import { AdminOpsService } from './admin-ops.service';
+import { AdminSettingsService } from './admin-settings.service';
 import {
   CreateAdminJobDto,
   CreateModelVersionDto,
@@ -21,9 +22,12 @@ import {
   ListTitlesQueryDto,
   ListUsersQueryDto,
   MetricsQueryDto,
+  PreviewSettingDto,
   ReviewContentFeatureDto,
+  RollbackSettingDto,
   SampleContentFeaturesQueryDto,
   UpdateModelVersionDto,
+  UpdateSettingDto,
   UpdateSourceRecordDto,
   UpdateTitleDto,
   UpdateUserDto,
@@ -49,6 +53,7 @@ export class AdminController {
     private readonly metrics: AdminMetricsService,
     private readonly outbox: MailOutboxService,
     private readonly jobs: AdminJobsService,
+    private readonly settings: AdminSettingsService,
   ) {}
 
   // ADMIN-W1 (ADR-117): the access-boundary probe. AuthGuard/AdminGuard
@@ -226,6 +231,33 @@ export class AdminController {
   @Post('jobs/:jobId/cancel')
   cancelJob(@Request() request: AdminRequest, @Param('jobId', ParseUUIDPipe) jobId: string) {
     return this.jobs.cancel(jobId, actorOf(request));
+  }
+
+  // ---- settings center (ADMIN-W6, plan §17.3) ----------------------------
+
+  @Get('settings')
+  listSettings() {
+    return this.settings.list();
+  }
+
+  @Get('settings/:key')
+  getSetting(@Param('key') key: string) {
+    return this.settings.get(key);
+  }
+
+  @Post('settings/:key/preview')
+  previewSetting(@Param('key') key: string, @Body() dto: PreviewSettingDto) {
+    return this.settings.preview(key, dto.value);
+  }
+
+  @Patch('settings/:key')
+  updateSetting(@Request() request: AdminRequest, @Param('key') key: string, @Body() dto: UpdateSettingDto) {
+    return this.settings.update(key, dto, actorOf(request));
+  }
+
+  @Post('settings/:key/rollback')
+  rollbackSetting(@Request() request: AdminRequest, @Param('key') key: string, @Body() dto: RollbackSettingDto) {
+    return this.settings.rollback(key, dto.toVersion, dto.reason, actorOf(request));
   }
 
   // ---- metrics board (BP §18.1) -----------------------------------------

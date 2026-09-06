@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsDefined,
   IsISO8601,
   IsIn,
   IsInt,
@@ -419,4 +420,44 @@ export class MetricsQueryDto {
   @IsString({ each: true })
   @MaxLength(100, { each: true })
   excludeDomains: string[] = [];
+}
+
+// ADMIN-W6 (plan §17.3): `value`'s real shape is per-key (AdminSettingDef in
+// admin-settings.service.ts validates it there), so it is accepted here as
+// any defined JSON value rather than re-declared per key in this shared DTO.
+export class PreviewSettingDto {
+  @IsDefined()
+  value: unknown;
+}
+
+export class UpdateSettingDto {
+  @IsDefined()
+  value: unknown;
+
+  @IsString()
+  @MaxLength(500)
+  reason: string;
+
+  // Optimistic concurrency (plan §17.3 "تعارض نسخة"): omitted, the write
+  // always proceeds; present, it must match the current version or the
+  // write is refused with the real current state instead of silently
+  // clobbering someone else's more recent change. 0 is valid -- it means
+  // "expect this setting has never been published before".
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  expectedVersion?: number;
+}
+
+export class RollbackSettingDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  toVersion: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
 }

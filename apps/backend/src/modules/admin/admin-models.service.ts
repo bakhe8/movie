@@ -1,5 +1,4 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, IsNull, Not, Repository } from 'typeorm';
 import { Experiment } from '../../entities/experiment.entity';
@@ -12,6 +11,7 @@ import { AuditService } from '../audit/audit.service';
 import { ModelServiceClient } from '../training/model-service.client';
 import { TrainingJobsService, TrainingJobsSummary } from '../training/training-jobs.service';
 import type { Actor } from './admin-catalog.service';
+import { AdminSettingsService } from './admin-settings.service';
 import { CreateModelVersionDto, UpdateModelVersionDto } from './dto/admin.dto';
 
 // ADMIN-W1 (ADR-117 ADM-P0-01 fix): wire field names match the frontend's
@@ -42,12 +42,6 @@ export interface ReadinessReport {
   modelService: { configured: boolean; reachable: boolean; ok: boolean };
 }
 
-const DEFAULT_CATALOG_MIN_TITLES = 200;
-// Below this share of the catalog carrying a published fingerprint, a
-// profile's watched titles are unlikely to form even one trainable learn
-// triad (training.py refuses one unless all three have a fingerprint).
-const MIN_FINGERPRINT_COVERAGE = 0.5;
-
 // Internal board, model half (BP §5.1 "model versions", §16.5 acceptance
 // gate, §18.1 rollback; SPECIFICATION §5.5). model_versions rows are
 // registered by hand until the trainer stamps them (ALPHA_PLAN 6.4);
@@ -57,8 +51,6 @@ const MIN_FINGERPRINT_COVERAGE = 0.5;
 // (board request), the pin itself lives here.
 @Injectable()
 export class AdminModelsService {
-  private readonly catalogMinTitles: number;
-
   constructor(
     @InjectRepository(ModelVersion)
     private readonly modelVersions: Repository<ModelVersion>,
@@ -76,10 +68,12 @@ export class AdminModelsService {
     private readonly audit: AuditService,
     private readonly trainingJobs: TrainingJobsService,
     private readonly modelService: ModelServiceClient,
-    config: ConfigService,
-  ) {
-    this.catalogMinTitles = Number(config.get<string>('CATALOG_MIN_TITLES')) || DEFAULT_CATALOG_MIN_TITLES;
-  }
+    // ADMIN-W6: catalog.min_titles/catalog.min_fingerprint_coverage are
+    // registered settings now (admin-settings.service.ts), not a value read
+    // once at construction -- a published override takes effect on the very
+    // next readiness() call, no restart.
+    private readonly settings: AdminSettingsService,
+  ) {}
 
   // GET /admin/training-jobs (remediation brief P0-02): where every recent
   // training attempt stands, mirroring GET /admin/mail-outbox's shape --
@@ -92,20 +86,22 @@ export class AdminModelsService {
   // succeed right now. `database.ok` is implied by this call returning at
   // all -- every count below already required a live connection.
   async readiness(): Promise<ReadinessReport> {
-    const [titleCount, publishedCount, modelServiceReachable] = await Promise.all([
+    const [titleCount, publishedCount, modelServiceReachable, catalogMinTitles, minFingerprintCoverage] = await Promise.all([
       this.titles.count(),
       this.titles.count({ where: { fingerprint: Not(IsNull()) } }),
       this.modelService.reachable(),
+      this.settings.getValue<number>('catalog.min_titles'),
+      this.settings.getValue<number>('catalog.min_fingerprint_coverage'),
     ]);
     const percent = titleCount > 0 ? publishedCount / titleCount : 0;
     return {
       database: { ok: true },
-      catalog: { titles: titleCount, threshold: this.catalogMinTitles, ok: titleCount >= this.catalogMinTitles },
+      catalog: { titles: titleCount, threshold: catalogMinTitles, ok: titleCount >= catalogMinTitles },
       fingerprintCoverage: {
         published: publishedCount,
         total: titleCount,
         percent: Math.round(percent * 1000) / 10,
-        ok: percent >= MIN_FINGERPRINT_COVERAGE,
+        ok: percent >= minFingerprintCoverage,
       },
       modelService: {
         configured: this.modelService.enabled,

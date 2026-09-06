@@ -743,6 +743,31 @@ export const api = {
   // refresh instead of retrying the cancel.
   adminCancelJob: (jobId: string) => request<AdminJobRecord>(`/admin/jobs/${jobId}/cancel`, { method: 'POST' }),
 
+  // ── ADMIN-W6: the settings center (plan §17.3) ──────────────────────────────
+
+  adminGetSettings: (signal?: AbortSignal) => request<AdminSettingView[]>('/admin/settings', { signal }),
+
+  adminGetSetting: (key: string, signal?: AbortSignal) =>
+    request<{ setting: AdminSettingView; history: AdminSettingVersionRecord[] }>(`/admin/settings/${encodeURIComponent(key)}`, { signal }),
+
+  // No write: validates `value` and reports the current vs. proposed value
+  // for the form to show before the operator confirms.
+  adminPreviewSetting: (key: string, value: unknown) =>
+    request<{ valid: boolean; error: string | null; current: unknown; proposed: unknown; needsRestart: boolean }>(
+      `/admin/settings/${encodeURIComponent(key)}/preview`,
+      { method: 'POST', body: JSON.stringify({ value }) },
+    ),
+
+  // A 409 (reason 'version_conflict') carries `details.currentVersion` and
+  // `details.currentValue` -- refresh and show the real state rather than
+  // retrying blindly. A 400 (reason 'invalid_value') means the value itself
+  // was rejected.
+  adminUpdateSetting: (key: string, dto: { value: unknown; reason: string; expectedVersion?: number }) =>
+    request<AdminSettingView>(`/admin/settings/${encodeURIComponent(key)}`, { method: 'PATCH', body: JSON.stringify(dto) }),
+
+  adminRollbackSetting: (key: string, dto: { toVersion: number; reason?: string }) =>
+    request<AdminSettingView>(`/admin/settings/${encodeURIComponent(key)}/rollback`, { method: 'POST', body: JSON.stringify(dto) }),
+
   adminGetModels: () =>
     request<{
       versions: { version: string; rankerType: string; active: boolean; fingerprintSchemaVersion: string; createdAt: string; stats: { snapshotCount: number; profileCount: number } | null }[];
@@ -903,6 +928,19 @@ export type AdminJobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'ca
 export interface AdminJobType {
   type: string;
   description: string;
+}
+
+export type AdminSettingSource = 'default' | 'deploy' | 'control_plane';
+
+export interface AdminSettingView {
+  key: string; name: string; description: string; unit: string | null;
+  type: 'number' | 'boolean' | 'string'; value: unknown; source: AdminSettingSource;
+  version: number; needsRestart: boolean; modifiedBy: string | null; modifiedAt: string | null; reason: string | null;
+}
+
+export interface AdminSettingVersionRecord {
+  id: string; key: string; value: unknown; version: number;
+  modifiedBy: string | null; reason: string | null; createdAt: string;
 }
 
 export interface AdminJobRecord {

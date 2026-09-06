@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminJob } from '../../entities/admin-job.entity';
+import { AdminSetting } from '../../entities/admin-setting.entity';
+import { AdminSettingVersion } from '../../entities/admin-setting-version.entity';
 import { AuditLog } from '../../entities/audit-log.entity';
 import { ContentFeature } from '../../entities/content-feature.entity';
 import { Experiment } from '../../entities/experiment.entity';
@@ -21,6 +23,7 @@ import { AdminJobsService } from './admin-jobs.service';
 import { AdminMetricsService } from './admin-metrics.service';
 import { AdminModelsService } from './admin-models.service';
 import { AdminOpsService } from './admin-ops.service';
+import { AdminSettingsService } from './admin-settings.service';
 import { AdminController } from './admin.controller';
 
 // Internal board (BP §5.1): catalog and rights, fingerprint review,
@@ -45,15 +48,18 @@ import { AdminController } from './admin.controller';
       PrivacyRequest,
       AuditLog,
       AdminJob,
+      AdminSetting,
+      AdminSettingVersion,
     ]),
     AuditModule,
     TrainingModule,
   ],
   controllers: [AdminController],
-  providers: [AdminCatalogService, AdminModelsService, AdminOpsService, AdminMetricsService, AdminJobsService],
-  // AdminJobsService.registerType lets another module add its own
-  // allowlisted job type without editing this module (item 9/J1-1) -- that
-  // module imports AdminModule and injects AdminJobsService to call it.
-  exports: [AdminJobsService],
+  providers: [AdminCatalogService, AdminModelsService, AdminOpsService, AdminMetricsService, AdminJobsService, AdminSettingsService],
+  // AdminJobsService.registerType and AdminSettingsService.registerSetting
+  // let another module extend the job/settings registries without editing
+  // this module (ADMIN-W5 item 9/J1-1, same shape reused for W6) -- that
+  // module imports AdminModule and injects the service it needs.
+  exports: [AdminJobsService, AdminSettingsService],
 })
 export class AdminModule {}

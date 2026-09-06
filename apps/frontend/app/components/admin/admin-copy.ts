@@ -61,6 +61,14 @@ export const ADMIN_SECTION_COPY: Record<string, { title: string; blurb: string }
     title: 'تشغيل مهمة',
     blurb: 'تشغيل مهمة من قائمة محدودة ومعروفة فقط؛ يمكن تجربتها أولاً دون كتابة فعلية (تنفيذ تجريبي).',
   },
+  settings: {
+    title: 'الإعدادات',
+    blurb: 'القيم التي يضبطها النظام تلقائياً، ومصدر كل قيمة ومتى تغيّرت آخر مرة.',
+  },
+  settingsAdmin: {
+    title: 'تعديل إعداد',
+    blurb: 'كل تعديل يُعاين قبل النشر، ويُسجَّل بسبب، ويمكن التراجع عنه لاحقاً دون فقدان القيم السابقة.',
+  },
 };
 
 // hasFingerprint/hasV2 (docs/API.md `admin/titles`): whether -- and how
@@ -311,6 +319,15 @@ export function adminErrorReasonLabel(reason: string | undefined, fallback: stri
   if (!reason) return fallback;
   return ADMIN_ERROR_REASON_LABELS[reason] ?? fallback;
 }
+
+// admin_settings' resolution source (ADMIN-W6, plan §17.3): whether the
+// value shown came from an explicit publish, an env var at deploy time, or
+// the hardcoded fallback nobody has touched.
+export const SETTING_SOURCE_LABELS: Record<string, string> = {
+  default: 'القيمة الافتراضية',
+  deploy: 'مضبوطة عند النشر',
+  control_plane: 'مُعدَّلة يدوياً',
+};
 
 // admin_jobs.status (ADMIN-W5, plan §17.2).
 export const JOB_STATUS_LABELS: Record<string, string> = {
