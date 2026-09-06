@@ -149,26 +149,6 @@
       "port": 3230
     },
     {
-      "name": "backend-3241-P5",
-      "runtimeExecutable": "cmd",
-      "runtimeArgs": [
-        "/c",
-        "set API_PORT=3241&& set FRONTEND_URL=http://localhost:3240&& npm run dev"
-      ],
-      "cwd": "apps/backend",
-      "port": 3241
-    },
-    {
-      "name": "frontend-3240-P5",
-      "runtimeExecutable": "cmd",
-      "runtimeArgs": [
-        "/c",
-        "set NEXT_PUBLIC_API_URL=http://localhost:3241/api&& npx next dev --webpack -p 3240"
-      ],
-      "cwd": "apps/frontend",
-      "port": 3240
-    },
-    {
       "name": "backend-3141-spare",
       "runtimeExecutable": "cmd",
       "runtimeArgs": [
