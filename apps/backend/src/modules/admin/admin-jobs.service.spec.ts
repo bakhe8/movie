@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ConfigService } from '@nestjs/config';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { AdminJob, AdminJobStatus } from '../../entities/admin-job.entity';
-import { AdminJobsService, MAX_ATTEMPTS } from './admin-jobs.service';
+import { AdminJobsService, MAX_ATTEMPTS, NonRetryableJobError } from './admin-jobs.service';
 
 // Just enough of a TypeORM repository, in memory, for the claim/dispatch
 // state machine to run without Postgres -- same shape as
@@ -12,6 +12,12 @@ class FakeRepo {
   private seq = 0;
   create = vi.fn((data: Partial<AdminJob>) => ({ ...data }) as AdminJob);
   save = vi.fn(async (row: AdminJob) => {
+    if (this.forceDuplicateOnce) {
+      const winner = this.forceDuplicateOnce;
+      this.forceDuplicateOnce = null;
+      this.rows.set(winner.id, winner);
+      throw { code: '23505' };
+    }
     if (!row.id) row.id = `row-${++this.seq}`;
     row.createdAt = row.createdAt ?? new Date();
     row.updatedAt = new Date();
@@ -29,10 +35,21 @@ class FakeRepo {
     Object.assign(row, patch, { updatedAt: new Date() });
     return { affected: 1 };
   });
-  findOne = vi.fn(async (options: { where: { id?: string; idempotencyKey?: string } }) => {
+  // `forceDuplicateOnce`: the next save() throws a 23505 as if a partial
+  // unique index refused it, and inserts this row first -- simulates a
+  // second, concurrent caller's INSERT winning the race between this
+  // caller's own read (found nothing) and its write.
+  forceDuplicateOnce: AdminJob | null = null;
+  findOne = vi.fn(async (options: { where: { id?: string; idempotencyKey?: string; type?: string; status?: string | { value: string[] } } }) => {
     for (const row of this.rows.values()) {
       if (options.where.id !== undefined && row.id !== options.where.id) continue;
       if (options.where.idempotencyKey !== undefined && row.idempotencyKey !== options.where.idempotencyKey) continue;
+      if (options.where.type !== undefined && row.type !== options.where.type) continue;
+      if (options.where.status !== undefined) {
+        const status = options.where.status;
+        const matches = typeof status === 'string' ? row.status === status : status.value.includes(row.status);
+        if (!matches) continue;
+      }
       return row;
     }
     return null;
@@ -103,6 +120,75 @@ describe('AdminJobsService.create', () => {
       expect.objectContaining({ action: 'admin.job.create', actorUserId: 'admin-1', reason: expect.stringContaining('dry run') }),
     );
   });
+
+  // Item 5: one non-terminal job per type at a time.
+  it('refuses a second job of a type that already has a non-terminal one', async () => {
+    const { service } = serviceOf();
+    const { job } = await service.create({ type: 'republish_fingerprints' }, actor);
+    await expect(service.create({ type: 'republish_fingerprints' }, actor)).rejects.toMatchObject({
+      response: expect.objectContaining({ reason: 'type_busy', existingJobId: job.id }),
+    });
+  });
+
+  // Item 2: the DB-level race -- two concurrent creates both pass the
+  // pre-checks (neither sees the other's row yet), then one INSERT wins and
+  // the other's partial unique index violation is caught and turned into the
+  // winner's row, not a raw 500.
+  it('recovers from a raced duplicate idempotencyKey insert instead of throwing a raw 500', async () => {
+    const { service, rows } = serviceOf();
+    const winner = {
+      id: 'winner-1', type: 'republish_fingerprints', status: 'queued', dryRun: false, params: null,
+      attempts: 0, nextAttemptAt: new Date(), idempotencyKey: 'k1', requestedBy: 'admin-1', trigger: 'admin',
+      cancelRequested: false, progress: null, result: null, lastError: null, startedAt: null, finishedAt: null,
+      createdAt: new Date(), updatedAt: new Date(),
+    } as AdminJob;
+    rows.forceDuplicateOnce = winner;
+    const result = await service.create({ type: 'republish_fingerprints', idempotencyKey: 'k1' }, actor);
+    expect(result.created).toBe(false);
+    expect(result.job.id).toBe('winner-1');
+  });
+
+  it('recovers from a raced duplicate type-exclusivity insert with the same 409 a synchronous check would give', async () => {
+    const { service, rows } = serviceOf();
+    const winner = {
+      id: 'winner-2', type: 'republish_fingerprints', status: 'running', dryRun: false, params: null,
+      attempts: 1, nextAttemptAt: new Date(), idempotencyKey: null, requestedBy: 'admin-1', trigger: 'admin',
+      cancelRequested: false, progress: null, result: null, lastError: null, startedAt: new Date(), finishedAt: null,
+      createdAt: new Date(), updatedAt: new Date(),
+    } as AdminJob;
+    rows.forceDuplicateOnce = winner;
+    await expect(service.create({ type: 'republish_fingerprints' }, actor)).rejects.toMatchObject({
+      response: expect.objectContaining({ reason: 'type_busy', existingJobId: 'winner-2' }),
+    });
+  });
+
+  it('rejects params a type declares invalid before writing any row', async () => {
+    const { service, rows } = serviceOf();
+    await expect(service.create({ type: 'republish_fingerprints', params: { titleId: 42 } }, actor)).rejects.toBeInstanceOf(BadRequestException);
+    expect(rows.rows.size).toBe(0);
+  });
+
+  // Item 1/9: a schedule-triggered call has no signed-in admin behind it.
+  it('records a null-actor call as a schedule trigger with no requestedBy, and audits it as system', async () => {
+    const { service, audit } = serviceOf();
+    const { job } = await service.create({ type: 'republish_fingerprints' }, null);
+    expect(job.trigger).toBe('schedule');
+    expect(job.requestedBy).toBeNull();
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ actorUserId: null, actorRole: 'system' }));
+  });
+});
+
+describe('AdminJobsService.registerType', () => {
+  it('refuses to register the same type key twice', () => {
+    const { service } = serviceOf();
+    expect(() => service.registerType({ key: 'republish_fingerprints', description: 'x', handler: async () => ({}) })).toThrow();
+  });
+
+  it('lets another module extend the allowlist', () => {
+    const { service } = serviceOf();
+    service.registerType({ key: 'catalog_pull', description: 'يسحب بيانات جديدة من مصدر خارجي.', handler: async () => ({}) });
+    expect(service.listTypes().map((t) => t.type)).toEqual(expect.arrayContaining(['republish_fingerprints', 'catalog_pull']));
+  });
 });
 
 describe('AdminJobsService claim/dispatch', () => {
@@ -117,6 +203,26 @@ describe('AdminJobsService claim/dispatch', () => {
     const claimB = await (service as unknown as { claim: (r: AdminJob, now: Date) => Promise<AdminJob | null> }).claim(row, new Date());
     expect(claimA).not.toBeNull();
     expect(claimB).toBeNull();
+  });
+
+  // Item 9/J1-1: a handler that knows its own failure is deterministic
+  // throws NonRetryableJobError instead of burning the whole backoff ladder
+  // on a certain repeat.
+  it('fails a job at once on a NonRetryableJobError, skipping the backoff ladder', async () => {
+    const { service, rows } = serviceOf();
+    service.registerType({
+      key: 'always_fails',
+      description: 'x',
+      handler: async () => {
+        throw new NonRetryableJobError('this input can never succeed');
+      },
+    });
+    const row = await rows.save(rows.create({ id: 'j1', type: 'always_fails', status: 'queued', attempts: 0, nextAttemptAt: new Date() }));
+    await (service as unknown as { dispatch: (r: AdminJob) => Promise<void> }).dispatch(row);
+    const saved = rows.rows.get('j1')!;
+    expect(saved.status).toBe('failed');
+    expect(saved.attempts).toBe(1);
+    expect(saved.lastError).toContain('this input can never succeed');
   });
 });
 

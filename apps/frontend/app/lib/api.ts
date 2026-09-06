@@ -910,7 +910,7 @@ export interface AdminJobRecord {
   params: Record<string, unknown> | null; dryRun: boolean;
   progress: Record<string, unknown> | null; result: Record<string, unknown> | null;
   attempts: number; lastError: string | null; nextAttemptAt: string;
-  cancelRequested: boolean; requestedBy: string; idempotencyKey: string | null;
+  cancelRequested: boolean; requestedBy: string | null; trigger: 'admin' | 'schedule'; idempotencyKey: string | null;
   startedAt: string | null; finishedAt: string | null; createdAt: string; updatedAt: string;
 }
 

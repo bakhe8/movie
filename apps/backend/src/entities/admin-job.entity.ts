@@ -55,8 +55,17 @@ export class AdminJob {
   @Column({ type: 'boolean', default: false })
   cancelRequested: boolean;
 
-  @Column({ type: 'uuid' })
-  requestedBy: string;
+  // NULL for a schedule-triggered job (see `trigger`) -- there is no acting
+  // admin to name, only the system.
+  @Column({ type: 'uuid', nullable: true })
+  requestedBy: string | null;
+
+  // 'admin' = a signed-in admin called POST /admin/jobs; 'schedule' = an
+  // internal caller (a future cron/interval) invoked AdminJobsService.create
+  // directly with no Actor. Display-only, like requestedBy -- the real
+  // record of who/what triggered a write is still the audit_log row.
+  @Column({ type: 'varchar', length: 16, default: 'admin' })
+  trigger: 'admin' | 'schedule';
 
   // Optional caller-supplied key: a repeated POST with the same key returns
   // the existing non-terminal (or recently terminal) row instead of starting

@@ -187,10 +187,41 @@ describe('Admin jobs API (role-gated)', () => {
     const runningRow = await jobs.save(
       jobs.create({ type: 'republish_fingerprints', status: 'running', attempts: 1, nextAttemptAt: new Date(), requestedBy: '00000000-0000-0000-0000-000000000000' }),
     );
-    const response = await request(app.getHttpServer())
-      .post(`/admin/jobs/${runningRow.id}/cancel`)
-      .set('Authorization', `Bearer ${adminToken}`)
-      .expect(201);
-    expect(response.body).toMatchObject({ status: 'running', cancelRequested: true });
+    try {
+      const response = await request(app.getHttpServer())
+        .post(`/admin/jobs/${runningRow.id}/cancel`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(201);
+      expect(response.body).toMatchObject({ status: 'running', cancelRequested: true });
+    } finally {
+      // This synthetic row was never really dispatched, so nothing ever
+      // moves it out of 'running' on its own (the sweep is disabled under
+      // NODE_ENV=test) -- clean it up so it cannot trip the one-active-per-
+      // type guard for a later test or run.
+      await jobs.delete({ id: runningRow.id });
+    }
+  });
+
+  it('refuses a second concurrent job of a type that already has a non-terminal one', async () => {
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const title = await titles.save({
+      internalId: `0-E2E-JOB3-${suffix}`,
+      titleEn: 'Job Exclusivity Check',
+      titleAr: 'فحص حصرية المهمة',
+      fingerprint: { schemaVersion: 'film-fingerprint-v1', pacing: 0.2 } as never,
+    });
+    const busyRow = await jobs.save(
+      jobs.create({ type: 'republish_fingerprints', status: 'running', attempts: 1, nextAttemptAt: new Date(), requestedBy: '00000000-0000-0000-0000-000000000000' }),
+    );
+    try {
+      const rejected = await request(app.getHttpServer())
+        .post('/admin/jobs')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ type: 'republish_fingerprints', dryRun: true, params: { titleId: title.id } })
+        .expect(409);
+      expect(rejected.body).toMatchObject({ reason: 'type_busy', existingJobId: busyRow.id });
+    } finally {
+      await jobs.delete({ id: busyRow.id });
+    }
   });
 });

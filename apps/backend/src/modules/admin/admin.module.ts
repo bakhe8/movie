@@ -51,5 +51,9 @@ import { AdminController } from './admin.controller';
   ],
   controllers: [AdminController],
   providers: [AdminCatalogService, AdminModelsService, AdminOpsService, AdminMetricsService, AdminJobsService],
+  // AdminJobsService.registerType lets another module add its own
+  // allowlisted job type without editing this module (item 9/J1-1) -- that
+  // module imports AdminModule and injects AdminJobsService to call it.
+  exports: [AdminJobsService],
 })
 export class AdminModule {}
