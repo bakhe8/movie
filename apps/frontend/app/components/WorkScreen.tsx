@@ -8,6 +8,7 @@ import { todayLocal } from '../lib/format';
 import { PublicQualityCell } from '../public-quality/PublicQualityCell';
 import { collectSources, SourcesFooter } from '../public-quality/SourcesFooter';
 import { Poster } from './Poster';
+import { PosterSet } from './PosterSet';
 import { WorkCard } from './WorkCard';
 import { Toast } from '../lib/toast';
 import styles from './WorkScreen.module.css';
@@ -228,6 +229,13 @@ function ProfileWork({ lang, profileId, title, context, initialState, onBack }: 
   // arrives, the card's copy renders.
   const [fresh, setFresh] = useState<Title | null>(null);
   const detail: Title = fresh ? { ...title, ...fresh } : title;
+  // POSTERS-MULTI P5 (direction ب, approved 2026-09-06): the film's poster
+  // set, index 0 the same image as posterUrl (ADR-120). The pick lives only
+  // here -- nothing is saved -- and ProfileWork remounts per title, so
+  // another film always opens on its first poster.
+  const [posterIndex, setPosterIndex] = useState(0);
+  const posters = detail.posters ?? [];
+  const activePoster = posterIndex < posters.length ? posterIndex : 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -319,9 +327,34 @@ function ProfileWork({ lang, profileId, title, context, initialState, onBack }: 
           Its artwork becomes the cover without composing another image URL. */}
       <div
         className={styles.header}
-        style={detail.posterUrl ? ({ '--hero-image': `url("${detail.posterUrl}")` } as CSSProperties) : undefined}
+        style={posters.length === 0 && detail.posterUrl ? ({ '--hero-image': `url("${detail.posterUrl}")` } as CSSProperties) : undefined}
       >
-        <Poster title={detail} size="lg" className={styles.headerPoster} name={name} />
+        {/* With a poster set the cover is a stack of layers and the chosen one
+            fades in over the last (240ms; instant under reduced motion), so
+            the cover and the small poster change together: the motion says
+            "the film's image changed" and nothing else. Without a set, the
+            single-poster path above is untouched. */}
+        {posters.map((poster, index) => (
+          <div
+            key={poster.posterUrl}
+            className={styles.coverLayer}
+            data-cover-layer=""
+            data-active={index === activePoster || undefined}
+            style={{ '--layer-image': `url("${poster.posterUrl}")` } as CSSProperties}
+            aria-hidden="true"
+          />
+        ))}
+        <div className={styles.headerPoster}>
+          {posters.length > 0 ? (
+            posters.map((poster, index) => (
+              <span key={poster.posterUrl} className={styles.posterLayer} data-poster-layer="" data-active={index === activePoster || undefined}>
+                <Poster title={{ posterUrl: poster.posterUrl, posters }} size="lg" className={styles.headerPosterImage} name={name} />
+              </span>
+            ))
+          ) : (
+            <Poster title={detail} size="lg" className={styles.headerPosterImage} name={name} />
+          )}
+        </div>
         <div className={styles.headerText}>
         <p className={styles.eyebrow}>{t.film}</p>
         <h2>{name}</h2>
@@ -384,6 +417,9 @@ function ProfileWork({ lang, profileId, title, context, initialState, onBack }: 
         {/* Full width under the poster on the phone: a synopsis in the narrow
             column beside a 120px poster wrapped every few words. */}
         <div className={styles.headerBelow}>
+          {/* The other posters, as the film's own thumbnails; nothing renders
+              for fewer than two (P5, direction ب). */}
+          <PosterSet lang={lang} posters={posters} selected={activePoster} onSelect={setPosterIndex} className={styles.posterSet} />
           {/* Catalogue descriptions arrive in their own language: direction from the text. */}
           {detail.description && (
               /* An Arabic screen led with an English Wikipedia paragraph, left

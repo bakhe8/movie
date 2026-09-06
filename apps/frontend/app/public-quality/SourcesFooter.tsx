@@ -26,6 +26,8 @@ export interface PageSource {
 export interface PageSourcesInput {
   publicQuality?: PublicQuality | null;
   posterSource?: { name: string; attribution: string } | null;
+  // The rest of the poster set (P5): each image credits its own source.
+  posters?: { posterSource: { name: string; attribution: string } | null }[] | null;
   descriptionSource?: TextSource | null;
 }
 
@@ -46,6 +48,11 @@ export function collectSources(input: PageSourcesInput): PageSource[] {
   }
   if (input.posterSource) {
     add(input.posterSource.name, input.posterSource.attribution, null);
+  }
+  for (const poster of input.posters ?? []) {
+    if (poster.posterSource) {
+      add(poster.posterSource.name, poster.posterSource.attribution, null);
+    }
   }
   if (input.descriptionSource) {
     add(input.descriptionSource.name, input.descriptionSource.attribution, input.descriptionSource.url);

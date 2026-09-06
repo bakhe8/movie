@@ -491,6 +491,16 @@ Still open: implementation (UX-B) — no code changed in this audit.
 
 ---
 
+## Closed on 2026-09-06 (POSTERS-MULTI P0–P5 — several posters per film, ADR-120)
+
+| Gap | What changed | Proof |
+|---|---|---|
+| One TMDB poster per film, while 378 of 389 have two or more; the work page painted the same image twice (cover and small poster) | `title_posters` (one row per image, its own rights row, `sortOrder` 0 = `posterUrl`) + backfill capped at four per film (P1–P2), a batched read path and the additive `posters` field on public titles (P3), plumbed through `Poster` (P4). P5 (direction ب, canvas `docs/design/posters-2026-09-06/`, chosen by the coordinator under the owner's delegation): `PosterSet` — a strip of up to four 44×66 thumbnails under the actions on the work page, each a labelled button (`البوستر 2 من 4`, arrow keys walk it); a tap swaps the cover and the small poster together by a 240ms crossfade over stacked layers, instant under reduced motion; nothing persisted, no swipe, no auto-rotation; single-poster films and pre-P3 responses unchanged; every image's source credited once in the footer. Cards outside the work page untouched | 4 `PosterSet` + 4 `WorkScreen` tests (swap, single poster, legacy shape, credits); full frontend suite 253/253, `tsc`/`eslint` clean; live at 360/390/430 and 1240px on the dev catalog (no horizontal overflow, strip under the poster column on wide screens) |
+
+Still open: TMDB returns posters in every language when fetched without a language filter (a Russian second poster on «بين النجوم»), so P2's order may want a language preference; posters narrower than 160px (recommendation, triad and list cards) deliberately carry one image.
+
+---
+
 ## Project setup
 
 | Item | Built | Blueprint | Evidence / gap |

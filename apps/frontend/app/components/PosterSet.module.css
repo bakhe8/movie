@@ -1,0 +1,55 @@
+/* The film's posters as a strip (POSTERS-MULTI P5, direction ب): at most four
+   thumbnails, 44x66 on the phone (P2 caps a film at four), so it never
+   scrolls and never asks for a swipe. Tokens only; the ring is the accent,
+   like every other chosen state. The host may size it with
+   --poster-set-thumb / --poster-set-gap and tint the edge with
+   --poster-set-edge. */
+
+.set {
+  display: flex;
+  align-items: center;
+  gap: var(--poster-set-gap, 8px);
+  min-width: 0;
+}
+
+.thumb {
+  display: block;
+  flex: none;
+  width: var(--poster-set-thumb, 44px);
+  aspect-ratio: 2 / 3;
+  padding: 0;
+  border: 1px solid var(--poster-set-edge, var(--poster-edge));
+  border-radius: var(--r-chip);
+  background: var(--well);
+  overflow: hidden;
+  cursor: pointer;
+  opacity: .72;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  transition: opacity 160ms ease, outline-color 160ms ease;
+}
+
+.thumb:focus-visible,
+.selected {
+  outline-color: var(--accent);
+  opacity: 1;
+}
+
+.image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .thumb:hover {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thumb {
+    transition: none;
+  }
+}
