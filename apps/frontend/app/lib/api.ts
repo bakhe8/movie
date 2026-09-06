@@ -470,6 +470,22 @@ export const api = {
   confirmPasswordReset: (token: string, password: string) =>
     request<{ reset: boolean }>('/auth/password-reset/confirm', { method: 'POST', body: JSON.stringify({ token, password }) }),
 
+  // Account settings (owner-approved design 2026-09-06). Distinct from
+  // password-reset above: this one is used while signed in and requires the
+  // current password instead of a mailed token; the caller's own
+  // `refresh_token` (when passed) survives the sweep that ends every other
+  // session.
+  changePassword: (data: { currentPassword: string; newPassword: string; refresh_token?: string }) =>
+    request<{ changed: boolean }>('/auth/change-password', { method: 'POST', body: JSON.stringify(data) }),
+
+  // The confirmation link goes to `newEmail`, never the account's current
+  // address; nothing changes until that link is opened.
+  requestEmailChange: (data: { newEmail: string; currentPassword: string }) =>
+    request<{ accepted: boolean }>('/auth/email-change/request', { method: 'POST', body: JSON.stringify(data) }),
+
+  confirmEmailChange: (token: string) =>
+    request<{ email: string }>('/auth/email-change/confirm', { method: 'POST', body: JSON.stringify({ token }) }),
+
   getProfiles: () => request<Profile[]>('/profiles'),
 
   createProfile: (data: { name: string; preferredLanguage?: PreferredLanguage }) =>

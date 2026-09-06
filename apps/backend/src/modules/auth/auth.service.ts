@@ -1,6 +1,6 @@
 import { Injectable, ConflictException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { IsNull, Repository } from 'typeorm';
+import { IsNull, Not, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 // bcryptjs, not bcrypt: same hash/compare API, but pure JS -- no native
 // compile step via node-pre-gyp/tar, which is what pulled a critical
@@ -14,6 +14,7 @@ import { User } from '../../entities/user.entity';
 import { AuditService } from '../audit/audit.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { isCanaryEmail } from './canary-account';
 
 // What JwtStrategy.validate() puts on req.user for every guarded route --
@@ -208,6 +209,48 @@ export class AuthService {
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
+  }
+
+  // Account settings: change password while signed in (owner-approved design
+  // 2026-09-06) -- distinct from PasswordResetService, which is what an
+  // unauthenticated person uses instead. Ends every *other* session (the
+  // caller's own `refresh_token`, when presented, survives); a reset ends
+  // all of them because it answers a fear the account itself was
+  // compromised, which changing your own password on purpose does not.
+  async changePassword(userId: string, dto: ChangePasswordDto, ip: string | null = null): Promise<void> {
+    const user = await this.usersRepository.findOne({ where: { id: userId } });
+    if (!user || !user.active) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const validPassword = await bcrypt.compare(dto.currentPassword, user.password);
+    if (!validPassword) {
+      throw new UnauthorizedException('Incorrect password');
+    }
+
+    await this.usersRepository.update({ id: user.id }, { password: await bcrypt.hash(dto.newPassword, 10) });
+
+    if (dto.refresh_token) {
+      await this.refreshTokensRepository.update(
+        { userId: user.id, tokenHash: Not(hashRefreshToken(dto.refresh_token)), revokedAt: IsNull() },
+        { revokedAt: new Date(), revokedReason: 'password_changed' },
+      );
+    } else {
+      await this.refreshTokensRepository.update(
+        { userId: user.id, revokedAt: IsNull() },
+        { revokedAt: new Date(), revokedReason: 'password_changed' },
+      );
+    }
+
+    await this.audit.record({
+      actorUserId: user.id,
+      action: 'auth.password_changed',
+      resource: 'user',
+      resourceId: user.id,
+      status: 'ok',
+      reason: null,
+      ip,
+    });
   }
 
   async getProfile(userId: string): Promise<Partial<User>> {

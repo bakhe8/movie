@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
-import type { Repository } from 'typeorm';
+import { IsNull, Not, type Repository } from 'typeorm';
 import { User } from '../../entities/user.entity';
 import { AuthService, hashRefreshToken } from './auth.service';
 
@@ -21,6 +21,7 @@ function createRepositoryMock() {
       active: true,
       ...entity,
     })),
+    update: vi.fn(async () => ({ affected: 1 })),
   };
 }
 
@@ -326,6 +327,50 @@ describe('AuthService', () => {
       expect(refreshTokens.update).toHaveBeenCalledWith(
         expect.objectContaining({ familyId: 'fam' }),
         expect.objectContaining({ revokedReason: 'deactivated' }),
+      );
+    });
+
+    it('changePassword rejects the wrong current password, touching nothing', async () => {
+      usersRepository.findOne.mockResolvedValue({ ...activeUser, password: 'hashed' });
+      vi.mocked(bcrypt.compare).mockResolvedValue(false as never);
+
+      await expect(
+        service.changePassword('user-1', { currentPassword: 'wrong', newPassword: 'new-password-1' }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(usersRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('changePassword hashes the new password and revokes every other session, keeping the caller\'s alive', async () => {
+      usersRepository.findOne.mockResolvedValue({ ...activeUser, password: 'hashed' });
+      vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+      vi.mocked(bcrypt.hash).mockResolvedValue('new-hashed-password' as never);
+
+      await service.changePassword('user-1', {
+        currentPassword: 'correct',
+        newPassword: 'new-password-1',
+        refresh_token: 'presented-token-value-xxxx',
+      });
+
+      expect(usersRepository.update).toHaveBeenCalledWith({ id: 'user-1' }, { password: 'new-hashed-password' });
+      expect(refreshTokens.update).toHaveBeenCalledWith(
+        { userId: 'user-1', tokenHash: Not(hashRefreshToken('presented-token-value-xxxx')), revokedAt: IsNull() },
+        expect.objectContaining({ revokedReason: 'password_changed' }),
+      );
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({ actorUserId: 'user-1', action: 'auth.password_changed', status: 'ok' }),
+      );
+    });
+
+    it('changePassword revokes every session when no current token is presented', async () => {
+      usersRepository.findOne.mockResolvedValue({ ...activeUser, password: 'hashed' });
+      vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+      vi.mocked(bcrypt.hash).mockResolvedValue('new-hashed-password' as never);
+
+      await service.changePassword('user-1', { currentPassword: 'correct', newPassword: 'new-password-1' });
+
+      expect(refreshTokens.update).toHaveBeenCalledWith(
+        { userId: 'user-1', revokedAt: IsNull() },
+        expect.objectContaining({ revokedReason: 'password_changed' }),
       );
     });
 

@@ -55,7 +55,10 @@ vi.mock('../lib/api', () => ({
     resetProfile: vi.fn().mockResolvedValue({}),
     exportData: vi.fn().mockResolvedValue({}),
     scheduleDelete: vi.fn().mockResolvedValue({}),
+    changePassword: vi.fn().mockResolvedValue({ changed: true }),
+    requestEmailChange: vi.fn().mockResolvedValue({ accepted: true }),
   },
+  getRefreshToken: vi.fn(() => 'current-refresh-token'),
   ApiError: class ApiError extends Error {
     constructor(public status: number, message: string) { super(message); }
   },
@@ -275,6 +278,58 @@ describe('ProfileScreen — reset taste', () => {
     const cancelBtn = await screen.findByRole('button', { name: /إلغاء|cancel/i });
     await user.click(cancelBtn);
     expect(mockApi.resetProfile).not.toHaveBeenCalled();
+  });
+});
+
+// ── account settings: change email + change password (owner-approved design 2026-09-06)
+
+describe('ProfileScreen — account settings', () => {
+  it('requests an email change with the new address and current password, and reports success', async () => {
+    const user = userEvent.setup();
+    render(<ProfileScreen lang="ar" />);
+    await user.click(await screen.findByRole('button', { name: /الحساب/ }));
+
+    await user.type(screen.getByLabelText('البريد الجديد'), 'new@example.com');
+    await user.type(screen.getByPlaceholderText('كلمة المرور الحالية'), 'correct-password');
+    await user.click(screen.getByRole('button', { name: 'إرسال رابط التأكيد' }));
+
+    await waitFor(() =>
+      expect(mockApi.requestEmailChange).toHaveBeenCalledWith({ newEmail: 'new@example.com', currentPassword: 'correct-password' }),
+    );
+    expect(await screen.findByText('أُرسل رابط التأكيد إلى البريد الجديد.')).toBeInTheDocument();
+  });
+
+  it('shows a dedicated message when the current password is wrong', async () => {
+    const user = userEvent.setup();
+    mockApi.requestEmailChange.mockRejectedValue(new (await import('../lib/api')).ApiError(401, 'Incorrect password'));
+    render(<ProfileScreen lang="ar" />);
+    await user.click(await screen.findByRole('button', { name: /الحساب/ }));
+
+    await user.type(screen.getByLabelText('البريد الجديد'), 'new@example.com');
+    await user.type(screen.getByPlaceholderText('كلمة المرور الحالية'), 'wrong');
+    await user.click(screen.getByRole('button', { name: 'إرسال رابط التأكيد' }));
+
+    expect(await screen.findByText('كلمة المرور غير صحيحة.')).toBeInTheDocument();
+  });
+
+  it('changes the password with the current session token, keeping it alive', async () => {
+    const user = userEvent.setup();
+    render(<ProfileScreen lang="ar" />);
+    await user.click(await screen.findByRole('button', { name: /الحساب/ }));
+
+    const currentPasswordField = document.getElementById('account-current-password') as HTMLInputElement;
+    await user.type(currentPasswordField, 'correct-password');
+    await user.type(screen.getByLabelText('كلمة المرور الجديدة'), 'brand-new-password-1');
+    await user.click(screen.getByRole('button', { name: 'تغيير كلمة المرور' }));
+
+    await waitFor(() =>
+      expect(mockApi.changePassword).toHaveBeenCalledWith({
+        currentPassword: 'correct-password',
+        newPassword: 'brand-new-password-1',
+        refresh_token: 'current-refresh-token',
+      }),
+    );
+    expect(await screen.findByText('تم تغيير كلمة المرور.')).toBeInTheDocument();
   });
 });
 

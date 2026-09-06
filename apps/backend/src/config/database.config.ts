@@ -23,6 +23,7 @@ import { Profile } from '../entities/profile.entity';
 import { PublicQualitySource } from '../entities/public-quality-source.entity';
 import { Recommendation } from '../entities/recommendation.entity';
 import { PasswordReset } from '../entities/password-reset.entity';
+import { EmailChange } from '../entities/email-change.entity';
 import { RefreshToken } from '../entities/refresh-token.entity';
 import { SharedLatentSpaceVersion } from '../entities/shared-latent-space-version.entity';
 import { SourceRecord } from '../entities/source-record.entity';
@@ -49,6 +50,7 @@ config({ path: resolve(process.cwd(), '../../.env') });
 const ENTITIES: DataSourceOptions['entities'] = [
   User,
   PasswordReset,
+  EmailChange,
   MailOutbox,
   RefreshToken,
   Profile,

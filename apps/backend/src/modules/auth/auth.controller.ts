@@ -2,7 +2,10 @@ import { Controller, Post, Get, Body, HttpCode, UseGuards, Request } from '@nest
 import { AuthGuard } from '@nestjs/passport';
 import { Throttle } from '@nestjs/throttler';
 import { ConfirmPasswordResetDto, RequestPasswordResetDto } from './dto/password-reset.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { ConfirmEmailChangeDto, RequestEmailChangeDto } from './dto/email-change.dto';
 import { PasswordResetService } from './password-reset.service';
+import { EmailChangeService } from './email-change.service';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -27,6 +30,7 @@ export class AuthController {
   constructor(
     private authService: AuthService,
     private passwordResetService: PasswordResetService,
+    private emailChangeService: EmailChangeService,
   ) {}
 
   @Throttle(AUTH_THROTTLE)
@@ -81,5 +85,36 @@ export class AuthController {
   @UseGuards(AuthGuard('jwt'))
   async getProfile(@Request() req: Req) {
     return this.authService.getProfile(req.user.id);
+  }
+
+  // Account settings (owner-approved design 2026-09-06): change password
+  // while signed in. Distinct from password-reset/confirm above -- this one
+  // requires the current password instead of a mailed token, and leaves the
+  // caller's own session alive.
+  @Post('change-password')
+  @HttpCode(200)
+  @UseGuards(AuthGuard('jwt'))
+  async changePassword(@Request() req: Req, @Body() dto: ChangePasswordDto) {
+    await this.authService.changePassword(req.user.id, dto, req.ip ?? null);
+    return { changed: true };
+  }
+
+  // Requires the current password like the change above; the link is mailed
+  // to the address being claimed, never the current one.
+  @Post('email-change/request')
+  @HttpCode(202)
+  @UseGuards(AuthGuard('jwt'))
+  async requestEmailChange(@Request() req: Req, @Body() dto: RequestEmailChangeDto) {
+    await this.emailChangeService.request(req.user.id, dto.newEmail, dto.currentPassword, req.ip ?? null);
+    return { accepted: true };
+  }
+
+  // Unauthenticated by necessity, like password-reset/confirm: the link
+  // arrives in a mailbox, not a signed-in tab, and behind the same throttle.
+  @Throttle(AUTH_THROTTLE)
+  @Post('email-change/confirm')
+  @HttpCode(200)
+  async confirmEmailChange(@Request() req: { ip?: string }, @Body() dto: ConfirmEmailChangeDto) {
+    return this.emailChangeService.confirm(dto.token, req.ip ?? null);
   }
 }

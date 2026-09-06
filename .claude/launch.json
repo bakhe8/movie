@@ -147,6 +147,46 @@
         "C:/Users/Bakheet/AppData/Local/Temp/claude/C--Users-Bakheet-Projects-movie/fccdb463-af22-425f-ac8f-4081eda31d46/scratchpad"
       ],
       "port": 3230
+    },
+    {
+      "name": "backend-3241-P5",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set API_PORT=3241&& set FRONTEND_URL=http://localhost:3240&& npm run dev"
+      ],
+      "cwd": "apps/backend",
+      "port": 3241
+    },
+    {
+      "name": "frontend-3240-P5",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set NEXT_PUBLIC_API_URL=http://localhost:3241/api&& npx next dev --webpack -p 3240"
+      ],
+      "cwd": "apps/frontend",
+      "port": 3240
+    },
+    {
+      "name": "backend-3141-spare",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set API_PORT=3141&& set FRONTEND_URL=http://localhost:3140&& npm run dev"
+      ],
+      "cwd": "apps/backend",
+      "port": 3141
+    },
+    {
+      "name": "frontend-3140-spare",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set NEXT_PUBLIC_API_URL=http://localhost:3141/api&& npx next dev --webpack -p 3140"
+      ],
+      "cwd": "apps/frontend",
+      "port": 3140
     }
   ]
 }

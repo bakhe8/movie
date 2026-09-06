@@ -7,14 +7,16 @@ import { User } from '../../entities/user.entity';
 import { getAccessTokenTtl, getJwtSecret } from '../../config/jwt.config';
 import { AuditModule } from '../audit/audit.module';
 import { PasswordReset } from '../../entities/password-reset.entity';
+import { EmailChange } from '../../entities/email-change.entity';
 import { PasswordResetService } from './password-reset.service';
+import { EmailChangeService } from './email-change.service';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, RefreshToken, PasswordReset]),
+    TypeOrmModule.forFeature([User, RefreshToken, PasswordReset, EmailChange]),
     PassportModule,
     JwtModule.register({
       secret: getJwtSecret(),
@@ -24,7 +26,7 @@ import { JwtStrategy } from './jwt.strategy';
     AuditModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, PasswordResetService, JwtStrategy],
+  providers: [AuthService, PasswordResetService, EmailChangeService, JwtStrategy],
   exports: [AuthService],
 })
 export class AuthModule {}

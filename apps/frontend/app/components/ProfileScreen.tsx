@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { api, ApiError, type ConfidenceBand, type PreferredLanguage } from '../lib/api';
+import { api, ApiError, getRefreshToken, type ConfidenceBand, type PreferredLanguage } from '../lib/api';
 import { formatConfidence, formatNumber } from '../lib/format';
 import { MARKETS, PLATFORMS } from '../lib/onboarding-options';
 import { useSession } from '../lib/session';
@@ -25,7 +25,7 @@ const labels = {
     tasteHint: 'ما تعلّمه نموذجك عنك، وما صار جاهزًا.',
     prefs: 'التفضيلات',
     prefsHint: 'اسم ملفك، ولغة الواجهة، وسوقك، ومنصاتك.',
-    accountHint: 'بريدك وتسجيل الخروج.',
+    accountHint: 'بريدك، كلمة مرورك، وتسجيل الخروج.',
     privacyHint: 'الموافقات، والتصدير، والحذف، وإيقاف المعالجة.',
     backToProfile: 'إلى ملفي',
     nameLabel: 'اسم ملف الذوق',
@@ -43,6 +43,25 @@ const labels = {
     saving: 'جارٍ الحفظ…',
     saved: 'تم الحفظ.',
     nameTaken: 'يوجد ملف بهذا الاسم.',
+    changeEmailTitle: 'تغيير البريد الإلكتروني',
+    changeEmailBody: 'أرسل رابط تأكيد إلى البريد الجديد؛ لا يتغيّر بريدك إلا بعد فتحه.',
+    newEmailLabel: 'البريد الجديد',
+    currentPasswordLabel: 'كلمة المرور الحالية',
+    changeEmailSubmit: 'إرسال رابط التأكيد',
+    changeEmailSending: 'جارٍ الإرسال…',
+    changeEmailSent: 'أُرسل رابط التأكيد إلى البريد الجديد.',
+    changeEmailWrongPassword: 'كلمة المرور غير صحيحة.',
+    changeEmailTaken: 'هذا البريد مستخدم بالفعل.',
+    changeEmailFailed: 'تعذّر الإرسال. حاول مجددًا.',
+    changePasswordTitle: 'تغيير كلمة المرور',
+    changePasswordBody: 'تبقى هذه الجلسة مسجَّلة دخولاً؛ كل جلسة أخرى تُنهى.',
+    newPasswordLabel: 'كلمة المرور الجديدة',
+    changePasswordSubmit: 'تغيير كلمة المرور',
+    changePasswordSaving: 'جارٍ التغيير…',
+    changePasswordDone: 'تم تغيير كلمة المرور.',
+    changePasswordWrongPassword: 'كلمة المرور الحالية غير صحيحة.',
+    changePasswordTooShort: 'كلمة المرور الجديدة قصيرة جداً (8 أحرف على الأقل).',
+    changePasswordFailed: 'تعذّر التغيير. حاول مجددًا.',
     rounds: 'جولات الترتيب المكتملة',
     watched: 'أفلام مسجّلة كمُشاهَدة',
     model: 'نموذجك',
@@ -110,7 +129,7 @@ const labels = {
     tasteHint: 'What your model has learned, and what is ready.',
     prefs: 'Preferences',
     prefsHint: 'Your profile name, interface language, market and platforms.',
-    accountHint: 'Your email and sign out.',
+    accountHint: 'Your email, password, and sign out.',
     privacyHint: 'Consents, export, deletion and pausing.',
     backToProfile: 'Back to profile',
     nameLabel: 'Taste profile name',
@@ -127,6 +146,25 @@ const labels = {
     saving: 'Saving…',
     saved: 'Saved.',
     nameTaken: 'A profile with this name already exists.',
+    changeEmailTitle: 'Change email',
+    changeEmailBody: 'A confirmation link is sent to the new address; your email only changes once you open it.',
+    newEmailLabel: 'New email',
+    currentPasswordLabel: 'Current password',
+    changeEmailSubmit: 'Send confirmation link',
+    changeEmailSending: 'Sending…',
+    changeEmailSent: 'A confirmation link was sent to the new address.',
+    changeEmailWrongPassword: 'Incorrect password.',
+    changeEmailTaken: 'This email is already in use.',
+    changeEmailFailed: 'Could not send. Please try again.',
+    changePasswordTitle: 'Change password',
+    changePasswordBody: 'This session stays signed in; every other session ends.',
+    newPasswordLabel: 'New password',
+    changePasswordSubmit: 'Change password',
+    changePasswordSaving: 'Changing…',
+    changePasswordDone: 'Password changed.',
+    changePasswordWrongPassword: 'Incorrect current password.',
+    changePasswordTooShort: 'The new password is too short (8 characters minimum).',
+    changePasswordFailed: 'Could not change it. Please try again.',
     rounds: 'Completed ranking rounds',
     watched: 'Films marked watched',
     model: 'Your model',
@@ -226,6 +264,14 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
   const [pauseBusy, setPauseBusy] = useState(false);
   const [pauseNotice, setPauseNotice] = useState<string | null>(null);
   const [paused, setPaused] = useState<boolean>(profile?.pausedAt !== null && profile?.pausedAt !== undefined);
+  const [newEmail, setNewEmail] = useState('');
+  const [emailChangePassword, setEmailChangePassword] = useState('');
+  const [emailChangeBusy, setEmailChangeBusy] = useState(false);
+  const [emailChangeNotice, setEmailChangeNotice] = useState<{ text: string; error?: boolean } | null>(null);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [passwordChangeBusy, setPasswordChangeBusy] = useState(false);
+  const [passwordChangeNotice, setPasswordChangeNotice] = useState<{ text: string; error?: boolean } | null>(null);
 
   const profileId = profile?.id;
   const profileName = profile?.name;
@@ -413,6 +459,45 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
       setPauseNotice(t.pauseFailed);
     } finally {
       setPauseBusy(false);
+    }
+  }
+
+  async function requestEmailChange() {
+    if (!newEmail || !emailChangePassword || emailChangeBusy) return;
+    setEmailChangeBusy(true);
+    setEmailChangeNotice(null);
+    try {
+      await api.requestEmailChange({ newEmail: newEmail.trim(), currentPassword: emailChangePassword });
+      setNewEmail('');
+      setEmailChangePassword('');
+      setEmailChangeNotice({ text: t.changeEmailSent });
+    } catch (err) {
+      const status = err instanceof ApiError ? err.status : null;
+      const text = status === 401 ? t.changeEmailWrongPassword : status === 409 ? t.changeEmailTaken : t.changeEmailFailed;
+      setEmailChangeNotice({ text, error: true });
+    } finally {
+      setEmailChangeBusy(false);
+    }
+  }
+
+  async function changePassword() {
+    if (!currentPassword || !newPassword || passwordChangeBusy) return;
+    if (newPassword.length < 8) {
+      setPasswordChangeNotice({ text: t.changePasswordTooShort, error: true });
+      return;
+    }
+    setPasswordChangeBusy(true);
+    setPasswordChangeNotice(null);
+    try {
+      await api.changePassword({ currentPassword, newPassword, refresh_token: getRefreshToken() ?? undefined });
+      setCurrentPassword('');
+      setNewPassword('');
+      setPasswordChangeNotice({ text: t.changePasswordDone });
+    } catch (err) {
+      const status = err instanceof ApiError ? err.status : null;
+      setPasswordChangeNotice({ text: status === 401 ? t.changePasswordWrongPassword : t.changePasswordFailed, error: true });
+    } finally {
+      setPasswordChangeBusy(false);
     }
   }
 
@@ -733,6 +818,86 @@ export function ProfileScreen({ lang, onLanguageChange }: { lang: Lang; onLangua
             {t.logout}
           </button>
         </div>
+
+        <h3>{t.changeEmailTitle}</h3>
+        <p>{t.changeEmailBody}</p>
+        <div className={styles.field}>
+          <label htmlFor="account-new-email">{t.newEmailLabel}</label>
+          <input
+            id="account-new-email"
+            type="email"
+            value={newEmail}
+            onChange={(e) => setNewEmail(e.target.value)}
+            disabled={emailChangeBusy}
+            autoComplete="email"
+          />
+        </div>
+        <div className={styles.passwordRow}>
+          <input
+            type="password"
+            className={styles.passwordInput}
+            value={emailChangePassword}
+            onChange={(e) => setEmailChangePassword(e.target.value)}
+            placeholder={t.currentPasswordLabel}
+            autoComplete="current-password"
+            aria-label={t.currentPasswordLabel}
+            disabled={emailChangeBusy}
+          />
+          <button
+            type="button"
+            className={styles.ghost}
+            onClick={requestEmailChange}
+            disabled={emailChangeBusy || !newEmail || !emailChangePassword}
+          >
+            {emailChangeBusy ? t.changeEmailSending : t.changeEmailSubmit}
+          </button>
+        </div>
+        {emailChangeNotice && (
+          <p className={styles.notice} role="status">
+            {emailChangeNotice.text}
+          </p>
+        )}
+
+        <h3>{t.changePasswordTitle}</h3>
+        <p>{t.changePasswordBody}</p>
+        <div className={styles.field}>
+          <label htmlFor="account-current-password">{t.currentPasswordLabel}</label>
+          <input
+            id="account-current-password"
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            disabled={passwordChangeBusy}
+            autoComplete="current-password"
+          />
+        </div>
+        <div className={styles.field}>
+          <label htmlFor="account-new-password">{t.newPasswordLabel}</label>
+          <input
+            id="account-new-password"
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            disabled={passwordChangeBusy}
+            autoComplete="new-password"
+            maxLength={64}
+          />
+        </div>
+        <div className={styles.row}>
+          <button
+            type="button"
+            className={styles.ghost}
+            onClick={changePassword}
+            disabled={passwordChangeBusy || !currentPassword || !newPassword}
+          >
+            {passwordChangeBusy ? t.changePasswordSaving : t.changePasswordSubmit}
+          </button>
+        </div>
+        {passwordChangeNotice && (
+          <p className={styles.notice} role="status">
+            {passwordChangeNotice.text}
+          </p>
+        )}
         </section>
       )}
 
