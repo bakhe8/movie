@@ -451,7 +451,7 @@ title_revisions (                                                               
   "posterPath" varchar, genres text, "releaseYear" integer,
   "sourceRecordIds" uuid[] NOT NULL DEFAULT '{}',        -- source_records rows this snapshot is built from
   "policyVersion" varchar NOT NULL,                      -- e.g. 'public-v1' -- the readiness policy evaluated against this snapshot
-  "blockerCodes" text[] NOT NULL DEFAULT '{}',           -- 'POSTER_MISSING' | 'DESCRIPTION_MISSING' | 'IDENTITY_UNRESOLVED' | 'LICENSE_BLOCKED' | … ; empty only when the policy accepted the snapshot
+  "blockerCodes" text[] NOT NULL DEFAULT '{}',           -- 'POSTER_MISSING' | 'DESCRIPTION_MISSING' | 'GENRES_MISSING' | 'IDENTITY_UNRESOLVED' | 'LICENSE_BLOCKED' | … ; empty only when the policy accepted the snapshot
   "evaluatedAt" timestamp NOT NULL, "createdAt" timestamp NOT NULL DEFAULT now(),
   INDEX ("titleId")
 )

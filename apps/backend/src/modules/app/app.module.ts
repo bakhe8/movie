@@ -22,6 +22,7 @@ import { TrainingModule } from '../training/training.module';
 import { PrivacyModule } from '../privacy/privacy.module';
 import { AdminModule } from '../admin/admin.module';
 import { AnalyticsModule } from '../analytics/analytics.module';
+import { PublicationModule } from '../publication/publication.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { AnalyticsModule } from '../analytics/analytics.module';
     PrivacyModule,
     AdminModule,
     AnalyticsModule,
+    PublicationModule,
   ],
   controllers: [AppController],
   providers: [
