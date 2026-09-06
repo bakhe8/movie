@@ -80,13 +80,31 @@ export function assertReservedIdentities(reserved: readonly CatalogIdentity[], i
   assertCumulativeIdentities(incoming, reserved);
 }
 
-/** A partial refresh cannot erase enrichment, artwork or other admitted works. */
-export function mergeCatalog<T extends CatalogIdentity>(previous: readonly T[], incoming: readonly T[]): T[] {
+interface CatalogBuildEntry extends CatalogIdentity {
+  fingerprint?: unknown;
+  posterPath?: unknown;
+  cultural?: unknown;
+  evidence?: Record<string, unknown>;
+}
+
+/** Refresh builder fields while retaining downstream derivatives and unselected works. */
+export function mergeCatalog<T extends CatalogBuildEntry>(previous: readonly T[], incoming: readonly T[]): T[] {
   assertCumulativeIdentities(previous, incoming);
   const next = new Map(previous.map((row) => [row.internalId, row]));
   for (const row of incoming) {
     const old = next.get(row.internalId);
-    next.set(row.internalId, old ? { ...row, ...old, externalIds: row.externalIds } : row);
+    const merged = { ...row };
+    if (old) {
+      for (const key of ['fingerprint', 'posterPath', 'cultural'] as const) {
+        if (Object.prototype.hasOwnProperty.call(old, key)) merged[key] = old[key];
+      }
+      for (const key of ['plotSummaryAr', 'plotSourceAr'] as const) {
+        if (old.evidence && Object.prototype.hasOwnProperty.call(old.evidence, key)) {
+          merged.evidence = { ...merged.evidence, [key]: old.evidence[key] };
+        }
+      }
+    }
+    next.set(row.internalId, merged);
   }
   return [...next.values()].sort((a, b) => a.internalId.localeCompare(b.internalId));
 }

@@ -54,4 +54,37 @@ describe('cumulative catalog identity', () => {
     const merged = mergeCatalog(before, [{ ...original, fingerprint: null, posterPath: null }]);
     expect(merged).toEqual(before);
   });
+  it('refreshes all builder metadata and evidence on a full rebuild, retaining only downstream derivatives', () => {
+    const old = {
+      ...original, titleEn: 'Old title', titleAr: 'عنوان قديم', description: 'Old description',
+      releaseYear: 2000, genres: ['Drama'], originalLanguage: 'en', obsoleteSourceField: 'remove me',
+      fingerprint: { pacing: 0.5 }, posterPath: '/poster.jpg', cultural: { setting: 'city' },
+      evidence: { plotSummary: 'Old plot', plotSource: 'old source', titleArSource: 'old Arabic source',
+        sourceIds: ['old'], wikipedia: { en: 'Old_page' }, wikidataLabelEn: 'Old label',
+        obsoleteEvidence: 'remove me too', plotSummaryAr: 'حبكة موثقة', plotSourceAr: 'Arabic plot source' },
+    };
+    const fresh = {
+      ...original, titleEn: 'Current title', titleAr: 'عنوان حالي', description: 'Current description',
+      releaseYear: 2001, genres: ['Comedy'], originalLanguage: 'ar',
+      fingerprint: null, posterPath: null, cultural: null,
+      evidence: { plotSummary: 'Current plot', plotSource: 'current source', titleArSource: 'current Arabic source',
+        sourceIds: ['current'], wikipedia: { en: 'Current_page' }, wikidataLabelEn: 'Current label' },
+    };
+    const oldSnapshot = structuredClone(old);
+    const freshSnapshot = structuredClone(fresh);
+    expect(mergeCatalog<typeof old | typeof fresh>([old], [fresh])).toEqual([{
+      ...fresh, fingerprint: old.fingerprint, posterPath: old.posterPath, cultural: old.cultural,
+      evidence: { ...fresh.evidence, plotSummaryAr: old.evidence.plotSummaryAr, plotSourceAr: old.evidence.plotSourceAr },
+    }]);
+    expect(old).toEqual(oldSnapshot);
+    expect(fresh).toEqual(freshSnapshot);
+  });
+  it('preserves explicit null derivatives and does not synthesize absent downstream fields', () => {
+    const old = { ...original, fingerprint: null, posterPath: null, cultural: null,
+      evidence: { plotSummaryAr: null, plotSourceAr: null } };
+    const fresh = { ...original, fingerprint: { pacing: 1 }, posterPath: '/new.jpg', cultural: { setting: 'new' },
+      evidence: { plotSummary: 'new plot' } };
+    expect(mergeCatalog<typeof old | typeof fresh>([old], [fresh])).toEqual([{ ...old, evidence: { ...fresh.evidence, ...old.evidence } }]);
+    expect(mergeCatalog([original], [fresh])).toEqual([fresh]);
+  });
 });
