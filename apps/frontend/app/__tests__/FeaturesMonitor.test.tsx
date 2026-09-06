@@ -39,7 +39,7 @@ describe('FeaturesMonitor (read-only)', () => {
     await waitFor(() => expect(screen.getAllByText('A Film').length).toBeGreaterThan(0));
 
     expect(screen.queryByRole('button', { name: 'عينة' })).toBeNull();
-    const [link] = screen.getAllByRole('link', { name: 'فتح في الإدارة' });
+    const [link] = screen.getAllByRole('link', { name: 'مراجعة هذا التحليل' });
     const href = link.getAttribute('href') ?? '';
     expect(href.startsWith('/admin/administration/review?')).toBe(true);
     const params = new URLSearchParams(href.split('?')[1]);

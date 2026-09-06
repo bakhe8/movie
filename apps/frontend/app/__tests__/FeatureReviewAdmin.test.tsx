@@ -38,23 +38,24 @@ describe('FeatureReviewAdmin', () => {
     mockApi.adminReviewFeature.mockResolvedValue({ feature: { id: 'f1', reviewStatus: 'sampled' }, correction: null });
     render(<FeatureReviewAdmin />);
 
-    const button = screen.getByRole('button', { name: 'تأكيد أخذ عينة' });
+    const button = screen.getByRole('button', { name: 'تأكيد صحة التحليل' });
     await userEvent.click(button);
 
     expect(mockApi.adminReviewFeature).toHaveBeenCalledWith('f1', { reviewStatus: 'sampled' });
     await waitFor(() => expect(screen.getByRole('button')).toBeDisabled());
     await waitFor(() => expect(screen.getByText(/تم الحفظ/)).toBeInTheDocument());
-    expect(screen.getByText(/sampled/)).toBeInTheDocument();
+    // The raw status code is never shown -- REVIEW_STATUS_COPY translates it.
+    expect(screen.getByText(/رُوجعت وصحيحة/)).toBeInTheDocument();
   });
 
   it('surfaces a visible error and allows retry on failure, without a false success message', async () => {
     mockApi.adminReviewFeature.mockRejectedValue(new Error('boom'));
     render(<FeatureReviewAdmin />);
 
-    await userEvent.click(screen.getByRole('button', { name: 'تأكيد أخذ عينة' }));
+    await userEvent.click(screen.getByRole('button', { name: 'تأكيد صحة التحليل' }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('تعذّر حفظ المراجعة'));
     expect(screen.queryByText(/تم الحفظ/)).toBeNull();
-    expect(screen.getByRole('button', { name: 'تأكيد أخذ عينة' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: 'تأكيد صحة التحليل' })).not.toBeDisabled();
   });
 
   it('builds the return-to-monitoring link from the carried filter/page', () => {

@@ -4,6 +4,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { api } from '../../../lib/api';
+import { FEATURE_REASON_COPY } from '../../../lib/copy';
+import { ADMIN_SECTION_COPY, CONFIRM_ANALYSIS_LABEL, REVIEW_STATUS_COPY, featureKeyLabel, featureValuePhrase } from '../admin-copy';
 import s from './FeatureReviewAdmin.module.css';
 
 type Status = 'idle' | 'pending' | 'success' | 'error';
@@ -29,12 +31,20 @@ export function FeatureReviewAdmin() {
   const [error, setError] = useState<string | null>(null);
 
   const backHref = `/admin/monitoring/reviews?${new URLSearchParams({ reviewStatus: returnReviewStatus, page: returnPage }).toString()}`;
+  const numericValue = Number(value);
+  const valuePhrase = Number.isFinite(numericValue) ? featureValuePhrase(featureKey, numericValue, FEATURE_REASON_COPY.ar) : null;
 
   if (!featureId) {
     return (
-      <div className={s.card}>
-        <p className={s.status}>لا يوجد سطر محدد للمراجعة. عُد إلى قائمة المراجعة واختر سطراً.</p>
-        <Link className={s.backLink} href="/admin/monitoring/reviews">رجوع إلى المراقبة</Link>
+      <div>
+        <div className={s.pageHeader}>
+          <h2 className={s.pageTitle}>{ADMIN_SECTION_COPY.review.title}</h2>
+          <p className={s.pageBlurb}>{ADMIN_SECTION_COPY.review.blurb}</p>
+        </div>
+        <div className={s.card}>
+          <p className={s.status}>لا يوجد سطر محدد للمراجعة. عُد إلى قائمة المراجعة واختر سطراً.</p>
+          <Link className={s.backLink} href="/admin/monitoring/reviews">رجوع إلى المراقبة</Link>
+        </div>
       </div>
     );
   }
@@ -53,27 +63,33 @@ export function FeatureReviewAdmin() {
   };
 
   return (
-    <div className={s.card}>
-      <div className={s.row}><span className={s.label}>العنوان</span><span>{titleLabel || '—'}</span></div>
-      <div className={s.row}><span className={s.label}>المفتاح</span><span className={s.value}>{featureKey || '—'}</span></div>
-      <div className={s.row}><span className={s.label}>القيمة</span><span className={s.value}>{value || '—'}</span></div>
-      <div className={s.row}><span className={s.label}>المستخرِج</span><span className={s.value}>{extractorVersion || '—'}</span></div>
-
-      <div className={s.actions}>
-        <button type="button" className={s.confirmBtn} disabled={status === 'pending' || status === 'success'} onClick={confirmSample}>
-          {status === 'pending' ? '…' : 'تأكيد أخذ عينة'}
-        </button>
-        <Link className={s.backLink} href={backHref}>رجوع إلى المراقبة</Link>
+    <div>
+      <div className={s.pageHeader}>
+        <h2 className={s.pageTitle}>{ADMIN_SECTION_COPY.review.title}</h2>
+        <p className={s.pageBlurb}>{ADMIN_SECTION_COPY.review.blurb}</p>
       </div>
+      <div className={s.card}>
+        <div className={s.row}><span className={s.label}>الفيلم</span><span>{titleLabel || '—'}</span></div>
+        <div className={s.row}><span className={s.label}>الخاصية</span><span>{featureKey ? featureKeyLabel(featureKey) : '—'}</span></div>
+        <div className={s.row}><span className={s.label}>ما يقوله التحليل</span><span>{valuePhrase ? `${valuePhrase} (${numericValue.toFixed(2)})` : value || '—'}</span></div>
+        <div className={s.row}><span className={s.label}>مصدر التحليل</span><span className={s.value}>{extractorVersion || '—'}</span></div>
 
-      {status === 'success' && (
-        <p className={`${s.status} ${s.statusSuccess}`} role="status" aria-live="polite">
-          تم الحفظ. الحالة الآن: {resultStatus}.
-        </p>
-      )}
-      {status === 'error' && (
-        <p className={`${s.status} ${s.statusError}`} role="alert">{error}</p>
-      )}
+        <div className={s.actions}>
+          <button type="button" className={s.confirmBtn} disabled={status === 'pending' || status === 'success'} onClick={confirmSample}>
+            {status === 'pending' ? '…' : CONFIRM_ANALYSIS_LABEL}
+          </button>
+          <Link className={s.backLink} href={backHref}>رجوع إلى المراقبة</Link>
+        </div>
+
+        {status === 'success' && (
+          <p className={`${s.status} ${s.statusSuccess}`} role="status" aria-live="polite">
+            تم الحفظ. الحالة الآن: {resultStatus ? (REVIEW_STATUS_COPY[resultStatus] ?? resultStatus) : ''}.
+          </p>
+        )}
+        {status === 'error' && (
+          <p className={`${s.status} ${s.statusError}`} role="alert">{error}</p>
+        )}
+      </div>
     </div>
   );
 }

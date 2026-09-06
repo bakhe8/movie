@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
 import { useAdminQueryState } from '../../../lib/admin-query-state';
+import { ADMIN_SECTION_COPY, ANALYSIS_STATUS_COPY, analysisStatus } from '../admin-copy';
 import { AdminRecordList, type AdminRecordListColumn } from '../AdminRecordList';
 import m from './monitoring.module.css';
 
@@ -16,9 +17,13 @@ const LICENSE_LABEL: Record<string, string> = {
   commercial_allowed: 'تجاري', non_commercial_only: 'غير تجاري', pending_review: 'قيد المراجعة',
 };
 
-function fingerprintBadge(row: TitleRow, m2: typeof m) {
-  const cls = row.hasV2 ? m2.green : row.hasFingerprint ? m2.yellow : m2.red;
-  return <span className={`${m2.badge} ${cls}`}>{row.hasV2 ? 'V2' : row.hasFingerprint ? 'V1' : 'لا'}</span>;
+// ADMIN-W2 (owner feedback 2026-09-06): "بصمة"/"V1"/"V2" named an internal
+// data structure and its schema version, not what it means operationally --
+// whether a title's automatic analysis exists at all, and how complete it is.
+function analysisBadge(row: TitleRow, m2: typeof m) {
+  const status = analysisStatus(row.hasFingerprint, row.hasV2);
+  const cls = status === 'full' ? m2.green : status === 'basic' ? m2.yellow : m2.red;
+  return <span className={`${m2.badge} ${cls}`}>{ANALYSIS_STATUS_COPY[status]}</span>;
 }
 
 function licenseBadge(row: TitleRow, m2: typeof m) {
@@ -30,9 +35,9 @@ const COLUMNS: AdminRecordListColumn<TitleRow>[] = [
   { key: 'internalId', header: 'المعرف', render: (r) => r.internalId, mono: true },
   { key: 'title', header: 'العنوان', render: (r) => r.titleAr || r.titleEn },
   { key: 'year', header: 'سنة', render: (r) => r.releaseYear ?? '—' },
-  { key: 'fp', header: 'بصمة', render: (r) => fingerprintBadge(r, m) },
-  { key: 'license', header: 'ترخيص', render: (r) => licenseBadge(r, m) },
-  { key: 'unreviewed', header: 'غير مراجَع', render: (r) => (r.unreviewedFeatures > 0 ? <span className={m.badge}>{r.unreviewedFeatures}</span> : '—') },
+  { key: 'fp', header: 'حالة التحليل', render: (r) => analysisBadge(r, m) },
+  { key: 'license', header: 'حقوق العرض', render: (r) => licenseBadge(r, m) },
+  { key: 'unreviewed', header: 'يحتاج مراجعة', render: (r) => (r.unreviewedFeatures > 0 ? <span className={m.badge}>{r.unreviewedFeatures}</span> : '—') },
 ];
 
 // ADMIN-W2 (plan §11.2 "بحث وفلاتر الكتالوج" -> جودة البيانات → الكتالوج).
@@ -92,6 +97,11 @@ export function CatalogMonitor() {
 
   return (
     <div>
+      <div className={m.pageHeader}>
+        <h2 className={m.pageTitle}>{ADMIN_SECTION_COPY.catalog.title}</h2>
+        <p className={m.pageBlurb}>{ADMIN_SECTION_COPY.catalog.blurb}</p>
+      </div>
+
       <div className={m.toolbar}>
         <input
           className={m.search}
@@ -106,9 +116,9 @@ export function CatalogMonitor() {
           onChange={(e) => setQ({ missing: e.target.value, page: '1' })}
         >
           <option value="">كل العناوين</option>
-          <option value="fingerprint">بلا بصمة</option>
-          <option value="v2">V1 فقط</option>
-          <option value="license">بلا ترخيص</option>
+          <option value="fingerprint">لم يُحلَّل إطلاقاً</option>
+          <option value="v2">تحليل أساسي فقط (غير مكتمل)</option>
+          <option value="license">بلا معلومات حقوق</option>
         </select>
       </div>
 
@@ -129,7 +139,7 @@ export function CatalogMonitor() {
             <div className={m.cardRow}>
               <span>{r.internalId}</span>
               <span>{r.releaseYear ?? '—'}</span>
-              {fingerprintBadge(r, m)}
+              {analysisBadge(r, m)}
               {licenseBadge(r, m)}
             </div>
           </>

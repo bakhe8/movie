@@ -2,22 +2,26 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { ADMIN_SECTION_COPY } from './admin-copy';
 import s from './AdminShell.module.css';
 
 // ADMIN-W2 (ADR-117 "Decision — separation"): the target IA (plan §11) split
 // into two areas. Monitoring is read-only; only Administration ever imports
 // a mutation client. W2 ships every section that already exists today --
 // later packages (W3-W6) add the remaining monitoring/administration rows
-// without moving these.
+// without moving these. Labels come from admin-copy.ts (owner feedback
+// 2026-09-06: nav must read as plain operator language, not engineering
+// terms) -- one title per destination, kept in sync with each page's own
+// heading and blurb.
 const MONITORING_SECTIONS = [
-  { href: '/admin/monitoring/catalog', label: 'الكتالوج' },
-  { href: '/admin/monitoring/reviews', label: 'السمات والمراجعات' },
-  { href: '/admin/monitoring/models', label: 'النماذج والتعلّم' },
-  { href: '/admin/monitoring/privacy', label: 'الخصوصية' },
+  { href: '/admin/monitoring/catalog', label: ADMIN_SECTION_COPY.catalog.title },
+  { href: '/admin/monitoring/reviews', label: ADMIN_SECTION_COPY.reviews.title },
+  { href: '/admin/monitoring/models', label: ADMIN_SECTION_COPY.models.title },
+  { href: '/admin/monitoring/privacy', label: ADMIN_SECTION_COPY.privacy.title },
 ] as const;
 
 const ADMINISTRATION_SECTIONS = [
-  { href: '/admin/administration/review', label: 'مراجعة المحتوى' },
+  { href: '/admin/administration/review', label: ADMIN_SECTION_COPY.review.title },
 ] as const;
 
 type Area = 'monitoring' | 'administration';

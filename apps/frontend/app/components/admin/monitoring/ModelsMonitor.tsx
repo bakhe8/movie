@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
 import { formatDateTime } from '../../../lib/format';
+import { ADMIN_SECTION_COPY, MODEL_SERVICE_STATUS_COPY, MODEL_VERSION_STATUS_COPY, modelServiceStatus } from '../admin-copy';
 import m from './monitoring.module.css';
 
 type ModelVersion = {
@@ -65,12 +66,17 @@ function ReadinessStrip() {
   if (!readiness) return <p className={m.count}>جارٍ التحميل…</p>;
 
   const items = [
-    { label: 'القاعدة', ok: readiness.database.ok, detail: readiness.database.ok ? 'متصلة' : 'غير متصلة' },
-    { label: 'الكتالوج', ok: readiness.catalog.ok, detail: `${readiness.catalog.titles} / ${readiness.catalog.threshold}` },
-    { label: 'تغطية البصمات', ok: readiness.fingerprintCoverage.ok, detail: `${readiness.fingerprintCoverage.percent}%` },
+    { label: 'قاعدة البيانات', ok: readiness.database.ok, detail: readiness.database.ok ? 'متصلة' : 'غير متصلة' },
     {
-      label: 'خدمة النموذج', ok: readiness.modelService.ok,
-      detail: !readiness.modelService.configured ? 'غير مُهيَّأة' : readiness.modelService.reachable ? 'تجيب' : 'لا تجيب',
+      label: 'عدد الأفلام',
+      ok: readiness.catalog.ok,
+      detail: `${readiness.catalog.titles} (الحد الأدنى المطلوب ${readiness.catalog.threshold})`,
+    },
+    { label: 'نسبة الأفلام المحلَّلة', ok: readiness.fingerprintCoverage.ok, detail: `${readiness.fingerprintCoverage.percent}%` },
+    {
+      label: 'خدمة الذكاء الاصطناعي',
+      ok: readiness.modelService.ok,
+      detail: MODEL_SERVICE_STATUS_COPY[modelServiceStatus(readiness.modelService.configured, readiness.modelService.reachable)],
     },
   ];
   return (
@@ -105,7 +111,7 @@ function TrainingJobsTable() {
   if (failed) {
     return (
       <p className={m.count} role="status" aria-live="polite">
-        تعذّر تحميل طابور التدريب. <button type="button" className={m.pageBtn} onClick={() => setAttempt((a) => a + 1)}>إعادة المحاولة</button>
+        تعذّر تحميل تحديثات ملفات الذوق. <button type="button" className={m.pageBtn} onClick={() => setAttempt((a) => a + 1)}>إعادة المحاولة</button>
       </p>
     );
   }
@@ -114,10 +120,10 @@ function TrainingJobsTable() {
   return (
     <>
       <h3 className={m.subhead}>
-        طابور التدريب — قيد الانتظار {data.counts.queued} · قيد التنفيذ {data.counts.running} · نجح {data.counts.succeeded} · فشل {data.counts.failed}
+        تحديث ملفات الذوق — قيد الانتظار {data.counts.queued} · قيد التنفيذ {data.counts.running} · نجح {data.counts.succeeded} · فشل {data.counts.failed}
       </h3>
       {data.recent.length === 0 ? (
-        <p className={m.count}>لا جولات تدريب بعد</p>
+        <p className={m.count}>لا عمليات تحديث بعد</p>
       ) : (
         <ul className={m.plainList}>
           {data.recent.map((row) => (
@@ -173,16 +179,17 @@ function ModelVersionsTable() {
   return (
     <>
       {data.versions.length === 0 ? (
-        <p className={m.count}>لا إصدارات مسجَّلة</p>
+        <p className={m.count}>لا يوجد إصدار معتمَد رسمياً بعد</p>
       ) : (
         <ul className={m.plainList}>
           {data.versions.map((row) => (
             <li key={row.version} className={m.cardRow}>
               <span className={m.mono}>{row.version}</span>
-              <span>{row.rankerType}</span>
-              <span>لقطات: {row.stats?.snapshotCount ?? '—'}</span>
-              <span>ملفات: {row.stats?.profileCount ?? '—'}</span>
-              {row.active && <span className={`${m.badge} ${m.green}`}>نشط</span>}
+              <span className={`${m.badge} ${row.active ? m.green : ''}`}>
+                {row.active ? MODEL_VERSION_STATUS_COPY.active : MODEL_VERSION_STATUS_COPY.registeredInactive}
+              </span>
+              <span>عدد ملفات الذوق: {row.stats?.snapshotCount ?? '—'}</span>
+              <span>عدد المستخدمين: {row.stats?.profileCount ?? '—'}</span>
             </li>
           ))}
         </ul>
@@ -190,13 +197,13 @@ function ModelVersionsTable() {
 
       {data.unregistered.length > 0 && (
         <>
-          <h3 className={m.subhead}>إصدارات غير مسجَّلة (من اللقطات)</h3>
+          <h3 className={m.subhead}>{MODEL_VERSION_STATUS_COPY.unregistered}</h3>
           <ul className={m.plainList}>
             {data.unregistered.map((row) => (
               <li key={row.modelVersion} className={m.cardRow}>
                 <span className={m.mono}>{row.modelVersion}</span>
-                <span>لقطات: {row.snapshotCount}</span>
-                <span>ملفات: {row.profileCount}</span>
+                <span>عدد ملفات الذوق: {row.snapshotCount}</span>
+                <span>عدد المستخدمين: {row.profileCount}</span>
               </li>
             ))}
           </ul>
@@ -211,10 +218,15 @@ function ModelVersionsTable() {
 export function ModelsMonitor() {
   return (
     <div>
-      <h3 className={m.subhead}>الجاهزية</h3>
+      <div className={m.pageHeader}>
+        <h2 className={m.pageTitle}>{ADMIN_SECTION_COPY.models.title}</h2>
+        <p className={m.pageBlurb}>{ADMIN_SECTION_COPY.models.blurb}</p>
+      </div>
+
+      <h3 className={m.subhead}>الجاهزية العامة</h3>
       <ReadinessStrip />
       <TrainingJobsTable />
-      <h3 className={m.subhead}>إصدارات النماذج</h3>
+      <h3 className={m.subhead}>إصدارات محرك التوصيات</h3>
       <ModelVersionsTable />
     </div>
   );

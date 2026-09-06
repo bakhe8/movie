@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '../../../lib/api';
+import { FEATURE_REASON_COPY } from '../../../lib/copy';
 import { useAdminQueryState } from '../../../lib/admin-query-state';
+import { ADMIN_SECTION_COPY, REVIEW_STATUS_COPY, featureKeyLabel, featureValuePhrase } from '../admin-copy';
 import { AdminRecordList, type AdminRecordListColumn } from '../AdminRecordList';
 import m from './monitoring.module.css';
 
@@ -13,11 +15,17 @@ type FeatureRow = {
   title: { id: string; internalId: string; titleEn: string; titleAr: string } | null;
 };
 
-const STATUS_LABEL: Record<string, string> = { unreviewed: 'غير مراجَع', sampled: 'عينة', human_verified: 'بشري' };
-
 function statusBadge(status: string) {
   const cls = status === 'human_verified' ? m.green : status === 'sampled' ? m.yellow : '';
-  return <span className={`${m.badge} ${cls}`}>{STATUS_LABEL[status] ?? status}</span>;
+  return <span className={`${m.badge} ${cls}`}>{REVIEW_STATUS_COPY[status] ?? status}</span>;
+}
+
+// ADMIN-W2 (owner feedback 2026-09-06): a bare 0-1 number told a reviewer
+// nothing about whether the AI got it right. Show what the number claims
+// about the film; keep the raw value alongside for anyone who wants it.
+function valueDisplay(row: FeatureRow) {
+  const phrase = featureValuePhrase(row.featureKey, row.value, FEATURE_REASON_COPY.ar);
+  return phrase ? `${phrase} (${row.value.toFixed(2)})` : row.value.toFixed(3);
 }
 
 // ADMIN-W2 (ADR-117 "Decision — separation"): read-only. The sample action
@@ -70,25 +78,39 @@ export function FeaturesMonitor() {
   };
 
   const columns: AdminRecordListColumn<FeatureRow>[] = [
-    { key: 'title', header: 'العنوان', render: (r) => (r.title ? (r.title.titleAr || r.title.titleEn) : r.titleId.slice(0, 8)) },
-    { key: 'key', header: 'المفتاح', render: (r) => r.featureKey, mono: true },
-    { key: 'value', header: 'القيمة', render: (r) => r.value.toFixed(3), mono: true },
-    { key: 'extractor', header: 'المستخرِج', render: (r) => r.extractorVersion, mono: true },
+    { key: 'title', header: 'الفيلم', render: (r) => (r.title ? (r.title.titleAr || r.title.titleEn) : r.titleId.slice(0, 8)) },
+    {
+      key: 'key',
+      header: 'الخاصية',
+      render: (r) => (
+        <>
+          <span className={m.featureKey}>{featureKeyLabel(r.featureKey)}</span>
+          <span className={m.featureKeyRaw}>{r.featureKey}</span>
+        </>
+      ),
+    },
+    { key: 'value', header: 'ما يقوله التحليل', render: (r) => valueDisplay(r) },
+    { key: 'extractor', header: 'مصدر التحليل', render: (r) => r.extractorVersion, mono: true },
     { key: 'status', header: 'الحالة', render: (r) => statusBadge(r.reviewStatus) },
     {
       key: 'action',
       header: '',
-      render: (r) => (r.reviewStatus === 'unreviewed' ? <Link className={m.link} href={returnTo(r)}>فتح في الإدارة</Link> : null),
+      render: (r) => (r.reviewStatus === 'unreviewed' ? <Link className={m.link} href={returnTo(r)}>مراجعة هذا التحليل</Link> : null),
     },
   ];
 
   return (
     <div>
+      <div className={m.pageHeader}>
+        <h2 className={m.pageTitle}>{ADMIN_SECTION_COPY.reviews.title}</h2>
+        <p className={m.pageBlurb}>{ADMIN_SECTION_COPY.reviews.blurb}</p>
+      </div>
+
       <div className={m.toolbar}>
         <select className={m.select} value={reviewStatus} onChange={(e) => setQ({ reviewStatus: e.target.value, page: '1' })}>
-          <option value="unreviewed">غير مراجَع</option>
-          <option value="sampled">مأخوذ عينة</option>
-          <option value="human_verified">بشري مُتحقَّق</option>
+          <option value="unreviewed">{REVIEW_STATUS_COPY.unreviewed}</option>
+          <option value="sampled">{REVIEW_STATUS_COPY.sampled}</option>
+          <option value="human_verified">{REVIEW_STATUS_COPY.human_verified}</option>
           <option value="">الكل</option>
         </select>
       </div>
@@ -108,11 +130,11 @@ export function FeaturesMonitor() {
           <>
             <p className={m.cardTitle}>{r.title ? (r.title.titleAr || r.title.titleEn) : r.titleId.slice(0, 8)}</p>
             <div className={m.cardRow}>
-              <span>{r.featureKey}</span>
-              <span>{r.value.toFixed(3)}</span>
+              <span>{featureKeyLabel(r.featureKey)}</span>
+              <span>{valueDisplay(r)}</span>
               {statusBadge(r.reviewStatus)}
             </div>
-            {r.reviewStatus === 'unreviewed' && <Link className={m.link} href={returnTo(r)}>فتح في الإدارة</Link>}
+            {r.reviewStatus === 'unreviewed' && <Link className={m.link} href={returnTo(r)}>مراجعة هذا التحليل</Link>}
           </>
         )}
       />

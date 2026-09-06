@@ -1,6 +1,36 @@
 /* Shared toolbar/badge styles for every monitoring destination (ADMIN-W2).
    Read from admin-tokens.css; no consumer theme/appearance token is used. */
 
+.pageHeader {
+  margin-block-end: var(--admin-sp-4);
+}
+
+.pageTitle {
+  margin: 0 0 var(--admin-sp-1);
+  font-size: var(--admin-fs-20);
+  font-weight: var(--admin-w-semibold);
+}
+
+.pageBlurb {
+  margin: 0;
+  max-width: 60ch;
+  color: var(--admin-muted);
+  font-size: var(--admin-fs-13);
+}
+
+.featureKey {
+  display: block;
+}
+
+.featureKeyRaw {
+  display: block;
+  color: var(--admin-muted);
+  font-size: var(--admin-fs-12);
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
 import { formatDate } from '../../../lib/format';
 import { useAdminQueryState } from '../../../lib/admin-query-state';
+import { ADMIN_SECTION_COPY } from '../admin-copy';
 import { AdminRecordList, type AdminRecordListColumn } from '../AdminRecordList';
 import m from './monitoring.module.css';
 
@@ -67,6 +68,11 @@ export function PrivacyMonitor() {
 
   return (
     <div>
+      <div className={m.pageHeader}>
+        <h2 className={m.pageTitle}>{ADMIN_SECTION_COPY.privacy.title}</h2>
+        <p className={m.pageBlurb}>{ADMIN_SECTION_COPY.privacy.blurb}</p>
+      </div>
+
       <div className={m.toolbar}>
         <select className={m.select} value={type} onChange={(e) => setQ({ type: e.target.value, page: '1' })}>
           <option value="">كل الأنواع</option>

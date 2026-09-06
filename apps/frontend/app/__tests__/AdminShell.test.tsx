@@ -19,7 +19,7 @@ describe('AdminShell', () => {
 
     const monitoringSwitch = screen.getByRole('link', { name: 'المراقبة' });
     expect(monitoringSwitch).toHaveAttribute('aria-current', 'page');
-    const modelsLinks = screen.getAllByRole('link', { name: 'النماذج والتعلّم' });
+    const modelsLinks = screen.getAllByRole('link', { name: 'أداء نظام التوصيات' });
     expect(modelsLinks.every((link) => link.getAttribute('aria-current') === 'page')).toBe(true);
   });
 
