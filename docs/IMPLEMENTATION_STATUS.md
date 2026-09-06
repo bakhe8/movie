@@ -579,7 +579,7 @@ Verdict: **separated in responsibilities, not in contract.** Two processes, one 
 | Tests: search/pagination | ✅ | — | search in `test/titles-search.e2e-spec.ts` (Arabic normalisation, starter list); pagination in `test/api-contract.e2e-spec.ts` |
 | Frontend: search + mark watched (`DiscoverScreen`) | ✅ | 🟡 | rebuilt 2026-09-03 (table above), second pass the same day: the starter list now comes from `GET /titles/starter` (genre-diverse, with a line saying it is not by taste) with a "browse the whole catalogue" toggle, and search benefits from the server's Arabic folding; existing marks load, progress to the first triad, watchlist, undo, bilingual titles; `§4.2` still missing CSV import and alternate-title search (backend) |
 | Frontend: work page (fingerprint, fit reason, public quality and availability separate) | ❌ | ❌ | `§5.3` |
-| Publication readiness contract (`title_revisions`, `titles.publishedRevisionId`, policy `public-v1`) | ❌ | 🟡 | ADR-118 (PUB-W0, doc only, no migration); gates `PUB-S1`→`G1` (D1000-4..7) before any CAT-1B/CAT-2 record may be shown publicly |
+| Publication gate (`title_revisions`, `titles.publishedRevisionId`, policy `public-v1`, guard on search/starter/detail/recommendations/triads/state/watch-events, manual publish `POST /admin/publication/titles/:id/publish`) | ✅ | 🟡 | ADR-118, PUB-W0→S1→B1→G1→1D-9 (`1a2fd39`…`eb186d5`). Live on production 2026-09-06 after the in-container publish run: 389 titles → 380 published, 9 `POSTER_MISSING` (DEMO0089/0094/0100/0320/0371/0373/0382/0419/0421) still hidden until they get a poster. Publication is per-database data — see ADR-118's incident note; dev has 380/384 published |
 
 ## Triads (core loop)
 
