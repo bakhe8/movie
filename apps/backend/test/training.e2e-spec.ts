@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import type { Repository } from 'typeorm';
 import { AppModule } from '../src/modules/app/app.module';
+import { publishForTest } from './publish-for-test';
 import { Title } from '../src/entities/title.entity';
 import { TrainingJob } from '../src/entities/training-job.entity';
 import { TrainingJobsService } from '../src/modules/training/training-jobs.service';
@@ -166,6 +167,7 @@ describe('Training trigger and status (ADR-25, real HTTP, real DB, fake model se
       })),
     );
     titleIds = titles.map((title) => title.id);
+    await publishForTest(app, titleIds); // PUB-G1: this spec marks these watched to build triads
 
     ownerToken = await registerUser(app, 'owner');
     ownerProfileId = await createProfile(app, ownerToken, 'Train owner');

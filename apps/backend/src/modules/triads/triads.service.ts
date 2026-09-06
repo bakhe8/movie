@@ -409,6 +409,10 @@ export class TriadsService {
   // and watchedAt on the new watch_events row stays NULL for the same reason
   // WatchEventsService.create() never guesses a day from a server clock
   // (DATE-01): unlike that path, a ranking carries no client-supplied one.
+  // PUB-G1: deliberately unguarded, like `withItems`. These are the triad's
+  // own three titles, already committed and just compared by the user --
+  // refusing the write here would fail a ranking mid-flight rather than
+  // prevent any new exposure. New triads cannot draw an unpublished title.
   private async confirmWatchedFromRanking(manager: EntityManager, triad: Triad): Promise<void> {
     for (const titleId of triad.titleIds) {
       const existing = await manager.findOne(UserTitleState, { where: { profileId: triad.profileId, titleId } });
@@ -533,6 +537,11 @@ export class TriadsService {
   }
 
   // The neutral bookkeeping each replacement reason implies (ADR-17).
+  // PUB-G1: deliberately unguarded, same reason as
+  // `confirmWatchedFromRanking` -- and guarding it would be actively wrong:
+  // `not_watched` *removes* a title from the watched set, so refusing it for
+  // an unpublished title would strand that title in a profile's history
+  // instead of letting it leave.
   private async applyReplacementReason(
     manager: EntityManager,
     profileId: string,

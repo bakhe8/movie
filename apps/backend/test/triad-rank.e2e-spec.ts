@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import type { Repository } from 'typeorm';
 import { AppModule } from '../src/modules/app/app.module';
+import { publishForTest } from './publish-for-test';
 import { Outcome } from '../src/entities/outcome.entity';
 import { Recommendation } from '../src/entities/recommendation.entity';
 import { Title } from '../src/entities/title.entity';
@@ -70,6 +71,7 @@ describe('Triad ranking (real HTTP, real DB)', () => {
       { internalId: `E2E-RANK-C-${suffix}`, titleEn: 'Rank Check C', titleAr: 'ج' },
     ]);
     titleIds = titles.map((title) => title.id);
+    await publishForTest(app, titleIds); // PUB-G1: these get marked watched to build triads
   }, 20_000);
 
   afterAll(async () => {
@@ -202,6 +204,7 @@ describe('Triad ranking (real HTTP, real DB)', () => {
       { internalId: `E2E-H1-E-${suffix}`, titleEn: 'H1 Check E', titleAr: 'هـ' },
       { internalId: `E2E-H1-F-${suffix}`, titleEn: 'H1 Check F', titleAr: 'و' },
     ]);
+    await publishForTest(app, sixTitles.map((title) => title.id)); // PUB-G1
     const sixTitleIds = new Set(sixTitles.map((title) => title.id));
 
     const token = await registerUser(app, 'h1-check');
@@ -248,6 +251,7 @@ describe('Triad ranking (real HTTP, real DB)', () => {
       { internalId: `E2E-RANKEDLATER-C-${suffix}`, titleEn: 'Ranked Later C', titleAr: 'ج' },
     ]);
     const threeTitleIds = threeTitles.map((title) => title.id);
+    await publishForTest(app, threeTitleIds); // PUB-G1
 
     const token = await registerUser(app, 'ranked-later-check');
     const profileId = await createProfile(app, token, 'Ranked later check');

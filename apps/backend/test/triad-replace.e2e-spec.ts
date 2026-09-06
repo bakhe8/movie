@@ -5,6 +5,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { Repository } from 'typeorm';
 import { AppModule } from '../src/modules/app/app.module';
+import { publishForTest } from './publish-for-test';
 import { Title } from '../src/entities/title.entity';
 import { TriadReplacement } from '../src/entities/triad-replacement.entity';
 
@@ -81,6 +82,7 @@ describe('Triad replacement (real HTTP, real DB)', () => {
       { internalId: `E2E-REPL-D-${suffix}`, titleEn: 'Replace Check D', titleAr: 'د' },
     ]);
     titleIds = titles.map((title) => title.id);
+    await publishForTest(app, titleIds); // PUB-G1: the triad flow marks these watched
   }, 20_000);
 
   afterAll(async () => {

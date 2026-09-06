@@ -5,6 +5,7 @@ import request from 'supertest';
 import type { Repository } from 'typeorm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/modules/app/app.module';
+import { publishForTest } from './publish-for-test';
 import { Outcome } from '../src/entities/outcome.entity';
 import { Recommendation } from '../src/entities/recommendation.entity';
 import { Title } from '../src/entities/title.entity';
@@ -47,6 +48,7 @@ describe('POST /profiles/:profileId/watch-events (blueprint gap 4, §4.5)', () =
     const suffix = Date.now();
     const title = await titlesRepository.save({ internalId: `E2E-WATCH-${suffix}`, titleEn: 'Watch Check', titleAr: 'فحص' });
     titleId = title.id;
+    await publishForTest(app, [titleId]); // PUB-G1: watch-event writes require a published title
   }, 20_000);
 
   afterAll(async () => {

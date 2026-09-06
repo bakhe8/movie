@@ -5,6 +5,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { Repository } from 'typeorm';
 import { AppModule } from '../src/modules/app/app.module';
+import { publishForTest } from './publish-for-test';
 import { AuditLog } from '../src/entities/audit-log.entity';
 import { Consent } from '../src/entities/consent.entity';
 import { PrivacyRequest } from '../src/entities/privacy-request.entity';
@@ -100,6 +101,7 @@ describe('Privacy rights: export, reset, delete (real HTTP, real DB)', () => {
       })),
     );
     titleIds = titles.map((title) => title.id);
+    await publishForTest(app, titleIds); // PUB-G1: this spec marks these watched
 
     owner = await registerUser(app, 'owner');
     ownerProfileId = await createProfile(app, owner.token, 'Privacy owner');

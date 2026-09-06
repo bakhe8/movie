@@ -6,6 +6,7 @@ import { Profile } from '../../entities/profile.entity';
 import { Recommendation } from '../../entities/recommendation.entity';
 import { Title } from '../../entities/title.entity';
 import { WatchEvent } from '../../entities/watch-event.entity';
+import { PUBLISHED_TITLE_WHERE } from '../publication/publication-guard';
 import { UserTitleStateService } from '../user-title-state/user-title-state.service';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { CreateWatchEventDto } from './dto/create-watch-event.dto';
@@ -37,7 +38,10 @@ export class WatchEventsService {
   // value, matching "does not imply liking" (API.md).
   async create(userId: string, profileId: string, dto: CreateWatchEventDto): Promise<WatchEvent> {
     await this.assertProfileOwnership(userId, profileId);
-    const title = await this.titlesRepository.findOne({ where: { id: dto.titleId } });
+    // PUB-G1 (board 1D-7): same rule as UserTitleStateService.upsert() -- a
+    // staged title cannot be written to. This method also calls that upsert
+    // below, so both halves of the write refuse the same rows.
+    const title = await this.titlesRepository.findOne({ where: { id: dto.titleId, ...PUBLISHED_TITLE_WHERE } });
     if (!title) {
       throw new NotFoundException('Title not found');
     }

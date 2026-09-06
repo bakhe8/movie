@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import type { Repository } from 'typeorm';
 import { AppModule } from '../src/modules/app/app.module';
+import { publishForTest } from './publish-for-test';
 import { Outcome } from '../src/entities/outcome.entity';
 import { Recommendation } from '../src/entities/recommendation.entity';
 import { Title } from '../src/entities/title.entity';
@@ -60,6 +61,8 @@ describe('GET /admin/metrics', () => {
     const saved = await titles.save(
       Array.from({ length: 3 }, (_, index) => ({ internalId: `E2E-METRICS-${suffix}-${index}`, titleEn: `Metrics ${index}`, titleAr: `مقاييس ${index}` })),
     );
+    // PUB-G1: marking a title watched requires it to be published.
+    await publishForTest(app, saved.map((title) => title.id));
     for (const title of saved) {
       await request(app.getHttpServer())
         .patch(`/profiles/${profileId}/titles/${title.id}/state`)

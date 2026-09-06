@@ -5,6 +5,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { Repository } from 'typeorm';
 import { AppModule } from '../src/modules/app/app.module';
+import { publishForTest } from './publish-for-test';
 import { Title } from '../src/entities/title.entity';
 import { UserTitleState } from '../src/entities/user-title-state.entity';
 
@@ -53,6 +54,7 @@ describe('Watch state PATCH semantics (M1)', () => {
       titleAr: 'فحص',
     });
     titleId = title.id;
+    await publishForTest(app, [titleId]); // PUB-G1: state writes require a published title
   }, 20_000);
 
   afterAll(async () => {

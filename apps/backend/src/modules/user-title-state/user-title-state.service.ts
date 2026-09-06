@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Profile } from '../../entities/profile.entity';
 import { Title } from '../../entities/title.entity';
 import { TitleState, UserTitleState } from '../../entities/user-title-state.entity';
+import { PUBLISHED_TITLE_WHERE } from '../publication/publication-guard';
 import { PosterService } from '../public-quality/poster.service';
 import { UpdateTitleStateDto } from './dto/update-title-state.dto';
 
@@ -26,7 +27,12 @@ export class UserTitleStateService {
     updateTitleStateDto: UpdateTitleStateDto,
   ): Promise<UserTitleState> {
     await this.assertProfileOwnership(userId, profileId);
-    const title = await this.titlesRepository.findOne({ where: { id: titleId } });
+    // PUB-G1 (board 1D-7): a staged title is not writable -- marking it
+    // watched/watchlisted is how an unpublished row would otherwise leak into
+    // the funnel (it would then reach triads and the library). Object-form
+    // `where`, so there is no `.where()` clause-reset hazard here (the bug
+    // findAll had); the condition simply composes into the same lookup.
+    const title = await this.titlesRepository.findOne({ where: { id: titleId, ...PUBLISHED_TITLE_WHERE } });
     if (!title) {
       throw new NotFoundException('Title not found');
     }
@@ -96,6 +102,12 @@ export class UserTitleStateService {
     return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505';
   }
 
+  // PUB-G1: deliberately unguarded, same exception as
+  // RecommendationsService.usualRegion/rankLibrary -- this is the profile's
+  // own watchlist/watched list shown back to itself. A title it already
+  // holds must not vanish from its own library because the catalogue later
+  // unpublished it; the guard's job is to stop *new* exposure, not to
+  // rewrite a user's history.
   async findByState(userId: string, profileId: string, state: TitleState): Promise<UserTitleState[]> {
     await this.assertProfileOwnership(userId, profileId);
     const rows = await this.statesRepository.find({
