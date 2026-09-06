@@ -1,14 +1,13 @@
 /**
  * Pure building blocks for PUB-B1's poster backfill (ADR-118): closes the
- * one gap the public-v1 shadow report found (POSTER_MISSING, 87 titles) by
- * the same TMDB call and rights-registry row shape the catalog already uses
- * for posters (`fetch-tmdb-posters.ts`, `load-catalog-rights.ts`) --
- * reimplemented standalone here rather than imported, because both of those
- * files had uncommitted edits in flight from another session when this ran.
+ * one gap the public-v1 shadow report found (POSTER_MISSING, 87 titles).
+ * The rights-registry row shape is `load-catalog-rights.ts`'s own
+ * `tmdbPosterRow` -- reused now that it is committed and stable, not
+ * duplicated (it had uncommitted edits in flight from another session
+ * during PUB-B1's first pass, which is why this started as a standalone
+ * copy; POSTERS-P2 landed in `a51ba4a`, so the copy is gone).
  */
-
-export const TMDB_ATTRIBUTION =
-  'TMDB Terms of Use: image non-commercial without a paid licence; attribution required — "This product uses the TMDB API but is not endorsed or certified by TMDB."';
+import { tmdbPosterRow } from './load-catalog-rights';
 
 export const EXTRACTOR_VERSION = 'pub-b1-poster-backfill-v1';
 
@@ -34,31 +33,4 @@ export function parseTmdbPosterPath(body: string): string | null {
   return typeof data.poster_path === 'string' && data.poster_path.length > 0 ? data.poster_path : null;
 }
 
-export interface SourceRecordRowSpec {
-  fieldName: string;
-  value: string;
-  source: string;
-  license: string;
-  licenseStatus: 'non_commercial_only';
-  allowsStorage: boolean;
-  allowsDerivation: boolean;
-  allowsTraining: boolean;
-  attributionRequired: boolean;
-  fallbackPlan: string;
-}
-
-/** Same shape and terms as `load-catalog-rights.ts`'s `tmdbPosterRow` (BP §11.3). */
-export function tmdbPosterSourceRecordRow(posterPath: string): SourceRecordRowSpec {
-  return {
-    fieldName: 'posterPath',
-    value: `https://image.tmdb.org/t/p/original${posterPath}`,
-    source: 'tmdb',
-    license: TMDB_ATTRIBUTION,
-    licenseStatus: 'non_commercial_only',
-    allowsStorage: true,
-    allowsDerivation: false,
-    allowsTraining: false,
-    attributionRequired: true,
-    fallbackPlan: 'omit the poster (empty slot) until a licensed image is available',
-  };
-}
+export const tmdbPosterSourceRecordRow = tmdbPosterRow;

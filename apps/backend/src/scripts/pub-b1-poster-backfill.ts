@@ -17,10 +17,10 @@
  *     -- this script is idempotent, a re-run only touches what is still
  *     POSTER_MISSING.
  *
- * Reimplements the TMDB call and rights-registry row shape standalone
- * (`pub-b1-poster-backfill.lib.ts`) rather than importing
- * `fetch-tmdb-posters.ts`/`load-catalog-rights.ts`, which had uncommitted
- * edits in flight from another session when this ran.
+ * The rights-registry row shape is `load-catalog-rights.ts`'s own
+ * `tmdbPosterRow`, reused via `pub-b1-poster-backfill.lib.ts` (it had
+ * uncommitted edits in flight from another session on the first pass here;
+ * POSTERS-P2 landed it in `a51ba4a`).
  *
  *   cd apps/backend && npx tsx src/scripts/pub-b1-poster-backfill.ts [--dry-run]
  */
